@@ -1,0 +1,17 @@
+[project]
+name = "smoke-fizzbuzz"
+version = "0.0.0"
+requires-python = ">=3.11"
+
+[dependency-groups]
+dev = ["ruff>=0.6", "mypy>=1.10", "pytest>=8"]
+
+[tool.ruff]
+line-length = 100
+
+[tool.mypy]
+strict = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

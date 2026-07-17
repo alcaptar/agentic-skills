@@ -12,6 +12,9 @@ skills/
   deploy-watch/    SKILL.md   Monitoriza el despliegue tras aprobar la PR
 docs/
   design-notes.md             Decisiones de diseno y el porque (para seguir iterando)
+  research-agent-loops.md     Research citado sobre loops autonomos de agentes
+  maturity-map.md             Donde encaja el pipeline (Steps of AI Adoption, Cherny)
+smoke/                        Smoke test autocontenido para validar slice-runner (ver smoke/README.md)
 ```
 
 ## Fuente de verdad y symlinks

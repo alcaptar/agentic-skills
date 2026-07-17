@@ -1,0 +1,1 @@
+{"slice_id":"slice-01","estado":"hecha","intentos":1,"gates":{"pytest":"5 passed","ruff":"clean","mypy_strict":"ok"},"verify":"PASA","verifier_tokens":37440,"pr_url":"(local: sin remoto)","ci_result":"green (local gates)","ts":"2026-07-17T10:52:07Z"}
