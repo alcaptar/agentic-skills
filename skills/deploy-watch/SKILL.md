@@ -64,6 +64,13 @@ En cada tick, recoge las 4 senales y tabula vs baseline (CSV + stream compartido
 2. **Redacta (sin ejecutar) el rollback** segun `slicing.md`: `git revert <merge_sha>` + redeploy, con los comandos listos para que los lance el usuario.
 3. Para y presenta: senal(es) degradada(s) + evidencia, RCA del `sre`, y el rollback preparado.
 
+## Integracion con el ledger / stream
+
+Comparte la observabilidad del pipeline con `slice-runner` via `.slice-runner/` del repo:
+
+- Anexa al **stream en vivo** (`.slice-runner/stream.log`) una linea por transicion: `deploy start`, `signal <nombre> ok|degradada`, `verdict sano|degradado|inconcluso`, `rca ...`, `rollback drafted`. Asi el mismo `tail -f` cubre implementacion y despliegue.
+- Al cerrar, anexa una entrada al **ledger** (`.slice-runner/runs.jsonl`) enlazada al `pr_url`/release: `{"pr_url":"...","fase":"deploy","veredicto":"sano|degradado|inconcluso","senales":{...},"ts":"..."}`.
+
 ## Fin
 
 Al parar, reporta siempre: servicio y release vigilados, ventana observada, veredicto (sano / degradado / inconcluso), tabla de las 4 senales vs baseline, y -si aplica- RCA + rollback redactado. Recuerda que el rollback lo ejecuta el usuario.

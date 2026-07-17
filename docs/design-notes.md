@@ -20,6 +20,9 @@ Flujo de trabajo objetivo: escribo specs; cada slice de la spec quiero que se im
 - **test-desiderata** en el verificador: bloquea solo lo grave (no determinista, no aislado, test que no verifica comportamiento); lo menor informa. Se salta en slices sin tests.
 - **Refactor tras cada verde** en el implementador.
 - **No hace merge.** Para en "PR abierto + CI verde". Merge humano.
+- **Contexto fresco por slice** (patron Ralph): cada slice arranca limpia; la spec + el ledger son lo que persiste. Hace seguro el Nivel 2.
+- **Ledger + stream** en `.slice-runner/` del repo objetivo (decision del usuario: por repo, versionado): `runs.jsonl` (versionado, memoria + coste + historico) y `stream.log` (efimero, gitignored, para `tail -f` en vivo). Panel = stream en vivo en terminal (no HTML), en linea con el stream compartido de deploy-monitor. deploy-watch anexa a los mismos ficheros.
+- **Coste**: presupuesto de tokens/$ por slice como circuit breaker adicional; metrica = coste por slice mergeada (no por intentada). Motivado por el research (coste hasta 30x impredecible, Stanford).
 
 ### Por que estas decisiones (fuentes)
 

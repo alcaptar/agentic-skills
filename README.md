@@ -49,6 +49,16 @@ Puertas antes de abrir PR: convenciones del repo -> `backend-best-practices` -> 
 
 Fase post-approve, manual, read-only sobre prod. Compone la skill `deploy-monitor` (motor baseline+poll+CSV) + skills de observabilidad (prometheus, elasticsearch, sentry, gcloud-logs) + agente `sre`. Nunca ejecuta rollback: lo redacta para que lo lances tu.
 
+## Seguimiento en vivo (ledger + stream)
+
+Ambas skills escriben en `.slice-runner/` del repo objetivo:
+- `runs.jsonl` (versionado): una linea por slice con estado, coste (tokens/$), PR, CI y veredicto de deploy. Es la memoria del contexto fresco y la fuente del coste-por-slice-mergeada.
+- `stream.log` (gitignored): stream en vivo. Sigue cualquier run en directo con:
+
+```bash
+tail -f .slice-runner/stream.log
+```
+
 ## Principios comunes
 
 - Escritor != verificador, pero el verificador **revisa convenciones/arquitectura, no re-testea** (CI + AC gobiernan la correccion).

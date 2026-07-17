@@ -23,8 +23,9 @@ Nivel de autonomia 1: un ciclo por invocacion. Para encadenar slices, envolver e
 - **TDD consciente de capa.** Por defecto TDD estricto: test rojo por cada AC antes del codigo, y el verificador comprueba que el test precede a la implementacion. Pero si las convenciones del repo eximen una capa (p. ej. modelos ORM y migraciones que no se testean por separado), la puerta para esa slice es "suite intacta + verificacion de datos/efecto", no test-first por AC. La convencion del repo decide, no este documento.
 - **Alinear antes de implementar.** Antes de escribir codigo, mostrar el entendimiento de la slice (alcance, AC, capa afectada, comando de validacion) y esperar go/no-go. Nunca transcribir a ciegas el codigo pre-horneado de una spec: validalo contra las convenciones primero.
 - **Seguir `backend-best-practices`.** El implementador carga esa skill y respeta hexagonal/DDD, DI, Pydantic en boundaries, subordinada siempre a las convenciones del repo.
-- **El estado vive en el repo.** El checklist de la spec ES el fichero de estado. El agente olvida; el repo no.
-- **Circuit breaker.** Maximo 2 reintentos por fase. Si la CI sigue roja tras el reintento, para, deja el PR abierto y reporta con logs.
+- **El estado vive en el repo.** El checklist de la spec y el ledger (`.slice-runner/runs.jsonl`) SON el estado. El agente olvida; el repo no.
+- **Contexto fresco por slice.** Cada slice arranca sin arrastrar la conversacion de la anterior; lo que persiste entre slices es la spec + el ledger, que se re-leen al empezar. Evita la degradacion de contexto (patron Ralph) y hace seguro el Nivel 2 (`/loop`).
+- **Circuit breaker.** Maximo 2 reintentos por fase. Ademas, **presupuesto de coste**: si la slice supera el limite de tokens/$ configurado, para con estado `abortada-presupuesto`. Si la CI sigue roja tras el reintento, para, deja el PR abierto y reporta con logs.
 
 ## Formatos de spec soportados
 
@@ -59,6 +60,32 @@ Un fichero **es una sola slice** (titulo tipo `Slice N — ...`), con `Goal`, `A
 - Formato B: como el fichero es una slice, registra el estado en su cabecera (una linea `> Estado: hecha | bloqueada (motivo)`), o marca el checklist de un indice externo si la spec vive dentro de uno.
 - `[!]` / bloqueada = CI roja no resuelta; deja el PR abierto.
 
+## Ledger y stream en vivo
+
+Estado y observabilidad del pipeline, en `.slice-runner/` del repo objetivo.
+
+### `.slice-runner/runs.jsonl` (versionado)
+
+Ledger append-only: una linea JSON por slice al cerrarla. Sirve de memoria para el contexto fresco, fuente del coste y registro historico. Esquema minimo:
+
+    {"slice_id":"slice-01","estado":"hecha","intentos":1,"tokens_in":0,"tokens_out":0,"coste_usd":0.0,"pr_url":"...","ci_result":"green","duracion_s":0,"ts":"2026-07-17T12:00:00Z"}
+
+- Estados: `hecha` | `bloqueada` | `abortada-presupuesto`.
+- **Coste por slice mergeada** = suma de `coste_usd` de las entradas `hecha` / numero de `hecha`. Es la metrica clave (no el coste por intento).
+- Al arrancar una slice (paso 1), leer el ledger para no repetir lo ya `hecha`/`bloqueada`.
+
+### `.slice-runner/stream.log` (efimero, no versionado)
+
+Stream en vivo legible para seguir el run en directo desde otra terminal:
+
+    tail -f .slice-runner/stream.log
+
+La skill anexa una linea por transicion de fase, formato `HH:MM:SS  slice-NN  <fase>  <detalle>`. Transiciones a emitir: `select`, `align`, `implement start`, `implement done`, `verify PASA|FALLA`, `pr <url>`, `ci green|red`, `done`, `blocked: <motivo>`, `abort: presupuesto`. Es un stream compartido: varias terminales pueden tail-earlo a la vez (patron de deploy-monitor).
+
+### Setup
+
+La primera vez, crear `.slice-runner/.gitignore` con `stream.log` (versiona el ledger, no el stream efimero). `deploy-watch` anexa a estos mismos ficheros su veredicto + señales del deploy.
+
 ## Steps
 
 ### 1. Localizar spec, detectar formato y seleccionar slice
@@ -69,6 +96,7 @@ Un fichero **es una sola slice** (titulo tipo `Slice N — ...`), con `Goal`, `A
   - Formato A: la indicada por el usuario, o la primera `[ ]`.
   - Formato B: el fichero completo es la slice.
 - Extrae titulo, alcance y AC. En Formato B derivalos del `Goal` + `Interfaces`/verificaciones de los Tasks + `Global Constraints`. Si no hay AC ni forma de derivarlos, para y pidelos: sin AC no hay puerta de verificacion.
+- **Lee `.slice-runner/runs.jsonl`** (si existe) para no repetir slices ya `hecha`/`bloqueada`. Crea `.slice-runner/` y su `.gitignore` (con `stream.log`) si no existen. Abre el stream con la linea `select`.
 - Deriva un slug para la rama: `slice/NN-slug`.
 
 ### 2. Autodetectar comandos del repo (Makefile primero)
@@ -126,10 +154,11 @@ Lanza un Agent **diferente** (subagent_type `nw-software-crafter-reviewer` o `ge
 ### 8. Esperar CI verde (puerta final)
 
 - `gh pr checks --watch` (o poll periodico) hasta verde o rojo. Respeta un timeout de espera razonable.
-- **Verde**: marca la slice como hecha (Formato A: `[x]`; Formato B: cabecera de estado), resume el PR (URL, checks) y **para**.
+- **Verde**: marca la slice como hecha (Formato A: `[x]`; Formato B: cabecera de estado), **escribe la entrada en el ledger** (estado `hecha`, intentos, tokens/$, `pr_url`, `ci_result`, duracion) y emite `ci green` + `done` al stream. Resume el PR y **para**.
 - **Rojo**: trae los logs del check fallido (`gh run view --log-failed`), un reintento via paso 5 con esos logs.
-  - Si tras el reintento sigue roja: marca la slice como bloqueada (`[!]` / cabecera), **deja el PR abierto**, resume el fallo con logs y **para** (circuit breaker). No cierres el PR ni descartes el worktree.
+  - Si tras el reintento sigue roja: marca la slice como bloqueada (`[!]` / cabecera), **escribe la entrada en el ledger** (estado `bloqueada`, motivo), emite `blocked: ci rojo` al stream, **deja el PR abierto**, resume el fallo con logs y **para** (circuit breaker). No cierres el PR ni descartes el worktree.
+- Si en cualquier momento se supera el presupuesto de tokens/$ de la slice: escribe la entrada `abortada-presupuesto`, emite `abort: presupuesto` y para.
 
 ## Fin
 
-Al parar, reporta siempre: slice ejecutada, estado (hecha / bloqueada), URL del PR, resultado de CI, y siguiente slice pendiente. Si quedan slices pendientes, sugiere volver a invocar (o envolver en `/loop` para Nivel 2).
+Al parar, reporta siempre: slice ejecutada, estado (hecha / bloqueada / abortada-presupuesto), URL del PR, resultado de CI, coste de la slice, y siguiente slice pendiente. Si quedan slices pendientes, sugiere volver a invocar (o envolver en `/loop` para Nivel 2).
