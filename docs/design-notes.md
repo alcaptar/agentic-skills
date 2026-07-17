@@ -51,6 +51,19 @@ Flujo de trabajo objetivo: escribo specs; cada slice de la spec quiero que se im
 - **Ante anomalia**: agente `sre` para RCA read-only + rollback redactado (git revert del merge + redeploy segun slicing.md), sin ejecutar.
 - **Seguridad**: nunca ejecuta rollback ni toca backends; max_runtime + circuit breaker; merge y rollback los decide el usuario.
 
+## Roadmap de autonomia (pendiente)
+
+Estado actual: **Nivel 1** — una slice por invocacion, todo bajo control manual. Subir de nivel solo cuando el anterior sea fiable; el cuello de botella nunca es implementar, es la calidad del gate de verificacion.
+
+- **Nivel 2 — semi-autonomo con `/loop`.** Envolver slice-runner en `/loop`: al terminar una slice (PR + CI verde), coge la siguiente pendiente sola. Guardrails a anadir antes de activarlo:
+  - Circuit breaker: `max_consecutive_failures` (parar tras N slices bloqueadas seguidas).
+  - `max_runtime` / tope de slices por sesion (evitar loop eterno).
+  - Checkpoint humano opcional entre slices.
+  - Requisito previo: confianza en el verificador; es lo que sostiene el loop sin supervision.
+- **Nivel 3 — Workflow fan-out (paralelo).** Solo para slices independientes. Requiere: chequeo de independencia (solape de ficheros/migraciones), aislamiento de entorno de test por worktree (`COMPOSE_PROJECT_NAME`/puertos), y orden de merge (serializar quien toque el head de alembic).
+- **Encadenar slice-runner -> deploy-watch.** Tras el merge, disparar deploy-watch automaticamente. Hoy deploy-watch es manual por decision (cero polling en vacio); la version encadenada poll-earia el estado del PR/merge para arrancar sola.
+- **deploy-watch autonomo.** Opcion descartada de momento: un `/loop` que vigila el merge y arranca la monitorizacion solo. Reconsiderar si el volumen de slices crece.
+
 ## Preferencias transversales
 
 - Respuestas y skills sin emojis (preferencia del usuario) -> el testigo de contexto es un marcador de texto `[skill-name]`, no un emoji.
