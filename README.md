@@ -52,15 +52,19 @@ Puertas antes de abrir PR: convenciones del repo -> `backend-best-practices` -> 
 
 Fase post-approve, manual, read-only sobre prod. Compone la skill `deploy-monitor` (motor baseline+poll+CSV) + skills de observabilidad (prometheus, elasticsearch, sentry, gcloud-logs) + agente `sre`. Nunca ejecuta rollback: lo redacta para que lo lances tu.
 
-## Seguimiento en vivo (ledger + stream)
+## Seguimiento en vivo (ledger + stream + panel)
 
 Ambas skills escriben en `.slice-runner/` del repo objetivo:
 - `runs.jsonl` (versionado): una linea por slice con estado, coste (tokens/$), PR, CI y veredicto de deploy. Es la memoria del contexto fresco y la fuente del coste-por-slice-mergeada.
-- `stream.log` (gitignored): stream en vivo. Sigue cualquier run en directo con:
+- `stream.log` (gitignored): stream en vivo. `tail -f .slice-runner/stream.log`.
+
+Panel de estado (TUI) que agrega el ledger + stream en una tabla live:
 
 ```bash
-tail -f .slice-runner/stream.log
+python3 panel/slice-panel.py /ruta/al/repo        # live (Ctrl+C sale)
 ```
+
+El panel cubre el **estado**; el consumo de tokens/$ en tiempo real sale de la telemetria de Claude Code (OTel -> Grafana), no de las skills. Ver `panel/README.md`.
 
 ## Principios comunes
 
