@@ -34,10 +34,13 @@ ln -s "$PWD/skills/deploy-watch" ~/.claude/skills/deploy-watch
 spec.md
   -> [slice-runner]  implementa (TDD por capa + refactor tras verde)
                      verifica (convenciones del repo + boundaries + test-desiderata)
-                     abre PR, espera CI verde, y para
-  -> (tu apruebas y mergeas: el merge es humano)
-  -> [deploy-watch]  baseline + 4 senales (rollout k8s, recursos, HTTP, Sentry)
-                     veredicto sano | RCA (agente sre) + rollback redactado
+                     abre PR, espera CI verde (ticks en background, sin shell bloqueante)
+                     y queda "waiting: merge" vigilando la PR
+  -> (tu mergeas en GitHub: el merge sigue siendo humano)
+  -> [deploy-watch]  se encadena AUTO al detectar el merge; arranca sola
+                     baseline + 4 senales (rollout k8s, recursos, HTTP, Sentry)
+                     veredicto sano (marca la slice validada en deploy)
+                     | degradado -> RCA (agente sre) + rollback redactado
 ```
 
 ### slice-runner
@@ -46,25 +49,26 @@ Nivel 1 (una slice por invocacion; envolver en `/loop` para Nivel 2). Soporta do
 - **A) checklist** `## Slices` con `- [ ]` por slice.
 - **B) plan de una sola slice** estilo superpowers (el fichero = 1 slice).
 
-Puertas antes de abrir PR: convenciones del repo -> `backend-best-practices` -> TDD por capa -> `test-desiderata` -> constraints/boundaries -> lint/types/tests -> CI verde. No hace merge.
+Puertas antes de abrir PR: convenciones del repo -> `backend-best-practices` -> TDD por capa -> `test-desiderata` -> constraints/boundaries -> lint/types/tests -> CI verde. No hace merge. Por defecto trabaja en una **rama normal** (no asume worktree; solo lo usa si se paralelizan slices). Tras CI verde queda **vigilando la PR** (`waiting: merge`) y, al detectar el merge, encadena `deploy-watch` automaticamente. Las esperas (CI, merge) son ticks en background, nunca una shell bloqueante.
 
 ### deploy-watch
 
-Fase post-approve, manual, read-only sobre prod. Compone la skill `deploy-monitor` (motor baseline+poll+CSV) + skills de observabilidad (prometheus, elasticsearch, sentry, gcloud-logs) + agente `sre`. Nunca ejecuta rollback: lo redacta para que lo lances tu.
+Fase post-approve, read-only sobre prod. Se **encadena automaticamente** al detectar el merge (o se invoca a mano) y **arranca sola**: infiere servicio/namespace y solo pregunta si hay duda real. Compone la skill `deploy-monitor` (motor baseline+poll+CSV) + skills de observabilidad (prometheus, elasticsearch, sentry, gcloud-logs) + agente `sre`. El poll de estabilizacion son ticks en background. Un veredicto `sano` marca la slice como **validada en deploy**. Nunca ejecuta rollback: lo redacta para que lo lances tu.
 
 ## Seguimiento en vivo (ledger + stream + panel)
 
 Ambas skills escriben en `.slice-runner/` del repo objetivo:
 - `runs.jsonl` (versionado): una linea por slice con estado, coste (tokens/$), PR, CI y veredicto de deploy. Es la memoria del contexto fresco y la fuente del coste-por-slice-mergeada.
-- `stream.log` (gitignored): stream en vivo. `tail -f .slice-runner/stream.log`.
+- `state.json` (gitignored): estado vivo (spec_path, slice en curso, fase) para que el panel muestre las pendientes y si esta `waiting: merge`.
+- `stream.log` (gitignored): stream en vivo con fecha completa. `tail -f .slice-runner/stream.log`.
 
-Panel de estado (TUI) que agrega el ledger + stream en una tabla live:
+Panel de estado (TUI) que agrega spec + ledger + stream en una tabla live:
 
 ```bash
 python3 panel/slice-panel.py /ruta/al/repo        # live (Ctrl+C sale)
 ```
 
-El panel cubre el **estado**; el consumo de tokens/$ en tiempo real sale de la telemetria de Claude Code (OTel -> Grafana), no de las skills. Ver `panel/README.md`.
+Muestra **todas** las slices (incluidas las pendientes de la spec), una columna **DEPLOY** (validada en prod) y un banner cuando esta **esperando una decision tuya**. Cubre el **estado**; el consumo de tokens/$ en tiempo real sale de la telemetria de Claude Code (OTel -> Grafana), no de las skills. Ver `panel/README.md`.
 
 ## Principios comunes
 

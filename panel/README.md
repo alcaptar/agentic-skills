@@ -1,6 +1,13 @@
 # Panel de estado (TUI)
 
-`slice-panel.py` pinta el estado del pipeline en vivo leyendo `<repo>/.slice-runner/runs.jsonl` (ledger) y `stream.log`. Sin dependencias (solo stdlib).
+`slice-panel.py` pinta el estado del pipeline en vivo leyendo tres fuentes de `<repo>/.slice-runner/` mas la spec:
+
+- `state.json` — estado vivo (`spec_path`, `slice_actual`, `fase`), para mostrar la slice en curso y si esta **esperando una decision tuya**.
+- `runs.jsonl` — ledger (una linea por slice/deploy al cerrar).
+- `stream.log` — stream en vivo.
+- la **spec** (via `spec_path` del `state.json`, o `--spec`) — para listar **todas** las slices, incluidas las **pendientes** que aun no estan en el ledger.
+
+Sin dependencias (solo stdlib).
 
 ## Uso
 
@@ -13,9 +20,12 @@ python3 panel/slice-panel.py /ruta/al/repo --once
 
 # otro intervalo
 python3 panel/slice-panel.py /ruta/al/repo --interval 5
+
+# forzar la spec (si aun no hay state.json)
+python3 panel/slice-panel.py /ruta/al/repo --spec spec.md
 ```
 
-Muestra por slice: ESTADO (hecha/bloqueada/abortada-presupuesto), intentos, VERIFY, COSTE (al cierre), CI, PR; un resumen (hechas/bloqueadas, coste total y por slice mergeada); las entradas de `deploy-watch`; y el tail del stream.
+Muestra **todas** las slices de la spec y su estado (`pendiente`/`en curso`/`esperando-merge`/`hecha`/`bloqueada`/`abortada-presupuesto`), intentos, VERIFY, COSTE (al cierre), CI, **DEPLOY** (veredicto de `deploy-watch`: `sano`/`degradado`/`inconcluso`), y PR. Encima de la tabla, un banner destaca si el pipeline esta **esperandote a ti** (p. ej. el merge) frente a parado. El resumen cuenta hechas, **validadas en deploy**, bloqueadas, pendientes y el coste total y por slice mergeada. Abajo, el tail del stream con fecha completa.
 
 ## Qué muestra y qué no
 

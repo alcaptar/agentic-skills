@@ -26,6 +26,8 @@ Nivel de autonomia 1: un ciclo por invocacion. Para encadenar slices, envolver e
 - **El estado vive en el repo.** El checklist de la spec y el ledger (`.slice-runner/runs.jsonl`) SON el estado. El agente olvida; el repo no.
 - **Contexto fresco por slice.** Cada slice arranca sin arrastrar la conversacion de la anterior; lo que persiste entre slices es la spec + el ledger, que se re-leen al empezar. Evita la degradacion de contexto (patron Ralph) y hace seguro el Nivel 2 (`/loop`).
 - **Circuit breaker.** Maximo 2 reintentos por fase. Ademas, **presupuesto de coste**: si la slice supera el limite de tokens/$ configurado, para con estado `abortada-presupuesto`. Si la CI sigue roja tras el reintento, para, deja el PR abierto y reporta con logs.
+- **Esperas no bloqueantes.** Prohibido lanzar shells bloqueantes largas para esperar (nada de `gh pr checks --watch`, `sleep` largos, ni polls que se queden colgados 30-60 min). Toda espera (CI verde, merge de la PR) se hace con **ticks acotados en background + notificacion** (o la herramienta `Monitor`), devolviendo el control entre ticks. Una espera nunca debe monopolizar una shell ni la sesion.
+- **No asumir worktree.** Por defecto se trabaja en una rama normal. Solo se usa un git worktree aislado si se van a paralelizar varias slices concurrentes (Nivel 2) o si el repo ya declara config de worktrees.
 
 ## Formatos de spec soportados
 
@@ -80,11 +82,20 @@ Stream en vivo legible para seguir el run en directo desde otra terminal:
 
     tail -f .slice-runner/stream.log
 
-La skill anexa una linea por transicion de fase, formato `HH:MM:SS  slice-NN  <fase>  <detalle>`. Transiciones a emitir: `select`, `align`, `implement start`, `implement done`, `verify PASA|FALLA`, `pr <url>`, `ci green|red`, `done`, `blocked: <motivo>`, `abort: presupuesto`. Es un stream compartido: varias terminales pueden tail-earlo a la vez (patron de deploy-monitor).
+La skill anexa una linea por transicion de fase, formato `YYYY-MM-DD HH:MM:SS  slice-NN  <fase>  <detalle>` (fecha completa, no solo la hora). Transiciones a emitir: `select`, `align`, `implement start`, `implement done`, `verify PASA|FALLA`, `pr <url>`, `ci green|red`, `waiting: merge`, `done`, `blocked: <motivo>`, `abort: presupuesto`. `waiting: merge` significa **esperando una decision tuya** (el merge), no parado; `done`/`blocked`/`abort` son parada real. Es un stream compartido: varias terminales pueden tail-earlo a la vez (patron de deploy-monitor).
+
+### `.slice-runner/state.json` (efimero, no versionado)
+
+Estado vivo del run para que el panel muestre **todas** las slices (no solo las cerradas) y sepa que spec leer. Se reescribe en cada transicion:
+
+    {"spec_path":"spec.md","spec_format":"A","slice_actual":"slice-02","fase":"waiting: merge","ts":"2026-07-17T12:00:00Z"}
+
+- `spec_path` deja que el panel lea el checklist de la spec y liste las slices `pendiente`.
+- `fase` refleja la fase en curso (incluido `waiting: merge`) para distinguir "esperandote" de "parado".
 
 ### Setup
 
-La primera vez, crear `.slice-runner/.gitignore` con `stream.log` (versiona el ledger, no el stream efimero). `deploy-watch` anexa a estos mismos ficheros su veredicto + señales del deploy.
+La primera vez, crear `.slice-runner/.gitignore` con `stream.log` y `state.json` (versiona el ledger, no el stream ni el estado efimeros). `deploy-watch` anexa a estos mismos ficheros su veredicto + señales del deploy.
 
 ## Steps
 
@@ -96,7 +107,7 @@ La primera vez, crear `.slice-runner/.gitignore` con `stream.log` (versiona el l
   - Formato A: la indicada por el usuario, o la primera `[ ]`.
   - Formato B: el fichero completo es la slice.
 - Extrae titulo, alcance y AC. En Formato B derivalos del `Goal` + `Interfaces`/verificaciones de los Tasks + `Global Constraints`. Si no hay AC ni forma de derivarlos, para y pidelos: sin AC no hay puerta de verificacion.
-- **Lee `.slice-runner/runs.jsonl`** (si existe) para no repetir slices ya `hecha`/`bloqueada`. Crea `.slice-runner/` y su `.gitignore` (con `stream.log`) si no existen. Abre el stream con la linea `select`.
+- **Lee `.slice-runner/runs.jsonl`** (si existe) para no repetir slices ya `hecha`/`bloqueada`. Crea `.slice-runner/` y su `.gitignore` (con `stream.log` y `state.json`) si no existen. Escribe `state.json` con `spec_path`, `spec_format` y la slice seleccionada, y abre el stream con la linea `select`.
 - Deriva un slug para la rama: `slice/NN-slug`.
 
 ### 2. Autodetectar comandos del repo (Makefile primero)
@@ -114,10 +125,10 @@ Infierelos, no los asumas. Cachea lo detectado en la respuesta.
 - Si la spec pre-hornea codigo, contrastalo contra `docs/conventions/` + `CLAUDE.md` y **senala cualquier violacion antes de escribir** (no lo transcribas a ciegas).
 - Espera go/no-go del usuario. Esto evita `silent-misalignment` y `ai-slop`.
 
-### 4. Preparar worktree aislado
+### 4. Preparar rama de trabajo
 
-- Crea un git worktree aislado desde la rama base actualizada y una rama `slice/NN-slug`.
-- Todo el trabajo de la slice ocurre en ese worktree para no colisionar con el workspace.
+- **Por defecto, rama normal**: `git switch -c slice/NN-slug` desde la rama base actualizada. No asumas worktree: no todos los repos tienen config de worktrees, y una slice por invocacion no colisiona con nada.
+- **Worktree solo si aplica**: usa un git worktree aislado unicamente si se van a paralelizar varias slices concurrentes (Nivel 2) o si el repo ya declara config de worktrees. En ese caso crea el worktree desde la base actualizada con la rama `slice/NN-slug`.
 
 ### 5. Implementar (subagente implementador)
 
@@ -153,12 +164,21 @@ Lanza un Agent **diferente** (subagent_type `nw-software-crafter-reviewer` o `ge
 
 ### 8. Esperar CI verde (puerta final)
 
-- `gh pr checks --watch` (o poll periodico) hasta verde o rojo. Respeta un timeout de espera razonable.
-- **Verde**: marca la slice como hecha (Formato A: `[x]`; Formato B: cabecera de estado), **escribe la entrada en el ledger** (estado `hecha`, intentos, tokens/$, `pr_url`, `ci_result`, duracion) y emite `ci green` + `done` al stream. Resume el PR y **para**.
+- Espera hasta verde o rojo con **ticks acotados en background + notificacion** (o la herramienta `Monitor`), **nunca** `gh pr checks --watch` ni un `sleep` largo que bloquee la shell/sesion (principio de esperas no bloqueantes; es trabajo deterministico que hace el harness, no la IA poll-eando). Cada tick consulta `gh pr checks --json` y devuelve el control. Respeta un timeout de espera razonable.
+- **Verde**: marca la slice como hecha (Formato A: `[x]`; Formato B: cabecera de estado), **escribe la entrada en el ledger** (estado `hecha`, intentos, tokens/$, `pr_url`, `ci_result`, duracion), emite `ci green` al stream y **pasa al paso 9** (no paras aqui).
 - **Rojo**: trae los logs del check fallido (`gh run view --log-failed`), un reintento via paso 5 con esos logs.
-  - Si tras el reintento sigue roja: marca la slice como bloqueada (`[!]` / cabecera), **escribe la entrada en el ledger** (estado `bloqueada`, motivo), emite `blocked: ci rojo` al stream, **deja el PR abierto**, resume el fallo con logs y **para** (circuit breaker). No cierres el PR ni descartes el worktree.
+  - Si tras el reintento sigue roja: marca la slice como bloqueada (`[!]` / cabecera), **escribe la entrada en el ledger** (estado `bloqueada`, motivo), emite `blocked: ci rojo` al stream, **deja el PR abierto**, resume el fallo con logs y **para** (circuit breaker). No cierres el PR ni descartes la rama/worktree.
 - Si en cualquier momento se supera el presupuesto de tokens/$ de la slice: escribe la entrada `abortada-presupuesto`, emite `abort: presupuesto` y para.
+
+### 9. Esperar el merge y encadenar el deploy
+
+El merge sigue siendo **humano** (lo haces tu en GitHub); lo que se automatiza es la **transicion**, para que no tengas que decir "continua" a mano.
+
+- Actualiza `state.json` a `fase: "waiting: merge"` y emite `waiting: merge` al stream. Esto es **espera de una decision tuya**, no parada: el panel lo destaca asi.
+- Vigila el estado de la PR con **ticks acotados en background + notificacion** (`gh pr view --json state,mergedAt`), nunca una shell bloqueante larga. Respeta un timeout razonable de espera de merge.
+  - **Merged**: invoca automaticamente la skill `deploy-watch` (sin pedir "continua"). `deploy-watch` arranca sola e infiere servicio/namespace; solo te preguntara si la inferencia es ambigua (`check-alignment` solo cuando hay duda real).
+  - **Timeout / cerrada sin merge**: emite el estado correspondiente al stream y **para**, dejando el PR como este. Reanudas invocando de nuevo cuando quieras.
 
 ## Fin
 
-Al parar, reporta siempre: slice ejecutada, estado (hecha / bloqueada / abortada-presupuesto), URL del PR, resultado de CI, coste de la slice, y siguiente slice pendiente. Si quedan slices pendientes, sugiere volver a invocar (o envolver en `/loop` para Nivel 2).
+Al parar (o al ceder el control a `deploy-watch`), reporta siempre: slice ejecutada, estado (hecha / bloqueada / abortada-presupuesto / esperando-merge), URL del PR, resultado de CI, coste de la slice, y siguiente slice pendiente. Si quedan slices pendientes, sugiere volver a invocar (o envolver en `/loop` para Nivel 2).
