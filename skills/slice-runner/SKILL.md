@@ -23,7 +23,8 @@ Nivel de autonomia 1: un ciclo por invocacion. Para encadenar slices, envolver e
 - **TDD consciente de capa.** Por defecto TDD estricto: test rojo por cada AC antes del codigo, y el verificador comprueba que el test precede a la implementacion. Pero si las convenciones del repo eximen una capa (p. ej. modelos ORM y migraciones que no se testean por separado), la puerta para esa slice es "suite intacta + verificacion de datos/efecto", no test-first por AC. La convencion del repo decide, no este documento.
 - **Alinear antes de implementar.** Antes de escribir codigo, mostrar el entendimiento de la slice (alcance, AC, capa afectada, comando de validacion) y esperar go/no-go. Nunca transcribir a ciegas el codigo pre-horneado de una spec: validalo contra las convenciones primero.
 - **Seguir `backend-best-practices`.** El implementador carga esa skill y respeta hexagonal/DDD, DI, Pydantic en boundaries, subordinada siempre a las convenciones del repo.
-- **El estado vive en el repo.** El checklist de la spec y el ledger (`.slice-runner/runs.jsonl`) SON el estado. El agente olvida; el repo no.
+- **El estado del run es efimero.** La spec y `.slice-runner/` (checklist + ledger) SON el estado durante el run, pero viven **gitignored** y se **descartan al terminar** (fin del run). El agente olvida entre slices; el estado efimero es su memoria intra-run, y el registro duradero son las PRs mergeadas, no ficheros en el repo.
+- **La PR solo lleva el codigo de la slice.** El commit stagea unicamente los ficheros de codigo/test que produjo el implementador (`git add` explicito, nunca `-A`/`.`). Spec, ledger, planes y design-docs jamas entran en la PR.
 - **Contexto fresco por slice.** Cada slice arranca sin arrastrar la conversacion de la anterior; lo que persiste entre slices es la spec + el ledger, que se re-leen al empezar. Evita la degradacion de contexto (patron Ralph) y hace seguro el Nivel 2 (`/loop`).
 - **Circuit breaker.** Maximo 2 reintentos por fase. Ademas, **presupuesto de coste**: si la slice supera el limite de tokens/$ configurado, para con estado `abortada-presupuesto`. Si la CI sigue roja tras el reintento, para, deja el PR abierto y reporta con logs.
 - **Esperas no bloqueantes.** Prohibido lanzar shells bloqueantes largas para esperar (nada de `gh pr checks --watch`, `sleep` largos, ni polls que se queden colgados 30-60 min). Toda espera (CI verde, merge de la PR) se hace con **ticks acotados en background + notificacion** (o la herramienta `Monitor`), devolviendo el control entre ticks. Una espera nunca debe monopolizar una shell ni la sesion.
@@ -35,23 +36,33 @@ La skill autodetecta cual de estos dos formatos usa la spec. Si no encaja en nin
 
 ### Formato A — checklist de slices
 
-Un fichero con varias slices; cada item del checklist es una slice, con AC embebidos.
+Un fichero con varias slices; cada item del checklist es una slice, con **nombre** y AC embebidos.
 
 ```markdown
 ## Slices
-- [ ] slice-01: Crear value object `Cantidad` con validacion de rango
+- [ ] slice-01 (cantidad-vo): Crear value object `Cantidad` con validacion de rango
       AC: rechaza negativos; tests en test/domain/test_cantidad.py
-- [x] slice-02: Caso de uso `AjustarStock` (puerto + adaptador)
+- [x] slice-02 (ajustar-stock): Caso de uso `AjustarStock` (puerto + adaptador)
       AC: emite evento StockAjustado; no toca infra directamente
 ```
 
 Unidad de trabajo = cada item `- [ ]`. `[ ]` pendiente, `[x]` hecha, `[!]` bloqueada.
+
+- **Nombre de slice (obligatorio en specs nuevas).** Entre parentesis tras el id va el `name`
+  en kebab-case: `slice-01 (cantidad-vo): ...`. El name es estable y determinista: alimenta la
+  rama (`slice/01-cantidad-vo`) y el scope del commit (`feat(cantidad-vo): ...`), sin derivar
+  slugs de texto libre.
+- **Type opcional.** Por defecto el commit es `feat`. Para otro type, prefijalo dentro del
+  parentesis: `slice-03 (refactor: extraer-repo): ...` ⇒ `refactor(extraer-repo): ...`.
+- **Compatibilidad.** Si una slice no trae `(name)`, deriva un slug del titulo como hoy y
+  **avisa** de que la spec deberia declarar nombre. No bloquea el run.
 
 ### Formato B — plan de una slice (estilo superpowers)
 
 Un fichero **es una sola slice** (titulo tipo `Slice N — ...`), con `Goal`, `Architecture`, `Global Constraints` y `### Task N` que contienen `- [ ] Step N`.
 
 - **La unidad de trabajo es el fichero entero**, no cada Step. No trates un Step como una slice.
+- El **nombre** va en la cabecera: `> Nombre: cantidad-vo` (y opcional `> Type: refactor`).
 - Los AC se derivan de: el `Goal`, los `Interfaces`/`Expected`/verificaciones de cada Task, y las `Global Constraints`.
 - Los `- [ ] Step N` son el plan de ejecucion interno; el estado de la slice se lleva a nivel de fichero (ver abajo).
 - Los `Global Constraints` son restricciones duras que el verificador debe comprobar.
@@ -61,20 +72,29 @@ Un fichero **es una sola slice** (titulo tipo `Slice N — ...`), con `Goal`, `A
 - Formato A: marca el item de la slice `[ ]`/`[x]`/`[!]`.
 - Formato B: como el fichero es una slice, registra el estado en su cabecera (una linea `> Estado: hecha | bloqueada (motivo)`), o marca el checklist de un indice externo si la spec vive dentro de uno.
 - `[!]` / bloqueada = CI roja no resuelta; deja el PR abierto.
+- **Recuerda: el marcado de estado es efimero.** Como la spec no se comitea (ver abajo), este
+  marcado solo persiste durante el run y se descarta al terminar. Sirve de memoria intra-run.
 
-## Ledger y stream en vivo
+## Estado del run: efimero y gitignored
 
-Estado y observabilidad del pipeline, en `.slice-runner/` del repo objetivo.
+Todo el estado del run (spec + `.slice-runner/`) es **efimero**: vive gitignored durante el run
+y se **descarta al terminar** (ver "Fin"). Nunca se comitea. Durante el run es la memoria del
+contexto-fresco; el registro duradero son las PRs mergeadas, no ficheros en el repo.
 
-### `.slice-runner/runs.jsonl` (versionado)
+Esto responde al feedback "la PR solo debe llevar los ficheros de la slice": si la spec y el
+ledger estan gitignored, no pueden colarse en un commit. La otra mitad la asegura la regla de
+staging del paso 7 (`git add` solo de los ficheros de codigo).
 
-Ledger append-only: una linea JSON por slice al cerrarla. Sirve de memoria para el contexto fresco, fuente del coste y registro historico. Esquema minimo:
+### `.slice-runner/runs.jsonl` (efimero, no versionado)
 
-    {"slice_id":"slice-01","estado":"hecha","intentos":1,"tokens_in":0,"tokens_out":0,"coste_usd":0.0,"pr_url":"...","ci_result":"green","duracion_s":0,"ts":"2026-07-17T12:00:00Z"}
+Ledger append-only: una linea JSON por slice al cerrarla. Sirve de memoria intra-run para el
+contexto fresco y de fuente del coste del run en curso. Esquema minimo:
+
+    {"slice_id":"slice-01","name":"cantidad-vo","estado":"hecha","intentos":1,"tokens_in":0,"tokens_out":0,"coste_usd":0.0,"pr_url":"...","ci_result":"green","duracion_s":0,"ts":"2026-07-17T12:00:00Z"}
 
 - Estados: `hecha` | `bloqueada` | `abortada-presupuesto`.
-- **Coste por slice mergeada** = suma de `coste_usd` de las entradas `hecha` / numero de `hecha`. Es la metrica clave (no el coste por intento).
-- Al arrancar una slice (paso 1), leer el ledger para no repetir lo ya `hecha`/`bloqueada`.
+- **Coste por slice mergeada** = suma de `coste_usd` de las entradas `hecha` / numero de `hecha`. Es la metrica clave del run (no el coste por intento). Es efimera: solo cubre el run actual.
+- Al arrancar una slice (paso 1), leer el ledger para no repetir lo ya `hecha`/`bloqueada` en este run.
 
 ### `.slice-runner/stream.log` (efimero, no versionado)
 
@@ -95,7 +115,12 @@ Estado vivo del run para que el panel muestre **todas** las slices (no solo las 
 
 ### Setup
 
-La primera vez, crear `.slice-runner/.gitignore` con `stream.log` y `state.json` (versiona el ledger, no el stream ni el estado efimeros). `deploy-watch` anexa a estos mismos ficheros su veredicto + señales del deploy.
+La primera vez, crear `.slice-runner/.gitignore` con una sola linea `*` (y otra `!.gitignore`
+para conservar el propio ignore). **Todo `.slice-runner/` es efimero y no versionado**: ledger,
+stream y estado. Si la spec vive fuera de `.slice-runner/`, aseguratela tambien fuera de la PR:
+`.slice-runner/spec.md` es la ubicacion por defecto (gitignored); si el usuario apunta a una
+spec en otra ruta, **nunca la stagees** (la regla de staging del paso 7 ya lo garantiza).
+`deploy-watch` anexa a estos mismos ficheros su veredicto + señales del deploy.
 
 ## Steps
 
@@ -107,8 +132,8 @@ La primera vez, crear `.slice-runner/.gitignore` con `stream.log` y `state.json`
   - Formato A: la indicada por el usuario, o la primera `[ ]`.
   - Formato B: el fichero completo es la slice.
 - Extrae titulo, alcance y AC. En Formato B derivalos del `Goal` + `Interfaces`/verificaciones de los Tasks + `Global Constraints`. Si no hay AC ni forma de derivarlos, para y pidelos: sin AC no hay puerta de verificacion.
-- **Lee `.slice-runner/runs.jsonl`** (si existe) para no repetir slices ya `hecha`/`bloqueada`. Crea `.slice-runner/` y su `.gitignore` (con `stream.log` y `state.json`) si no existen. Escribe `state.json` con `spec_path`, `spec_format` y la slice seleccionada, y abre el stream con la linea `select`.
-- Deriva un slug para la rama: `slice/NN-slug`.
+- **Lee `.slice-runner/runs.jsonl`** (si existe) para no repetir slices ya `hecha`/`bloqueada`. Crea `.slice-runner/` y su `.gitignore` (una linea `*` + `!.gitignore`; todo efimero) si no existen. Escribe `state.json` con `spec_path`, `spec_format` y la slice seleccionada, y abre el stream con la linea `select`.
+- **Toma el `name` de la slice** (Formato A: entre parentesis tras el id; Formato B: cabecera `> Nombre:`). Si no hay name, deriva un slug del titulo y avisa. La rama es `slice/NN-<name>` (p. ej. `slice/01-cantidad-vo`). Toma tambien el `type` opcional (por defecto `feat`).
 
 ### 2. Autodetectar comandos del repo (Makefile primero)
 
@@ -121,7 +146,8 @@ Infierelos, no los asumas. Cachea lo detectado en la respuesta.
 
 ### 3. Alinear antes de implementar (check-alignment)
 
-- Resume: slice elegida, AC, capa(s) afectada(s), comando de validacion que aplicara, y como piensa abordarla.
+- Resume: slice elegida (id + `name`), AC, capa(s) afectada(s), comando de validacion que aplicara, `type(name)` de conventional commit que usara el commit/PR, y como piensa abordarla.
+- Si el cambio claramente **no es un `feat`** (p. ej. refactor o fix) y la spec no declaro type, confirma el type con el usuario aqui (barato; evita un scope de commit erroneo).
 - Si la spec pre-hornea codigo, contrastalo contra `docs/conventions/` + `CLAUDE.md` y **senala cualquier violacion antes de escribir** (no lo transcribas a ciegas).
 - Espera go/no-go del usuario. Esto evita `silent-misalignment` y `ai-slop`.
 
@@ -140,7 +166,10 @@ Lanza un Agent (subagent_type `nw-software-crafter` o `general-purpose`) con ins
   - Capas eximidas por la convencion del repo (p. ej. modelos ORM y migraciones alembic que no se testean por separado): no forzar test-first; la validacion es "suite intacta + verificacion del efecto" (p. ej. el `SELECT` que exige el plan).
 - **Refactor tras cada verde.** Una vez los tests pasan, hacer una pasada de refactor (eliminar duplicacion, mejorar nombres y estructura) manteniendo el verde, antes de entregar. La evidencia empirica senala el refactor tras verde -no el orden test-first- como el verdadero driver de calidad y mantenibilidad en agentes; no lo difieras a una pasada final.
 - No sobredimensionar: lo minimo para los AC. Nada de andamiaje de slices futuras.
-- Devolver: ficheros tocados, tests anadidos (si aplica) y resumen del enfoque.
+- **No tocar spec, ledger ni artefactos.** Solo ficheros de codigo/test de la slice. No escribas
+  planes, design-docs ni marques la spec: eso es trabajo del orquestador y no va a la PR.
+- Devolver: **la lista explicita de rutas de codigo/test creadas o modificadas** (es lo que se
+  stageara en el paso 7, nada mas), tests anadidos (si aplica) y resumen del enfoque.
 
 ### 6. Verificar (subagente verificador, distinto)
 
@@ -153,13 +182,25 @@ Lanza un Agent **diferente** (subagent_type `nw-software-crafter-reviewer` o `ge
 - TDD consciente de capa (comprobacion barata, no re-testeo): en capas con test, que exista un test por AC y que preceda a la implementacion; en capas eximidas, "suite intacta + efecto verificado".
 - **Calidad de tests (test-desiderata)**: si la slice anade o toca tests, correr la skill `test-desiderata` sobre ellos. Bloquea el gate solo ante violaciones **graves** (no determinista, no aislado, o test que no verifica comportamiento real); las menores (legibilidad, velocidad, etc.) se reportan como aviso sin bloquear. En slices sin tests (infra/migracion), se salta.
 - Comprobar las `Global Constraints` de la spec (Formato B) y los boundaries de las dos-arboles (nucleo sin infra, DI correcta, DTOs en boundaries).
+- **Higiene de la PR (feedback 3).** Inspeccionar `git diff --cached --name-only`: el diff staged
+  debe contener **solo ficheros de codigo/test de la slice**. Si aparece la spec, `.slice-runner/`,
+  un plan, un design-doc u otro artefacto, es FALLA (staging incorrecto en el paso 7).
 - Veredicto: PASA / FALLA con motivos concretos.
 - Si FALLA: devolver al paso 5 con los motivos (max 2 reintentos). Si agota reintentos, para y reporta.
 
 ### 7. Abrir PR
 
-- Commit con mensaje que referencia la slice (nunca en `master`/`main`). Push de la rama.
-- `gh pr create` con cuerpo que: enlaza la spec, lista los AC cumplidos y resume los cambios.
+- **Stagea SOLO los ficheros de codigo/test que devolvio el implementador (feedback 3).** Usa
+  `git add <ruta1> <ruta2> ...` con la lista explicita; **prohibido `git add -A`, `git add .`
+  o `git commit -a`**. La spec, `.slice-runner/`, planes y design-docs NO entran en la PR (ya
+  estan gitignored o simplemente no se stagean). Verifica con `git diff --cached --name-only`.
+- **Conventional commit (feedback 4).** Mensaje y titulo de PR = `type(name): resumen`, con el
+  `type` (por defecto `feat`) y el `name` de la slice: p. ej. `feat(cantidad-vo): add Cantidad
+  value object`. Cuerpo del commit opcional con detalle; el `name` es el scope. Nunca commitees
+  en `master`/`main`. Push de la rama `slice/NN-<name>`.
+- `gh pr create` con titulo `type(name): resumen` y cuerpo que: lista los AC cumplidos y resume
+  los cambios. **No enlaces la spec por ruta** (es efimera y no vive en el repo); resume su
+  contenido si hace falta.
 - No marcar como ready-to-merge automaticamente mas alla de lo normal; el merge es humano.
 
 ### 8. Esperar CI verde (puerta final)
@@ -182,3 +223,16 @@ El merge sigue siendo **humano** (lo haces tu en GitHub); lo que se automatiza e
 ## Fin
 
 Al parar (o al ceder el control a `deploy-watch`), reporta siempre: slice ejecutada, estado (hecha / bloqueada / abortada-presupuesto / esperando-merge), URL del PR, resultado de CI, coste de la slice, y siguiente slice pendiente. Si quedan slices pendientes, sugiere volver a invocar (o envolver en `/loop` para Nivel 2).
+
+### Descarte del estado efimero (fin del run)
+
+Cuando **no quedan slices pendientes** (todas las de la spec estan `hecha`/`bloqueada`), el run
+ha terminado: descarta el estado efimero.
+
+- Borra `.slice-runner/` (`rm -rf .slice-runner/`) y la spec (`.slice-runner/spec.md`, o la ruta
+  externa que se uso). No se comitea nada de esto: el registro duradero son las PRs mergeadas.
+- Hazlo solo al final del run completo, **no por slice**: durante el run el ledger y la spec son
+  la memoria del contexto-fresco y del encadenado con `/loop`.
+- Si el run se para con slices aun pendientes (bloqueo, presupuesto, o una sola invocacion de
+  Nivel 1 con mas slices por delante), **no borres nada**: el estado debe sobrevivir para el
+  siguiente ciclo. El descarte es exclusivamente el cierre del run entero.

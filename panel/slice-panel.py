@@ -57,7 +57,18 @@ DEPLOY_COLOR = {
 BOX_ESTADO = {" ": "pendiente", "x": "hecha", "X": "hecha", "!": "bloqueada"}
 
 _SLICE_LINE = re.compile(r"^\s*-\s*\[([ xX!])\]\s*(.*)$")
-_SLICE_ID = re.compile(r"^(slice[-\w]+)\s*[:\-—]?\s*(.*)$", re.IGNORECASE)
+# id + nombre opcional entre parentesis ("(name)" o "(type: name)") + titulo.
+_SLICE_ID = re.compile(r"^(slice[-\w]+)\s*(?:\(([^)]*)\))?\s*[:\-—]?\s*(.*)$", re.IGNORECASE)
+
+
+def _split_name(paren: str | None) -> str:
+    """Extrae el name de un parentesis '(name)' o '(type: name)'. '' si no hay."""
+    if not paren:
+        return ""
+    paren = paren.strip()
+    if ":" in paren:
+        return paren.split(":", 1)[1].strip()
+    return paren
 
 
 def _read_jsonl(path: Path) -> list[dict]:
@@ -102,10 +113,12 @@ def _parse_spec(spec_path: Path) -> list[dict]:
         box, rest = m.group(1), m.group(2).strip()
         idm = _SLICE_ID.match(rest)
         if idm:
-            sid, title = idm.group(1), idm.group(2).strip()
+            sid, name, title = idm.group(1), _split_name(idm.group(2)), idm.group(3).strip()
         else:
-            sid, title = rest.split(":", 1)[0][:12], rest
-        slices.append({"slice_id": sid, "title": title, "box_estado": BOX_ESTADO.get(box, "pendiente")})
+            sid, name, title = rest.split(":", 1)[0][:12], "", rest
+        slices.append(
+            {"slice_id": sid, "name": name, "title": title, "box_estado": BOX_ESTADO.get(box, "pendiente")}
+        )
     return slices
 
 
@@ -203,9 +216,12 @@ def _render(repo: Path, cli_spec: str | None) -> str:
         )
         out.append("")
 
-    header = f"  {'SLICE':<12} {'ESTADO':<16} {'INT':<4} {'VERIFY':<7} {'COSTE':<10} {'CI':<14} {'DEPLOY':<11} PR"
+    header = (
+        f"  {'SLICE':<10} {'NAME':<16} {'ESTADO':<16} {'INT':<4} {'VERIFY':<7} "
+        f"{'COSTE':<10} {'CI':<14} {'DEPLOY':<11} PR"
+    )
     out.append(f"{BOLD}{header}{RESET}")
-    out.append(f"  {DIM}{'-' * 92}{RESET}")
+    out.append(f"  {DIM}{'-' * 108}{RESET}")
 
     if not ordered_ids:
         out.append(f"  {DIM}(sin slices: no hay spec legible ni entradas en el ledger){RESET}")
@@ -218,8 +234,10 @@ def _render(repo: Path, cli_spec: str | None) -> str:
         ver = str(dep.get("veredicto", "-"))
         dep_color = DEPLOY_COLOR.get(ver, DIM)
         e = led_e or {}
+        name = spec_by_id.get(sid, {}).get("name") or e.get("name") or "-"
         row = (
-            f"  {str(sid):<12} "
+            f"  {str(sid):<10} "
+            f"{_trunc(name, 16):<16} "
             f"{color}{estado:<16}{RESET} "
             f"{str(e.get('intentos', '-')):<4} "
             f"{str(e.get('verify', '-')):<7} "

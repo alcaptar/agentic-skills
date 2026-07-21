@@ -1,7 +1,7 @@
 # agentic-skills — instrucciones del repo
 
-Este repo es la **fuente de verdad** de skills personales de Claude Code (`slice-runner`,
-`deploy-watch`, panel). Las skills viven aqui y `~/.claude/skills/` apunta por symlink,
+Este repo es la **fuente de verdad** de skills personales de Claude Code (`slice-spec`,
+`slice-runner`, `deploy-watch`, panel). Las skills viven aqui y `~/.claude/skills/` apunta por symlink,
 asi que editar aqui cambia el comportamiento activo de Claude Code.
 
 ## Antes de hacer cambios (obligatorio)
@@ -28,8 +28,16 @@ coherencia con `ai-patterns`.
 - **Esperas no bloqueantes**: ninguna skill lanza shells bloqueantes largas (`--watch`,
   `sleep` largos); las esperas son ticks acotados en background + notificacion.
 - **No asumir worktree**: rama normal por defecto; worktree solo al paralelizar slices.
-- **El estado vive en el repo**: la spec + `.slice-runner/` (`runs.jsonl`, `state.json`,
-  `stream.log`) son el estado; el agente olvida, el repo no.
+- **El estado del run es efimero**: la spec + `.slice-runner/` (`runs.jsonl`, `state.json`,
+  `stream.log`) son el estado durante el run, pero viven **gitignored** y se **descartan al
+  terminar** (fin del run, sin slices pendientes). Son la memoria intra-run del agente; el
+  registro duradero son las PRs mergeadas, no ficheros en el repo.
+- **La PR solo lleva el codigo de la slice**: el commit stagea unicamente los ficheros de
+  codigo/test de la slice (`git add` explicito, nunca `-A`/`.`); spec, ledger, planes y
+  design-docs jamas entran en la PR. Conventional commits con el `name` de la slice como scope
+  (`feat(name): ...`).
+- **Cada slice tiene nombre**: `name` kebab-case en la spec; alimenta rama (`slice/NN-name`) y
+  scope de commit de forma determinista. La skill `slice-spec` produce specs bien formadas.
 
 ## Verificacion tras tocar el panel
 

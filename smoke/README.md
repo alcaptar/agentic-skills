@@ -39,7 +39,9 @@ Luego, desde Claude Code en ese directorio:
 /slice-runner   (o: "corre la siguiente slice de spec.md")
 ```
 
-Debe: seleccionar slice-01, alinear, escribir el test (rojo), implementar `fizzbuzz`, refactor, verificar con un subagente independiente, dejar las puertas verdes, y escribir `.slice-runner/runs.jsonl` + `.slice-runner/stream.log`.
+Debe: seleccionar slice-01 (name `fizzbuzz-core`), alinear, escribir el test (rojo), implementar `fizzbuzz`, refactor, verificar con un subagente independiente, dejar las puertas verdes, y escribir `.slice-runner/runs.jsonl` + `.slice-runner/stream.log`.
+
+En la variante con PR/CI real, el commit y el titulo de PR siguen conventional commits con el name como scope: `feat(fizzbuzz-core): ...`.
 
 Sigue el run en vivo desde otra terminal:
 
@@ -51,10 +53,14 @@ tail -f .slice-runner/stream.log
 
 - `make linting && make check-types && make test` verdes.
 - El verificador devuelve `PASA` (AC cubiertos + convenciones OK).
-- `spec.md` queda con `- [x] slice-01`.
-- `.slice-runner/runs.jsonl` tiene una entrada `"estado":"hecha"`.
+- Durante el run, `spec.md` queda con `- [x] slice-01 (fizzbuzz-core)` y `.slice-runner/runs.jsonl`
+  tiene una entrada `"estado":"hecha"` con `"name":"fizzbuzz-core"`.
+- El diff staged (variante PR) contiene **solo** `fizzbuzz/core.py` y `tests/test_core.py`: ni la
+  spec, ni `.slice-runner/`, ni otros artefactos.
 
-Compara tu salida con `sample-output/` para confirmar que coincide en forma.
+Nota: la spec y `.slice-runner/` son **efimeros y gitignored**; al cerrar el run (sin slices
+pendientes) slice-runner los descarta. Inspecciona el ledger/stream durante el run, o compara con
+`sample-output/` (evidencia commiteada de un run verde real).
 
 ## Resultado del último run de referencia
 
