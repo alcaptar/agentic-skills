@@ -88,12 +88,11 @@ staging del paso 7 (`git add` solo de los ficheros de codigo).
 ### `.slice-runner/runs.jsonl` (efimero, no versionado)
 
 Ledger append-only: una linea JSON por slice al cerrarla. Sirve de memoria intra-run para el
-contexto fresco y de fuente del coste del run en curso. Esquema minimo:
+contexto fresco: que slices ya estan cerradas en este run. Esquema minimo:
 
-    {"slice_id":"slice-01","name":"cantidad-vo","estado":"hecha","intentos":1,"tokens_in":0,"tokens_out":0,"coste_usd":0.0,"pr_url":"...","ci_result":"green","duracion_s":0,"ts":"2026-07-17T12:00:00Z"}
+    {"slice_id":"slice-01","name":"cantidad-vo","estado":"hecha","pr_url":"...","duracion_s":0,"ts":"2026-07-17T12:00:00Z"}
 
 - Estados: `hecha` | `bloqueada` | `abortada-presupuesto`.
-- **Coste por slice mergeada** = suma de `coste_usd` de las entradas `hecha` / numero de `hecha`. Es la metrica clave del run (no el coste por intento). Es efimera: solo cubre el run actual.
 - Al arrancar una slice (paso 1), leer el ledger para no repetir lo ya `hecha`/`bloqueada` en este run.
 
 ### `.slice-runner/stream.log` (efimero, no versionado)
@@ -206,7 +205,7 @@ Lanza un Agent **diferente** (subagent_type `nw-software-crafter-reviewer` o `ge
 ### 8. Esperar CI verde (puerta final)
 
 - Espera hasta verde o rojo con **ticks acotados en background + notificacion** (o la herramienta `Monitor`), **nunca** `gh pr checks --watch` ni un `sleep` largo que bloquee la shell/sesion (principio de esperas no bloqueantes; es trabajo deterministico que hace el harness, no la IA poll-eando). Cada tick consulta `gh pr checks --json` y devuelve el control. Respeta un timeout de espera razonable.
-- **Verde**: marca la slice como hecha (Formato A: `[x]`; Formato B: cabecera de estado), **escribe la entrada en el ledger** (estado `hecha`, intentos, tokens/$, `pr_url`, `ci_result`, duracion), emite `ci green` al stream y **pasa al paso 9** (no paras aqui).
+- **Verde**: marca la slice como hecha (Formato A: `[x]`; Formato B: cabecera de estado), **escribe la entrada en el ledger** (estado `hecha`, `pr_url`, duracion), emite `ci green` al stream y **pasa al paso 9** (no paras aqui).
 - **Rojo**: trae los logs del check fallido (`gh run view --log-failed`), un reintento via paso 5 con esos logs.
   - Si tras el reintento sigue roja: marca la slice como bloqueada (`[!]` / cabecera), **escribe la entrada en el ledger** (estado `bloqueada`, motivo), emite `blocked: ci rojo` al stream, **deja el PR abierto**, resume el fallo con logs y **para** (circuit breaker). No cierres el PR ni descartes la rama/worktree.
 - Si en cualquier momento se supera el presupuesto de tokens/$ de la slice: escribe la entrada `abortada-presupuesto`, emite `abort: presupuesto` y para.

@@ -47,12 +47,6 @@ ESTADO_COLOR = {
     "pendiente": DIM,
 }
 
-DEPLOY_COLOR = {
-    "sano": GREEN,
-    "degradado": RED,
-    "inconcluso": YELLOW,
-}
-
 # checkbox de la spec (Formato A) -> estado
 BOX_ESTADO = {" ": "pendiente", "x": "hecha", "X": "hecha", "!": "bloqueada"}
 
@@ -122,16 +116,6 @@ def _parse_spec(spec_path: Path) -> list[dict]:
     return slices
 
 
-def _coste(entry: dict) -> str:
-    usd = entry.get("coste_usd")
-    if isinstance(usd, (int, float)) and usd > 0:
-        return f"${usd:.2f}"
-    tok = entry.get("verifier_tokens") or entry.get("tokens_out") or entry.get("tokens_in")
-    if isinstance(tok, (int, float)) and tok > 0:
-        return f"{tok / 1000:.1f}k tok"
-    return "-"
-
-
 def _trunc(text: str, width: int) -> str:
     text = str(text)
     return text if len(text) <= width else text[: width - 1] + "…"
@@ -174,17 +158,8 @@ def _render(repo: Path, cli_spec: str | None) -> str:
     led = _read_jsonl(sr / "runs.jsonl")
     stream = _tail(sr / "stream.log", 8)
 
+    # Ignora entradas `fase: deploy` de ledgers viejos: ya no se trackean.
     slice_led = {e.get("slice_id"): e for e in led if e.get("fase") != "deploy" and e.get("slice_id")}
-    deploy_led: dict[str, dict] = {}
-    deploys_sin_slice: list[dict] = []
-    for e in led:
-        if e.get("fase") != "deploy":
-            continue
-        sid = e.get("slice_id")
-        if sid:
-            deploy_led[sid] = e
-        else:
-            deploys_sin_slice.append(e)
 
     spec_path = _resolve_spec_path(repo, state, cli_spec)
     spec_slices = _parse_spec(spec_path) if spec_path else []
@@ -216,12 +191,9 @@ def _render(repo: Path, cli_spec: str | None) -> str:
         )
         out.append("")
 
-    header = (
-        f"  {'SLICE':<10} {'NAME':<16} {'ESTADO':<16} {'INT':<4} {'VERIFY':<7} "
-        f"{'COSTE':<10} {'CI':<14} {'DEPLOY':<11} PR"
-    )
+    header = f"  {'SLICE':<10} {'NAME':<32} {'ESTADO':<16} PR"
     out.append(f"{BOLD}{header}{RESET}")
-    out.append(f"  {DIM}{'-' * 108}{RESET}")
+    out.append(f"  {DIM}{'-' * 80}{RESET}")
 
     if not ordered_ids:
         out.append(f"  {DIM}(sin slices: no hay spec legible ni entradas en el ledger){RESET}")
@@ -230,32 +202,15 @@ def _render(repo: Path, cli_spec: str | None) -> str:
         led_e = slice_led.get(sid)
         estado = _estado_de(sid, slice_led, spec_by_id, slice_actual, fase_actual, esperando)
         color = ESTADO_COLOR.get(estado, "")
-        dep = deploy_led.get(sid, {})
-        ver = str(dep.get("veredicto", "-"))
-        dep_color = DEPLOY_COLOR.get(ver, DIM)
         e = led_e or {}
         name = spec_by_id.get(sid, {}).get("name") or e.get("name") or "-"
         row = (
             f"  {str(sid):<10} "
-            f"{_trunc(name, 16):<16} "
+            f"{_trunc(name, 32):<32} "
             f"{color}{estado:<16}{RESET} "
-            f"{str(e.get('intentos', '-')):<4} "
-            f"{str(e.get('verify', '-')):<7} "
-            f"{_coste(e):<10} "
-            f"{_trunc(e.get('ci_result', '-'), 14):<14} "
-            f"{dep_color}{ver:<11}{RESET} "
             f"{DIM}{str(e.get('pr_url', '-'))}{RESET}"
         )
         out.append(row)
-
-    # deploys sin slice asociada (compat con entradas viejas)
-    if deploys_sin_slice:
-        out.append("")
-        out.append(f"{BOLD}  deploy-watch (sin slice){RESET}")
-        for d in deploys_sin_slice:
-            ver = str(d.get("veredicto", "?"))
-            color = DEPLOY_COLOR.get(ver, YELLOW)
-            out.append(f"  {str(d.get('pr_url', '-')):<24} {color}{ver}{RESET}")
 
     # resumen
     all_states = {
@@ -266,23 +221,16 @@ def _render(repo: Path, cli_spec: str | None) -> str:
     bloqueadas = [s for s, st in all_states.items() if st == "bloqueada"]
     pendientes = [s for s, st in all_states.items() if st == "pendiente"]
     esperando_merge = [s for s, st in all_states.items() if st == "esperando-merge"]
-    validadas = [s for s in ordered_ids if deploy_led.get(s, {}).get("veredicto") == "sano"]
-    total_usd = sum(float((slice_led.get(s) or {}).get("coste_usd") or 0) for s in ordered_ids)
-    usd_hechas = sum(float((slice_led.get(s) or {}).get("coste_usd") or 0) for s in hechas)
 
     out.append("")
     resumen = (
         f"  {BOLD}resumen{RESET}  "
         f"{GREEN}{len(hechas)} hechas{RESET}  "
-        f"{GREEN}{len(validadas)} validadas en deploy{RESET}  "
         f"{MAGENTA}{len(esperando_merge)} esperando merge{RESET}  "
         f"{RED}{len(bloqueadas)} bloqueadas{RESET}  "
         f"{DIM}{len(pendientes)} pendientes{RESET}  "
         f"{len(ordered_ids)} total"
     )
-    if total_usd > 0:
-        por_slice = usd_hechas / len(hechas) if hechas else 0.0
-        resumen += f"  ·  ${total_usd:.2f} total  ·  ${por_slice:.2f}/slice mergeada"
     out.append(resumen)
 
     # stream en vivo

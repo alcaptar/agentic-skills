@@ -25,14 +25,14 @@ python3 panel/slice-panel.py /ruta/al/repo --interval 5
 python3 panel/slice-panel.py /ruta/al/repo --spec spec.md
 ```
 
-Muestra **todas** las slices de la spec y su estado (`pendiente`/`en curso`/`esperando-merge`/`hecha`/`bloqueada`/`abortada-presupuesto`), intentos, VERIFY, COSTE (al cierre), CI, **DEPLOY** (veredicto de `deploy-watch`: `sano`/`degradado`/`inconcluso`), y PR. Encima de la tabla, un banner destaca si el pipeline esta **esperandote a ti** (p. ej. el merge) frente a parado. El resumen cuenta hechas, **validadas en deploy**, bloqueadas, pendientes y el coste total y por slice mergeada. Abajo, el tail del stream con fecha completa.
+Muestra **todas** las slices de la spec en cuatro columnas: `SLICE` (id), `NAME` (nombre kebab-case), `ESTADO` (`pendiente`/`en curso`/`esperando-merge`/`hecha`/`bloqueada`/`abortada-presupuesto`) y `PR`. Encima de la tabla, un banner destaca si el pipeline esta **esperandote a ti** (p. ej. el merge) frente a parado. El resumen cuenta hechas, esperando merge, bloqueadas, pendientes y el total. Abajo, el tail del stream con fecha completa.
 
 ## Qué muestra y qué no
 
-- **Sí**: estado del pipeline en vivo y coste **al cierre de cada slice** (lo que hay en el ledger).
-- **No**: consumo de tokens/$ en **tiempo real** durante un run. Una skill no puede auto-reportar su burn de tokens fiablemente en streaming.
+- **Sí**: el **estado** del pipeline en vivo (por donde va cada slice y si te esta esperando).
+- **No**: consumo de tokens/$ (ni en tiempo real ni al cierre). Una skill no puede auto-reportar su burn de tokens de forma fiable, asi que el panel no lo intenta.
 
-Para el consumo en vivo de verdad (tokens/$/sesiones/agentes al momento), la fuente correcta es la **telemetria de Claude Code**:
+Para el consumo de tokens/$/sesiones/agentes, la fuente correcta es la **telemetria de Claude Code**:
 - Exportar metricas por **OpenTelemetry** a tu stack (Prometheus/Grafana de monline).
 - O la **Analytics API** de Claude Code.
 

@@ -56,7 +56,7 @@ Se ejecuta con **ticks acotados en background + notificacion** (o `Monitor`), no
 ### 4. Veredicto por tick
 
 - Cada senal es `ok` o `degradada`.
-- **Sano**: las 4 `ok` durante toda la ventana de estabilizacion -> reporte verde, **marca la slice como validada en deploy** (ver ledger abajo) y **para**.
+- **Sano**: las 4 `ok` durante toda la ventana de estabilizacion -> reporte verde, la slice queda **validada en deploy** (no solo mergeada; es un veredicto en vivo, no se persiste) y **para**.
 - **Degradada**: cualquier senal fuera de rango -> rama de anomalia (paso 5).
 - **Timeout**: agotada la ventana sin converger -> reporte inconcluso con datos y **para**.
 
@@ -66,12 +66,12 @@ Se ejecuta con **ticks acotados en background + notificacion** (o `Monitor`), no
 2. **Redacta (sin ejecutar) el rollback** segun `slicing.md`: `git revert <merge_sha>` + redeploy, con los comandos listos para que los lance el usuario.
 3. Para y presenta: senal(es) degradada(s) + evidencia, RCA del `sre`, y el rollback preparado.
 
-## Integracion con el ledger / stream
+## Integracion con el stream
 
 Comparte la observabilidad del pipeline con `slice-runner` via `.slice-runner/` del repo:
 
 - Anexa al **stream en vivo** (`.slice-runner/stream.log`) una linea por transicion, con **fecha completa** `YYYY-MM-DD HH:MM:SS` (igual que `slice-runner`): `deploy start`, `signal <nombre> ok|degradada`, `verdict sano|degradado|inconcluso`, `rca ...`, `rollback drafted`. Asi el mismo `tail -f` cubre implementacion y despliegue.
-- Al cerrar, anexa una entrada al **ledger** (`.slice-runner/runs.jsonl`) enlazada al `pr_url` y al `slice_id`: `{"pr_url":"...","slice_id":"slice-NN","fase":"deploy","veredicto":"sano|degradado|inconcluso","senales":{...},"ts":"..."}`. El `slice_id` permite al panel unir la slice con su validacion en deploy y pintar la columna DEPLOY. Un veredicto `sano` es lo que marca la slice como **validada en deploy** (no solo mergeada).
+- **No** escribe en el ledger (`runs.jsonl`): el veredicto del deploy es efimero, se reporta en vivo (stream + "Fin") y no se persiste como dato ni se pinta en el panel.
 
 ## Fin
 

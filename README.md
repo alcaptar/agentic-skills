@@ -79,7 +79,7 @@ Fase post-approve, read-only sobre prod. Se **encadena automaticamente** al dete
 
 Ambas skills escriben en `.slice-runner/` del repo objetivo. **Todo es efimero y gitignored**: se
 descarta al terminar el run (nada se comitea).
-- `runs.jsonl`: una linea por slice con name, estado, coste (tokens/$), PR, CI y veredicto de deploy. Es la memoria intra-run del contexto fresco y la fuente del coste-por-slice-mergeada (del run actual).
+- `runs.jsonl`: una linea por slice con name, estado y PR. Es la memoria intra-run del contexto fresco: que slices ya estan cerradas.
 - `state.json`: estado vivo (spec_path, slice en curso, fase) para que el panel muestre las pendientes y si esta `waiting: merge`.
 - `stream.log`: stream en vivo con fecha completa. `tail -f .slice-runner/stream.log`.
 
@@ -89,7 +89,7 @@ Panel de estado (TUI) que agrega spec + ledger + stream en una tabla live:
 python3 panel/slice-panel.py /ruta/al/repo        # live (Ctrl+C sale)
 ```
 
-Muestra **todas** las slices (incluidas las pendientes de la spec), una columna **DEPLOY** (validada en prod) y un banner cuando esta **esperando una decision tuya**. Cubre el **estado**; el consumo de tokens/$ en tiempo real sale de la telemetria de Claude Code (OTel -> Grafana), no de las skills. Ver `panel/README.md`.
+Muestra **todas** las slices (incluidas las pendientes de la spec) en una tabla `SLICE · NAME · ESTADO · PR`, con un banner cuando esta **esperando una decision tuya**. Cubre el **estado**; el consumo de tokens/$ sale de la telemetria de Claude Code (OTel -> Grafana), no de las skills. Ver `panel/README.md`.
 
 ## Principios comunes
 
