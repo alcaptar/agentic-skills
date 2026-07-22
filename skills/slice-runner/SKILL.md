@@ -20,6 +20,7 @@ Nivel de autonomia 1: un ciclo por invocacion. Para encadenar slices, envolver e
 - **El que implementa no verifica.** La implementacion y la verificacion las hacen subagentes distintos (Agent tool), con instrucciones distintas. El verificador es adversarial.
 - **Las convenciones del repo mandan.** Implementador y verificador cargan `docs/conventions/` + `CLAUDE.md` (si existen) como vara de medir, por encima de cualquier default generico de hexagonal/DDD. En conflicto, ganan las convenciones del repo. Sin esto, el verificador no puede cazar violaciones reales (p. ej. una migracion que siembra datos donde la convencion lo prohibe).
 - **Puertas de parada objetivas.** No hay PR mergeable sin lint limpio, tipos limpios, tests verdes y **CI verde**, ejecutados con los comandos reales del repo (paso 2), no con binarios asumidos.
+- **Determinista lo que es regla exacta (`offload-deterministic`).** Lo que se puede comprobar con una regla (higiene del diff staged, formato del conventional commit) NO se delega al juicio del verificador: lo resuelve el script `scripts/gates.py`, cuyo exit code es autoritativo. El verificador gasta su presupuesto solo en lo semantico: convenciones y arquitectura del repo. No se pide dos veces a la IA lo que un script decide una vez.
 - **TDD consciente de capa.** Por defecto TDD estricto: test rojo por cada AC antes del codigo, y el verificador comprueba que el test precede a la implementacion. Pero si las convenciones del repo eximen una capa (p. ej. modelos ORM y migraciones que no se testean por separado), la puerta para esa slice es "suite intacta + verificacion de datos/efecto", no test-first por AC. La convencion del repo decide, no este documento.
 - **Alinear antes de implementar.** Antes de escribir codigo, mostrar el entendimiento de la slice (alcance, AC, capa afectada, comando de validacion) y esperar go/no-go. Nunca transcribir a ciegas el codigo pre-horneado de una spec: validalo contra las convenciones primero.
 - **Seguir `backend-best-practices`.** El implementador carga esa skill y respeta hexagonal/DDD, DI, Pydantic en boundaries, subordinada siempre a las convenciones del repo.
@@ -121,6 +122,23 @@ stream y estado. Si la spec vive fuera de `.slice-runner/`, aseguratela tambien 
 spec en otra ruta, **nunca la stagees** (la regla de staging del paso 7 ya lo garantiza).
 `deploy-watch` anexa a estos mismos ficheros su veredicto + señales del deploy.
 
+### Metricas durables (fuera del repo, sobreviven al run)
+
+Distinto del estado efimero: `~/.claude/slice-runner/metrics.jsonl` es un log **durable**
+append-only, un registro por slice cerrada, que **no vive en el repo** (por tanto nunca entra en
+una PR) y **no se borra** al descartar `.slice-runner/`. Existe para responder con datos "cuando
+subir de nivel" sin depender de la intuicion. Lo escribe y lo agrega `scripts/metrics.py`
+(`offload-deterministic`): la IA no estima cifras a ojo.
+
+    python3 ~/.claude/skills/slice-runner/scripts/metrics.py report [--repo <repo>]
+
+Reporta: tasa de FALLA del verificador, % de slices al primer intento, media de reintentos,
+tasa de CI roja, duracion media. Es el instrumento para el "confianza en el loop" del Step 3 del
+mapa de madurez. Coste en tokens no se mide aqui (sale de OTel de Claude Code).
+
+`<repo>` debe ser un **identificador estable** del repo (p. ej. el nombre del directorio raiz o el
+slug del remoto), el mismo en `record` y en `report --repo`, para que las cifras agrupen bien.
+
 ## Steps
 
 ### 1. Localizar spec, detectar formato y seleccionar slice
@@ -176,27 +194,51 @@ Lanza un Agent **diferente** (subagent_type `nw-software-crafter-reviewer` o `ge
 
 **Su valor es la revision de convenciones y arquitectura, no re-testear.** La correccion del comportamiento la gobiernan CI + los AC; duplicar esa validacion con un segundo agente que re-deriva coberturas sale caro y no aporta (evidencia empirica sobre split authorship). Por eso el verificador **ejecuta** las puertas deterministas pero concentra su **juicio** en convenciones, boundaries y constraints.
 
-- Cargar `docs/conventions/` + `CLAUDE.md` como vara de medir principal y **contrastar el diff contra ellos**, citando regla + path en cada hallazgo (esto es lo que caza cosas como una migracion que siembra datos donde la convencion lo prohibe). Cargar tambien `backend-best-practices` como vara secundaria para lo que las convenciones del repo no cubren. En conflicto, ganan las convenciones del repo.
-- Ejecutar las puertas deterministas con los comandos del paso 2 (Makefile primero) y capturar output. Es ejecucion, no re-derivacion: no reimplementes ni reinventes coberturas de test.
-- TDD consciente de capa (comprobacion barata, no re-testeo): en capas con test, que exista un test por AC y que preceda a la implementacion; en capas eximidas, "suite intacta + efecto verificado".
-- **Calidad de tests (test-desiderata)**: si la slice anade o toca tests, correr la skill `test-desiderata` sobre ellos. Bloquea el gate solo ante violaciones **graves** (no determinista, no aislado, o test que no verifica comportamiento real); las menores (legibilidad, velocidad, etc.) se reportan como aviso sin bloquear. En slices sin tests (infra/migracion), se salta.
-- Comprobar las `Global Constraints` de la spec (Formato B) y los boundaries de las dos-arboles (nucleo sin infra, DI correcta, DTOs en boundaries).
-- **Higiene de la PR (feedback 3).** Inspeccionar `git diff --cached --name-only`: el diff staged
-  debe contener **solo ficheros de codigo/test de la slice**. Si aparece la spec, `.slice-runner/`,
-  un plan, un design-doc u otro artefacto, es FALLA (staging incorrecto en el paso 7).
-- Veredicto: PASA / FALLA con motivos concretos.
-- Si FALLA: devolver al paso 5 con los motivos (max 2 reintentos). Si agota reintentos, para y reporta.
+Recorre esta **rubrica cerrada** entera y reporta item a item. Cada item esta marcado `[det]` (lo resuelve un script y solo consumes su resultado) o `[sem]` (lo juzgas tu):
+
+- `[det]` **Puertas objetivas**: ejecutar lint, tipos y tests con los comandos del paso 2 (Makefile primero) y capturar output. Es ejecucion, no re-derivacion: no reimplementes ni reinventes coberturas de test. El exit code manda.
+- `[sem]` **Convenciones y arquitectura**: cargar `docs/conventions/` + `CLAUDE.md` como vara de medir principal y **contrastar el diff contra ellos**, citando regla + path en cada hallazgo (esto es lo que caza cosas como una migracion que siembra datos donde la convencion lo prohibe). Cargar tambien `backend-best-practices` como vara secundaria para lo que las convenciones no cubren. En conflicto, ganan las convenciones del repo.
+- `[sem]` **Boundaries**: nucleo sin infra, DI correcta, DTOs (Pydantic) en boundaries.
+- `[sem]` **Global Constraints** de la spec (Formato B): comprobar una a una.
+- `[sem]` **TDD consciente de capa** (comprobacion barata, no re-testeo): en capas con test, que exista un test por AC y que preceda a la implementacion; en capas eximidas, "suite intacta + efecto verificado".
+- `[sem]` **Calidad de tests (test-desiderata)**: si la slice anade o toca tests, correr la skill `test-desiderata` sobre ellos. Bloquea solo ante violaciones **graves** (no determinista, no aislado, o test que no verifica comportamiento real); las menores (legibilidad, velocidad...) se reportan como aviso sin bloquear. En slices sin tests (infra/migracion), se salta.
+
+La higiene del diff staged y el formato del commit **no** se comprueban aqui: son `[det]` puros y los ejecuta `scripts/gates.py` en el paso 7, cuando el staging ya existe. No los re-juzgues por lectura.
+
+**Veredicto estructurado (no prosa).** Lanza este Agent con `schema` para que devuelva exactamente:
+
+```json
+{
+  "veredicto": "PASA | FALLA",
+  "hallazgos": [
+    {"regla": "boundaries", "path": "src/infra/x.py", "severidad": "alta | media | baja", "detalle": "..."}
+  ]
+}
+```
+
+- Reglas del veredicto: **FALLA** si alguna puerta objetiva `[det]` falla o si hay algun hallazgo `severidad: alta`. Los `media`/`baja` se reportan pero no bloquean por si solos (juicio: si se acumulan, el verificador puede subir a FALLA explicando por que).
+- El schema se valida en la capa de tool: no parsees texto libre.
+- Si FALLA: devolver al paso 5 con los `hallazgos` (max 2 reintentos). Guarda el conteo de hallazgos por severidad y el veredicto final: alimentan las metricas.
+- **Si agota los reintentos con FALLA**: marca la slice como bloqueada (`[!]` / cabecera), **escribe la entrada en el ledger** (estado `bloqueada`, motivo `verify`), emite `blocked: verify` al stream, **registra la metrica durable** (`veredicto=FALLA`, `ci=none`; ver paso 8) y **para**. No sigas al paso 7: sin PASA del verificador no se abre PR. Sin esto, el rechazo del verificador -justo lo que queremos medir- no dejaria rastro.
 
 ### 7. Abrir PR
 
 - **Stagea SOLO los ficheros de codigo/test que devolvio el implementador (feedback 3).** Usa
   `git add <ruta1> <ruta2> ...` con la lista explicita; **prohibido `git add -A`, `git add .`
   o `git commit -a`**. La spec, `.slice-runner/`, planes y design-docs NO entran en la PR (ya
-  estan gitignored o simplemente no se stagean). Verifica con `git diff --cached --name-only`.
+  estan gitignored o simplemente no se stagean).
+- **Puerta determinista de higiene (`[det]`).** Tras stagear, corre
+  `python3 ~/.claude/skills/slice-runner/scripts/gates.py pr-hygiene --repo . --spec <ruta-spec> --allow <ruta1> --allow <ruta2> ...`
+  con la lista exacta que devolvio el implementador. Exit 0 = PASA. Si FALLA (algo staged fuera de
+  lo declarado, o un artefacto: spec, `.slice-runner/`, plan, design-doc), **corrige el staging**
+  (`git restore --staged`) y reintenta; no lo re-interpretes a ojo. No commitees hasta PASA.
 - **Conventional commit (feedback 4).** Mensaje y titulo de PR = `type(name): resumen`, con el
   `type` (por defecto `feat`) y el `name` de la slice: p. ej. `feat(cantidad-vo): add Cantidad
   value object`. Cuerpo del commit opcional con detalle; el `name` es el scope. Nunca commitees
   en `master`/`main`. Push de la rama `slice/NN-<name>`.
+- **Puerta determinista del mensaje (`[det]`).** Antes de commitear, valida el mensaje con
+  `python3 ~/.claude/skills/slice-runner/scripts/gates.py commit-msg --name <name> --message "<titulo>"`. Exit 0 = PASA.
+  Si FALLA, arregla el mensaje (no cambies el `name` de la slice para colar el commit).
 - `gh pr create` con titulo `type(name): resumen` y cuerpo que: lista los AC cumplidos y resume
   los cambios. **No enlaces la spec por ruta** (es efimera y no vive en el repo); resume su
   contenido si hace falta.
@@ -205,10 +247,22 @@ Lanza un Agent **diferente** (subagent_type `nw-software-crafter-reviewer` o `ge
 ### 8. Esperar CI verde (puerta final)
 
 - Espera hasta verde o rojo con **ticks acotados en background + notificacion** (o la herramienta `Monitor`), **nunca** `gh pr checks --watch` ni un `sleep` largo que bloquee la shell/sesion (principio de esperas no bloqueantes; es trabajo deterministico que hace el harness, no la IA poll-eando). Cada tick consulta `gh pr checks --json` y devuelve el control. Respeta un timeout de espera razonable.
-- **Verde**: marca la slice como hecha (Formato A: `[x]`; Formato B: cabecera de estado), **escribe la entrada en el ledger** (estado `hecha`, `pr_url`, duracion), emite `ci green` al stream y **pasa al paso 9** (no paras aqui).
+- **Verde**: marca la slice como hecha (Formato A: `[x]`; Formato B: cabecera de estado), **escribe la entrada en el ledger** (estado `hecha`, `pr_url`, duracion), emite `ci green` al stream, **registra la metrica durable** (ver abajo, `ci=green`) y **pasa al paso 9** (no paras aqui).
 - **Rojo**: trae los logs del check fallido (`gh run view --log-failed`), un reintento via paso 5 con esos logs.
-  - Si tras el reintento sigue roja: marca la slice como bloqueada (`[!]` / cabecera), **escribe la entrada en el ledger** (estado `bloqueada`, motivo), emite `blocked: ci rojo` al stream, **deja el PR abierto**, resume el fallo con logs y **para** (circuit breaker). No cierres el PR ni descartes la rama/worktree.
-- Si en cualquier momento se supera el presupuesto de tokens/$ de la slice: escribe la entrada `abortada-presupuesto`, emite `abort: presupuesto` y para.
+  - Si tras el reintento sigue roja: marca la slice como bloqueada (`[!]` / cabecera), **escribe la entrada en el ledger** (estado `bloqueada`, motivo), emite `blocked: ci rojo` al stream, **registra la metrica durable** (`ci=red`), **deja el PR abierto**, resume el fallo con logs y **para** (circuit breaker). No cierres el PR ni descartes la rama/worktree.
+- Si en cualquier momento se supera el presupuesto de tokens/$ de la slice: escribe la entrada `abortada-presupuesto`, emite `abort: presupuesto`, **registra la metrica durable** (`veredicto=abortada-presupuesto`) y para.
+
+**Registro de la metrica durable (`[det]`).** Al cerrar la slice, en **cualquiera** de los caminos de cierre (verify terminal FALLA del paso 6, CI verde, CI roja terminal, o presupuesto), anexa un registro con:
+
+```
+python3 ~/.claude/skills/slice-runner/scripts/metrics.py record --repo <repo> --slice <slice_id> --name <name> \
+  --veredicto <PASA|FALLA|abortada-presupuesto> --ci <green|red|none> \
+  --hallazgos-alta N --hallazgos-media N --hallazgos-baja N \
+  --reintentos-implement N --reintentos-ci N --duracion-s N
+```
+
+- `veredicto` = el del verificador del paso 6 (`PASA`/`FALLA`), o `abortada-presupuesto` si paro el presupuesto. Los conteos de `hallazgos` salen del veredicto estructurado del paso 6.
+- Este log vive **fuera del repo** (`~/.claude/slice-runner/metrics.jsonl`), sobrevive al descarte del estado efimero y **nunca entra en una PR**. Coste en tokens: opcional (`--coste-tokens`); si no lo tienes de OTel, no lo inventes (se omite).
 
 ### 9. Esperar el merge y encadenar el deploy
 
@@ -230,6 +284,8 @@ ha terminado: descarta el estado efimero.
 
 - Borra `.slice-runner/` (`rm -rf .slice-runner/`) y la spec (`.slice-runner/spec.md`, o la ruta
   externa que se uso). No se comitea nada de esto: el registro duradero son las PRs mergeadas.
+- **No toques `~/.claude/slice-runner/metrics.jsonl`**: es durable, vive fuera del repo y es
+  justo lo que debe sobrevivir al run para medir la evolucion del loop.
 - Hazlo solo al final del run completo, **no por slice**: durante el run el ledger y la spec son
   la memoria del contexto-fresco y del encadenado con `/loop`.
 - Si el run se para con slices aun pendientes (bloqueo, presupuesto, o una sola invocacion de
