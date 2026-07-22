@@ -36,9 +36,12 @@ Dos modos:
   de slice-runner sin ambiguedad. Si no cumple el contrato de abajo, no esta terminada.
 - **Cada slice tiene nombre.** `name` kebab-case, estable, determinista: alimenta rama y scope de
   commit en slice-runner. Sin nombre no hay spec bien formada.
+- **Guia el corte, no lo delega.** El troceo lo lleva esta skill cargando su cerebro de slicing
+  (`references/slicing.md`): walking skeleton, heuristica ordenada, hamburger como motor de
+  composicion, calibrador de tamano y validacion del corte. La skill es la **fuente de verdad** del
+  slicing; `hamburger-method`/`story-splitting` son profundizacion opcional, no el motor.
 - **Slices verticales y pequenas.** Cada slice es una rebanada entregable de punta a punta con AC
-  propios, no una capa tecnica suelta. Para el troceo, apoyate en `hamburger-method` y
-  `story-splitting` si la feature es grande o ambigua.
+  propios, no una capa tecnica suelta.
 - **AC obligatorios por slice.** Sin AC no hay puerta de verificacion en slice-runner: toda slice
   declara criterios de aceptacion concretos y comprobables.
 - **La spec es efimera.** Se escribe en `.slice-runner/spec.md` (gitignored); slice-runner la
@@ -102,10 +105,12 @@ Reglas duras:
 1. **Invoca `superpowers:brainstorming`** y sigue su proceso para entender intencion, proponer
    enfoques y validar el diseno con el usuario. **Excepcion al terminal de brainstorming:** no
    invoques `writing-plans`; el paso siguiente es emitir la spec de slices (pasos 2-4).
-2. **Trocea en slices verticales.** A partir del diseno aprobado, define las slices: cada una
-   entregable, con AC propios, en orden de dependencia. Si la feature es grande o el troceo no es
-   obvio, usa `hamburger-method`/`story-splitting`. Elige `name` kebab-case por slice y, si aplica,
-   su `type`.
+2. **Trocea en slices verticales (guia activa).** Carga `references/slicing.md` y aplica su
+   procedimiento sobre el diseno aprobado: identifica el **walking skeleton** (slice #1), genera el
+   resto por la **heuristica ordenada**, y **solo abre dialogo con la persona** (opciones graduadas
+   por capa, estilo hamburger) cuando el corte no es obvio o una slice supera el budget. Valida cada
+   slice contra los criterios de validez y el conjunto contra el **test de despriorizacion** e
+   **igualdad de tamano**. Elige `name` kebab-case por slice y, si aplica, su `type`.
 3. **Elige formato.** Varias slices ⇒ Formato A. Una sola slice con pasos internos ⇒ Formato B.
 4. **Escribe la spec** en `.slice-runner/spec.md` (crea `.slice-runner/` y su `.gitignore` con `*`
    + `!.gitignore` si no existen, para que nunca se comitee). Cumple el contrato de formato al pie
@@ -127,6 +132,11 @@ corregirlas. Checklist:
 - Checkboxes validos (`[ ]`/`[x]`/`[!]`).
 - Ninguna slice sin AC (sin AC no hay puerta de verificacion en slice-runner).
 - Nombres unicos y estables (no colisionan al derivar ramas `slice/NN-name`).
+- **Calidad del corte** (contra `references/slicing.md`): cada slice es vertical, desplegable sola y
+  reversible; el conjunto pasa el **test de despriorizacion** (hay >=1 slice que se podria posponer)
+  y tiene **tamano equilibrado**; ninguna slice nombrada por capa tecnica salvo horizontal
+  justificado; cuando una slice sustituye comportamiento en prod, nombra su mecanismo seguro (flag /
+  expand-contract).
 
 Si todo cumple: reporta `spec valida` y recuerda que se ejecuta con `/slice-runner`.
 
