@@ -1,0 +1,21 @@
+name: smoke-fixture
+
+# Solo corre para PRs que tocan la fixture del smoke (no molesta al resto del repo).
+on:
+  pull_request:
+    paths:
+      - "smoke/fixture/**"
+
+jobs:
+  gates:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: smoke/fixture
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync
+      - run: make linting
+      - run: make check-types
+      - run: make test
