@@ -1,6 +1,6 @@
 ---
 name: slice-runner
-description: Ejecuta una slice de una spec markdown de principio a fin. Usar cuando el usuario tenga una spec en .md (checklist de slices, o un plan de una sola slice estilo superpowers) y quiera implementar la siguiente (o una concreta) de forma autonoma - implementar con TDD consciente de capa, verificar con un agente independiente que carga las convenciones del repo, abrir PR y esperar a que la CI este verde, y parar. Aplica si dice "corre la siguiente slice", "implementa la slice X de la spec", "slice-runner", o describe el flujo spec -> slice -> PR -> CI.
+description: Ejecuta una slice de una spec markdown de principio a fin. Usar cuando el usuario tenga una spec en .md (checklist de slices con nombre y AC) y quiera implementar la siguiente (o una concreta) de forma autonoma - implementar con TDD consciente de capa, verificar con un agente independiente que carga las convenciones del repo, abrir PR y esperar a que la CI este verde, y parar. Aplica si dice "corre la siguiente slice", "implementa la slice X de la spec", "slice-runner", o describe el flujo spec -> slice -> PR -> CI.
 ---
 
 # Slice Runner
@@ -31,13 +31,11 @@ Nivel de autonomia 1: un ciclo por invocacion. Para encadenar slices, envolver e
 - **Esperas no bloqueantes.** Prohibido lanzar shells bloqueantes largas para esperar (nada de `gh pr checks --watch`, `sleep` largos, ni polls que se queden colgados 30-60 min). Toda espera (CI verde, merge de la PR) se hace con **ticks acotados en background + notificacion** (o la herramienta `Monitor`), devolviendo el control entre ticks. Una espera nunca debe monopolizar una shell ni la sesion.
 - **No asumir worktree.** Por defecto se trabaja en una rama normal. Solo se usa un git worktree aislado si se van a paralelizar varias slices concurrentes (Nivel 2) o si el repo ya declara config de worktrees.
 
-## Formatos de spec soportados
+## Formato de spec
 
-La skill autodetecta cual de estos dos formatos usa la spec. Si no encaja en ninguno, para y pregunta.
-
-### Formato A — checklist de slices
-
-Un fichero con varias slices; cada item del checklist es una slice, con **nombre** y AC embebidos.
+La spec es un **checklist de slices**. Un fichero con una o varias slices; cada item del checklist
+es una slice, con **nombre** y AC embebidos. Si el `.md` no encaja en este formato, para y pide una
+spec valida (o sugiere `/slice-spec` para generarla).
 
 ```markdown
 ## Slices
@@ -47,7 +45,8 @@ Un fichero con varias slices; cada item del checklist es una slice, con **nombre
       AC: emite evento StockAjustado; no toca infra directamente
 ```
 
-Unidad de trabajo = cada item `- [ ]`. `[ ]` pendiente, `[x]` hecha, `[!]` bloqueada.
+Unidad de trabajo = cada item `- [ ]`. `[ ]` pendiente, `[x]` hecha, `[!]` bloqueada. Una feature de
+una sola slice es simplemente un checklist con una unica linea.
 
 - **Nombre de slice (obligatorio en specs nuevas).** Entre parentesis tras el id va el `name`
   en kebab-case: `slice-01 (cantidad-vo): ...`. El name es estable y determinista: alimenta la
@@ -55,23 +54,14 @@ Unidad de trabajo = cada item `- [ ]`. `[ ]` pendiente, `[x]` hecha, `[!]` bloqu
   slugs de texto libre.
 - **Type opcional.** Por defecto el commit es `feat`. Para otro type, prefijalo dentro del
   parentesis: `slice-03 (refactor: extraer-repo): ...` ⇒ `refactor(extraer-repo): ...`.
-- **Compatibilidad.** Si una slice no trae `(name)`, deriva un slug del titulo como hoy y
-  **avisa** de que la spec deberia declarar nombre. No bloquea el run.
-
-### Formato B — plan de una slice (estilo superpowers)
-
-Un fichero **es una sola slice** (titulo tipo `Slice N — ...`), con `Goal`, `Architecture`, `Global Constraints` y `### Task N` que contienen `- [ ] Step N`.
-
-- **La unidad de trabajo es el fichero entero**, no cada Step. No trates un Step como una slice.
-- El **nombre** va en la cabecera: `> Nombre: cantidad-vo` (y opcional `> Type: refactor`).
-- Los AC se derivan de: el `Goal`, los `Interfaces`/`Expected`/verificaciones de cada Task, y las `Global Constraints`.
-- Los `- [ ] Step N` son el plan de ejecucion interno; el estado de la slice se lleva a nivel de fichero (ver abajo).
-- Los `Global Constraints` son restricciones duras que el verificador debe comprobar.
+- **Restricciones duras = AC.** Lo que la slice debe respetar (p. ej. "no toca infra directamente")
+  se expresa como un AC comprobable mas; el verificador comprueba los AC.
+- **Compatibilidad.** Si una slice no trae `(name)`, deriva un slug del titulo y **avisa** de que la
+  spec deberia declarar nombre. No bloquea el run.
 
 ### Estado
 
-- Formato A: marca el item de la slice `[ ]`/`[x]`/`[!]`.
-- Formato B: como el fichero es una slice, registra el estado en su cabecera (una linea `> Estado: hecha | bloqueada (motivo)`), o marca el checklist de un indice externo si la spec vive dentro de uno.
+- Marca el item de la slice `[ ]`/`[x]`/`[!]`.
 - `[!]` / bloqueada = CI roja no resuelta; deja el PR abierto.
 - **Recuerda: el marcado de estado es efimero.** Como la spec no se comitea (ver abajo), este
   marcado solo persiste durante el run y se descarta al terminar. Sirve de memoria intra-run.
@@ -108,7 +98,7 @@ La skill anexa una linea por transicion de fase, formato `YYYY-MM-DD HH:MM:SS  s
 
 Estado vivo del run para que el panel muestre **todas** las slices (no solo las cerradas) y sepa que spec leer. Se reescribe en cada transicion:
 
-    {"spec_path":"spec.md","spec_format":"A","slice_actual":"slice-02","fase":"waiting: merge","ts":"2026-07-17T12:00:00Z"}
+    {"spec_path":"spec.md","slice_actual":"slice-02","fase":"waiting: merge","ts":"2026-07-17T12:00:00Z"}
 
 - `spec_path` deja que el panel lea el checklist de la spec y liste las slices `pendiente`.
 - `fase` refleja la fase en curso (incluido `waiting: merge`) para distinguir "esperandote" de "parado".
@@ -141,16 +131,15 @@ slug del remoto), el mismo en `record` y en `report --repo`, para que las cifras
 
 ## Steps
 
-### 1. Localizar spec, detectar formato y seleccionar slice
+### 1. Localizar spec y seleccionar slice
 
 - Pide la ruta de la spec `.md` si no se ha dado.
-- **Detecta el formato** (A checklist / B plan de una slice; ver "Formatos de spec soportados"). Si no encaja, para y pregunta.
-- Selecciona la slice:
-  - Formato A: la indicada por el usuario, o la primera `[ ]`.
-  - Formato B: el fichero completo es la slice.
-- Extrae titulo, alcance y AC. En Formato B derivalos del `Goal` + `Interfaces`/verificaciones de los Tasks + `Global Constraints`. Si no hay AC ni forma de derivarlos, para y pidelos: sin AC no hay puerta de verificacion.
-- **Lee `.slice-runner/runs.jsonl`** (si existe) para no repetir slices ya `hecha`/`bloqueada`. Crea `.slice-runner/` y su `.gitignore` (una linea `*` + `!.gitignore`; todo efimero) si no existen. Escribe `state.json` con `spec_path`, `spec_format` y la slice seleccionada, y abre el stream con la linea `select`.
-- **Toma el `name` de la slice** (Formato A: entre parentesis tras el id; Formato B: cabecera `> Nombre:`). Si no hay name, deriva un slug del titulo y avisa. La rama es `slice/NN-<name>` (p. ej. `slice/01-cantidad-vo`). Toma tambien el `type` opcional (por defecto `feat`).
+- **Comprueba que es un checklist de slices** (ver "Formato de spec"). Si no encaja, para y pide una
+  spec valida (o sugiere `/slice-spec`).
+- Selecciona la slice: la indicada por el usuario, o la primera `[ ]`.
+- Extrae titulo, alcance y AC de la slice. Si no hay AC, para y pidelos: sin AC no hay puerta de verificacion.
+- **Lee `.slice-runner/runs.jsonl`** (si existe) para no repetir slices ya `hecha`/`bloqueada`. Crea `.slice-runner/` y su `.gitignore` (una linea `*` + `!.gitignore`; todo efimero) si no existen. Escribe `state.json` con `spec_path` y la slice seleccionada, y abre el stream con la linea `select`.
+- **Toma el `name` de la slice** (entre parentesis tras el id). Si no hay name, deriva un slug del titulo y avisa. La rama es `slice/NN-<name>` (p. ej. `slice/01-cantidad-vo`). Toma tambien el `type` opcional (por defecto `feat`).
 
 ### 2. Autodetectar comandos del repo (Makefile primero)
 
@@ -200,7 +189,6 @@ Recorre esta **rubrica cerrada** entera y reporta item a item. Cada item esta ma
 - `[sem]` **Convenciones y arquitectura**: cargar `docs/conventions/` + `CLAUDE.md` como vara de medir principal y **contrastar el diff contra ellos**, citando regla + path en cada hallazgo (esto es lo que caza cosas como una migracion que siembra datos donde la convencion lo prohibe). Cargar tambien `backend-best-practices` como vara secundaria para lo que las convenciones no cubren. En conflicto, ganan las convenciones del repo.
 - `[sem]` **Patron de rollout/entrega correcto (no solo bien implementado).** Caso concreto del check de convenciones anterior, resaltado aparte por ser un fallo recurrente. No basta con que el patron elegido este bien ejecutado y sea coherente consigo mismo: comprueba que **es el patron que la convencion del repo prescribe para este tipo de cambio**. Disparador general: si el cambio toca la **firma/constructor/contrato publico** de una accion o caso de uso, la convencion suele exigir un patron distinto (duplicar la accion / expand-contract) que si solo cambia logica interna (gatear en el metodo). Deriva el criterio de `docs/conventions/` (p. ej. delivery/testing), **no** de como quedo una slice anterior: el codigo ya mergeado es circunstancia, no regla. Si el patron elegido no encaja con lo que pide la convencion para este cambio, es **FALLA (severidad alta)**, citando regla + path. Este es el check que un verificador que solo mira la implementacion deja pasar.
 - `[sem]` **Boundaries**: nucleo sin infra, DI correcta, DTOs (Pydantic) en boundaries.
-- `[sem]` **Global Constraints** de la spec (Formato B): comprobar una a una.
 - `[sem]` **TDD consciente de capa** (comprobacion barata, no re-testeo): en capas con test, que exista un test por AC y que preceda a la implementacion; en capas eximidas, "suite intacta + efecto verificado".
 - `[sem]` **Conformidad con los AC (no solo que existan tests).** Distinto del punto anterior (que comprueba que *hay* un test por AC) y de test-desiderata (que juzga la calidad *generica* del test); este comprueba que se **cumple el cometido del AC**. Para cada AC: (1) **mapeo AC↔test**: que el test asserte lo que *ese* AC exige, no una version debilitada -la calidad generica del test (verifica comportamiento real, aislamiento...) es de test-desiderata, no la repitas aqui-; (2) que el **codigo cumpla la intencion** del AC, no solo que pase su propio test (pregunta adversarial: "¿podria pasar este test y aun asi violar lo que el AC pedia?") -lectura acotada, no re-derivar cobertura-; (3) codigo que implementa **comportamiento que ningun AC pidio** (feature especulativa, andamiaje de slices futuras). El refactor tras verde que permite el paso 5 (extraer helpers, mejorar estructura) **traza al AC** y no es hallazgo. FALLA (severidad alta) si un AC no queda pineado, si el codigo no cumple su intencion, o si hay comportamiento sin AC que lo justifique.
 - `[sem]` **Calidad de tests (test-desiderata)**: si la slice anade o toca tests, correr la skill `test-desiderata` sobre ellos. Bloquea solo ante violaciones **graves** (no determinista, no aislado, o test que no verifica comportamiento real); las menores (legibilidad, velocidad...) se reportan como aviso sin bloquear. En slices sin tests (infra/migracion), se salta.
@@ -221,7 +209,7 @@ La higiene del diff staged y el formato del commit **no** se comprueban aqui: so
 - Reglas del veredicto: **FALLA** si alguna puerta objetiva `[det]` falla o si hay algun hallazgo `severidad: alta`. Los `media`/`baja` se reportan pero no bloquean por si solos (juicio: si se acumulan, el verificador puede subir a FALLA explicando por que).
 - El schema se valida en la capa de tool: no parsees texto libre.
 - Si FALLA: devolver al paso 5 con los `hallazgos` (max 2 reintentos). Guarda el conteo de hallazgos por severidad y el veredicto final: alimentan las metricas.
-- **Si agota los reintentos con FALLA**: marca la slice como bloqueada (`[!]` / cabecera), **escribe la entrada en el ledger** (estado `bloqueada`, motivo `verify`), emite `blocked: verify` al stream, **registra la metrica durable** (`veredicto=FALLA`, `ci=none`; ver paso 8) y **para**. No sigas al paso 7: sin PASA del verificador no se abre PR. Sin esto, el rechazo del verificador -justo lo que queremos medir- no dejaria rastro.
+- **Si agota los reintentos con FALLA**: marca la slice como bloqueada (`[!]`), **escribe la entrada en el ledger** (estado `bloqueada`, motivo `verify`), emite `blocked: verify` al stream, **registra la metrica durable** (`veredicto=FALLA`, `ci=none`; ver paso 8) y **para**. No sigas al paso 7: sin PASA del verificador no se abre PR. Sin esto, el rechazo del verificador -justo lo que queremos medir- no dejaria rastro.
 
 ### 7. Abrir PR
 
@@ -234,13 +222,11 @@ La higiene del diff staged y el formato del commit **no** se comprueban aqui: so
   con la lista exacta que devolvio el implementador. Exit 0 = PASA. Si FALLA (algo staged fuera de
   lo declarado, o un artefacto: spec, `.slice-runner/`, plan, design-doc), **corrige el staging**
   (`git restore --staged`) y reintenta; no lo re-interpretes a ojo. No commitees hasta PASA.
-- **Conventional commit (feedback 4).** Mensaje y titulo de PR = `type(name): resumen`, con el
-  `type` (por defecto `feat`) y el `name` de la slice: p. ej. `feat(cantidad-vo): add Cantidad
-  value object`. Cuerpo del commit opcional con detalle; el `name` es el scope. Nunca commitees
-  en `master`/`main`. Push de la rama `slice/NN-<name>`.
-- **Puerta determinista del mensaje (`[det]`).** Antes de commitear, valida el mensaje con
-  `python3 ~/.claude/skills/slice-runner/scripts/gates.py commit-msg --name <name> --message "<titulo>"`. Exit 0 = PASA.
-  Si FALLA, arregla el mensaje (no cambies el `name` de la slice para colar el commit).
+- **Conventional commit.** Mensaje y titulo de PR = `type(name): resumen`, con el `type` (por
+  defecto `feat`) y el `name` de la slice como scope: p. ej. `feat(cantidad-vo): add Cantidad value
+  object`. Redactar un conventional commit lo haces bien sin puerta; lo unico determinista aqui es
+  que el `name` (scope) viene de la spec, no de un slug inventado. Cuerpo del commit opcional con
+  detalle. Nunca commitees en `master`/`main`. Push de la rama `slice/NN-<name>`.
 - `gh pr create` con titulo `type(name): resumen` y cuerpo que: lista los AC cumplidos y resume
   los cambios. **No enlaces la spec por ruta** (es efimera y no vive en el repo); resume su
   contenido si hace falta.
@@ -249,9 +235,9 @@ La higiene del diff staged y el formato del commit **no** se comprueban aqui: so
 ### 8. Esperar CI verde (puerta final)
 
 - Espera hasta verde o rojo con **ticks acotados en background + notificacion** (o la herramienta `Monitor`), **nunca** `gh pr checks --watch` ni un `sleep` largo que bloquee la shell/sesion (principio de esperas no bloqueantes; es trabajo deterministico que hace el harness, no la IA poll-eando). Cada tick consulta `gh pr checks --json` y devuelve el control. Respeta un timeout de espera razonable.
-- **Verde**: marca la slice como hecha (Formato A: `[x]`; Formato B: cabecera de estado), **escribe la entrada en el ledger** (estado `hecha`, `pr_url`, duracion), emite `ci green` al stream, **registra la metrica durable** (ver abajo, `ci=green`) y **pasa al paso 9** (no paras aqui).
+- **Verde**: marca la slice como hecha (`[x]`), **escribe la entrada en el ledger** (estado `hecha`, `pr_url`, duracion), emite `ci green` al stream, **registra la metrica durable** (ver abajo, `ci=green`) y **pasa al paso 9** (no paras aqui).
 - **Rojo**: trae los logs del check fallido (`gh run view --log-failed`), un reintento via paso 5 con esos logs.
-  - Si tras el reintento sigue roja: marca la slice como bloqueada (`[!]` / cabecera), **escribe la entrada en el ledger** (estado `bloqueada`, motivo), emite `blocked: ci rojo` al stream, **registra la metrica durable** (`ci=red`), **deja el PR abierto**, resume el fallo con logs y **para** (circuit breaker). No cierres el PR ni descartes la rama/worktree.
+  - Si tras el reintento sigue roja: marca la slice como bloqueada (`[!]`), **escribe la entrada en el ledger** (estado `bloqueada`, motivo), emite `blocked: ci rojo` al stream, **registra la metrica durable** (`ci=red`), **deja el PR abierto**, resume el fallo con logs y **para** (circuit breaker). No cierres el PR ni descartes la rama/worktree.
 - Si en cualquier momento se supera el presupuesto de tokens/$ de la slice: escribe la entrada `abortada-presupuesto`, emite `abort: presupuesto`, **registra la metrica durable** (`veredicto=abortada-presupuesto`) y para.
 
 **Registro de la metrica durable (`[det]`).** Al cerrar la slice, en **cualquiera** de los caminos de cierre (verify terminal FALLA del paso 6, CI verde, CI roja terminal, o presupuesto), anexa un registro con:

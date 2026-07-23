@@ -77,7 +77,12 @@ def _load(path: Path, repo: str | None) -> list[dict[str, object]]:
             line = line.strip()
             if not line:
                 continue
-            row = json.loads(line)
+            try:
+                row = json.loads(line)
+            except json.JSONDecodeError:
+                # Log durable append-only: una linea corrupta (p. ej. escritura a
+                # medias) no debe reventar el report. Se salta, como hace el panel.
+                continue
             if repo is None or row.get("repo") == repo:
                 rows.append(row)
     return rows

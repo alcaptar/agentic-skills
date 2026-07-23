@@ -1,6 +1,6 @@
 ---
 name: slice-spec
-description: Crea (o valida) una spec de slices en el formato exacto que consume slice-runner. Usar cuando el usuario quiera "escribir una spec", "montar el plan de slices", "trocear una feature en slices", "slice-spec", o tenga una idea/feature y necesite convertirla en una spec ejecutable por slice-runner. Envuelve superpowers:brainstorming para el diseno y luego emite el formato (Formato A checklist o Formato B una-slice) con nombre por slice y AC. Modo `validate` para revisar una spec existente contra el contrato del script. No implementa codigo: produce la spec que slice-runner luego ejecuta.
+description: Crea (o valida) una spec de slices en el formato exacto que consume slice-runner. Usar cuando el usuario quiera "escribir una spec", "montar el plan de slices", "trocear una feature en slices", "slice-spec", o tenga una idea/feature y necesite convertirla en una spec ejecutable por slice-runner. Envuelve superpowers:brainstorming para el diseno y luego emite la spec en su formato exacto (checklist de slices con nombre y AC). Modo `validate` para revisar una spec existente contra el contrato. No implementa codigo: produce la spec que slice-runner luego ejecuta.
 ---
 
 # Slice Spec
@@ -49,9 +49,7 @@ Dos modos:
 
 ## Contrato de formato (lo que el script espera)
 
-`slice-runner` autodetecta dos formatos. Emite uno de los dos, sin mezclarlos.
-
-### Formato A — checklist de slices (por defecto)
+La spec es un **checklist de slices**. Un solo formato, sin variantes.
 
 ```markdown
 # <titulo de la feature>
@@ -68,37 +66,13 @@ Reglas duras:
 - Cada slice es una linea `- [ ] slice-NN (name): titulo`. `NN` = orden de dos digitos; `name` =
   kebab-case unico dentro de la spec.
 - Type opcional para conventional commits: `slice-03 (refactor: extraer-repo): ...`. Sin type ⇒ `feat`.
+  No hace falta declarar la lista de types validos: el commit lo redacta el agente (sabe conventional
+  commits) y su unica puerta determinista es la higiene del diff (`gates.py pr-hygiene`).
 - Debajo de cada slice, una o mas lineas indentadas con `AC:` describiendo criterios concretos
-  (y donde viven los tests si aplica).
+  (y donde viven los tests si aplica). Las **restricciones duras** (p. ej. "no toca infra
+  directamente") se expresan como un AC comprobable mas.
 - Checkbox inicial siempre `[ ]` (pendiente). slice-runner lo pasa a `[x]`/`[!]` durante el run.
-
-### Formato B — plan de una sola slice (estilo superpowers)
-
-Usalo cuando la feature es **una sola** slice con pasos internos:
-
-```markdown
-# Slice — <titulo>
-
-> Nombre: nombre-kebab
-> Type: feat        (opcional; por defecto feat)
-> Estado: pendiente
-
-## Goal
-<que consigue la slice, en una-tres frases>
-
-## Global Constraints
-- <restriccion dura 1 que el verificador debe comprobar>
-
-### Task 1 — <nombre>
-- [ ] Step 1: <accion>
-  Expected: <verificacion / interfaz esperada>
-```
-
-Reglas duras:
-
-- Un fichero = una slice. El `name` va en la cabecera `> Nombre:`.
-- Los AC se derivan del `Goal` + los `Expected`/`Interfaces` de los Tasks + los `Global Constraints`.
-- Los `- [ ] Step N` son el plan interno; el estado de la slice se lleva a nivel de fichero (`> Estado:`).
+- Una feature de **una sola slice** = un checklist con una unica linea.
 
 ## Steps — modo autoria (por defecto)
 
@@ -111,13 +85,12 @@ Reglas duras:
    por capa, estilo hamburger) cuando el corte no es obvio o una slice supera el budget. Valida cada
    slice contra los criterios de validez y el conjunto contra el **test de despriorizacion** e
    **igualdad de tamano**. Elige `name` kebab-case por slice y, si aplica, su `type`.
-3. **Elige formato.** Varias slices ⇒ Formato A. Una sola slice con pasos internos ⇒ Formato B.
-4. **Escribe la spec** en `.slice-runner/spec.md` (crea `.slice-runner/` y su `.gitignore` con `*`
+3. **Escribe la spec** en `.slice-runner/spec.md` (crea `.slice-runner/` y su `.gitignore` con `*`
    + `!.gitignore` si no existen, para que nunca se comitee). Cumple el contrato de formato al pie
    de la letra.
-5. **Auto-validacion (offload-deterministic).** Aplica el checklist de `validate` (abajo) sobre lo
-   que acabas de escribir y corrige inline antes de entregar.
-6. **Cierra** diciendo la ruta de la spec y que se ejecuta con `/slice-runner` (o `/loop /slice-runner`
+4. **Auto-validacion.** Aplica el checklist de `validate` (abajo) sobre lo que acabas de escribir y
+   corrige inline antes de entregar.
+5. **Cierra** diciendo la ruta de la spec y que se ejecuta con `/slice-runner` (o `/loop /slice-runner`
    para encadenar todas las slices en Nivel 2).
 
 ## Steps — modo `validate <ruta>`
@@ -125,10 +98,10 @@ Reglas duras:
 Revisa una spec existente contra el contrato y reporta desviaciones (con `regla + linea`). Ofrece
 corregirlas. Checklist:
 
-- Formato detectable (A o B) sin ambiguedad.
-- Formato A: cada slice tiene `slice-NN`, `(name)` kebab-case unico, titulo y al menos una linea `AC:`.
-- Type, si aparece, es valido (`feat|fix|refactor|chore|docs|test|perf|build|ci`).
-- Formato B: cabecera con `> Nombre:` kebab-case; `Goal` presente; AC derivables.
+- Es un checklist de slices (`## Slices` con lineas `- [ ] slice-NN ...`).
+- Cada slice tiene `slice-NN`, `(name)` kebab-case unico, titulo y al menos una linea `AC:`.
+- Si aparece un `type` en el parentesis, es un type de conventional commit (no hay lista normativa
+  que validar aqui: el commit lo redacta y valida el flujo de slice-runner).
 - Checkboxes validos (`[ ]`/`[x]`/`[!]`).
 - Ninguna slice sin AC (sin AC no hay puerta de verificacion en slice-runner).
 - Nombres unicos y estables (no colisionan al derivar ramas `slice/NN-name`).
@@ -142,6 +115,6 @@ Si todo cumple: reporta `spec valida` y recuerda que se ejecuta con `/slice-runn
 
 ## Fin
 
-Reporta: ruta de la spec, formato (A/B), numero de slices y sus nombres, y el comando para
-ejecutarla (`/slice-runner`, o `/loop /slice-runner` para Nivel 2). No implementes nada: ese es el
-trabajo de `slice-runner`.
+Reporta: ruta de la spec, numero de slices y sus nombres, y el comando para ejecutarla
+(`/slice-runner`, o `/loop /slice-runner` para Nivel 2). No implementes nada: ese es el trabajo de
+`slice-runner`.

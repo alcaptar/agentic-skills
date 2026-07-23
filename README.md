@@ -51,15 +51,15 @@ spec.md (efimera, gitignored)
 ### slice-spec
 
 Convierte una idea en una **spec bien formada** que `slice-runner` sabe ejecutar. Envuelve
-`superpowers:brainstorming` para el diseno y luego emite el formato exacto (A checklist o B una-slice)
+`superpowers:brainstorming` para el diseno y luego emite el formato exacto (checklist de slices)
 con un **nombre kebab-case por slice** y AC. Modo `validate` para revisar una spec existente contra el
-contrato del script. No implementa codigo: produce la spec (efimera, en `.slice-runner/spec.md`).
+contrato. No implementa codigo: produce la spec (efimera, en `.slice-runner/spec.md`).
 
 ### slice-runner
 
-Nivel 1 (una slice por invocacion; envolver en `/loop` para Nivel 2). Soporta dos formatos de spec:
-- **A) checklist** `## Slices` con `- [ ] slice-NN (name): ...` por slice.
-- **B) plan de una sola slice** estilo superpowers (el fichero = 1 slice, name en cabecera).
+Nivel 1 (una slice por invocacion; envolver en `/loop` para Nivel 2). La spec es un **checklist de
+slices**: `## Slices` con una linea `- [ ] slice-NN (name): ...` por slice y sus AC. Una feature de
+una sola slice es un checklist con una unica linea.
 
 Cada slice tiene **nombre**: alimenta la rama (`slice/NN-name`) y el scope de conventional commit
 (`feat(name): ...`). Puertas antes de abrir PR: convenciones del repo -> `backend-best-practices` ->

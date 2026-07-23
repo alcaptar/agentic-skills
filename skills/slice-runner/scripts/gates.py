@@ -1,29 +1,26 @@
 #!/usr/bin/env python3
-"""Puertas deterministas de slice-runner (patron offload-deterministic).
+"""Puerta determinista de slice-runner (patron offload-deterministic).
 
-Lo que es una regla exacta NO se delega al juicio semantico del verificador: se
-resuelve aqui con un exit code autoritativo. Dos puertas:
+Se offloada a script solo la regla mecanica con coste de error alto que el modelo
+no garantiza por si mismo. Redactar un conventional commit lo hace bien el agente,
+asi que no hay puerta para eso; lo que si es un backstop mecanico es la higiene del
+diff staged:
 
     pr-hygiene   el diff staged solo puede contener los ficheros de codigo/test
                  que declaro el implementador; nunca spec, .slice-runner/, planes
                  ni design-docs.
-    commit-msg   el mensaje debe ser un conventional commit `type(name): resumen`
-                 con el `name` de la slice como scope exacto.
 
 Exit code 0 = PASA, 1 = FALLA, 2 = error de uso. Con --json imprime el resultado
 estructurado en stdout para que el orquestador lo consuma sin parsear prosa.
 
 Uso:
     gates.py pr-hygiene --repo . --allow src/a.py --allow test/a.py [--spec ruta] [--json]
-    gates.py commit-msg --name cantidad-vo --message "feat(cantidad-vo): ..." [--json]
-    gates.py commit-msg --name cantidad-vo --message-file MSG [--json]
 """
 
 from __future__ import annotations
 
 import argparse
 import json
-import re
 import subprocess
 import sys
 from dataclasses import dataclass, field
@@ -35,21 +32,6 @@ FORBIDDEN_PREFIXES = (
     ".slice-runner/",
     "docs/superpowers/specs/",
     "docs/superpowers/plans/",
-)
-
-# Types validos de conventional commits.
-COMMIT_TYPES = (
-    "feat",
-    "fix",
-    "refactor",
-    "chore",
-    "docs",
-    "test",
-    "perf",
-    "build",
-    "ci",
-    "style",
-    "revert",
 )
 
 
@@ -126,33 +108,6 @@ def check_pr_hygiene(
     return result
 
 
-def _conventional_re(name: str) -> re.Pattern[str]:
-    types = "|".join(COMMIT_TYPES)
-    scope = re.escape(name)
-    # `!` opcional antes de los dos puntos: marcador de breaking change de Conventional Commits.
-    return re.compile(rf"^(?:{types})\({scope}\)!?: .+")
-
-
-def check_commit_msg(name: str, message: str) -> GateResult:
-    """El titulo debe ser `type(name): resumen` con name como scope exacto."""
-    result = GateResult(gate="commit-msg", passed=True)
-    title = message.strip().splitlines()[0].strip() if message.strip() else ""
-
-    if not title:
-        result.passed = False
-        result.hallazgos.append("mensaje de commit vacio")
-        return result
-
-    if not _conventional_re(name).match(title):
-        result.passed = False
-        result.hallazgos.append(
-            f"'{title}' no es conventional commit `type({name}): resumen` "
-            f"(types validos: {', '.join(COMMIT_TYPES)}; scope debe ser '{name}')"
-        )
-
-    return result
-
-
 def _emit(result: GateResult, as_json: bool) -> int:
     if as_json:
         print(json.dumps(result.to_dict(), ensure_ascii=False))
@@ -165,8 +120,7 @@ def _emit(result: GateResult, as_json: bool) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Puertas deterministas de slice-runner")
-    parser.add_argument("--json", action="store_true", help="salida estructurada JSON")
+    parser = argparse.ArgumentParser(description="Puerta determinista de slice-runner")
     sub = parser.add_subparsers(dest="gate", required=True)
 
     hyg = sub.add_parser("pr-hygiene", help="el diff staged solo lleva codigo/test de la slice")
@@ -178,25 +132,11 @@ def main(argv: list[str] | None = None) -> int:
         help="ruta declarada por el implementador (repetible)",
     )
     hyg.add_argument("--spec", default=None, help="ruta de la spec, para prohibirla explicitamente")
-
-    cm = sub.add_parser("commit-msg", help="conventional commit con name como scope")
-    cm.add_argument("--name", required=True, help="name de la slice = scope del commit")
-    grp = cm.add_mutually_exclusive_group(required=True)
-    grp.add_argument("--message", help="mensaje del commit (se valida la primera linea)")
-    grp.add_argument("--message-file", help="fichero con el mensaje del commit")
+    hyg.add_argument("--json", action="store_true", help="salida estructurada JSON")
 
     args = parser.parse_args(argv)
 
-    if args.gate == "pr-hygiene":
-        result = check_pr_hygiene(args.repo, args.allow, args.spec)
-    else:
-        if args.message_file:
-            with open(args.message_file, encoding="utf-8") as fh:
-                message = fh.read()
-        else:
-            message = args.message
-        result = check_commit_msg(args.name, message)
-
+    result = check_pr_hygiene(args.repo, args.allow, args.spec)
     return _emit(result, args.json)
 
 

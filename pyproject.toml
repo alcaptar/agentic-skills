@@ -1,0 +1,5 @@
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# gates.py y metrics.py se importan por nombre; el panel (fichero con guion) se
+# carga con importlib desde conftest.py.
+pythonpath = ["skills/slice-runner/scripts"]

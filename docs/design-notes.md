@@ -11,7 +11,7 @@ Flujo de trabajo objetivo: escribo specs; cada slice de la spec quiero que se im
 ### Decisiones clave
 
 - **Nivel 1 por defecto** (una slice por invocacion, para maximo control). Nivel 2 = envolver en `/loop`. Nivel 3 = Workflow fan-out (no construido; solo para slices independientes).
-- **Dos formatos de spec**: checklist (`## Slices`) y plan de una slice estilo superpowers. Detectados en el paso 1. Surgio al probar con `docs/superpowers/plans/*.md` de un repo real, donde el fichero entero era una sola slice.
+- **Un formato de spec**: checklist (`## Slices`, una linea `- [ ] slice-NN (name): ...` por slice). Hubo un segundo formato (plan de una slice estilo superpowers, el fichero entero = 1 slice) para consumir `docs/superpowers/plans/*.md` de un repo real; se **elimino** porque el flujo canonico (slice-spec -> slice-runner) siempre emite el checklist, y el Formato B no aportaba poder expresivo pero si superficie transversal (deteccion, derivacion de AC, contrato duplicado en 3 sitios). Ver `docs/superpowers/specs/2026-07-22-formato-unico-y-tests-deterministas-design.md`.
 - **Autodeteccion de comandos con Makefile primero.** Muchos repos corren todo en Docker via `make` (`make test`, `make check-types`, `make fastapi-migrate`...); lanzar `pytest`/`ruff` directos falla.
 - **Convenciones del repo como vara de medir principal**, `backend-best-practices` como secundaria, default generico al final. No es invento: replica la jerarquia de autoridad que declara el `CLAUDE.md` de los repos (convenciones > skill > default). Implementador y verificador cargan ambas.
 - **TDD consciente de capa.** Test-first por AC en capas con test; en capas eximidas por convencion (modelos ORM, migraciones alembic) la puerta es "suite intacta + efecto verificado", no test-first. El repo decide.
@@ -21,8 +21,9 @@ Flujo de trabajo objetivo: escribo specs; cada slice de la spec quiero que se im
 - **Refactor tras cada verde** en el implementador.
 - **No hace merge.** Para en "PR abierto + CI verde". Merge humano.
 - **Contexto fresco por slice** (patron Ralph): cada slice arranca limpia; la spec + el ledger son lo que persiste. Hace seguro el Nivel 2.
-- **Ledger + stream** en `.slice-runner/` del repo objetivo (decision del usuario: por repo, versionado): `runs.jsonl` (versionado, memoria + coste + historico) y `stream.log` (efimero, gitignored, para `tail -f` en vivo). Panel = stream en vivo en terminal (no HTML), en linea con el stream compartido de deploy-monitor. deploy-watch anexa a los mismos ficheros.
-- **Coste**: presupuesto de tokens/$ por slice como circuit breaker adicional; metrica = coste por slice mergeada (no por intentada). Motivado por el research (coste hasta 30x impredecible, Stanford).
+- **Estado del run efimero**: todo `.slice-runner/` (`runs.jsonl` ledger, `state.json` estado vivo, `stream.log`) vive **gitignored** y se **descarta al terminar el run**; es la memoria intra-run del contexto fresco, no un registro duradero (ese son las PRs mergeadas). Panel = stream en vivo en terminal (no HTML), en linea con el stream compartido de deploy-monitor. deploy-watch anexa a los mismos ficheros.
+- **Metricas durables fuera del repo**: `~/.claude/slice-runner/metrics.jsonl` (append-only, no versionado, sobrevive al descarte) para medir "cuando subir de nivel". Lo escribe/agrega `scripts/metrics.py`.
+- **Coste**: presupuesto de tokens/$ por slice como circuit breaker adicional; metrica = coste por slice mergeada (no por intentada). Motivado por el research (coste hasta 30x impredecible, Stanford). El coste vive en las metricas durables, no en el ledger.
 
 ### Por que estas decisiones (fuentes)
 

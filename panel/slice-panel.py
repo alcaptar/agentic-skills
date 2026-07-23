@@ -10,7 +10,7 @@ Fuentes:
     <repo>/.slice-runner/state.json   estado vivo (spec_path, slice_actual, fase)
     <repo>/.slice-runner/runs.jsonl   ledger (una linea por slice/deploy al cerrar)
     <repo>/.slice-runner/stream.log   stream en vivo
-    <spec_path>                       checklist Formato A: slices pendientes
+    <spec_path>                       checklist de slices: slices pendientes
 
 Uso:
     python3 slice-panel.py [repo]            # live, refresco cada 2s (Ctrl+C sale)
@@ -47,7 +47,7 @@ ESTADO_COLOR = {
     "pendiente": DIM,
 }
 
-# checkbox de la spec (Formato A) -> estado
+# checkbox de la spec -> estado
 BOX_ESTADO = {" ": "pendiente", "x": "hecha", "X": "hecha", "!": "bloqueada"}
 
 _SLICE_LINE = re.compile(r"^\s*-\s*\[([ xX!])\]\s*(.*)$")
@@ -96,7 +96,7 @@ def _tail(path: Path, n: int) -> list[str]:
 
 
 def _parse_spec(spec_path: Path) -> list[dict]:
-    """Lee un checklist Formato A y devuelve las slices en orden de aparicion."""
+    """Lee el checklist de slices y devuelve las slices en orden de aparicion."""
     if not spec_path.exists():
         return []
     slices: list[dict] = []
@@ -106,10 +106,11 @@ def _parse_spec(spec_path: Path) -> list[dict]:
             continue
         box, rest = m.group(1), m.group(2).strip()
         idm = _SLICE_ID.match(rest)
-        if idm:
-            sid, name, title = idm.group(1), _split_name(idm.group(2)), idm.group(3).strip()
-        else:
-            sid, name, title = rest.split(":", 1)[0][:12], "", rest
+        # Solo cuenta como slice una linea `- [ ] slice-NN ...`. Cualquier otro
+        # checkbox (una tarea suelta, un paso interno) se ignora: no es una slice.
+        if not idm:
+            continue
+        sid, name, title = idm.group(1), _split_name(idm.group(2)), idm.group(3).strip()
         slices.append(
             {"slice_id": sid, "name": name, "title": title, "box_estado": BOX_ESTADO.get(box, "pendiente")}
         )
@@ -218,16 +219,20 @@ def _render(repo: Path, cli_spec: str | None) -> str:
         for sid in ordered_ids
     }
     hechas = [s for s, st in all_states.items() if st == "hecha"]
-    bloqueadas = [s for s, st in all_states.items() if st == "bloqueada"]
-    pendientes = [s for s, st in all_states.items() if st == "pendiente"]
+    en_curso = [s for s, st in all_states.items() if st == "en curso"]
     esperando_merge = [s for s, st in all_states.items() if st == "esperando-merge"]
+    bloqueadas = [s for s, st in all_states.items() if st == "bloqueada"]
+    abortadas = [s for s, st in all_states.items() if st == "abortada-presupuesto"]
+    pendientes = [s for s, st in all_states.items() if st == "pendiente"]
 
     out.append("")
     resumen = (
         f"  {BOLD}resumen{RESET}  "
         f"{GREEN}{len(hechas)} hechas{RESET}  "
+        f"{CYAN}{len(en_curso)} en curso{RESET}  "
         f"{MAGENTA}{len(esperando_merge)} esperando merge{RESET}  "
         f"{RED}{len(bloqueadas)} bloqueadas{RESET}  "
+        f"{YELLOW}{len(abortadas)} abortadas{RESET}  "
         f"{DIM}{len(pendientes)} pendientes{RESET}  "
         f"{len(ordered_ids)} total"
     )

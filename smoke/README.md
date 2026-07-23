@@ -15,7 +15,7 @@ fixture/              proyecto uv autocontenido, en estado RESET (fizzbuzz sin i
   pyproject.toml      ruff + mypy strict + pytest via uv
   Makefile            test / check-types / check-style / check-format / linting
   conventions.md      vara de convenciones (para el verificador)
-  spec.md             1 slice (formato A) con AC, sin marcar
+  spec.md             1 slice (checklist) con AC, sin marcar
   fizzbuzz/core.py    vacio: la slice lo implementa
 sample-output/        artefactos de un run verde real (evidencia)
   stream.log          el stream en vivo de ese run
