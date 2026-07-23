@@ -13,16 +13,16 @@ Emite `[slice-spec]` al inicio de cada respuesta mientras ejecutas este proceso,
 
 Skill fina que produce la **spec** que `slice-runner` consume, en su formato exacto. No re-piensa
 el diseno del producto: **delega el diseno en `superpowers:brainstorming`** y su unico trabajo es
-el **contrato de formato** (los nombres de slice, los AC, los checkboxes que el script y el panel
-saben parsear). Es el `check-alignment` + `text-native` del flujo: la spec en markdown es el
-artefacto compartido entre humano y agente.
+el **contrato de formato** (los nombres de slice, los AC, las lineas de slice que `slice-runner`
+sabe parsear). Es el `check-alignment` + `text-native` del flujo: la spec es el artefacto compartido
+entre humano y agente, y **vive en un issue de GitHub** (una feature = un issue).
 
-Par natural: `/slice-spec` escribe la spec, `/slice-runner` la ejecuta.
+Par natural: `/slice-spec` crea el issue con la spec, `/slice-runner #N` lo ejecuta.
 
 Dos modos:
 
-- **Autoria (por defecto):** brainstorming -> spec bien formada en `.slice-runner/spec.md`.
-- **`validate <ruta>`:** revisa una spec existente contra el contrato y reporta (o corrige) desviaciones.
+- **Autoria (por defecto):** brainstorming -> crea el issue de GitHub con la spec bien formada.
+- **`validate`:** revisa una spec existente (issue o borrador) contra el contrato y reporta (o corrige) desviaciones.
 
 ## Principios
 
@@ -32,8 +32,8 @@ Dos modos:
   enfoques, validar diseno). Esta skill reengancha solo la **cola**: cuando el diseno esta
   aprobado, en vez de `writing-plans` emite la spec de slices. La spec ES el plan que consume
   slice-runner.
-- **Formato es contrato.** La spec debe parsearla el panel (`panel/slice-panel.py`) y el paso 1
-  de slice-runner sin ambiguedad. Si no cumple el contrato de abajo, no esta terminada.
+- **Formato es contrato.** La spec debe parsearla `slice-runner` (via `scripts/issue_body.py`) sin
+  ambiguedad. Si no cumple el contrato de abajo, no esta terminada.
 - **Cada slice tiene nombre.** `name` kebab-case, estable, determinista: alimenta rama y scope de
   commit en slice-runner. Sin nombre no hay spec bien formada.
 - **Guia el corte, no lo delega.** El troceo lo lleva esta skill cargando su cerebro de slicing
@@ -44,8 +44,8 @@ Dos modos:
   propios, no una capa tecnica suelta.
 - **AC obligatorios por slice.** Sin AC no hay puerta de verificacion en slice-runner: toda slice
   declara criterios de aceptacion concretos y comprobables.
-- **La spec es efimera.** Se escribe en `.slice-runner/spec.md` (gitignored); slice-runner la
-  descarta al terminar el run. No la comitees ni la guardes en `docs/`.
+- **La spec vive en el issue de GitHub.** `slice-spec` crea el issue (1 issue = 1 feature): es la
+  fuente de verdad duradera del estado, no un fichero en el repo. No la guardes en `docs/` ni la comitees.
 
 ## Contrato de formato (lo que el script espera)
 
@@ -55,9 +55,9 @@ La spec es un **checklist de slices**. Un solo formato, sin variantes.
 # <titulo de la feature>
 
 ## Slices
-- [ ] slice-01 (nombre-kebab): <titulo de la slice>
+- [ ] slice-01 (nombre-kebab): <titulo de la slice> [pendiente]
       AC: <criterio 1>; <criterio 2>; tests en <ruta>
-- [ ] slice-02 (otro-nombre): <titulo>
+- [ ] slice-02 (otro-nombre): <titulo> [pendiente]
       AC: <criterios>
 ```
 
@@ -71,7 +71,8 @@ Reglas duras:
 - Debajo de cada slice, una o mas lineas indentadas con `AC:` describiendo criterios concretos
   (y donde viven los tests si aplica). Las **restricciones duras** (p. ej. "no toca infra
   directamente") se expresan como un AC comprobable mas.
-- Checkbox inicial siempre `[ ]` (pendiente). slice-runner lo pasa a `[x]`/`[!]` durante el run.
+- Cada slice arranca `[ ] ... [pendiente]`. slice-runner actualiza el marcador de estado durante el
+  run (`en-curso`, `esperando-merge`, `mergeada` con `[x]`, `bloqueada`, `abortada`).
 - Una feature de **una sola slice** = un checklist con una unica linea.
 
 ## Steps — modo autoria (por defecto)
@@ -85,13 +86,14 @@ Reglas duras:
    por capa, estilo hamburger) cuando el corte no es obvio o una slice supera el budget. Valida cada
    slice contra los criterios de validez y el conjunto contra el **test de despriorizacion** e
    **igualdad de tamano**. Elige `name` kebab-case por slice y, si aplica, su `type`.
-3. **Escribe la spec** en `.slice-runner/spec.md` (crea `.slice-runner/` y su `.gitignore` con `*`
-   + `!.gitignore` si no existen, para que nunca se comitee). Cumple el contrato de formato al pie
-   de la letra.
-4. **Auto-validacion.** Aplica el checklist de `validate` (abajo) sobre lo que acabas de escribir y
-   corrige inline antes de entregar.
-5. **Cierra** diciendo la ruta de la spec y que se ejecuta con `/slice-runner` (o `/loop /slice-runner`
-   para encadenar todas las slices en Nivel 2).
+3. **Crea el issue** de GitHub con la spec en el cuerpo (`gh issue create --title <feature> --body ...`).
+   Como es una accion visible/colaborativa (outward-facing), **confirmala antes de crear**. Cada
+   slice arranca `[ ] slice-NN (name): titulo [pendiente]`. Cumple el contrato de formato al pie de
+   la letra.
+4. **Auto-validacion.** Aplica el checklist de `validate` (abajo) sobre lo que vas a poner en el
+   cuerpo y corrige inline antes de crear el issue.
+5. **Cierra** diciendo el numero/URL del issue y que se ejecuta con `/slice-runner #N` (o
+   `/loop /slice-runner #N` para encadenar todas las slices en Nivel 2).
 
 ## Steps — modo `validate <ruta>`
 
@@ -102,7 +104,8 @@ corregirlas. Checklist:
 - Cada slice tiene `slice-NN`, `(name)` kebab-case unico, titulo y al menos una linea `AC:`.
 - Si aparece un `type` en el parentesis, es un type de conventional commit (no hay lista normativa
   que validar aqui: el commit lo redacta y valida el flujo de slice-runner).
-- Checkboxes validos (`[ ]`/`[x]`/`[!]`).
+- Checkboxes `[ ]`/`[x]` y, si hay marcador `[estado]`, es uno canonico (pendiente, en-curso,
+  esperando-merge, mergeada, bloqueada, abortada).
 - Ninguna slice sin AC (sin AC no hay puerta de verificacion en slice-runner).
 - Nombres unicos y estables (no colisionan al derivar ramas `slice/NN-name`).
 - **Calidad del corte** (contra `references/slicing.md`): cada slice es vertical, desplegable sola y
@@ -115,6 +118,6 @@ Si todo cumple: reporta `spec valida` y recuerda que se ejecuta con `/slice-runn
 
 ## Fin
 
-Reporta: ruta de la spec, numero de slices y sus nombres, y el comando para ejecutarla
-(`/slice-runner`, o `/loop /slice-runner` para Nivel 2). No implementes nada: ese es el trabajo de
-`slice-runner`.
+Reporta: numero/URL del issue, numero de slices y sus nombres, y el comando para ejecutarla
+(`/slice-runner #N`, o `/loop /slice-runner #N` para Nivel 2). No implementes nada: ese es el trabajo
+de `slice-runner`.

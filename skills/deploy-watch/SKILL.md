@@ -66,12 +66,12 @@ Se ejecuta con **ticks acotados en background + notificacion** (o `Monitor`), no
 2. **Redacta (sin ejecutar) el rollback** segun `slicing.md`: `git revert <merge_sha>` + redeploy, con los comandos listos para que los lance el usuario.
 3. Para y presenta: senal(es) degradada(s) + evidencia, RCA del `sre`, y el rollback preparado.
 
-## Integracion con el stream
+## Integracion con el issue
 
-Comparte la observabilidad del pipeline con `slice-runner` via `.slice-runner/` del repo:
+Comparte la trazabilidad del pipeline con `slice-runner` a traves del **issue de GitHub** de la feature:
 
-- Anexa al **stream en vivo** (`.slice-runner/stream.log`) una linea por transicion, con **fecha completa** `YYYY-MM-DD HH:MM:SS` (igual que `slice-runner`): `deploy start`, `signal <nombre> ok|degradada`, `verdict sano|degradado|inconcluso`, `rca ...`, `rollback drafted`. Asi el mismo `tail -f` cubre implementacion y despliegue.
-- **No** escribe en el ledger (`runs.jsonl`): el veredicto del deploy es efimero, se reporta en vivo (stream + "Fin") y no se persiste como dato ni se pinta en el panel.
+- Al arrancar y en el veredicto, **comenta en el issue** (`gh issue comment`) el resultado del deploy de esa slice: `deploy start`, senales `ok|degradada`, `verdict sano|degradado|inconcluso`, y -si aplica- `rca` + `rollback redactado`, con la tabla vs baseline. Asi el issue reune diseno, implementacion y despliegue en un solo hilo.
+- **No cambia el estado (marcador/checkbox) de la slice**: ya quedo `mergeada` en el paso 9 de `slice-runner`. El veredicto del deploy es informativo y se registra como comentario, no como estado.
 
 ## Fin
 

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Metricas durables de slice-runner (patron offload-deterministic).
 
-El estado del run (`.slice-runner/`) es efimero y se borra al terminar. Para poder
-decidir con datos "cuando subir de nivel" hace falta un rastro que sobreviva a ese
-descarte y que NUNCA entre en el repo/PR. Este log vive fuera del repo:
+El estado del run vive en el issue de GitHub, no en el repo. Para decidir con datos
+"cuando subir de nivel" hace falta ademas un rastro de telemetria que NUNCA entre en el
+repo/PR y sobreviva a los runs. Este log vive fuera del repo:
 
     ~/.claude/slice-runner/metrics.jsonl   append-only, una linea por slice cerrada
 

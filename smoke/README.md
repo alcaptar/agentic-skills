@@ -1,12 +1,25 @@
-# Smoke test de slice-runner
+# Smoke test de slice-runner (real, contra GitHub)
 
-Harness mínimo y autocontenido para validar el loop de `slice-runner` de punta a punta sin depender de un repo real. Es la forma barata de ganar confianza en el "self-verification loop" antes de subir al Nivel 2 (ver `../docs/maturity-map.md`).
+Harness para validar el loop de `slice-runner` de punta a punta **contra GitHub de verdad**: el
+estado del run vive en un issue, asi que el smoke ya no es offline. Es la forma de ganar confianza en
+el "self-verification loop" antes de subir al Nivel 2 (ver `../docs/maturity-map.md`).
+
+La logica pura (parseo y reescritura del cuerpo del issue) se testea offline en `../tests/`
+(`python3 -m pytest`). Este smoke cubre lo que esos unit tests no pueden: la **I/O real** contra
+`gh` (issue create/view/edit/comment, pr) y el CI de GitHub Actions.
 
 ## Qué valida
 
-El **inner loop crítico** (lo que Cherny marca como la palanca 1->2): detectar la spec -> alinear -> implementar con TDD -> **verificador independiente** -> puertas verdes (lint/types/test) -> ledger + stream.
+El **inner loop critico** de extremo a extremo: `slice-spec` crea el issue -> `slice-runner` lee el
+issue, alinea, implementa con TDD, verifica con un subagente independiente, abre PR (`Part of #N`),
+espera CI verde y **refleja el estado de la slice en el issue** en cada transicion.
 
-Qué **no** valida (necesita repo con remoto): `gh pr create` y el CI real de GitHub Actions. En local, la puerta de "CI verde" se sustituye por `make linting && make check-types && make test`.
+## Requisitos
+
+- `gh` autenticado (`gh auth status`) con permiso para crear issues y PRs.
+- Un **repo remoto propio** (p. ej. un fork/clon de la fixture) con GitHub Actions que corra las
+  puertas (`make linting && make check-types && make test`) en `pull_request`.
+- `uv`, `git`, `make` para el proyecto objetivo.
 
 ## Estructura
 
@@ -15,53 +28,57 @@ fixture/              proyecto uv autocontenido, en estado RESET (fizzbuzz sin i
   pyproject.toml      ruff + mypy strict + pytest via uv
   Makefile            test / check-types / check-style / check-format / linting
   conventions.md      vara de convenciones (para el verificador)
-  spec.md             1 slice (checklist) con AC, sin marcar
+  spec.md             borrador de la spec (1 slice) que se sube al issue
   fizzbuzz/core.py    vacio: la slice lo implementa
-sample-output/        artefactos de un run verde real (evidencia)
-  stream.log          el stream en vivo de ese run
-  runs.jsonl          la entrada de ledger resultante
-  *.example           test y core generados por la slice
+sample-output/        evidencia del codigo que produce la slice
+  core.py.example     implementacion esperada de fizzbuzz
+  test_core.py.example  test esperado
 ```
 
 ## Cómo ejecutarlo
 
-Requisitos: `uv`, `git`, `make` (y `gh` solo para la variante con PR/CI real).
+1. **Sube la fixture a un repo remoto** con CI en `pull_request` (o usa uno ya montado):
 
-```bash
-cp -r smoke/fixture /tmp/slice-smoke && cd /tmp/slice-smoke
-git init -q && git add -A && git commit -qm baseline
-uv run python -V   # calienta el entorno (instala ruff/mypy/pytest)
-```
+   ```bash
+   cp -r smoke/fixture /tmp/slice-smoke && cd /tmp/slice-smoke
+   git init -q && git add -A && git commit -qm baseline
+   gh repo create <tu-usuario>/slice-smoke --private --source=. --push
+   uv run python -V   # calienta el entorno (instala ruff/mypy/pytest)
+   ```
 
-Luego, desde Claude Code en ese directorio:
+2. **Crea el issue con la spec** (via la skill o a mano):
 
-```
-/slice-runner   (o: "corre la siguiente slice de spec.md")
-```
+   ```
+   /slice-spec        (usa fixture/spec.md como borrador)
+   ```
+   o directamente `gh issue create --title "fizzbuzz" --body-file spec.md`.
 
-Debe: seleccionar slice-01 (name `fizzbuzz-core`), alinear, escribir el test (rojo), implementar `fizzbuzz`, refactor, verificar con un subagente independiente, dejar las puertas verdes, y escribir `.slice-runner/runs.jsonl` + `.slice-runner/stream.log`.
+3. **Corre el loop** apuntando al issue:
 
-En la variante con PR/CI real, el commit y el titulo de PR siguen conventional commits con el name como scope: `feat(fizzbuzz-core): ...`.
+   ```
+   /slice-runner #<N>   (o: "corre la siguiente slice del issue #<N>")
+   ```
 
-Sigue el run en vivo desde otra terminal:
+Debe: leer el issue, seleccionar `slice-01` (name `fizzbuzz-core`), marcarla `en-curso` en el issue,
+alinear, escribir el test (rojo), implementar `fizzbuzz`, refactor, verificar con un subagente
+independiente, dejar las puertas verdes, abrir PR (`Part of #<N>`), y al llegar a CI verde marcar la
+slice `esperando-merge` en el issue.
 
-```bash
-tail -f .slice-runner/stream.log
-```
+Sigue el estado en vivo **desde el propio issue en GitHub** (se actualiza en cada transicion).
 
 ## Criterio de "smoke OK"
 
-- `make linting && make check-types && make test` verdes.
+- El commit y el titulo de PR son conventional commits con el name como scope:
+  `feat(fizzbuzz-core): ...`, y el cuerpo referencia el issue con `Part of #<N>`.
+- El PR tiene CI verde (`make linting && make check-types && make test`).
 - El verificador devuelve `PASA` (AC cubiertos + convenciones OK).
-- Durante el run, `spec.md` queda con `- [x] slice-01 (fizzbuzz-core)` y `.slice-runner/runs.jsonl`
-  tiene una entrada `"estado":"hecha"` con `"name":"fizzbuzz-core"`.
-- El diff staged (variante PR) contiene **solo** `fizzbuzz/core.py` y `tests/test_core.py`: ni la
-  spec, ni `.slice-runner/`, ni otros artefactos.
+- En el issue, la linea de la slice pasa por `[en-curso]` -> `[esperando-merge] PR #<M>` y, tras el
+  merge, `[x] ... [mergeada]`.
+- El diff staged de la PR contiene **solo** `fizzbuzz/core.py` y `tests/test_core.py`: ni borradores
+  ni artefactos (lo garantiza `gates.py pr-hygiene`).
 
-Nota: la spec y `.slice-runner/` son **efimeros y gitignored**; al cerrar el run (sin slices
-pendientes) slice-runner los descarta. Inspecciona el ledger/stream durante el run, o compara con
-`sample-output/` (evidencia commiteada de un run verde real).
+## Evidencia de referencia
 
-## Resultado del último run de referencia
-
-Ver `sample-output/`: pytest 5/5, ruff limpio, mypy strict OK, verificador PASA, slice `hecha`.
+`sample-output/` guarda el codigo que la slice deberia producir (`core.py.example`,
+`test_core.py.example`). El estado del run ya no deja ficheros locales: la evidencia viva es el issue
+en GitHub.

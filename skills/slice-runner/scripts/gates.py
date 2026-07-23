@@ -7,8 +7,8 @@ asi que no hay puerta para eso; lo que si es un backstop mecanico es la higiene 
 diff staged:
 
     pr-hygiene   el diff staged solo puede contener los ficheros de codigo/test
-                 que declaro el implementador; nunca spec, .slice-runner/, planes
-                 ni design-docs.
+                 que declaro el implementador; nunca planes ni design-docs (la spec
+                 vive en el issue de GitHub, no como fichero).
 
 Exit code 0 = PASA, 1 = FALLA, 2 = error de uso. Con --json imprime el resultado
 estructurado en stdout para que el orquestador lo consuma sin parsear prosa.
@@ -26,10 +26,11 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import PurePosixPath
 
-# Prefijos/patrones de artefactos que jamas pueden entrar en la PR (estado efimero
-# del run y documentos de diseno). Backstop ademas del allow-list.
+# Prefijos/patrones de artefactos que jamas pueden entrar en la PR (documentos de
+# diseno y planes de brainstorming/writing-plans). Backstop ademas del allow-list.
+# El estado del run ya no vive en el repo (vive en el issue de GitHub), asi que no
+# hay `.slice-runner/` que prohibir.
 FORBIDDEN_PREFIXES = (
-    ".slice-runner/",
     "docs/superpowers/specs/",
     "docs/superpowers/plans/",
 )

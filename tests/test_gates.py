@@ -56,11 +56,11 @@ def test_nada_staged(repo: Path) -> None:
 
 
 def test_artefacto_prohibido_aunque_este_en_allow(repo: Path) -> None:
-    # .slice-runner/ es FORBIDDEN: falla aunque se declare en --allow.
+    # Un design-doc bajo docs/superpowers/specs/ es FORBIDDEN: falla aunque se declare en --allow.
     _stage(repo, "src/a.py")
-    _stage(repo, ".slice-runner/state.json")
+    _stage(repo, "docs/superpowers/specs/x-design.md")
     res = gates.check_pr_hygiene(
-        str(repo), ["src/a.py", ".slice-runner/state.json"], None
+        str(repo), ["src/a.py", "docs/superpowers/specs/x-design.md"], None
     )
     assert not res.passed
     assert any("artefacto prohibido" in h for h in res.hallazgos)

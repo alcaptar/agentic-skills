@@ -1,8 +1,0 @@
-2026-07-17 12:50:42  slice-01  select      spec.md formato A; AC: 15->FizzBuzz,3->Fizz,5->Buzz,else n, n<=0 ValueError
-2026-07-17 12:50:42  slice-01  align       capa=dominio (funcion pura, testeable) -> TDD estricto; gates: make linting/check-types/test
-2026-07-17 12:50:42  slice-01  implement start (test rojo primero)
-2026-07-17 12:51:01  slice-01  implement done  test verde; refactor (guard clauses) manteniendo verde
-2026-07-17 12:51:01  slice-01  gates       pytest=OK ruff=OK mypy(strict)=OK
-2026-07-17 12:52:07  slice-01  verify PASA  verificador independiente (haiku): AC cubiertos + convenciones OK
-2026-07-17 12:52:07  slice-01  ci green     (local: sin remoto; 'CI' = make linting && check-types && test verdes)
-2026-07-17 12:52:07  slice-01  done

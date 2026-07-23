@@ -26,7 +26,7 @@ Referencia: **"Steps of AI Adoption"**, Boris Cherny (2026-07-16). Modelo de 5 e
 | loops and routines (`/loop` `/goal` `/batch`) | Nivel 2 |
 | let Claude kick off Claude | encadenado slice-runner → deploy-watch |
 | CLAUDE.md and Skills to encode standards | jerarquía de convenciones del repo |
-| manage token use; monitoring (OTel/Analytics) | presupuesto por slice + ledger/stream |
+| manage token use; monitoring (OTel/Analytics) | presupuesto por slice + estado/seguimiento en el issue de GitHub |
 
 ## El aviso clave
 

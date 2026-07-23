@@ -20,10 +20,10 @@ Flujo de trabajo objetivo: escribo specs; cada slice de la spec quiero que se im
 - **test-desiderata** en el verificador: bloquea solo lo grave (no determinista, no aislado, test que no verifica comportamiento); lo menor informa. Se salta en slices sin tests.
 - **Refactor tras cada verde** en el implementador.
 - **No hace merge.** Para en "PR abierto + CI verde". Merge humano.
-- **Contexto fresco por slice** (patron Ralph): cada slice arranca limpia; la spec + el ledger son lo que persiste. Hace seguro el Nivel 2.
-- **Estado del run efimero**: todo `.slice-runner/` (`runs.jsonl` ledger, `state.json` estado vivo, `stream.log`) vive **gitignored** y se **descarta al terminar el run**; es la memoria intra-run del contexto fresco, no un registro duradero (ese son las PRs mergeadas). Panel = stream en vivo en terminal (no HTML), en linea con el stream compartido de deploy-monitor. deploy-watch anexa a los mismos ficheros.
+- **Contexto fresco por slice** (patron Ralph): cada slice arranca limpia; el **issue de GitHub** (spec + estado) es lo que persiste y se re-lee al empezar. Hace seguro el Nivel 2.
+- **Estado del run en el issue de GitHub** (decision 2026-07-23): la spec y el estado de cada slice viven en el cuerpo de un issue (1 feature = 1 issue), unica fuente de verdad viva y duradera. Sustituye al estado local anterior (`.slice-runner/` con `runs.jsonl`/`state.json`/`stream.log` + un panel TUI), que se **elimino**: el seguimiento pasa a ser publico y colaborativo, sin infra local. `slice-runner` reescribe la linea de la slice en cada transicion (logica pura en `scripts/issue_body.py`, I/O en `gh`); `deploy-watch` comenta su veredicto. Ver `docs/superpowers/specs/2026-07-23-specs-como-issues-de-github-design.md`.
 - **Metricas durables fuera del repo**: `~/.claude/slice-runner/metrics.jsonl` (append-only, no versionado, sobrevive al descarte) para medir "cuando subir de nivel". Lo escribe/agrega `scripts/metrics.py`.
-- **Coste**: presupuesto de tokens/$ por slice como circuit breaker adicional; metrica = coste por slice mergeada (no por intentada). Motivado por el research (coste hasta 30x impredecible, Stanford). El coste vive en las metricas durables, no en el ledger.
+- **Coste**: presupuesto de tokens/$ por slice como circuit breaker adicional; metrica = coste por slice mergeada (no por intentada). Motivado por el research (coste hasta 30x impredecible, Stanford). El coste vive en las metricas durables (`~/.claude/slice-runner/metrics.jsonl`), fuera del repo.
 
 ### Por que estas decisiones (fuentes)
 
