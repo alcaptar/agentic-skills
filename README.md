@@ -12,6 +12,8 @@ skills/
   slice-runner/    SKILL.md   Ejecuta una slice de una spec de principio a fin
     scripts/                  issue_body.py (estado en el issue), gates.py, metrics.py
   deploy-watch/    SKILL.md   Monitoriza el despliegue tras aprobar la PR
+    scripts/                  deploy_core.py (decision go/no-go pura)
+    references/               monitoring.md (cerebro: que senales, como leerlas)
 docs/
   design-notes.md             Decisiones de diseno y el porque (para seguir iterando)
   research-agent-loops.md     Research citado sobre loops autonomos de agentes
@@ -76,7 +78,7 @@ background, nunca una shell bloqueante. No hay estado local que descartar: el es
 
 ### deploy-watch
 
-Fase post-approve, read-only sobre prod. Se **encadena automaticamente** al detectar el merge (o se invoca a mano) y **arranca sola**: infiere servicio/namespace y solo pregunta si hay duda real. Compone la skill `deploy-monitor` (motor baseline+poll+CSV) + skills de observabilidad (prometheus, elasticsearch, sentry, gcloud-logs) + agente `sre`. El poll de estabilizacion son ticks en background. **Comenta su veredicto** (sano/degradado/inconcluso, con tabla vs baseline) en el issue de la feature. Nunca ejecuta rollback: lo redacta para que lo lances tu.
+Fase post-approve, read-only sobre prod. Se **encadena automaticamente** al detectar el merge (o se invoca a mano) y **arranca sola**: infiere servicio/namespace y solo pregunta si hay duda real. **El agente orquesta por tick** las skills de observabilidad disponibles (prometheus, elasticsearch, gcloud-logs, sentry, keycloak, postgres-readonly; **catalogo abierto**, elige por blast radius) y decide con un core puro (`scripts/deploy_core.py`: umbrales relativos, confirmacion sostenida, scorecard, veredicto go/no-go); el RCA lo hace el agente `sre`. El poll son ticks en background, sin shell bloqueante. **Comenta su veredicto** (go/no-go/inconclusive, con scorecard vs baseline) en el issue de la feature. Nunca ejecuta rollback: lo redacta para que lo lances tu.
 
 ## Seguimiento (issue de GitHub)
 

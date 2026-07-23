@@ -1,6 +1,6 @@
 ---
 name: deploy-watch
-description: Monitoriza un despliegue en produccion tras aprobar y mergear una PR. Usar cuando el usuario diga "monitoriza el deploy", "vigila el despliegue", "deploy-watch", o acabe de mergear/desplegar y quiera confirmar que todo va bien. Fase post-approve, invocacion manual, read-only sobre prod: captura baseline, poll-ea 4 senales de salud (rollout k8s, recursos, errores/latencia HTTP, Sentry) contra baseline, emite veredicto, y ante anomalia lanza el agente sre para RCA y redacta (sin ejecutar) el rollback. Compone las skills deploy-monitor y de observabilidad y el agente sre; no reinventa el motor.
+description: Monitoriza un despliegue en produccion tras aprobar y mergear una PR. Usar cuando el usuario diga "monitoriza el deploy", "vigila el despliegue", "deploy-watch", o acabe de mergear/desplegar y quiera confirmar que todo va bien. Fase post-approve, invocacion manual, read-only sobre prod: captura baseline, poll-ea por tick las senales relevantes al cambio (rollout k8s, recursos, errores/latencia HTTP, Sentry, y segun el blast radius auth/DB) contra baseline, emite un veredicto go/no-go, y ante anomalia lanza el agente sre para RCA y redacta (sin ejecutar) el rollback. Orquesta las skills de observabilidad ya existentes y el agente sre, y decide con un core puro; no reinventa el acceso a datos.
 ---
 
 # Deploy Watch
@@ -11,20 +11,20 @@ Emite `[deploy-watch]` al inicio de cada respuesta mientras ejecutas este proces
 
 ## Description
 
-Fase **post-approve** del flujo spec -> slice -> PR -> CI: una vez el usuario aprueba y mergea la PR y el despliegue arranca, esta skill confirma que la nueva version esta sana en produccion. Se invoca **automaticamente al detectar el merge** (encadenada desde `slice-runner`) o a mano; en ambos casos **arranca sola**. Read-only sobre prod. No es un motor nuevo: **compone** los que ya existen.
+Fase **post-approve** del flujo spec -> slice -> PR -> CI: una vez el usuario aprueba y mergea la PR y el despliegue arranca, esta skill confirma que la nueva version esta sana en produccion. Se invoca **automaticamente al detectar el merge** (encadenada desde `slice-runner`) o a mano; en ambos casos **arranca sola**. Read-only sobre prod. No es un motor nuevo: **el agente orquesta** piezas que ya existen.
 
-- Motor de comparacion viva (baseline + poll + CSV + stream compartido): skill `deploy-monitor`.
-- Fuentes de datos: skills de observabilidad (`query-prometheus`, `query-elasticsearch`, `query-sentry`, `query-gcloud-logs`).
-- RCA ante anomalia: agente `sre` (read-only).
+- **Datos**: se componen las **skills de observabilidad** disponibles (catalogo abierto): `query-prometheus`, `query-elasticsearch`, `query-gcloud-logs`, `query-sentry`, `query-keycloak`, `query-postgres-readonly`. El agente recoge las muestras por tick; no hay HTTP directo.
+- **Decision**: la logica (baseline, umbrales relativos, confirmacion sostenida, scorecard, veredicto go/no-go) la ejecuta `scripts/deploy_core.py` (puro, testeable). El juicio de **que senales elegir** esta en `references/monitoring.md`.
+- **RCA ante anomalia**: agente `sre` (read-only). Postmortem formal opcional: `incident-postmortem`.
 
-Esta skill solo orquesta el flujo y emite el veredicto.
+El agente orquesta el flujo (recoge senales -> `deploy_core` decide -> evidencia en el issue) y emite el veredicto.
 
 ## Principios no negociables
 
 - **Read-only sobre prod.** Nunca ejecuta el rollback ni toca backends. El merge y el rollback los decide siempre el usuario.
 - **Arranque sin friccion.** Se invoca automaticamente tras el merge (desde `slice-runner`) y **arranca sola**: infiere servicio/workload/namespace del repo y empieza. Solo para y pregunta si la inferencia es ambigua o de baja confianza (`check-alignment` solo cuando hay duda real, no un gate por defecto). No espera a que le digas "revisa el deploy".
-- **Componer, no reinventar.** El baseline+poll+CSV lo hace `deploy-monitor`; los datos vienen de las skills de observabilidad; el RCA lo hace el agente `sre`. Esta skill no duplica esa logica.
-- **Veredicto por las 4 senales.** El despliegue es sano solo si las 4 estan `ok` durante toda la ventana de estabilizacion. Cualquier senal `degradada` dispara la rama de anomalia.
+- **Componer, no reinventar.** Los datos vienen de las **skills de observabilidad** (catalogo abierto; anadir una nueva no debe requerir tocar esta skill); la decision la hace `deploy_core.py`; el RCA lo hace el agente `sre`. Nada de HTTP directo a Prometheus/ES ni de reimplementar acceso a datos.
+- **Veredicto por senales criticas, sostenido.** Solo las senales `critical` fuerzan `no-go`, y solo si el breach **persiste** (`failure_limit` ticks); las `advisory` informan sin bloquear. `deploy_core` respeta warm-up (grace tras el cambio) y min-observe (no declara `go` antes de cubrir rollout+drain). Un pico aislado no dispara anomalia.
 - **Esperas no bloqueantes.** El poll de estabilizacion se hace con **ticks acotados en background + notificacion** (o `Monitor`), devolviendo el control entre ticks. Prohibido una unica shell bloqueante que se quede colgada toda la ventana (30-60 min): es trabajo deterministico del harness, no la IA poll-eando (`offload-deterministic`).
 - **Sin loop infinito.** `max_runtime` (timeout de ventana) + circuit breaker: si no converge, reporte inconcluso con datos, nunca poll eterno.
 - **Evidencia siempre.** Cada veredicto (sano, degradado, inconcluso) va acompanado de los datos que lo sostienen (tabla vs baseline).
@@ -39,32 +39,36 @@ Esta skill solo orquesta el flujo y emite el veredicto.
 
 ### 2. Baseline
 
-- Captura la ventana **pre-deploy** (p. ej. 30-60 min antes de t0) para errores, latencia y recursos, usando la skill `deploy-monitor` como motor.
+- Elige las senales segun el **blast radius** del cambio (ver `references/monitoring.md`: RED en el edge + USE del recurso; toca auth -> `query-keycloak`; toca DB/migracion -> `query-gcloud-logs`/`query-postgres-readonly`). Marca cada senal `critical` o `advisory`.
+- Toma varias muestras **pre-cambio** componiendo las `query-*` elegidas y agregalas con `deploy_core.aggregate_baseline` (media + std). Comprueba el **gate de baseline ruidoso**; si avisa, alarga el baseline.
 - El baseline es la vara contra la que se comparan los ticks posteriores.
 
-### 3. Poll loop (motor deploy-monitor)
+### 3. Poll loop (el agente orquesta por tick)
 
-Se ejecuta con **ticks acotados en background + notificacion** (o `Monitor`), no como una shell bloqueante que se quede toda la ventana colgada. En cada tick, recoge las 4 senales, tabula vs baseline (CSV + stream compartido de `deploy-monitor`) y devuelve el control:
+Se ejecuta con **ticks acotados en background + notificacion** (o `Monitor`), no como una shell bloqueante que se quede toda la ventana colgada. En cada tick, el agente **recoge las senales elegidas componiendo las `query-*`**, arma la muestra y se la pasa a `deploy_core` (clasifica vs baseline con umbrales relativos y acumula el scorecard con confirmacion sostenida). Senales tipicas (elige por blast radius, **no es lista fija**):
 
-| Senal | Fuente | `ok` si... |
+| Senal | Fuente | breach si... |
 |---|---|---|
-| Rollout k8s | `query-prometheus` (`rollout_info_*`, `kube_deployment_status_*`) + k8s | rollout Healthy, replicas listas, sin CrashLoop |
-| Recursos | `query-prometheus` (`container_memory_*`, restarts, `container_cpu_*` throttling) | sin OOMKills, sin restarts anomalos, CPU en rango |
-| Errores/latencia HTTP | `query-prometheus` (`http_server_duration_*`) + `query-elasticsearch` (5xx nginx/akamai) | 5xx y p95/p99 no se desvian del baseline mas alla del margen |
-| Sentry | `query-sentry` | sin issues nuevas ni regresiones ligadas al release |
+| Rollout k8s | `query-prometheus` (`rollout_info_*`, `kube_deployment_status_*`) | rollout no Healthy, replicas no listas, CrashLoop |
+| Recursos | `query-prometheus` (`container_memory_*`, restarts, `container_cpu_*` throttling) | OOMKills, restarts anomalos, throttling alto |
+| Errores/latencia HTTP | `query-prometheus` (`http_server_duration_*`) + `query-elasticsearch` (5xx nginx/akamai) | 5xx o p95/p99 se desvian del baseline mas alla del umbral |
+| Sentry | `query-sentry` | issues nuevas o regresiones ligadas al release |
+| Auth (si aplica) | `query-keycloak` | pico de `LOGIN_ERROR`/`CODE_TO_TOKEN_ERROR` del release |
+| DB (si aplica) | `query-gcloud-logs` (Cloud SQL) + `query-postgres-readonly` | deadlocks/lock timeouts; efecto de datos incorrecto |
 
-### 4. Veredicto por tick
+### 4. Veredicto (deploy_core)
 
-- Cada senal es `ok` o `degradada`.
-- **Sano**: las 4 `ok` durante toda la ventana de estabilizacion -> reporte verde, la slice queda **validada en deploy** (no solo mergeada; es un veredicto en vivo, no se persiste) y **para**.
-- **Degradada**: cualquier senal fuera de rango -> rama de anomalia (paso 5).
-- **Timeout**: agotada la ventana sin converger -> reporte inconcluso con datos y **para**.
+`deploy_core.verdict` da `go` / `no-go` / `inconclusive` a partir del scorecard y las ventanas:
+
+- **go** (sano): ninguna senal `critical` en breach **sostenido** y cubierta la ventana `min_observe` -> reporte verde, la slice queda **validada en deploy** (veredicto en vivo, no se persiste) y **para**.
+- **no-go** (degradado): una senal `critical` en breach sostenido -> rama de anomalia (paso 5).
+- **inconclusive**: dentro del warm-up, o agotado `max_runtime` sin converger -> reporte con datos y **para**.
 
 ### 5. Rama de anomalia
 
-1. Lanza el agente `sre` para un **RCA read-only**, cruzando las fuentes de observabilidad, con el impacto de negocio.
-2. **Redacta (sin ejecutar) el rollback** segun `slicing.md`: `git revert <merge_sha>` + redeploy, con los comandos listos para que los lance el usuario.
-3. Para y presenta: senal(es) degradada(s) + evidencia, RCA del `sre`, y el rollback preparado.
+1. Lanza el agente `sre` para un **RCA read-only**, cruzando las fuentes de observabilidad, con el impacto de negocio. (`incident-postmortem` opcional si se quiere un postmortem formal.)
+2. **Redacta (sin ejecutar) el rollback**: `git revert <merge_sha>` + redeploy, con los comandos listos para que los lance el usuario. Si el cambio iba tras un feature flag, apagar el flag es el rollback preferido (reversible en runtime, sin redeploy).
+3. Para y presenta: senal(es) en breach + evidencia (scorecard vs baseline), RCA del `sre`, y el rollback preparado.
 
 ## Integracion con el issue
 

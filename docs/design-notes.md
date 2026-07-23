@@ -50,7 +50,7 @@ Flujo de trabajo objetivo: escribo specs; cada slice de la spec quiero que se im
 ### Decisiones clave
 
 - **Fase post-approve, invocacion manual, read-only sobre prod.** Disparador manual elegido para cero polling en vacio.
-- **Compone, no reinventa**: `deploy-monitor` (baseline+poll+CSV+stream) + observabilidad + agente `sre`.
+- **Compone, no reinventa**: el agente orquesta por tick las skills de observabilidad (catalogo abierto) + agente `sre`; la decision la hace un core puro (`deploy_core.py`: umbrales relativos, confirmacion sostenida, scorecard, veredicto). Antes delegaba en una skill `deploy-monitor` suelta (script HTTP bloqueante), **absorbida en 2026-07-23**; ver `docs/superpowers/specs/2026-07-23-deploy-watch-absorbe-el-monitor-design.md`.
 - **Veredicto por 4 senales**: rollout k8s, recursos (OOM/restarts/CPU), errores/latencia HTTP vs baseline, Sentry (issues nuevas del release). Sano solo si las 4 estan ok toda la ventana de estabilizacion.
 - **Ante anomalia**: agente `sre` para RCA read-only + rollback redactado (git revert del merge + redeploy segun slicing.md), sin ejecutar.
 - **Seguridad**: nunca ejecuta rollback ni toca backends; max_runtime + circuit breaker; merge y rollback los decide el usuario.
