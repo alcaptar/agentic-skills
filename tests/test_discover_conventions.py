@@ -1,0 +1,92 @@
+"""Tests del descubrimiento determinista de candidatos a fuente de convencion."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+from discover_conventions import discover_candidates
+from issue_body import Fuente
+
+
+def _touch(path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("x", encoding="utf-8")
+
+
+def _build_repo(root: Path) -> None:
+    """Un arbol parecido al de un repo real (estilo mo.picking.api)."""
+    _touch(root / ".claude" / "CLAUDE.md")
+    _touch(root / ".claude" / "rules" / "conventions" / "testing.md")
+    _touch(root / ".claude" / "rules" / "conventions" / "delivery.md")
+    _touch(root / ".claude" / "skills" / "duplicate-action" / "SKILL.md")
+    _touch(root / ".claude" / "skills" / "deprecate-hermes-handler" / "SKILL.md")
+    _touch(root / "CONTRIBUTING.md")
+    _touch(root / "src" / "app" / "CLAUDE.md")
+    # ruido que NO debe salir
+    _touch(root / ".git" / "config")
+    _touch(root / "__pycache__" / "x.pyc")
+    _touch(root / "node_modules" / "dep" / "CLAUDE.md")
+    _touch(root / "src" / "app" / "service.py")
+
+
+def test_descubre_docs_y_skills(tmp_path: Path) -> None:
+    _build_repo(tmp_path)
+    fuentes = discover_candidates(tmp_path)
+
+    docs = {f.ruta for f in fuentes if f.tipo == "doc"}
+    skills = {f.ruta for f in fuentes if f.tipo == "skill"}
+
+    assert ".claude/CLAUDE.md" in docs
+    assert "CONTRIBUTING.md" in docs
+    assert "src/app/CLAUDE.md" in docs
+    assert ".claude/skills/duplicate-action/" in skills
+    assert ".claude/skills/deprecate-hermes-handler/" in skills
+
+
+def test_directorio_de_convencion_como_puntero_al_outermost(tmp_path: Path) -> None:
+    _build_repo(tmp_path)
+    docs = {f.ruta for f in discover_candidates(tmp_path) if f.tipo == "doc"}
+    # apunta al directorio de reglas outermost, no a cada .md ni al conventions/ anidado
+    assert ".claude/rules/" in docs
+    assert ".claude/rules/conventions/" not in docs
+    assert ".claude/rules/conventions/testing.md" not in docs
+
+
+def test_ignora_directorios_ruido(tmp_path: Path) -> None:
+    _build_repo(tmp_path)
+    rutas = {f.ruta for f in discover_candidates(tmp_path)}
+    assert not any(".git" in r for r in rutas)
+    assert not any("__pycache__" in r for r in rutas)
+    assert not any("node_modules" in r for r in rutas)
+
+
+def test_orden_determinista_docs_luego_skills(tmp_path: Path) -> None:
+    _build_repo(tmp_path)
+    fuentes = discover_candidates(tmp_path)
+    tipos = [f.tipo for f in fuentes]
+    # todos los doc preceden a los skill
+    assert tipos == sorted(tipos, key=lambda t: 0 if t == "doc" else 1)
+    # dentro de cada tipo, ordenado por ruta
+    docs = [f.ruta for f in fuentes if f.tipo == "doc"]
+    skills = [f.ruta for f in fuentes if f.tipo == "skill"]
+    assert docs == sorted(docs)
+    assert skills == sorted(skills)
+
+
+def test_ignora_dirs_ocultos_dentro_de_skills(tmp_path: Path) -> None:
+    # `.claude/skills/.nwave/` es estado de herramienta, no una skill de proyecto.
+    _touch(tmp_path / ".claude" / "skills" / "duplicate-action" / "SKILL.md")
+    _touch(tmp_path / ".claude" / "skills" / ".nwave" / "config.json")
+    skills = {f.ruta for f in discover_candidates(tmp_path) if f.tipo == "skill"}
+    assert skills == {".claude/skills/duplicate-action/"}
+
+
+def test_repo_sin_candidatos_lista_vacia(tmp_path: Path) -> None:
+    _touch(tmp_path / "src" / "main.py")
+    assert discover_candidates(tmp_path) == []
+
+
+def test_devuelve_fuentes(tmp_path: Path) -> None:
+    _touch(tmp_path / "CLAUDE.md")
+    fuentes = discover_candidates(tmp_path)
+    assert fuentes == [Fuente("doc", "CLAUDE.md")]
