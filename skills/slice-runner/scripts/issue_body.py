@@ -23,6 +23,7 @@ verdad de "mergeada": una slice marcada esta mergeada aunque el texto diga otra 
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 
 # Estados canonicos de una slice.
@@ -48,6 +49,21 @@ _LINE_RE = re.compile(
     r"\s*(?:PR\s*#(\d+))?\s*$"
 )
 
+# --- Fuentes de convencion (punteros a la vara de medir del repo) ---
+# Viven en una seccion `## Fuentes de convencion` del cuerpo del issue. Son punteros
+# (no contenido): `doc:` para convenciones declarativas y `skill:` para skills de
+# proyecto (patrones procedimentales). `slice-spec` las escribe tras descubrirlas y
+# confirmarlas; `slice-runner` solo las lee como vara de medir. Guardar el "donde" (no
+# el contenido) evita duplicar la fuente de verdad, que sigue viviendo en el repo.
+FUENTE_TIPOS = ("doc", "skill")
+
+_FUENTES_HEADING = "## Fuentes de convencion"
+_FUENTES_HEADING_RE = re.compile(
+    r"^\s*##\s+fuentes\s+de\s+convenci[oó]n\s*$", re.IGNORECASE
+)
+_H2_RE = re.compile(r"^\s*##\s+")
+_FUENTE_LINE_RE = re.compile(r"^\s*-\s*(doc|skill)\s*:\s*(.+?)\s*$", re.IGNORECASE)
+
 
 @dataclass
 class Slice:
@@ -61,6 +77,18 @@ class Slice:
     motivo: str = ""
     pr: int | None = None
     ac: list[str] = field(default_factory=list)
+
+
+@dataclass
+class Fuente:
+    """Un puntero a una fuente de convencion del repo.
+
+    `tipo` es `doc` (convencion declarativa: CLAUDE.md, docs de reglas...) o `skill`
+    (skill de proyecto que codifica un patron). `ruta` es la ruta relativa al repo.
+    """
+
+    tipo: str
+    ruta: str
 
 
 def _split_type_name(paren: str | None) -> tuple[str, str]:
@@ -160,6 +188,84 @@ def set_slice_estado(
 
     if not changed:
         raise KeyError(f"slice {slice_id!r} no encontrada en el cuerpo del issue")
+
+    result = "\n".join(out)
+    return result + "\n" if body.endswith("\n") else result
+
+
+def tiene_seccion_fuentes(body: str) -> bool:
+    """True si el cuerpo tiene la seccion `## Fuentes de convencion` (aunque este vacia).
+
+    Distingue "seccion ausente" (el issue nunca la declaro -> `slice-runner` para y pide
+    generarla con `slice-spec`) de "seccion presente pero vacia".
+    """
+    return any(_FUENTES_HEADING_RE.match(line) for line in body.splitlines())
+
+
+def parse_fuentes(body: str) -> list[Fuente]:
+    """Extrae los punteros de la seccion `## Fuentes de convencion`, en orden.
+
+    Devuelve `[]` si la seccion no existe o esta vacia. Solo lee las lineas `- doc: ...`
+    y `- skill: ...` que van bajo el heading, hasta el siguiente `## `.
+    """
+    fuentes: list[Fuente] = []
+    in_section = False
+    for line in body.splitlines():
+        if _FUENTES_HEADING_RE.match(line):
+            in_section = True
+            continue
+        if in_section:
+            if _H2_RE.match(line):  # empieza otra seccion: la de fuentes acabo
+                break
+            m = _FUENTE_LINE_RE.match(line)
+            if m:
+                fuentes.append(Fuente(m.group(1).lower(), m.group(2).strip()))
+    return fuentes
+
+
+def render_fuentes_section(fuentes: Iterable[Fuente]) -> str:
+    """Renderiza la seccion completa (heading + lineas) en formato canonico, sin `\\n` final.
+
+    Lanza ValueError si algun `tipo` no es canonico (`doc`/`skill`).
+    """
+    lines = [_FUENTES_HEADING]
+    for f in fuentes:
+        if f.tipo not in FUENTE_TIPOS:
+            raise ValueError(
+                f"tipo de fuente no valido: {f.tipo!r} (validos: {', '.join(FUENTE_TIPOS)})"
+            )
+        lines.append(f"- {f.tipo}: {f.ruta}")
+    return "\n".join(lines)
+
+
+def set_fuentes(body: str, fuentes: Iterable[Fuente]) -> str:
+    """Upsert de la seccion de fuentes: reemplaza si existe, la anade al final si no.
+
+    Read-modify-write puro que preserva el resto del cuerpo (intro, slices, AC). Valida
+    los tipos via `render_fuentes_section`.
+    """
+    section_lines = render_fuentes_section(fuentes).splitlines()
+    lines = body.splitlines()
+    out: list[str] = []
+    i, n = 0, len(lines)
+    replaced = False
+    while i < n:
+        if _FUENTES_HEADING_RE.match(lines[i]):
+            out.extend(section_lines)
+            i += 1
+            while i < n and not _H2_RE.match(lines[i]):  # descarta la seccion vieja
+                i += 1
+            if i < n:  # separa de la siguiente seccion con una linea en blanco
+                out.append("")
+            replaced = True
+            continue
+        out.append(lines[i])
+        i += 1
+
+    if not replaced:
+        if out and out[-1].strip() != "":
+            out.append("")
+        out.extend(section_lines)
 
     result = "\n".join(out)
     return result + "\n" if body.endswith("\n") else result

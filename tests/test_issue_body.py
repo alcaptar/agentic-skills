@@ -5,7 +5,17 @@ from __future__ import annotations
 import pytest
 
 import issue_body
-from issue_body import Slice, parse_body, render_slice_line, set_slice_estado
+from issue_body import (
+    Fuente,
+    Slice,
+    parse_body,
+    parse_fuentes,
+    render_fuentes_section,
+    render_slice_line,
+    set_fuentes,
+    set_slice_estado,
+    tiene_seccion_fuentes,
+)
 
 _BODY = """\
 # Feature X
@@ -135,3 +145,107 @@ def test_roundtrip_render_parse() -> None:
 def test_estados_expuestos() -> None:
     assert "esperando-merge" in issue_body.ESTADOS
     assert "mergeada" in issue_body.ESTADOS
+
+
+# --- Fuentes de convencion ---
+
+_BODY_CON_FUENTES = """\
+# Feature X
+
+Intro de la feature.
+
+## Fuentes de convencion
+- doc: .claude/CLAUDE.md
+- doc: .claude/rules/conventions/
+- skill: .claude/skills/duplicate-action
+
+## Slices
+- [ ] slice-01 (vo): Crear VO [pendiente]
+      AC: rechaza negativos
+"""
+
+_BODY_SIN_FUENTES = """\
+# Feature Y
+
+## Slices
+- [ ] slice-01 (vo): Crear VO [pendiente]
+"""
+
+
+def test_parse_fuentes_extrae_docs_y_skills_en_orden() -> None:
+    fuentes = parse_fuentes(_BODY_CON_FUENTES)
+    assert fuentes == [
+        Fuente("doc", ".claude/CLAUDE.md"),
+        Fuente("doc", ".claude/rules/conventions/"),
+        Fuente("skill", ".claude/skills/duplicate-action"),
+    ]
+
+
+def test_parse_fuentes_seccion_ausente_lista_vacia() -> None:
+    assert parse_fuentes(_BODY_SIN_FUENTES) == []
+
+
+def test_parse_fuentes_se_detiene_en_la_siguiente_seccion() -> None:
+    # No debe tragarse la linea de slice de '## Slices' como fuente.
+    fuentes = parse_fuentes(_BODY_CON_FUENTES)
+    assert all(f.tipo in ("doc", "skill") for f in fuentes)
+    assert len(fuentes) == 3
+
+
+def test_parse_fuentes_tolera_tilde_y_mayusculas_en_heading() -> None:
+    body = "## Fuentes de Convención\n- skill: .claude/skills/tdd\n"
+    assert parse_fuentes(body) == [Fuente("skill", ".claude/skills/tdd")]
+
+
+def test_tiene_seccion_fuentes_distingue_ausente_de_presente() -> None:
+    assert tiene_seccion_fuentes(_BODY_CON_FUENTES) is True
+    assert tiene_seccion_fuentes(_BODY_SIN_FUENTES) is False
+    # presente pero vacia sigue contando como presente
+    assert tiene_seccion_fuentes("## Fuentes de convencion\n") is True
+
+
+def test_render_fuentes_section_formato_canonico() -> None:
+    section = render_fuentes_section(
+        [Fuente("doc", ".claude/CLAUDE.md"), Fuente("skill", ".claude/skills/pr")]
+    )
+    assert section == (
+        "## Fuentes de convencion\n"
+        "- doc: .claude/CLAUDE.md\n"
+        "- skill: .claude/skills/pr"
+    )
+
+
+def test_render_fuentes_tipo_invalido() -> None:
+    with pytest.raises(ValueError):
+        render_fuentes_section([Fuente("regla", ".claude/CLAUDE.md")])
+
+
+def test_set_fuentes_anade_seccion_cuando_no_existe() -> None:
+    nuevo = set_fuentes(_BODY_SIN_FUENTES, [Fuente("doc", ".claude/CLAUDE.md")])
+    assert tiene_seccion_fuentes(nuevo)
+    assert parse_fuentes(nuevo) == [Fuente("doc", ".claude/CLAUDE.md")]
+    # preserva las slices existentes
+    assert [s.slice_id for s in parse_body(nuevo)] == ["slice-01"]
+
+
+def test_set_fuentes_reemplaza_seccion_existente_preservando_el_resto() -> None:
+    nuevo = set_fuentes(_BODY_CON_FUENTES, [Fuente("skill", ".claude/skills/tdd")])
+    assert parse_fuentes(nuevo) == [Fuente("skill", ".claude/skills/tdd")]
+    # la vieja lista de docs desaparece
+    assert "duplicate-action" not in nuevo
+    # lo de despues de la seccion sigue intacto
+    assert "Intro de la feature." in nuevo
+    by_id = {s.slice_id: s for s in parse_body(nuevo)}
+    assert by_id["slice-01"].ac == ["rechaza negativos"]
+
+
+def test_set_fuentes_preserva_trailing_newline() -> None:
+    assert set_fuentes(_BODY_SIN_FUENTES, [Fuente("doc", "x")]).endswith("\n")
+    sin_nl = _BODY_SIN_FUENTES.rstrip("\n")
+    assert not set_fuentes(sin_nl, [Fuente("doc", "x")]).endswith("\n")
+
+
+def test_roundtrip_render_parse_fuentes() -> None:
+    fuentes = [Fuente("doc", "docs/conventions/"), Fuente("skill", ".claude/skills/x")]
+    parsed = parse_fuentes(render_fuentes_section(fuentes) + "\n")
+    assert parsed == fuentes
