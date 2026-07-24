@@ -231,9 +231,11 @@ La higiene del diff staged y el formato del commit **no** se comprueban aqui: so
   object`. Redactar un conventional commit lo haces bien sin puerta; lo unico determinista aqui es
   que el `name` (scope) viene de la spec (issue), no de un slug inventado. Cuerpo del commit opcional
   con detalle. Nunca commitees en `master`/`main`. Push de la rama `slice/NN-<name>`.
-- `gh pr create` con titulo `type(name): resumen` y cuerpo que: **referencia el issue con
+- `gh pr create --draft` con titulo `type(name): resumen` y cuerpo que: **referencia el issue con
   `Part of #<N>`** (no `Closes`: una PR es una slice, no la feature entera), lista los AC cumplidos y
-  resume los cambios.
+  resume los cambios. **La PR se abre siempre en draft**: la CI corre igual, pero deja explicito que
+  esta pendiente de tu revision y no lista para mergear (refuerza que el merge es humano). Sacarla de
+  draft (`ready for review`) y mergear lo decides tu.
 - Actualiza la linea de la slice en el issue con la PR: `set_slice_estado(..., "en-curso", pr=<M>)`
   -> `gh issue edit` (el estado pasara a `esperando-merge` en el paso 8 al haber CI verde).
 - No marcar como ready-to-merge automaticamente mas alla de lo normal; el merge es humano.
