@@ -150,22 +150,36 @@ Infierelos, no los asumas. Cachea lo detectado en la respuesta.
 
 ### 5. Implementar (subagente implementador)
 
-Lanza un Agent (subagent_type `nw-software-crafter` o `general-purpose`) con instrucciones:
+Lanza un Agent (`subagent_type: general-purpose`) con instrucciones. Se usa `general-purpose` a
+proposito: hereda el modelo fuerte de la sesion, tiene `Bash`, y no arrastra la metodologia de ningun
+agente prestado; todo el criterio se lo da este prompt, subordinado a las convenciones del repo.
 
 - Cargar `docs/conventions/` + `CLAUDE.md` del repo (si existen) y respetarlos como vara de medir; cargar tambien la skill `backend-best-practices`. En conflicto, ganan las convenciones del repo.
 - **TDD segun la capa**:
   - Capas con test (dominio/aplicacion/API...): escribir primero el/los test(s) que codifican los AC, verlos fallar, luego el codigo minimo.
   - Capas eximidas por la convencion del repo (p. ej. modelos ORM y migraciones alembic que no se testean por separado): no forzar test-first; la validacion es "suite intacta + verificacion del efecto" (p. ej. el `SELECT` que exige el plan).
+- **Integridad de tests (regla de hierro).** Nunca modifiques un test existente para que pase: no
+  debilites asserts, no lo borres, no lo marques `@skip`/`xfail`. Si no puedes satisfacer un test,
+  revierte al ultimo verde y para/escala; adaptar el test al codigo destruye la red de seguridad en
+  silencio y es la peor patologia posible. (El verificador lo caza en el paso 6, V1; aqui se evita en origen.)
 - **Refactor tras cada verde.** Una vez los tests pasan, hacer una pasada de refactor (eliminar duplicacion, mejorar nombres y estructura) manteniendo el verde, antes de entregar. La evidencia empirica senala el refactor tras verde -no el orden test-first- como el verdadero driver de calidad y mantenibilidad en agentes; no lo difieras a una pasada final.
 - No sobredimensionar: lo minimo para los AC. Nada de andamiaje de slices futuras.
 - **No tocar el issue ni artefactos.** Solo ficheros de codigo/test de la slice. No escribas planes
   ni design-docs, ni edites el issue: el estado del issue lo gestiona el orquestador, no la PR.
-- Devolver: **la lista explicita de rutas de codigo/test creadas o modificadas** (es lo que se
-  stageara en el paso 7, nada mas), tests anadidos (si aplica) y resumen del enfoque.
+- **Auto-check de wiring antes de entregar.** Corre `git diff --name-only` y confirma que los ficheros
+  de **produccion** que la slice debia tocar aparecen en el diff, no solo tests: si la suite pasa a
+  verde sin tocar produccion, el efecto lo esta produciendo el test/fixture y no el codigo. En slices
+  sin codigo de produccion (migracion/infra) no aplica. (El verificador lo cruza en el paso 6, V2.)
+- Devolver: **la lista explicita de rutas creadas o modificadas, marcando cada una como produccion o
+  test** (es lo que se stageara en el paso 7 y lo que el verificador usa para el check de wiring; nada
+  mas), tests anadidos (si aplica) y resumen del enfoque.
 
 ### 6. Verificar (subagente verificador, distinto)
 
-Lanza un Agent **diferente** (subagent_type `nw-software-crafter-reviewer` o `general-purpose`), adversarial.
+Lanza un Agent **diferente** (`subagent_type: general-purpose`), adversarial. Se usa `general-purpose`
+a proposito: hereda el modelo fuerte de la sesion (el juicio semantico mas sutil -el patron de rollout-
+lo requiere) y tiene `Bash`, asi que ejecuta el mismo las puertas `[det]`. No recibe el "resumen del
+enfoque" del implementador como verdad: juzga el diff, no la narrativa.
 
 **Su valor es la revision de convenciones y arquitectura, no re-testear.** La correccion del comportamiento la gobiernan CI + los AC; duplicar esa validacion con un segundo agente que **re-deriva coberturas** sale caro y no aporta (evidencia empirica sobre split authorship). Por eso el verificador **ejecuta** las puertas deterministas pero concentra su **juicio** en convenciones, boundaries y constraints. Matiz importante: "no re-testear" = no re-derivar ni reimplementar cobertura; **si** entra comprobar, por lectura, que los tests que codifican los AC realmente los fijan (que no sean un proxy debil). Eso es barato y es justo donde el segundo par de ojos aporta -cazar un AC mal traducido, no re-verificar comportamiento ya correcto-.
 
@@ -177,6 +191,8 @@ Recorre esta **rubrica cerrada** entera y reporta item a item. Cada item esta ma
 - `[sem]` **Boundaries**: nucleo sin infra, DI correcta, DTOs (Pydantic) en boundaries.
 - `[sem]` **TDD consciente de capa** (comprobacion barata, no re-testeo): en capas con test, que exista un test por AC y que preceda a la implementacion; en capas eximidas, "suite intacta + efecto verificado".
 - `[sem]` **Conformidad con los AC (no solo que existan tests).** Distinto del punto anterior (que comprueba que *hay* un test por AC) y de test-desiderata (que juzga la calidad *generica* del test); este comprueba que se **cumple el cometido del AC**. Para cada AC: (1) **mapeo AC↔test**: que el test asserte lo que *ese* AC exige, no una version debilitada -la calidad generica del test (verifica comportamiento real, aislamiento...) es de test-desiderata, no la repitas aqui-; (2) que el **codigo cumpla la intencion** del AC, no solo que pase su propio test (pregunta adversarial: "¿podria pasar este test y aun asi violar lo que el AC pedia?") -lectura acotada, no re-derivar cobertura-; (3) codigo que implementa **comportamiento que ningun AC pidio** (feature especulativa, andamiaje de slices futuras). El refactor tras verde que permite el paso 5 (extraer helpers, mejorar estructura) **traza al AC** y no es hallazgo. FALLA (severidad alta) si un AC no queda pineado, si el codigo no cumple su intencion, o si hay comportamiento sin AC que lo justifique.
+- `[sem]` **Manipulacion de tests (regla de hierro; siempre alta).** Con `git diff <base>...HEAD` sobre los ficheros de test, comprueba que ningun test **preexistente** se haya debilitado para acomodar la implementacion: assert relajado (`== x` -> `is not None`/truthy), numero de asserts que baja, test borrado, `@skip`/`xfail` anadido, o comentarios tipo "TODO/temporal" en tests. Debilitar un test que ya existia es **FALLA (severidad alta)**, citando path + linea. Cambios puramente aditivos (nuevos asserts, nuevos tests) o refactor de test que preserva los asserts **no** son hallazgo. Este check no necesita ningun artefacto: sale del propio diff de la rama.
+- `[sem]` **Fixture/wiring theater (siempre alta).** Cruza la lista etiquetada produccion/test que devolvio el implementador (paso 5) con `git diff --name-only`: si la suite pasa a verde pero el diff **no toca ningun fichero de produccion** (solo tests/fixtures), el efecto puede estarlo produciendo el fixture y no el codigo. Prueba de borrado (juicio por lectura): "¿pasaria la suite revirtiendo solo los cambios de test, con el codigo de produccion?". Si el efecto lo da el fixture y no el codigo, es **FALLA (severidad alta)**. Excepcion legitima: slices sin codigo de produccion (migracion/infra) cuyo efecto se verifica de otro modo.
 - `[sem]` **Calidad de tests (test-desiderata)**: si la slice anade o toca tests, correr la skill `test-desiderata` sobre ellos. Bloquea solo ante violaciones **graves** (no determinista, no aislado, o test que no verifica comportamiento real); las menores (legibilidad, velocidad...) se reportan como aviso sin bloquear. En slices sin tests (infra/migracion), se salta.
 
 La higiene del diff staged y el formato del commit **no** se comprueban aqui: son `[det]` puros y los ejecuta `scripts/gates.py` en el paso 7, cuando el staging ya existe. No los re-juzgues por lectura.
@@ -187,12 +203,14 @@ La higiene del diff staged y el formato del commit **no** se comprueban aqui: so
 {
   "veredicto": "PASA | FALLA",
   "hallazgos": [
-    {"regla": "boundaries", "path": "src/infra/x.py", "severidad": "alta | media | baja", "detalle": "..."}
+    {"regla": "boundaries", "path": "src/infra/x.py", "linea": 42,
+     "severidad": "alta | media | baja", "evidencia": "...", "detalle": "..."}
   ]
 }
 ```
 
 - Reglas del veredicto: **FALLA** si alguna puerta objetiva `[det]` falla o si hay algun hallazgo `severidad: alta`. Los `media`/`baja` se reportan pero no bloquean por si solos (juicio: si se acumulan, el verificador puede subir a FALLA explicando por que).
+- **Evidencia antes de bloquear (calibracion).** Un hallazgo `severidad: alta` **exige evidencia citable**: regla + path + linea + por que, en el campo `evidencia`. Si no puedes citarla concretamente, **degrada la severidad** en vez de bloquear. Contiene el over-reporting: a un verificador al que se le pide encontrar fallos siempre encuentra alguno; obligar a citar evidencia hace que el bloqueo sea real, no defensivo.
 - El schema se valida en la capa de tool: no parsees texto libre.
 - Si FALLA: devolver al paso 5 con los `hallazgos` (max 2 reintentos). Guarda el conteo de hallazgos por severidad y el veredicto final: alimentan las metricas.
 - **Si agota los reintentos con FALLA**: marca la slice `bloqueada: verify` en el issue, **registra la metrica durable** (`veredicto=FALLA`, `ci=none`; ver paso 8) y **para**. No sigas al paso 7: sin PASA del verificador no se abre PR. Sin esto, el rechazo del verificador -justo lo que queremos medir- no dejaria rastro.
