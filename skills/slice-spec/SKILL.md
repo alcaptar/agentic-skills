@@ -44,6 +44,13 @@ Dos modos:
   propios, no una capa tecnica suelta.
 - **AC obligatorios por slice.** Sin AC no hay puerta de verificacion en slice-runner: toda slice
   declara criterios de aceptacion concretos y comprobables.
+- **Declara las fuentes de convencion.** La spec incluye una seccion `## Fuentes de convencion` con
+  **punteros** (no contenido) a la vara de medir del repo: docs de convencion y skills de proyecto.
+  slice-runner las lee para que implementador y verificador midan contra las convenciones **reales**
+  del repo, no contra defaults genericos ni contra como quedo una slice anterior. No se asumen rutas
+  fijas: se **descubren** por repo (paso 3) y las **confirma la persona**. Sin esta seccion,
+  slice-runner para y no ejecuta con la vara vacia (evita el `silent-misalignment` de trabajar sin
+  criterio y no avisar).
 - **La spec vive en el issue de GitHub.** `slice-spec` crea el issue (1 issue = 1 feature): es la
   fuente de verdad duradera del estado, no un fichero en el repo. No la guardes en `docs/` ni la comitees.
 
@@ -54,6 +61,10 @@ La spec es un **checklist de slices**. Un solo formato, sin variantes.
 ```markdown
 # <titulo de la feature>
 
+## Fuentes de convencion
+- doc: <ruta a convencion declarativa, p. ej. .claude/CLAUDE.md>
+- skill: <ruta a skill de proyecto, p. ej. .claude/skills/duplicate-action>
+
 ## Slices
 - [ ] slice-01 (nombre-kebab): <titulo de la slice> [pendiente]
       AC: <criterio 1>; <criterio 2>; tests en <ruta>
@@ -62,6 +73,10 @@ La spec es un **checklist de slices**. Un solo formato, sin variantes.
 ```
 
 Reglas duras:
+
+- Antes de `## Slices`, una seccion `## Fuentes de convencion` con lineas `- doc: <ruta>` o
+  `- skill: <ruta>`: punteros confirmados a la vara de medir del repo (la escribe el paso 3;
+  slice-runner la exige). Punteros, nunca el contenido de la convencion.
 
 - Cada slice es una linea `- [ ] slice-NN (name): titulo`. `NN` = orden de dos digitos; `name` =
   kebab-case unico dentro de la spec.
@@ -79,20 +94,28 @@ Reglas duras:
 
 1. **Invoca `superpowers:brainstorming`** y sigue su proceso para entender intencion, proponer
    enfoques y validar el diseno con el usuario. **Excepcion al terminal de brainstorming:** no
-   invoques `writing-plans`; el paso siguiente es emitir la spec de slices (pasos 2-4).
+   invoques `writing-plans`; el paso siguiente es emitir la spec de slices (pasos 2-6).
 2. **Trocea en slices verticales (guia activa).** Carga `references/slicing.md` y aplica su
    procedimiento sobre el diseno aprobado: identifica el **walking skeleton** (slice #1), genera el
    resto por la **heuristica ordenada**, y **solo abre dialogo con la persona** (opciones graduadas
    por capa, estilo hamburger) cuando el corte no es obvio o una slice supera el budget. Valida cada
    slice contra los criterios de validez y el conjunto contra el **test de despriorizacion** e
    **igualdad de tamano**. Elige `name` kebab-case por slice y, si aplica, su `type`.
-3. **Crea el issue** de GitHub con la spec en el cuerpo (`gh issue create --title <feature> --body ...`).
-   Como es una accion visible/colaborativa (outward-facing), **confirmala antes de crear**. Cada
-   slice arranca `[ ] slice-NN (name): titulo [pendiente]`. Cumple el contrato de formato al pie de
-   la letra.
-4. **Auto-validacion.** Aplica el checklist de `validate` (abajo) sobre lo que vas a poner en el
+3. **Descubre y confirma las fuentes de convencion (`offload-deterministic` + `check-alignment`).**
+   Corre el helper determinista para no asumir rutas ni inventarlas:
+   `python3 ~/.claude/skills/slice-runner/scripts/discover_conventions.py <repo>`. Lista candidatos
+   (docs y skills de proyecto) sin decidir. Juzga cuales son la vara de medir real, **proponselos a
+   la persona y espera su confirmacion** (puede anadir o quitar). Si el helper no devuelve nada
+   plausible o no se confirma ninguna, **para y pregunta** donde viven las convenciones: nunca emitas
+   la spec con la seccion vacia. Con lo confirmado, redacta la seccion `## Fuentes de convencion`
+   (punteros, no contenido: las convenciones siguen viviendo en el repo).
+4. **Crea el issue** de GitHub con la spec en el cuerpo (`gh issue create --title <feature> --body ...`).
+   Como es una accion visible/colaborativa (outward-facing), **confirmala antes de crear**. El cuerpo
+   lleva `## Fuentes de convencion` (paso 3) y luego `## Slices`; cada slice arranca
+   `[ ] slice-NN (name): titulo [pendiente]`. Cumple el contrato de formato al pie de la letra.
+5. **Auto-validacion.** Aplica el checklist de `validate` (abajo) sobre lo que vas a poner en el
    cuerpo y corrige inline antes de crear el issue.
-5. **Cierra** diciendo el numero/URL del issue y que se ejecuta con `/slice-runner #N` (o
+6. **Cierra** diciendo el numero/URL del issue y que se ejecuta con `/slice-runner #N` (o
    `/loop /slice-runner #N` para encadenar todas las slices en Nivel 2).
 
 ## Steps — modo `validate <ruta>`
@@ -107,6 +130,11 @@ corregirlas. Checklist:
 - Checkboxes `[ ]`/`[x]` y, si hay marcador `[estado]`, es uno canonico (pendiente, en-curso,
   esperando-merge, mergeada, bloqueada, abortada).
 - Ninguna slice sin AC (sin AC no hay puerta de verificacion en slice-runner).
+- Tiene una seccion `## Fuentes de convencion` con al menos un puntero (`- doc:` / `- skill:`). Si
+  falta (p. ej. un issue legacy anterior a este mecanismo), **es la desviacion a corregir**: corre el
+  descubrimiento (paso 3), confirmala con la persona y anadela al cuerpo con
+  `issue_body.set_fuentes`. Este modo es el unico sitio que rellena issues sin la seccion:
+  slice-runner solo la consume, no la genera.
 - Nombres unicos y estables (no colisionan al derivar ramas `slice/NN-name`).
 - **Calidad del corte** (contra `references/slicing.md`): cada slice es vertical, desplegable sola y
   reversible; el conjunto pasa el **test de despriorizacion** (hay >=1 slice que se podria posponer)
