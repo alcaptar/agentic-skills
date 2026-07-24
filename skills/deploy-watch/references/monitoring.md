@@ -30,6 +30,8 @@ existen. La lista es un **catalogo abierto** — anadir una skill nueva no debe 
 
 RCA ante anomalia: agente `sre`. Postmortem formal (opcional): `incident-postmortem`.
 
+**Quien elige vs quien ejecuta.** La **eleccion** de senales (que medir por blast radius) es juicio y se queda en el **hilo principal**, guiada por este doc. La **ejecucion** (construir la query concreta, componer la `query-*`, absorber la salida cruda y extraer el valor) la hace el **subagente colector**, uno por tick, que devuelve la muestra plana + una tabla con las queries reproducibles. Asi la salida verbosa no ensucia el contexto principal (`focused-agent`, `context-management`).
+
 ## Eleccion de senales por blast radius
 
 Elige 4-8 senales segun **que toca el cambio** (no siempre las mismas):

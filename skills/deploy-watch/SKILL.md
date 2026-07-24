@@ -13,17 +13,18 @@ Emite `[deploy-watch]` al inicio de cada respuesta mientras ejecutas este proces
 
 Fase **post-approve** del flujo spec -> slice -> PR -> CI: una vez el usuario aprueba y mergea la PR y el despliegue arranca, esta skill confirma que la nueva version esta sana en produccion. Se invoca **automaticamente al detectar el merge** (encadenada desde `slice-runner`) o a mano; en ambos casos **arranca sola**. Read-only sobre prod. No es un motor nuevo: **el agente orquesta** piezas que ya existen.
 
-- **Datos**: se componen las **skills de observabilidad** disponibles (catalogo abierto): `query-prometheus`, `query-elasticsearch`, `query-gcloud-logs`, `query-sentry`, `query-keycloak`, `query-postgres-readonly`. El agente recoge las muestras por tick; no hay HTTP directo.
+- **Datos**: se componen las **skills de observabilidad** disponibles (catalogo abierto): `query-prometheus`, `query-elasticsearch`, `query-gcloud-logs`, `query-sentry`, `query-keycloak`, `query-postgres-readonly`. Un **subagente colector** recoge las muestras por tick (aisla la salida cruda de las `query-*`); no hay HTTP directo.
 - **Decision**: la logica (baseline, umbrales relativos, confirmacion sostenida, scorecard, veredicto go/no-go) la ejecuta `scripts/deploy_core.py` (puro, testeable). El juicio de **que senales elegir** esta en `references/monitoring.md`.
 - **RCA ante anomalia**: agente `sre` (read-only). Postmortem formal opcional: `incident-postmortem`.
 
-El agente orquesta el flujo (recoge senales -> `deploy_core` decide -> evidencia en el issue) y emite el veredicto.
+El agente orquesta el flujo (lanza el **colector** por tick -> `deploy_core` decide -> evidencia en el issue) y emite el veredicto.
 
 ## Principios no negociables
 
 - **Read-only sobre prod.** Nunca ejecuta el rollback ni toca backends. El merge y el rollback los decide siempre el usuario.
 - **Arranque sin friccion.** Se invoca automaticamente tras el merge (desde `slice-runner`) y **arranca sola**: infiere servicio/workload/namespace del repo y empieza. Solo para y pregunta si la inferencia es ambigua o de baja confianza (`check-alignment` solo cuando hay duda real, no un gate por defecto). No espera a que le digas "revisa el deploy".
 - **Componer, no reinventar.** Los datos vienen de las **skills de observabilidad** (catalogo abierto; anadir una nueva no debe requerir tocar esta skill); la decision la hace `deploy_core.py`; el RCA lo hace el agente `sre`. Nada de HTTP directo a Prometheus/ES ni de reimplementar acceso a datos.
+- **Recogida aislada en un colector (`focused-agent`, `context-management`).** La salida cruda y verbosa de las `query-*` no se acumula en el hilo principal: un **subagente colector efimero (uno por tick, y en el baseline)** la absorbe en su contexto y devuelve solo la muestra plana `{senal: valor}` mas una tabla de hallazgos con las **queries reproducibles**. El hilo principal elige QUE senales (juicio, por blast radius) y decide/orquesta; el colector solo ejecuta y extrae. `deploy_core` no cambia: sigue recibiendo la misma muestra.
 - **Veredicto por senales criticas, sostenido.** Solo las senales `critical` fuerzan `no-go`, y solo si el breach **persiste** (`failure_limit` ticks); las `advisory` informan sin bloquear. `deploy_core` respeta warm-up (grace tras el cambio) y min-observe (no declara `go` antes de cubrir rollout+drain). Un pico aislado no dispara anomalia.
 - **Esperas no bloqueantes.** El poll de estabilizacion se hace con **ticks acotados en background + notificacion** (o `Monitor`), devolviendo el control entre ticks. Prohibido una unica shell bloqueante que se quede colgada toda la ventana (30-60 min): es trabajo deterministico del harness, no la IA poll-eando (`offload-deterministic`).
 - **Sin loop infinito.** `max_runtime` (timeout de ventana) + circuit breaker: si no converge, reporte inconcluso con datos, nunca poll eterno.
@@ -40,12 +41,12 @@ El agente orquesta el flujo (recoge senales -> `deploy_core` decide -> evidencia
 ### 2. Baseline
 
 - Elige las senales segun el **blast radius** del cambio (ver `references/monitoring.md`: RED en el edge + USE del recurso; toca auth -> `query-keycloak`; toca DB/migracion -> `query-gcloud-logs`/`query-postgres-readonly`). Marca cada senal `critical` o `advisory`.
-- Toma varias muestras **pre-cambio** componiendo las `query-*` elegidas y agregalas con `deploy_core.aggregate_baseline` (media + std). Comprueba el **gate de baseline ruidoso**; si avisa, alarga el baseline.
+- Toma varias muestras **pre-cambio lanzando el colector** (mismo mecanismo que el poll, ver paso 3) y agregalas con `deploy_core.aggregate_baseline` (media + std). Comprueba el **gate de baseline ruidoso**; si avisa, alarga el baseline.
 - El baseline es la vara contra la que se comparan los ticks posteriores.
 
 ### 3. Poll loop (el agente orquesta por tick)
 
-Se ejecuta con **ticks acotados en background + notificacion** (o `Monitor`), no como una shell bloqueante que se quede toda la ventana colgada. En cada tick, el agente **recoge las senales elegidas componiendo las `query-*`**, arma la muestra y se la pasa a `deploy_core` (clasifica vs baseline con umbrales relativos y acumula el scorecard con confirmacion sostenida). Senales tipicas (elige por blast radius, **no es lista fija**):
+Se ejecuta con **ticks acotados en background + notificacion** (o `Monitor`), no como una shell bloqueante que se quede toda la ventana colgada. En cada tick, el hilo principal **lanza el colector** (Agent tool, `subagent_type: general-purpose`) con las senales elegidas; el colector compone las `query-*`, absorbe su salida cruda y devuelve la muestra + la tabla (ver contrato abajo). El hilo principal mete la muestra en `tick_history` y se la pasa a `deploy_core` (clasifica vs baseline con umbrales relativos y acumula el scorecard con confirmacion sostenida), y **guarda la tabla sin imprimirla**: aflora solo en hitos (baseline listo, veredicto, anomalia), para no re-ensuciar el contexto que el colector limpio. Senales tipicas (elige por blast radius, **no es lista fija**):
 
 | Senal | Fuente | breach si... |
 |---|---|---|
@@ -55,6 +56,13 @@ Se ejecuta con **ticks acotados en background + notificacion** (o `Monitor`), no
 | Sentry | `query-sentry` | issues nuevas o regresiones ligadas al release |
 | Auth (si aplica) | `query-keycloak` | pico de `LOGIN_ERROR`/`CODE_TO_TOKEN_ERROR` del release |
 | DB (si aplica) | `query-gcloud-logs` (Cloud SQL) + `query-postgres-readonly` | deadlocks/lock timeouts; efecto de datos incorrecto |
+
+**Contrato del colector (entrada / salida).** El **hilo principal** elige QUE senales (juicio por blast radius; ver `references/monitoring.md`) y lanza un colector por tick con:
+
+- **entrada**: contexto del deploy (workload / servicio / namespace / release / `merge_sha` / t0) + lista de specs de senal `{name, fuente (que query-* usar), descripcion, critical|advisory}`.
+- El colector **construye la query concreta** (PromQL/KQL/SQL) el mismo -ese conocimiento vive en la `query-*` que carga-; el hilo principal habla en terminos de negocio ("p95 del workload X"), no en query.
+- **salida**: por senal una fila `{valor, estado (ok/warn/breach informativo), hallazgo (una linea), query reproducible}`. Agregado devuelve (a) la **muestra plana** `{senal: valor}` para `deploy_core` y (b) la **tabla de hallazgos con las queries reproducibles** para el informe.
+- El colector **no** decide veredicto, **no** redacta rollback, **no** lanza a `sre` (seria anidar): solo recoge y extrae (`focused-agent`).
 
 ### 4. Veredicto (deploy_core)
 
@@ -66,7 +74,7 @@ Se ejecuta con **ticks acotados en background + notificacion** (o `Monitor`), no
 
 ### 5. Rama de anomalia
 
-1. Lanza el agente `sre` para un **RCA read-only**, cruzando las fuentes de observabilidad, con el impacto de negocio. (`incident-postmortem` opcional si se quiere un postmortem formal.)
+1. **El hilo principal** lanza el agente `sre` para un **RCA read-only** (no lo lanza el colector: seria anidar), cruzando las fuentes de observabilidad, con el impacto de negocio, y le pasa como pista las **senales en breach + sus queries reproducibles** que el colector ya devolvio -mejor punto de partida del triaje-. (`incident-postmortem` opcional si se quiere un postmortem formal.)
 2. **Redacta (sin ejecutar) el rollback**: `git revert <merge_sha>` + redeploy, con los comandos listos para que los lance el usuario. Si el cambio iba tras un feature flag, apagar el flag es el rollback preferido (reversible en runtime, sin redeploy).
 3. Para y presenta: senal(es) en breach + evidencia (scorecard vs baseline), RCA del `sre`, y el rollback preparado.
 
@@ -74,9 +82,9 @@ Se ejecuta con **ticks acotados en background + notificacion** (o `Monitor`), no
 
 Comparte la trazabilidad del pipeline con `slice-runner` a traves del **issue de GitHub** de la feature:
 
-- Al arrancar y en el veredicto, **comenta en el issue** (`gh issue comment`) el resultado del deploy de esa slice: `deploy start`, senales `ok|degradada`, `verdict sano|degradado|inconcluso`, y -si aplica- `rca` + `rollback redactado`, con la tabla vs baseline. Asi el issue reune diseno, implementacion y despliegue en un solo hilo.
+- Al arrancar y en el veredicto, **comenta en el issue** (`gh issue comment`) el resultado del deploy de esa slice: `deploy start`, senales `ok|degradada`, `verdict sano|degradado|inconcluso`, y -si aplica- `rca` + `rollback redactado`, con la **tabla de hallazgos vs baseline y las queries reproducibles del hito** (no una por tick). Asi el issue reune diseno, implementacion y despliegue en un solo hilo.
 - **No cambia el estado (marcador/checkbox) de la slice**: ya quedo `mergeada` en el paso 9 de `slice-runner`. El veredicto del deploy es informativo y se registra como comentario, no como estado.
 
 ## Fin
 
-Al parar, reporta siempre: servicio y release vigilados, ventana observada, veredicto (sano / degradado / inconcluso), tabla de las 4 senales vs baseline, y -si aplica- RCA + rollback redactado. Recuerda que el rollback lo ejecuta el usuario.
+Al parar, reporta siempre: servicio y release vigilados, ventana observada, veredicto (sano / degradado / inconcluso), tabla de senales vs baseline **con las queries reproducibles**, y -si aplica- RCA + rollback redactado. Recuerda que el rollback lo ejecuta el usuario.
