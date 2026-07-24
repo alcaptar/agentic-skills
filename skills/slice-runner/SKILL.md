@@ -18,7 +18,7 @@ Nivel de autonomia 1: un ciclo por invocacion. Para encadenar slices, envolver e
 ## Principios no negociables
 
 - **El que implementa no verifica.** La implementacion y la verificacion las hacen subagentes distintos (Agent tool), con instrucciones distintas. El verificador es adversarial.
-- **Las convenciones del repo mandan.** Implementador y verificador cargan `docs/conventions/` + `CLAUDE.md` (si existen) como vara de medir, por encima de cualquier default generico de hexagonal/DDD. En conflicto, ganan las convenciones del repo. Sin esto, el verificador no puede cazar violaciones reales (p. ej. una migracion que siembra datos donde la convencion lo prohibe).
+- **Las convenciones del repo mandan.** Implementador y verificador cargan como vara de medir las **fuentes de convencion declaradas en el issue** (seccion `## Fuentes de convencion`: docs y skills de proyecto), por encima de cualquier default generico de hexagonal/DDD. En conflicto, ganan las convenciones del repo. No se asumen rutas fijas: las fuentes se descubren por repo y las declara `slice-spec` en el issue; `slice-runner` solo las lee. Si el issue no trae esa seccion, **para** y pide anadirla con `slice-spec` (no ejecutes con la vara vacia: fue la causa raiz de desviaciones silenciosas de convencion). Sin la vara, el verificador no puede cazar violaciones reales (p. ej. una migracion que siembra datos donde la convencion lo prohibe).
 - **Puertas de parada objetivas.** No hay PR mergeable sin lint limpio, tipos limpios, tests verdes y **CI verde**, ejecutados con los comandos reales del repo (paso 2), no con binarios asumidos.
 - **Determinista lo que es regla exacta (`offload-deterministic`).** Lo que se puede comprobar con una regla mecanica (higiene del diff staged) NO se delega al juicio del verificador: lo resuelve el script `scripts/gates.py`, cuyo exit code es autoritativo. El verificador gasta su presupuesto solo en lo semantico: convenciones y arquitectura del repo. No se pide dos veces a la IA lo que un script decide una vez.
 - **TDD consciente de capa.** Por defecto TDD estricto: test rojo por cada AC antes del codigo, y el verificador comprueba que el test precede a la implementacion. Pero si las convenciones del repo eximen una capa (p. ej. modelos ORM y migraciones que no se testean por separado), la puerta para esa slice es "suite intacta + verificacion de datos/efecto", no test-first por AC. La convencion del repo decide, no este documento.
@@ -39,6 +39,10 @@ estado**. Si el issue no encaja en este formato, para y pide una spec valida (o 
 `/slice-spec` para generarla).
 
 ```markdown
+## Fuentes de convencion
+- doc: .claude/CLAUDE.md
+- skill: .claude/skills/duplicate-action
+
 ## Slices
 - [x] slice-01 (cantidad-vo): Crear value object `Cantidad` [mergeada] PR #11
       AC: rechaza negativos; tests en test/domain/test_cantidad.py
@@ -48,7 +52,9 @@ estado**. Si el issue no encaja en este formato, para y pide una spec valida (o 
       AC: ...
 ```
 
-Unidad de trabajo = cada item `- [ ] slice-NN ...`. Una feature de una sola slice es un checklist
+La seccion `## Fuentes de convencion` (punteros a la vara de medir del repo) la declara
+`slice-spec`; `slice-runner` la exige y para si falta (paso 1). Unidad de trabajo = cada item
+`- [ ] slice-NN ...`. Una feature de una sola slice es un checklist
 con una unica linea. El parseo y la reescritura de estas lineas los hace la logica pura de
 `scripts/issue_body.py` (`offload-deterministic`); la I/O contra el issue es `gh`.
 
@@ -121,6 +127,12 @@ slug del remoto), el mismo en `record` y en `report --repo`, para que las cifras
   (`gh issue list`) y pregunta cual; para `/loop`, el numero viaja en el input del loop.
 - Lee el cuerpo (`gh issue view <N> --json body`) y parsealo con `issue_body.parse_body`. Si no es
   un checklist de slices valido, para y pide una spec valida (o sugiere `/slice-spec`).
+- **Carga la vara de medir del issue.** Extrae las fuentes de convencion con
+  `issue_body.parse_fuentes` (y `issue_body.tiene_seccion_fuentes` para distinguir ausente de vacia).
+  Si la seccion `## Fuentes de convencion` **falta o esta vacia**, para y pide anadirla con
+  `slice-spec` (modo `validate` sobre este issue): sin vara no se ejecuta. Con la seccion presente,
+  estos punteros (docs y skills de proyecto) son la vara que cargaran implementador (paso 5) y
+  verificador (paso 6); las skills de proyecto se leen/invocan y se citan igual que una regla.
 - **Selecciona la slice**: la indicada por el usuario, o la primera `pendiente`. No repitas las
   `mergeada`. Si una slice quedo `esperando-merge`, retomala ahi (paso 9) en vez de reimplementarla.
 - Extrae titulo, alcance y AC de la slice. Si no hay AC, para y pidelos: sin AC no hay puerta de verificacion.
@@ -140,7 +152,7 @@ Infierelos, no los asumas. Cachea lo detectado en la respuesta.
 
 - Resume: slice elegida (id + `name`), AC, capa(s) afectada(s), comando de validacion que aplicara, `type(name)` de conventional commit que usara el commit/PR, y como piensa abordarla.
 - Si el cambio claramente **no es un `feat`** (p. ej. refactor o fix) y la spec no declaro type, confirma el type con el usuario aqui (barato; evita un scope de commit erroneo).
-- Si la spec pre-hornea codigo, contrastalo contra `docs/conventions/` + `CLAUDE.md` y **senala cualquier violacion antes de escribir** (no lo transcribas a ciegas).
+- Si la spec pre-hornea codigo, contrastalo contra las fuentes de convencion del issue (paso 1) y **senala cualquier violacion antes de escribir** (no lo transcribas a ciegas).
 - Espera go/no-go del usuario. Esto evita `silent-misalignment` y `ai-slop`.
 
 ### 4. Preparar rama de trabajo
@@ -154,7 +166,7 @@ Lanza un Agent (`subagent_type: general-purpose`) con instrucciones. Se usa `gen
 proposito: hereda el modelo fuerte de la sesion, tiene `Bash`, y no arrastra la metodologia de ningun
 agente prestado; todo el criterio se lo da este prompt, subordinado a las convenciones del repo.
 
-- Cargar `docs/conventions/` + `CLAUDE.md` del repo (si existen) y respetarlos como vara de medir; cargar tambien la skill `backend-best-practices`. En conflicto, ganan las convenciones del repo.
+- Cargar las **fuentes de convencion declaradas en el issue** (paso 1: docs y skills de proyecto) y respetarlas como vara de medir; cargar tambien la skill `backend-best-practices`. En conflicto, ganan las convenciones del repo.
 - **TDD segun la capa**:
   - Capas con test (dominio/aplicacion/API...): escribir primero el/los test(s) que codifican los AC, verlos fallar, luego el codigo minimo.
   - Capas eximidas por la convencion del repo (p. ej. modelos ORM y migraciones alembic que no se testean por separado): no forzar test-first; la validacion es "suite intacta + verificacion del efecto" (p. ej. el `SELECT` que exige el plan).
@@ -186,8 +198,8 @@ enfoque" del implementador como verdad: juzga el diff, no la narrativa.
 Recorre esta **rubrica cerrada** entera y reporta item a item. Cada item esta marcado `[det]` (lo resuelve un script y solo consumes su resultado) o `[sem]` (lo juzgas tu):
 
 - `[det]` **Puertas objetivas**: ejecutar lint, tipos y tests con los comandos del paso 2 (Makefile primero) y capturar output. Es ejecucion, no re-derivacion: no reimplementes ni reinventes coberturas de test. El exit code manda.
-- `[sem]` **Convenciones y arquitectura**: cargar `docs/conventions/` + `CLAUDE.md` como vara de medir principal y **contrastar el diff contra ellos**, citando regla + path en cada hallazgo (esto es lo que caza cosas como una migracion que siembra datos donde la convencion lo prohibe). Cargar tambien `backend-best-practices` como vara secundaria para lo que las convenciones no cubren. En conflicto, ganan las convenciones del repo.
-- `[sem]` **Patron de rollout/entrega correcto (no solo bien implementado).** Caso concreto del check de convenciones anterior, resaltado aparte por ser un fallo recurrente. No basta con que el patron elegido este bien ejecutado y sea coherente consigo mismo: comprueba que **es el patron que la convencion del repo prescribe para este tipo de cambio**. Disparador general: si el cambio toca la **firma/constructor/contrato publico** de una accion o caso de uso, la convencion suele exigir un patron distinto (duplicar la accion / expand-contract) que si solo cambia logica interna (gatear en el metodo). Deriva el criterio de `docs/conventions/` (p. ej. delivery/testing), **no** de como quedo una slice anterior: el codigo ya mergeado es circunstancia, no regla. Si el patron elegido no encaja con lo que pide la convencion para este cambio, es **FALLA (severidad alta)**, citando regla + path. Este es el check que un verificador que solo mira la implementacion deja pasar.
+- `[sem]` **Convenciones y arquitectura**: cargar las **fuentes de convencion declaradas en el issue** (paso 1: docs y skills de proyecto) como vara de medir principal y **contrastar el diff contra ellas**, citando regla/skill + path en cada hallazgo (esto es lo que caza cosas como una migracion que siembra datos donde la convencion lo prohibe). Cargar tambien `backend-best-practices` como vara secundaria para lo que las convenciones no cubren. En conflicto, ganan las convenciones del repo.
+- `[sem]` **Patron de rollout/entrega correcto (no solo bien implementado).** Caso concreto del check de convenciones anterior, resaltado aparte por ser un fallo recurrente. No basta con que el patron elegido este bien ejecutado y sea coherente consigo mismo: comprueba que **es el patron que la convencion del repo prescribe para este tipo de cambio**. Disparador general: si el cambio toca la **firma/constructor/contrato publico** de una accion o caso de uso, la convencion suele exigir un patron distinto (duplicar la accion / expand-contract) que si solo cambia logica interna (gatear en el metodo). Deriva el criterio de las fuentes de convencion del issue (paso 1: docs y skills de proyecto, p. ej. una skill `duplicate-action`/`deprecate-*` o reglas de delivery/testing), **no** de como quedo una slice anterior: el codigo ya mergeado es circunstancia, no regla. Si el patron elegido no encaja con lo que pide la convencion para este cambio, es **FALLA (severidad alta)**, citando regla + path. Este es el check que un verificador que solo mira la implementacion deja pasar.
 - `[sem]` **Boundaries**: nucleo sin infra, DI correcta, DTOs (Pydantic) en boundaries.
 - `[sem]` **TDD consciente de capa** (comprobacion barata, no re-testeo): en capas con test, que exista un test por AC y que preceda a la implementacion; en capas eximidas, "suite intacta + efecto verificado".
 - `[sem]` **Conformidad con los AC (no solo que existan tests).** Distinto del punto anterior (que comprueba que *hay* un test por AC) y de test-desiderata (que juzga la calidad *generica* del test); este comprueba que se **cumple el cometido del AC**. Para cada AC: (1) **mapeo AC↔test**: que el test asserte lo que *ese* AC exige, no una version debilitada -la calidad generica del test (verifica comportamiento real, aislamiento...) es de test-desiderata, no la repitas aqui-; (2) que el **codigo cumpla la intencion** del AC, no solo que pase su propio test (pregunta adversarial: "¿podria pasar este test y aun asi violar lo que el AC pedia?") -lectura acotada, no re-derivar cobertura-; (3) codigo que implementa **comportamiento que ningun AC pidio** (feature especulativa, andamiaje de slices futuras). El refactor tras verde que permite el paso 5 (extraer helpers, mejorar estructura) **traza al AC** y no es hallazgo. FALLA (severidad alta) si un AC no queda pineado, si el codigo no cumple su intencion, o si hay comportamiento sin AC que lo justifique.
