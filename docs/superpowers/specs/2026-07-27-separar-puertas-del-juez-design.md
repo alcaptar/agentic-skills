@@ -139,6 +139,12 @@ allowed-tools: [Read, Grep, Glob, Bash(git diff *), Bash(git log *), Bash(git sh
   > commits que la base haya avanzado saldrian como borrados y el verificador cazaria violaciones
   > fantasma). Fail-closed: base inexistente o cero cambios es FALLA, no un bundle vacio sobre el que
   > el verificador daria PASA.
+  >
+  > **Verificado en el segundo smoke (sesion nueva, 2026-07-27)**: preguntado por su configuracion, el
+  > agente enumero exactamente `Read`, `Skill`, `Grep`, `Glob`, y no intento ejecutar nada -"no puedo
+  > intentar `git status`: no existe la tool con la que invocarlo, no es que la llamada falle"-. La
+  > evidencia de sus hallazgos citaba lineas de `slice.diff`, no salida de `git`. La diferencia con la
+  > version de `allowed-tools`, que ejecutaba `ls` sin friccion, es el mecanismo, no la redaccion.
 
 ### 3b. Dos defectos de rubrica que el smoke destapo
 
@@ -253,5 +259,14 @@ Verde, con tests nuevos:
   agregado en el report.
 
 Lo que pytest **no** cubre y hay que verificar a mano en el smoke real (`smoke/README.md`): que
-`subagent_type: slice-verifier` resuelve, que la allowlist impide de verdad ejecutar `pytest`, y que
-el agente devuelve el JSON del veredicto sin prosa alrededor.
+`subagent_type: slice-verifier` resuelve, que no tiene `Bash`, y que el agente devuelve el JSON del
+veredicto sin prosa alrededor.
+
+**Resultado del smoke (2026-07-27, tras sesion nueva).** Los tres arreglos confirmados sobre dos ramas
+identicas salvo en la manipulacion de tests: la sucia dio FALLA con **exactamente 2 hallazgos `alta`**
+para los 2 defectos reales (antes 3-4, con el mismo assert contado dos veces), citando lineas de
+`slice.diff`; declaro por escrito que no lo recuenta en `test-desiderata` "por ser test preexistente" ni
+en `convenciones` "por ser la regla mas especifica"; y **cero** hallazgos sobre el historial de commits.
+La limpia dio `{"veredicto": "PASA", "hallazgos": []}`. Gotcha caro descubierto por el camino, ya en
+`CLAUDE.md`: **las skills se releen en caliente, los agentes no** -el primer smoke valido en silencio la
+definicion vieja-.
