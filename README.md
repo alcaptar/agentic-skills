@@ -7,6 +7,8 @@ No es de la organizacion: de momento, uso personal.
 ## Estructura
 
 ```
+agents/
+  slice-verifier.md           Verificador adversarial de slice-runner (rubrica como system prompt)
 skills/
   slice-spec/      SKILL.md   Crea/valida la spec de slices (envuelve brainstorming)
   slice-runner/    SKILL.md   Ejecuta una slice de una spec de principio a fin
@@ -25,7 +27,10 @@ smoke/                        Smoke test real contra GitHub (ver smoke/README.md
 
 ## Fuente de verdad y symlinks
 
-**Este repo es la fuente de verdad.** Las skills viven aqui y `~/.claude/skills/` apunta a ellas por symlink, asi que se editan versionadas y siguen activas en Claude Code.
+**Este repo es la fuente de verdad.** Las skills y el agente verificador viven aqui; `~/.claude/skills/`
+y `~/.claude/agents/` apuntan a ellos por symlink, asi que se editan versionados y siguen activos en
+Claude Code. Ambos directorios son **de usuario**, no de proyecto: valen en cualquier repo donde se
+invoque `slice-runner`.
 
 Recrear los symlinks (p. ej. en otra maquina) tras clonar:
 
@@ -33,7 +38,11 @@ Recrear los symlinks (p. ej. en otra maquina) tras clonar:
 ln -s "$PWD/skills/slice-spec" ~/.claude/skills/slice-spec
 ln -s "$PWD/skills/slice-runner" ~/.claude/skills/slice-runner
 ln -s "$PWD/skills/deploy-watch" ~/.claude/skills/deploy-watch
+ln -s "$PWD/agents/slice-verifier.md" ~/.claude/agents/slice-verifier.md
 ```
+
+El del agente **no es opcional**: sin el, `subagent_type: slice-verifier` no resuelve y el paso de
+verificacion de `slice-runner` rompe.
 
 ## El pipeline
 
@@ -67,8 +76,11 @@ una sola slice es un checklist con una unica linea.
 
 La spec y el estado de cada slice viven en el **issue de GitHub** (unica fuente de verdad). Cada slice
 tiene **nombre**: alimenta la rama (`slice/NN-name`) y el scope de conventional commit
-(`feat(name): ...`). Puertas antes de abrir PR: convenciones del repo -> `backend-best-practices` ->
-TDD por capa -> `test-desiderata` -> constraints/boundaries -> lint/types/tests -> CI verde. **La PR
+(`feat(name): ...`). Puertas antes de abrir PR, **en este orden**: lint/tipos/tests (deterministas, via
+`gates.py checks`) -> verificador adversarial (convenciones del repo -> `backend-best-practices` -> TDD
+por capa -> `test-desiderata` -> constraints/boundaries) -> CI verde. Las deterministas van **primero** a
+proposito: cuando corre el verificador ya estan verdes, asi que no ve output de build y no gasta un
+reintento adversarial en un `ruff` sucio. **La PR
 solo lleva el codigo de la slice**: se stagean unicamente los ficheros que produjo el implementador,
 nunca planes ni design-docs (la spec vive en el issue), y referencia el issue con `Part of #N`. No hace
 merge. Por defecto trabaja en una **rama normal** (no asume worktree; solo lo usa si se paralelizan
@@ -99,7 +111,7 @@ metricas del loop (tasa de FALLA, reintentos...) viven fuera del repo en
 
 ## Principios comunes
 
-- Escritor != verificador, pero el verificador **revisa convenciones/arquitectura, no re-testea** (CI + AC gobiernan la correccion).
+- Escritor != verificador, pero el verificador **revisa convenciones/arquitectura, no re-testea** (CI + AC gobiernan la correccion) y **no ejecuta puertas ni ve output de build**: corren antes, y su presupuesto entero es para lo semantico.
 - Puertas de parada objetivas y deterministas.
 - Convenciones del repo como vara de medir principal.
 - Estado del run en el **issue de GitHub**: la spec y el estado de cada slice viven en el issue (unica fuente de verdad); el registro duradero son el issue y las PRs mergeadas.

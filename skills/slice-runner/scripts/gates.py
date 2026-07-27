@@ -1,20 +1,30 @@
 #!/usr/bin/env python3
-"""Puerta determinista de slice-runner (patron offload-deterministic).
+"""Puertas deterministas de slice-runner (patron offload-deterministic).
 
-Se offloada a script solo la regla mecanica con coste de error alto que el modelo
-no garantiza por si mismo. Redactar un conventional commit lo hace bien el agente,
-asi que no hay puerta para eso; lo que si es un backstop mecanico es la higiene del
-diff staged:
+Se offloada a script la regla mecanica con coste de error alto que el modelo no
+garantiza por si mismo. Redactar un conventional commit lo hace bien el agente, asi
+que no hay puerta para eso. Hay dos:
 
     pr-hygiene   el diff staged solo puede contener los ficheros de codigo/test
                  que declaro el implementador; nunca planes ni design-docs (la spec
                  vive en el issue de GitHub, no como fichero).
+
+    checks       ejecuta lint/tipos/tests con los comandos que autodetecto el paso 2
+                 y devuelve, por puerta, exit code y salida truncada. Existe para que
+                 el output crudo de build no entre en el contexto de ningun agente: el
+                 juez adversarial no ejecuta puertas ni ve su salida, y el
+                 implementador recibe el error ya acotado. Es el patron de los
+                 verificadores de Honk (Spotify); su parseo por regex por herramienta
+                 NO se copia, porque aqui los comandos se autodetectan por repo y un
+                 regex que no matchea oculta el error real.
 
 Exit code 0 = PASA, 1 = FALLA, 2 = error de uso. Con --json imprime el resultado
 estructurado en stdout para que el orquestador lo consuma sin parsear prosa.
 
 Uso:
     gates.py pr-hygiene --repo . --allow src/a.py --allow test/a.py [--spec ruta] [--json]
+    gates.py checks --repo . --check lint="make linting" --check tests="make test" \\
+        [--tail 30] [--timeout 600] [--json]
 """
 
 from __future__ import annotations
@@ -25,6 +35,10 @@ import subprocess
 import sys
 from dataclasses import dataclass, field
 from pathlib import PurePosixPath
+
+# Truncado de la salida de una puerta que falla, y tope de duracion por puerta.
+DEFAULT_TAIL = 30
+DEFAULT_TIMEOUT = 600
 
 # Prefijos/patrones de artefactos que jamas pueden entrar en la PR (documentos de
 # diseno y planes de brainstorming/writing-plans). Backstop ademas del allow-list.
@@ -109,6 +123,99 @@ def check_pr_hygiene(
     return result
 
 
+@dataclass
+class CheckResult:
+    """Resultado de una puerta ejecutada (lint, tipos o tests)."""
+
+    nombre: str
+    comando: str
+    passed: bool
+    exit_code: int
+    salida: str
+
+    @property
+    def veredicto(self) -> str:
+        return "PASA" if self.passed else "FALLA"
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "nombre": self.nombre,
+            "comando": self.comando,
+            "veredicto": self.veredicto,
+            "exit_code": self.exit_code,
+            "salida": self.salida,
+        }
+
+
+@dataclass
+class ChecksResult:
+    """Resultado agregado de todas las puertas ejecutadas."""
+
+    checks: list[CheckResult] = field(default_factory=list)
+
+    @property
+    def passed(self) -> bool:
+        return all(c.passed for c in self.checks)
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "gate": "checks",
+            "veredicto": "PASA" if self.passed else "FALLA",
+            "checks": [c.to_dict() for c in self.checks],
+        }
+
+
+def parse_check_spec(spec: str) -> tuple[str, str]:
+    """`nombre=comando` -> (nombre, comando). Parte por el PRIMER `=`.
+
+    El comando puede llevar `=` (p. ej. `make test ARGS=-x`), asi que solo el primero
+    separa. Nombre y comando vacios son error de uso, no una puerta que falla.
+    """
+    nombre, sep, comando = spec.partition("=")
+    if not sep or not nombre.strip() or not comando.strip():
+        raise ValueError(f"--check mal formado, se esperaba nombre=comando: {spec!r}")
+    return nombre.strip(), comando.strip()
+
+
+def tail(text: str, lines: int) -> str:
+    """Las ultimas `lines` lineas de `text`, sin salto final."""
+    return "\n".join(text.rstrip("\n").splitlines()[-lines:])
+
+
+def run_check(repo: str, nombre: str, comando: str, tail_lines: int, timeout: int) -> CheckResult:
+    """Ejecuta una puerta y devuelve exit code + salida truncada solo si falla."""
+    try:
+        out = subprocess.run(
+            comando,
+            shell=True,  # noqa: S602 - el comando lo autodetecto el paso 2 del propio repo
+            cwd=repo,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired:
+        return CheckResult(nombre, comando, False, -1, f"timeout tras {timeout}s")
+    passed = out.returncode == 0
+    # En PASA la salida se descarta: el mensaje corto de exito evita meter ruido de
+    # build en el contexto de quien consuma esto.
+    return CheckResult(nombre, comando, passed, out.returncode, "" if passed else tail(out.stdout, tail_lines))
+
+
+def run_checks(
+    repo: str,
+    specs: list[tuple[str, str]],
+    tail_lines: int,
+    timeout: int,
+) -> ChecksResult:
+    """Ejecuta TODAS las puertas, sin fail-fast.
+
+    Una vuelta al implementador (spawn de agente + contexto) cuesta mas que volver a
+    correr la suite, asi que se recolectan todos los fallos en una pasada.
+    """
+    return ChecksResult([run_check(repo, n, c, tail_lines, timeout) for n, c in specs])
+
+
 def _emit(result: GateResult, as_json: bool) -> int:
     if as_json:
         print(json.dumps(result.to_dict(), ensure_ascii=False))
@@ -117,6 +224,19 @@ def _emit(result: GateResult, as_json: bool) -> int:
         print(f"[{result.gate}] {veredicto}")
         for h in result.hallazgos:
             print(f"  - {h}")
+    return 0 if result.passed else 1
+
+
+def _emit_checks(result: ChecksResult, as_json: bool) -> int:
+    if as_json:
+        print(json.dumps(result.to_dict(), ensure_ascii=False))
+    else:
+        print(f"[checks] {'PASA' if result.passed else 'FALLA'}")
+        for c in result.checks:
+            print(f"  {c.veredicto} {c.nombre} ({c.comando})")
+            if c.salida:
+                for line in c.salida.splitlines():
+                    print(f"    {line}")
     return 0 if result.passed else 1
 
 
@@ -135,10 +255,40 @@ def main(argv: list[str] | None = None) -> int:
     hyg.add_argument("--spec", default=None, help="ruta de la spec, para prohibirla explicitamente")
     hyg.add_argument("--json", action="store_true", help="salida estructurada JSON")
 
+    chk = sub.add_parser("checks", help="ejecuta lint/tipos/tests y devuelve salida truncada")
+    chk.add_argument("--repo", default=".", help="ruta del repo (default: cwd)")
+    chk.add_argument(
+        "--check",
+        action="append",
+        default=[],
+        help="puerta como nombre=comando, p. ej. lint='make linting' (repetible)",
+    )
+    chk.add_argument("--tail", type=int, default=DEFAULT_TAIL, help=f"lineas de salida en fallo (default {DEFAULT_TAIL})")
+    chk.add_argument(
+        "--timeout",
+        type=int,
+        default=DEFAULT_TIMEOUT,
+        help=f"segundos por puerta (default {DEFAULT_TIMEOUT})",
+    )
+    chk.add_argument("--json", action="store_true", help="salida estructurada JSON")
+
     args = parser.parse_args(argv)
 
-    result = check_pr_hygiene(args.repo, args.allow, args.spec)
-    return _emit(result, args.json)
+    if args.gate == "pr-hygiene":
+        return _emit(check_pr_hygiene(args.repo, args.allow, args.spec), args.json)
+
+    # Error de uso (exit 2), no FALLA de puerta: confundirlos haria que el orquestador
+    # reintentara el paso 5 por un fallo que esta en su propia invocacion.
+    if not args.check:
+        print("error: checks necesita al menos un --check nombre=comando", file=sys.stderr)
+        return 2
+    try:
+        specs = [parse_check_spec(s) for s in args.check]
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+
+    return _emit_checks(run_checks(args.repo, specs, args.tail, args.timeout), args.json)
 
 
 if __name__ == "__main__":

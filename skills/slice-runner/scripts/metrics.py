@@ -8,16 +8,20 @@ repo/PR y sobreviva a los runs. Este log vive fuera del repo:
     ~/.claude/slice-runner/metrics.jsonl   append-only, una linea por slice cerrada
 
 Un script anexa el registro (no la IA redactando prosa) y otro lo agrega. Las cifras
-del reporte son deterministas: tasa de FALLA del verificador, % de slices al primer
-intento, media de reintentos, tasa de CI roja. Coste en tokens NO se mide aqui (sale
-de la telemetria/OTel de Claude Code): se admite como campo opcional best-effort y, si
-no viene, no se inventa.
+del reporte son deterministas: tasa de FALLA del verificador, tasa de bloqueo por
+puertas, % de slices al primer intento, media de reintentos, tasa de CI roja. Coste en
+tokens NO se mide aqui (sale de la telemetria/OTel de Claude Code): se admite como campo
+opcional best-effort y, si no viene, no se inventa.
+
+El log es durable y append-only, asi que los registros viejos no tienen los campos
+nuevos: el agregado los trata como cero, nunca como dato ausente que invalide la fila.
 
 Uso:
     metrics.py record --repo <repo> --slice slice-01 --name cantidad-vo \\
         --veredicto PASA --ci green \\
         --hallazgos-alta 0 --hallazgos-media 1 --hallazgos-baja 2 \\
-        --reintentos-implement 0 --reintentos-ci 0 --duracion-s 540 \\
+        --reintentos-implement 0 --reintentos-puertas 0 --reintentos-ci 0 \\
+        --duracion-s 540 \\
         [--coste-tokens 12345] [--ts 2026-07-22T10:00:00Z] [--path RUTA]
 
     metrics.py report [--repo <repo>] [--json] [--path RUTA]
@@ -33,7 +37,10 @@ from pathlib import Path
 
 DEFAULT_PATH = Path.home() / ".claude" / "slice-runner" / "metrics.jsonl"
 
-VEREDICTOS = ("PASA", "FALLA", "abortada-presupuesto")
+# `FALLA` es el veto del juez adversarial. `bloqueada-puertas` es agotar los reintentos
+# de lint/tipos/tests: un fallo mecanico, que se registra aparte porque confundirlo con un
+# veto del juez dejaria inservible el unico instrumento para calibrarlo.
+VEREDICTOS = ("PASA", "FALLA", "bloqueada-puertas", "abortada-presupuesto")
 CI_RESULTS = ("green", "red", "none")
 
 
@@ -56,6 +63,7 @@ def record(args: argparse.Namespace) -> int:
             "baja": args.hallazgos_baja,
         },
         "reintentos_implement": args.reintentos_implement,
+        "reintentos_puertas": args.reintentos_puertas,
         "reintentos_ci": args.reintentos_ci,
         "duracion_s": args.duracion_s,
         "coste_tokens": args.coste_tokens,  # None si no se pasa: no se inventa
@@ -104,27 +112,33 @@ def _as_float(v: object) -> float:
 def _aggregate(rows: list[dict[str, object]]) -> dict[str, object]:
     total = len(rows)
     verificador_falla = sum(1 for r in rows if r.get("veredicto") == "FALLA")
+    bloqueada_puertas = sum(1 for r in rows if r.get("veredicto") == "bloqueada-puertas")
     ci_red = sum(1 for r in rows if r.get("ci") == "red")
     # "Primer intento" = resuelta limpia a la primera: PASA del verificador, CI verde
-    # y cero reintentos. Un abort-por-presupuesto con 0 reintentos NO es exito.
+    # y cero reintentos de cualquier clase (tambien de puertas: una vuelta por lint
+    # sucio no es limpia). Un abort-por-presupuesto con 0 reintentos NO es exito.
     primer_intento = sum(
         1
         for r in rows
         if r.get("veredicto") == "PASA"
         and r.get("ci") == "green"
         and r.get("reintentos_implement") == 0
+        and not r.get("reintentos_puertas")
         and r.get("reintentos_ci") == 0
     )
     reint_impl = [_as_float(r.get("reintentos_implement")) for r in rows]
+    reint_puertas = [_as_float(r.get("reintentos_puertas")) for r in rows]
     reint_ci = [_as_float(r.get("reintentos_ci")) for r in rows]
     duraciones = [_as_float(r["duracion_s"]) for r in rows if r.get("duracion_s") is not None]
     costes = [_as_float(r["coste_tokens"]) for r in rows if r.get("coste_tokens") is not None]
     return {
         "slices": total,
         "verificador_falla_pct": _pct(verificador_falla, total),
+        "bloqueada_puertas_pct": _pct(bloqueada_puertas, total),
         "ci_roja_pct": _pct(ci_red, total),
         "primer_intento_pct": _pct(primer_intento, total),
         "reintentos_implement_media": _mean(reint_impl),
+        "reintentos_puertas_media": _mean(reint_puertas),
         "reintentos_ci_media": _mean(reint_ci),
         "duracion_s_media": _mean(duraciones),
         "coste_tokens_media": _mean(costes) if costes else None,
@@ -147,9 +161,11 @@ def report(args: argparse.Namespace) -> int:
         return 0
     print(f"metricas slice-runner ({scope}) - {agg['slices']} slices - {path}")
     print(f"  verificador FALLA      {agg['verificador_falla_pct']}%")
+    print(f"  bloqueada por puertas  {agg['bloqueada_puertas_pct']}%")
     print(f"  CI roja                {agg['ci_roja_pct']}%")
     print(f"  slices al 1er intento  {agg['primer_intento_pct']}%")
     print(f"  reintentos implement   {agg['reintentos_implement_media']} media")
+    print(f"  reintentos puertas     {agg['reintentos_puertas_media']} media")
     print(f"  reintentos CI          {agg['reintentos_ci_media']} media")
     print(f"  duracion               {agg['duracion_s_media']}s media")
     if agg["coste_tokens_media"] is not None:
@@ -173,6 +189,7 @@ def main(argv: list[str] | None = None) -> int:
     rec.add_argument("--hallazgos-media", type=int, default=0)
     rec.add_argument("--hallazgos-baja", type=int, default=0)
     rec.add_argument("--reintentos-implement", type=int, default=0)
+    rec.add_argument("--reintentos-puertas", type=int, default=0)
     rec.add_argument("--reintentos-ci", type=int, default=0)
     rec.add_argument("--duracion-s", type=int, default=None)
     rec.add_argument("--coste-tokens", type=int, default=None)

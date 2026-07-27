@@ -20,15 +20,16 @@ Nivel de autonomia 1: un ciclo por invocacion. Para encadenar slices, envolver e
 - **El que implementa no verifica.** La implementacion y la verificacion las hacen subagentes distintos (Agent tool), con instrucciones distintas. El verificador es adversarial.
 - **Las convenciones del repo mandan.** Implementador y verificador cargan como vara de medir las **fuentes de convencion declaradas en el issue** (seccion `## Fuentes de convencion`: docs y skills de proyecto), por encima de cualquier default generico de hexagonal/DDD. En conflicto, ganan las convenciones del repo. No se asumen rutas fijas: las fuentes se descubren por repo y las declara `slice-spec` en el issue; `slice-runner` solo las lee. Si el issue no trae esa seccion, **para** y pide anadirla con `slice-spec` (no ejecutes con la vara vacia: fue la causa raiz de desviaciones silenciosas de convencion). Sin la vara, el verificador no puede cazar violaciones reales (p. ej. una migracion que siembra datos donde la convencion lo prohibe).
 - **Puertas de parada objetivas.** No hay PR mergeable sin lint limpio, tipos limpios, tests verdes y **CI verde**, ejecutados con los comandos reales del repo (paso 2), no con binarios asumidos.
-- **Determinista lo que es regla exacta (`offload-deterministic`).** Lo que se puede comprobar con una regla mecanica (higiene del diff staged) NO se delega al juicio del verificador: lo resuelve el script `scripts/gates.py`, cuyo exit code es autoritativo. El verificador gasta su presupuesto solo en lo semantico: convenciones y arquitectura del repo. No se pide dos veces a la IA lo que un script decide una vez.
-- **Los tests son ciudadanos de primera categoria.** Valen tanto o mas que el codigo de produccion: ahi va el mayor esfuerzo de calidad, y sobre todo la exigencia de que **testeen de verdad lo que la slice pretende construir**, no una version debilitada ni un proxy que pasa por casualidad. Un test que pasa sin fijar su AC es un fallo tan grave como codigo roto. Con dientes, no como declaracion: el implementador aplica `writing-good-tests.md` de `superpowers:test-driven-development` (nombrar el cambio de produccion que haria fallar el test **antes** de escribirlo; asertar comportamiento real, nunca mocks; codigo de test fuera de produccion), y el verificador lo bloquea con severidad **alta** en el paso 6 (mapeo AC↔test, fixture/wiring theater, manipulacion de tests, test-desiderata).
+- **El juez no ejecuta puertas ni ve output de build.** Las puertas deterministas (lint, tipos, tests) corren **antes** del verificador: el implementador las corre en su ciclo para tener feedback incremental, y el orquestador las re-corre como backstop (paso 6) porque el auto-reporte del implementador no es fuente de verdad. Cuando se invoca al verificador (paso 7) ya estan verdes por construccion, asi que no recibe nada de ellas: su presupuesto entero se gasta en lo semantico. Meter un traceback de pytest en el contexto del unico agente cuyo valor es el juicio es `limited-focus` autoinfligido, y un `ruff` sucio no debe consumir un reintento adversarial.
+- **Determinista lo que es regla exacta (`offload-deterministic`).** Lo mecanico NO se delega al juicio de un agente: lo resuelve el script `scripts/gates.py`, cuyo exit code es autoritativo. Dos puertas: `pr-hygiene` (higiene del diff staged, paso 8) y `checks` (ejecutar lint/tipos/tests con los comandos del paso 2 y devolver exit code + salida truncada, pasos 5 y 6). No se pide dos veces a la IA lo que un script decide una vez, y ningun agente ve output crudo de build.
+- **Los tests son ciudadanos de primera categoria.** Valen tanto o mas que el codigo de produccion: ahi va el mayor esfuerzo de calidad, y sobre todo la exigencia de que **testeen de verdad lo que la slice pretende construir**, no una version debilitada ni un proxy que pasa por casualidad. Un test que pasa sin fijar su AC es un fallo tan grave como codigo roto. Con dientes, no como declaracion: el implementador aplica `writing-good-tests.md` de `superpowers:test-driven-development` (nombrar el cambio de produccion que haria fallar el test **antes** de escribirlo; asertar comportamiento real, nunca mocks; codigo de test fuera de produccion), y el verificador lo bloquea con severidad **alta** en el paso 7 (mapeo AC↔test, fixture/wiring theater, manipulacion de tests, test-desiderata).
 - **TDD consciente de capa.** El ciclo TDD lo define `superpowers:test-driven-development` (lo invoca el implementador, paso 5); aqui vive solo el delta: si las convenciones del repo eximen una capa (p. ej. modelos ORM y migraciones que no se testean por separado), la puerta de esa slice es "suite intacta + verificacion de datos/efecto" en vez del test-first por AC. Decide la convencion del repo, no este documento ni superpowers.
 - **Alinear antes de implementar.** Antes de escribir codigo, mostrar el entendimiento de la slice (alcance, AC, capa afectada, comando de validacion) y esperar go/no-go. Nunca transcribir a ciegas el codigo pre-horneado de una spec: validalo contra las convenciones primero.
 - **Seguir `backend-best-practices`.** El implementador carga esa skill y respeta hexagonal/DDD, DI, Pydantic en boundaries, subordinada siempre a las convenciones del repo.
 - **El estado del run vive en el issue de GitHub.** La spec y el estado de cada slice viven en el cuerpo de un issue de GitHub (una feature = un issue): es la **unica fuente de verdad**, viva y duradera. No hay estado local (`.slice-runner/`, ledger ni panel). El agente olvida entre slices; al arrancar re-lee el issue. Registro duradero = issue (intencion + estado) + PRs mergeadas (codigo).
 - **La PR solo lleva el codigo de la slice.** El commit stagea unicamente los ficheros de codigo/test que produjo el implementador (`git add` explicito, nunca `-A`/`.`). Planes y design-docs jamas entran en la PR (la spec ya no es un fichero: vive en el issue).
 - **Contexto fresco por slice.** Cada slice arranca sin arrastrar la conversacion de la anterior; lo que persiste entre slices es el **issue** (spec + estado), que se re-lee al empezar. Evita la degradacion de contexto (patron Ralph) y hace seguro el Nivel 2 (`/loop`).
-- **Circuit breaker.** Maximo 2 reintentos por fase. Ademas, **presupuesto de coste**: si la slice supera el limite de tokens/$ configurado, para con estado `abortada-presupuesto`. Si la CI sigue roja tras el reintento, para, deja el PR abierto y reporta con logs.
+- **Circuit breaker.** Maximo 2 reintentos por fase, y las **puertas tienen presupuesto propio** (2), separado del del verificador (2): gastar el presupuesto adversarial en un fallo mecanico es justo lo que este reparto evita. Ademas, **presupuesto de coste**: si la slice supera el limite de tokens/$ configurado, para con estado `abortada-presupuesto`. Si la CI sigue roja tras el reintento, para, deja el PR abierto y reporta con logs.
 - **Esperas no bloqueantes.** Prohibido lanzar shells bloqueantes largas para esperar (nada de `gh pr checks --watch`, `sleep` largos, ni polls que se queden colgados 30-60 min). Toda espera (CI verde, merge de la PR) se hace con **ticks acotados en background + notificacion** (o la herramienta `Monitor`), devolviendo el control entre ticks. Una espera nunca debe monopolizar una shell ni la sesion.
 - **No asumir worktree.** Por defecto se trabaja en una rama normal. Solo se usa un git worktree aislado si se van a paralelizar varias slices concurrentes (Nivel 2) o si el repo ya declara config de worktrees.
 
@@ -78,7 +79,8 @@ El estado se codifica en la linea con `[estado]` (y `PR #N` cuando aplica):
 - `en-curso` — implementando/verificando.
 - `esperando-merge` — PR abierta, CI verde, esperando la decision humana de merge.
 - `mergeada` — PR mergeada. **Es el unico estado que marca el checkbox `[x]`.**
-- `bloqueada: <motivo>` — CI roja no resuelta o verify terminal; deja el PR abierto.
+- `bloqueada: <motivo>` — `puertas` (lint/tipos/tests sin arreglar tras los reintentos), `verify`
+  (veto del verificador) o `ci-roja`. En `ci-roja` deja el PR abierto; en `puertas` y `verify` no hay PR.
 - `abortada: presupuesto` — supero el presupuesto de la slice.
 
 `[x]` solo al merge mantiene la barra de progreso nativa de GitHub fiel a lo que esta en main. El
@@ -113,9 +115,14 @@ telemetria distinto del estado del run (que vive en el issue).
 
     python3 ~/.claude/skills/slice-runner/scripts/metrics.py report [--repo <repo>]
 
-Reporta: tasa de FALLA del verificador, % de slices al primer intento, media de reintentos,
-tasa de CI roja, duracion media. Es el instrumento para el "confianza en el loop" del Step 3 del
-mapa de madurez. Coste en tokens no se mide aqui (sale de OTel de Claude Code).
+Reporta: tasa de FALLA del verificador, tasa de bloqueo por puertas, % de slices al primer intento,
+media de reintentos (implement, puertas y CI por separado), tasa de CI roja, duracion media. Es el
+instrumento para el "confianza en el loop" del Step 3 del mapa de madurez. Coste en tokens no se mide
+aqui (sale de OTel de Claude Code).
+
+El **veto del juez** (`FALLA`) y el **bloqueo por puertas** (`bloqueada-puertas`) se registran aparte a
+proposito: uno es un rechazo semantico y el otro un fallo mecanico, y confundirlos deja inservible el
+unico instrumento que hay para calibrar al juez.
 
 `<repo>` debe ser un **identificador estable** del repo (p. ej. el nombre del directorio raiz o el
 slug del remoto), el mismo en `record` y en `report --repo`, para que las cifras agrupen bien.
@@ -133,9 +140,9 @@ slug del remoto), el mismo en `record` y en `report --repo`, para que las cifras
   Si la seccion `## Fuentes de convencion` **falta o esta vacia**, para y pide anadirla con
   `slice-spec` (modo `validate` sobre este issue): sin vara no se ejecuta. Con la seccion presente,
   estos punteros (docs y skills de proyecto) son la vara que cargaran implementador (paso 5) y
-  verificador (paso 6); las skills de proyecto se leen/invocan y se citan igual que una regla.
+  verificador (paso 7); las skills de proyecto se leen/invocan y se citan igual que una regla.
 - **Selecciona la slice**: la indicada por el usuario, o la primera `pendiente`. No repitas las
-  `mergeada`. Si una slice quedo `esperando-merge`, retomala ahi (paso 9) en vez de reimplementarla.
+  `mergeada`. Si una slice quedo `esperando-merge`, retomala ahi (paso 10) en vez de reimplementarla.
 - Extrae titulo, alcance y AC de la slice. Si no hay AC, para y pidelos: sin AC no hay puerta de verificacion.
 - **Toma el `name` de la slice** (entre parentesis tras el id). Si no hay name, deriva un slug del titulo y avisa. La rama es `slice/NN-<name>` (p. ej. `slice/01-cantidad-vo`). Toma tambien el `type` opcional (por defecto `feat`).
 - Marca la slice `en-curso` en el issue (`set_slice_estado(..., "en-curso")` -> `gh issue edit --body`).
@@ -148,6 +155,12 @@ Infierelos, no los asumas. Cachea lo detectado en la respuesta.
 - **Prioridad 2 — pyproject/tox**: si no hay Makefile util, cae a `ruff`, `mypy` (leyendo `[tool.mypy]`), `pytest` (rutas/opts de `pyproject.toml`/`tox.ini`).
 - **Workflow de CI**: identifica el workflow de `.github/workflows/*.yml` que corre en `pull_request`.
 - Si una puerta no tiene comando claro, pregunta antes de continuar.
+
+Lo detectado se expresa como los `--check nombre=comando` que consumiran `gates.py checks` en los pasos
+5 y 6. El script no sabe nada del toolchain: solo ejecuta lo que se le pasa, asi que la autodeteccion
+se queda aqui y no se duplica dentro del script.
+
+    --check lint="make linting" --check types="make check-types" --check tests="make test"
 
 ### 3. Alinear antes de implementar (check-alignment)
 
@@ -181,7 +194,7 @@ agente prestado; todo el criterio se lo da este prompt, subordinado a las conven
   arregla el codigo, no el test"; aqui se concreta: nunca modifiques un test **que ya existia** para
   que pase -no debilites asserts, no lo borres, no lo marques `@skip`/`xfail`-. Si no puedes
   satisfacer un test, revierte al ultimo verde y para/escala; adaptar el test al codigo destruye la
-  red de seguridad en silencio y es la peor patologia posible. (El verificador lo caza en el paso 6;
+  red de seguridad en silencio y es la peor patologia posible. (El verificador lo caza en el paso 7;
   aqui se evita en origen.)
 - **Delta 3 - refactor tras cada verde**, no diferido a una pasada final: en cuanto los tests pasan,
   pasada de refactor (eliminar duplicacion, mejorar nombres y estructura) manteniendo el verde. La
@@ -197,37 +210,76 @@ agente prestado; todo el criterio se lo da este prompt, subordinado a las conven
 - **Auto-check de wiring antes de entregar.** Corre `git diff --name-only` y confirma que los ficheros
   de **produccion** que la slice debia tocar aparecen en el diff, no solo tests: si la suite pasa a
   verde sin tocar produccion, el efecto lo esta produciendo el test/fixture y no el codigo. En slices
-  sin codigo de produccion (migracion/infra) no aplica. (El verificador lo cruza en el paso 6, V2.)
+  sin codigo de produccion (migracion/infra) no aplica. (El verificador lo cruza en el paso 7.)
+- **Puertas verdes antes de entregar (`[det]`).** No entregues con lint, tipos o tests en rojo: corre
+
+      python3 ~/.claude/skills/slice-runner/scripts/gates.py checks --repo . \
+        --check lint="<cmd>" --check types="<cmd>" --check tests="<cmd>" --json
+
+  con los comandos del paso 2, y arregla hasta exit 0. Es feedback incremental mientras trabajas, no un
+  informe final: el script devuelve solo exit code y salida truncada, asi que el error llega acotado y
+  no te inunda el contexto. El orquestador lo re-ejecuta despues (paso 6), asi que entregar en rojo solo
+  te cuesta una vuelta.
 - Devolver: **la lista explicita de rutas creadas o modificadas, marcando cada una como produccion o
-  test** (es lo que se stageara en el paso 7 y lo que el verificador usa para el check de wiring; nada
+  test** (es lo que se stageara en el paso 8 y lo que el verificador usa para el check de wiring; nada
   mas), tests anadidos (si aplica) y resumen del enfoque.
 
-### 6. Verificar (subagente verificador, distinto)
+### 6. Puertas deterministas (backstop del orquestador)
 
-Lanza un Agent **diferente** (`subagent_type: general-purpose`), adversarial. Se usa `general-purpose`
-a proposito: hereda el modelo fuerte de la sesion (el juicio semantico mas sutil -el patron de rollout-
-lo requiere) y tiene `Bash`, asi que ejecuta el mismo las puertas `[det]`. No recibe el "resumen del
-enfoque" del implementador como verdad: juzga el diff, no la narrativa.
+Antes de invocar al verificador, **re-ejecuta tu mismo** las puertas con los comandos del paso 2:
 
-**Su valor es la revision de convenciones y arquitectura, no re-testear.** La correccion del comportamiento la gobiernan CI + los AC; duplicar esa validacion con un segundo agente que **re-deriva coberturas** sale caro y no aporta (evidencia empirica sobre split authorship: costo 3x sin ganancia consistente porque los AC ocultos ya gobernaban). Por eso el verificador **ejecuta** las puertas deterministas pero concentra su **juicio** en convenciones, boundaries y constraints.
+    python3 ~/.claude/skills/slice-runner/scripts/gates.py checks --repo . \
+      --check lint="<cmd>" --check types="<cmd>" --check tests="<cmd>" --json
 
-**Divergencia deliberada de `superpowers:requesting-code-review` (no es un olvido).** Esta skill delega en superpowers el ciclo TDD (paso 5), pero **a proposito no usa** su skill de code review, que si re-revisa el codigo: aqui el segundo par de ojos se gasta en la vara de medir del repo -convenciones, boundaries, patron de rollout-, que es lo que la evidencia senala como no cubierto por CI + AC. No sustituyas esta rubrica por `requesting-code-review`. Matiz importante: "no re-testear" = no re-derivar ni reimplementar cobertura; **si** entra comprobar, por lectura, que los tests que codifican los AC realmente los fijan (que no sean un proxy debil). Eso es barato y es justo donde el segundo par de ojos aporta -cazar un AC mal traducido, no re-verificar comportamiento ya correcto-.
+El implementador ya las corrio (paso 5), pero **su auto-reporte no es fuente de verdad**: es la misma
+razon por la que el verificador no se cree su resumen del enfoque. Aqui la garantia la da el harness, no
+la buena voluntad del agente. Exit 0 = puedes invocar al verificador.
 
-Recorre esta **rubrica cerrada** entera y reporta item a item. Cada item esta marcado `[det]` (lo resuelve un script y solo consumes su resultado) o `[sem]` (lo juzgas tu):
+- **Verde**: pasa al paso 7.
+- **Rojo**: vuelve al paso 5 con **solo los checks en FALLA y su `salida`** del JSON. No invoques al
+  verificador: un fallo mecanico no se juzga, se arregla. **Presupuesto propio: 2 reintentos**,
+  separado del del verificador.
+- **Si agota los reintentos**: marca la slice `bloqueada: puertas` en el issue, **registra la metrica
+  durable** (`veredicto=bloqueada-puertas`, `ci=none`, `--reintentos-puertas N`; ver paso 9) y **para**.
+  No se abre PR con puertas en rojo.
 
-- `[det]` **Puertas objetivas**: ejecutar lint, tipos y tests con los comandos del paso 2 (Makefile primero) y capturar output. Es ejecucion, no re-derivacion: no reimplementes ni reinventes coberturas de test. El exit code manda.
-- `[sem]` **Convenciones y arquitectura**: cargar las **fuentes de convencion declaradas en el issue** (paso 1: docs y skills de proyecto) como vara de medir principal y **contrastar el diff contra ellas**, citando regla/skill + path en cada hallazgo (esto es lo que caza cosas como una migracion que siembra datos donde la convencion lo prohibe). Cargar tambien `backend-best-practices` como vara secundaria para lo que las convenciones no cubren. En conflicto, ganan las convenciones del repo.
-- `[sem]` **Patron de rollout/entrega correcto (no solo bien implementado).** Caso concreto del check de convenciones anterior, resaltado aparte por ser un fallo recurrente. No basta con que el patron elegido este bien ejecutado y sea coherente consigo mismo: comprueba que **es el patron que la convencion del repo prescribe para este tipo de cambio**. Disparador general: si el cambio toca la **firma/constructor/contrato publico** de una accion o caso de uso, la convencion suele exigir un patron distinto (duplicar la accion / expand-contract) que si solo cambia logica interna (gatear en el metodo). Deriva el criterio de las fuentes de convencion del issue (paso 1: docs y skills de proyecto, p. ej. una skill `duplicate-action`/`deprecate-*` o reglas de delivery/testing), **no** de como quedo una slice anterior: el codigo ya mergeado es circunstancia, no regla. Si el patron elegido no encaja con lo que pide la convencion para este cambio, es **FALLA (severidad alta)**, citando regla + path. Este es el check que un verificador que solo mira la implementacion deja pasar.
-- `[sem]` **Boundaries**: nucleo sin infra, DI correcta, DTOs (Pydantic) en boundaries.
-- `[sem]` **TDD consciente de capa** (comprobacion barata, no re-testeo): mide con **la misma vara que el paso 5** (`superpowers:test-driven-development` + los deltas de ese paso), no con una propia. En capas con test, que exista un test por AC y que preceda a la implementacion; en capas eximidas por la convencion, "suite intacta + efecto verificado".
-- `[sem]` **Conformidad con los AC (no solo que existan tests).** Distinto del punto anterior (que comprueba que *hay* un test por AC) y de test-desiderata (que juzga la calidad *generica* del test); este comprueba que se **cumple el cometido del AC**. Para cada AC: (1) **mapeo AC↔test**: que el test asserte lo que *ese* AC exige, no una version debilitada -la calidad generica del test (verifica comportamiento real, aislamiento...) es de test-desiderata, no la repitas aqui-; (2) que el **codigo cumpla la intencion** del AC, no solo que pase su propio test (pregunta adversarial: "¿podria pasar este test y aun asi violar lo que el AC pedia?") -lectura acotada, no re-derivar cobertura-; (3) codigo que implementa **comportamiento que ningun AC pidio** (feature especulativa, andamiaje de slices futuras). El refactor tras verde que permite el paso 5 (extraer helpers, mejorar estructura) **traza al AC** y no es hallazgo. FALLA (severidad alta) si un AC no queda pineado, si el codigo no cumple su intencion, o si hay comportamiento sin AC que lo justifique.
-- `[sem]` **Manipulacion de tests (regla de hierro; siempre alta).** Con `git diff <base>...HEAD` sobre los ficheros de test, comprueba que ningun test **preexistente** se haya debilitado para acomodar la implementacion: assert relajado (`== x` -> `is not None`/truthy), numero de asserts que baja, test borrado, `@skip`/`xfail` anadido, o comentarios tipo "TODO/temporal" en tests. Debilitar un test que ya existia es **FALLA (severidad alta)**, citando path + linea. Cambios puramente aditivos (nuevos asserts, nuevos tests) o refactor de test que preserva los asserts **no** son hallazgo. Este check no necesita ningun artefacto: sale del propio diff de la rama.
-- `[sem]` **Fixture/wiring theater (siempre alta).** Cruza la lista etiquetada produccion/test que devolvio el implementador (paso 5) con `git diff --name-only`: si la suite pasa a verde pero el diff **no toca ningun fichero de produccion** (solo tests/fixtures), el efecto puede estarlo produciendo el fixture y no el codigo. Prueba de borrado (juicio por lectura): "¿pasaria la suite revirtiendo solo los cambios de test, con el codigo de produccion?". Si el efecto lo da el fixture y no el codigo, es **FALLA (severidad alta)**. Excepcion legitima: slices sin codigo de produccion (migracion/infra) cuyo efecto se verifica de otro modo.
-- `[sem]` **Calidad de tests (test-desiderata)**: si la slice anade o toca tests, correr la skill `test-desiderata` sobre ellos. Bloquea solo ante violaciones **graves** (no determinista, no aislado, o test que no verifica comportamiento real); las menores (legibilidad, velocidad...) se reportan como aviso sin bloquear. En slices sin tests (infra/migracion), se salta.
+No leas ni pegues el output crudo de las puertas en ningun sitio: el script ya devuelve exit code y
+salida truncada, y eso es todo lo que hay que propagar.
 
-La higiene del diff staged y el formato del commit **no** se comprueban aqui: son `[det]` puros y los ejecuta `scripts/gates.py` en el paso 7, cuando el staging ya existe. No los re-juzgues por lectura.
+### 7. Verificar (agente `slice-verifier`, adversarial)
 
-**Veredicto estructurado (no prosa).** Lanza este Agent con `schema` para que devuelva exactamente:
+Lanza un Agent con `subagent_type: slice-verifier`. Es un **agente definido**
+(`~/.claude/agents/slice-verifier.md`, symlink a `agents/slice-verifier.md` de este repo), no
+`general-purpose`, por dos razones:
+
+- **La rubrica va en su system prompt**, verbatim en cada invocacion, en vez de que tu la relates y
+  puedas parafrasearla o saltarte items. La parte mas importante del loop no debe depender de una
+  transcripcion.
+- **Su allowlist de tools no incluye ejecutores de test** (`Read`, `Grep`, `Glob` y solo
+  `Bash(git diff|log|show|status *)`). La prohibicion de re-ejecutar puertas es estructural, no un ruego
+  en el prompt. `model: inherit` conserva el modelo fuerte de la sesion, que el juicio mas sutil -el
+  patron de rollout- requiere.
+
+**No le pases nada de las puertas**: cuando llega aqui estan verdes por construccion (paso 6), asi que
+un resumen seria cero informacion y solo gastaria contexto. Tampoco le pases el "resumen del enfoque"
+del implementador: juzga el diff, no la narrativa.
+
+**Divergencia deliberada de `superpowers:requesting-code-review` (no es un olvido).** Esta skill delega
+en superpowers el ciclo TDD (paso 5) pero **a proposito no usa** su skill de code review, que si
+re-revisa el codigo: aqui el segundo par de ojos se gasta en la vara de medir del repo. El argumento
+completo esta en `agents/slice-verifier.md`; no sustituyas ese agente por `requesting-code-review`.
+
+**Inputs de la invocacion** (lo del run; lo estable ya esta en el agente):
+
+- numero de issue, `slice_id` y `name`;
+- los **AC** de la slice, tal cual estan en el issue;
+- las **fuentes de convencion** declaradas en el issue (paso 1);
+- la **base ref** de la rama, para `git diff <base>...HEAD`;
+- la **lista etiquetada produccion/test** que devolvio el implementador (paso 5).
+
+**Veredicto.** Devuelve como mensaje final exactamente este objeto JSON (lo exige su system prompt; la
+tool `Agent` no valida schemas, asi que si vuelve envuelto en prosa, es un fallo del agente y se
+reintenta la invocacion, no se parsea a mano):
 
 ```json
 {
@@ -239,13 +291,17 @@ La higiene del diff staged y el formato del commit **no** se comprueban aqui: so
 }
 ```
 
-- Reglas del veredicto: **FALLA** si alguna puerta objetiva `[det]` falla o si hay algun hallazgo `severidad: alta`. Los `media`/`baja` se reportan pero no bloquean por si solos (juicio: si se acumulan, el verificador puede subir a FALLA explicando por que).
-- **Evidencia antes de bloquear (calibracion).** Un hallazgo `severidad: alta` **exige evidencia citable**: regla + path + linea + por que, en el campo `evidencia`. Si no puedes citarla concretamente, **degrada la severidad** en vez de bloquear. Contiene el over-reporting: a un verificador al que se le pide encontrar fallos siempre encuentra alguno; obligar a citar evidencia hace que el bloqueo sea real, no defensivo.
-- El schema se valida en la capa de tool: no parsees texto libre.
-- Si FALLA: devolver al paso 5 con los `hallazgos` (max 2 reintentos). Guarda el conteo de hallazgos por severidad y el veredicto final: alimentan las metricas.
-- **Si agota los reintentos con FALLA**: marca la slice `bloqueada: verify` en el issue, **registra la metrica durable** (`veredicto=FALLA`, `ci=none`; ver paso 8) y **para**. No sigas al paso 7: sin PASA del verificador no se abre PR. Sin esto, el rechazo del verificador -justo lo que queremos medir- no dejaria rastro.
+- **FALLA** si hay algun hallazgo `severidad: alta` (los `media`/`baja` no bloquean por si solos, pero
+  el agente puede escalar si se acumulan, explicando por que). Las puertas ya no entran en esta regla:
+  se decidieron en el paso 6.
+- Si FALLA: devuelve al paso 5 con los `hallazgos` (max 2 reintentos, presupuesto propio del
+  verificador). Guarda el conteo de hallazgos por severidad y el veredicto final: alimentan las metricas.
+- **Si agota los reintentos con FALLA**: marca la slice `bloqueada: verify` en el issue, **registra la
+  metrica durable** (`veredicto=FALLA`, `ci=none`; ver paso 9) y **para**. No sigas al paso 8: sin PASA
+  del verificador no se abre PR. Sin esto, el rechazo del verificador -justo lo que queremos medir- no
+  dejaria rastro.
 
-### 7. Abrir PR
+### 8. Abrir PR
 
 - **Stagea SOLO los ficheros de codigo/test que devolvio el implementador.** Usa
   `git add <ruta1> <ruta2> ...` con la lista explicita; **prohibido `git add -A`, `git add .`
@@ -267,34 +323,34 @@ La higiene del diff staged y el formato del commit **no** se comprueban aqui: so
   esta pendiente de tu revision y no lista para mergear (refuerza que el merge es humano). Sacarla de
   draft (`ready for review`) y mergear lo decides tu.
 - Actualiza la linea de la slice en el issue con la PR: `set_slice_estado(..., "en-curso", pr=<M>)`
-  -> `gh issue edit` (el estado pasara a `esperando-merge` en el paso 8 al haber CI verde).
+  -> `gh issue edit` (el estado pasara a `esperando-merge` en el paso 9 al haber CI verde).
 - No marcar como ready-to-merge automaticamente mas alla de lo normal; el merge es humano.
 
-### 8. Esperar CI verde (puerta final)
+### 9. Esperar CI verde (puerta final)
 
 - Espera hasta verde o rojo con **ticks acotados en background + notificacion** (o la herramienta `Monitor`), **nunca** `gh pr checks --watch` ni un `sleep` largo que bloquee la shell/sesion (principio de esperas no bloqueantes; es trabajo deterministico que hace el harness, no la IA poll-eando). Cada tick consulta `gh pr checks --json` y devuelve el control. Respeta un timeout de espera razonable.
-- **Verde**: **registra la metrica durable** (ver abajo, `ci=green`), marca la slice `esperando-merge` en el issue (aun **no** `[x]`: el merge es humano; ver paso 9) y **pasa al paso 9** (no paras aqui).
+- **Verde**: **registra la metrica durable** (ver abajo, `ci=green`), marca la slice `esperando-merge` en el issue (aun **no** `[x]`: el merge es humano; ver paso 10) y **pasa al paso 10** (no paras aqui).
 - **Rojo**: trae los logs del check fallido (`gh run view --log-failed`), un reintento via paso 5 con esos logs.
   - Si tras el reintento sigue roja: marca la slice `bloqueada: ci-roja` en el issue, **registra la metrica durable** (`ci=red`), **deja el PR abierto**, resume el fallo con logs y **para** (circuit breaker). No cierres el PR ni descartes la rama/worktree.
 - Si en cualquier momento se supera el presupuesto de tokens/$ de la slice: marca la slice `abortada: presupuesto` en el issue, **registra la metrica durable** (`veredicto=abortada-presupuesto`) y para.
 
-**Registro de la metrica durable (`[det]`).** Al cerrar la slice, en **cualquiera** de los caminos de cierre (verify terminal FALLA del paso 6, CI verde, CI roja terminal, o presupuesto), anexa un registro con:
+**Registro de la metrica durable (`[det]`).** Al cerrar la slice, en **cualquiera** de los caminos de cierre (puertas agotadas del paso 6, verify terminal FALLA del paso 7, CI verde, CI roja terminal, o presupuesto), anexa un registro con:
 
 ```
 python3 ~/.claude/skills/slice-runner/scripts/metrics.py record --repo <repo> --slice <slice_id> --name <name> \
-  --veredicto <PASA|FALLA|abortada-presupuesto> --ci <green|red|none> \
+  --veredicto <PASA|FALLA|bloqueada-puertas|abortada-presupuesto> --ci <green|red|none> \
   --hallazgos-alta N --hallazgos-media N --hallazgos-baja N \
-  --reintentos-implement N --reintentos-ci N --duracion-s N
+  --reintentos-implement N --reintentos-puertas N --reintentos-ci N --duracion-s N
 ```
 
-- `veredicto` = el del verificador del paso 6 (`PASA`/`FALLA`), o `abortada-presupuesto` si paro el presupuesto. Los conteos de `hallazgos` salen del veredicto estructurado del paso 6.
+- `veredicto` = el del verificador del paso 7 (`PASA`/`FALLA`), `bloqueada-puertas` si paro en el backstop del paso 6, o `abortada-presupuesto` si paro el presupuesto. Los conteos de `hallazgos` salen del veredicto estructurado del paso 7 (en `bloqueada-puertas` son 0: no hubo juicio semantico). **No uses `FALLA` para un fallo de puertas**: es un fallo mecanico, no un veto del juez, y confundirlos deja inservible la calibracion del verificador.
 - Este log vive **fuera del repo** (`~/.claude/slice-runner/metrics.jsonl`) y **nunca entra en una PR**. Coste en tokens: opcional (`--coste-tokens`); si no lo tienes de OTel, no lo inventes (se omite).
 
-### 9. Esperar el merge y encadenar el deploy
+### 10. Esperar el merge y encadenar el deploy
 
 El merge sigue siendo **humano** (lo haces tu en GitHub); lo que se automatiza es la **transicion**, para que no tengas que decir "continua" a mano.
 
-- La slice ya figura `esperando-merge` en el issue (paso 8): eso comunica **esperando una decision tuya**, no parada.
+- La slice ya figura `esperando-merge` en el issue (paso 9): eso comunica **esperando una decision tuya**, no parada.
 - Vigila el estado de la PR con **ticks acotados en background + notificacion** (`gh pr view --json state,mergedAt`), nunca una shell bloqueante larga. Respeta un timeout razonable de espera de merge.
   - **Merged**: marca la slice `mergeada` (`[x]`) en el issue e invoca automaticamente la skill `deploy-watch` (sin pedir "continua"). `deploy-watch` arranca sola e infiere servicio/namespace; solo te preguntara si la inferencia es ambigua (`check-alignment` solo cuando hay duda real).
   - **Timeout / cerrada sin merge**: deja la slice `esperando-merge` (o `bloqueada` si se cerro sin merge) en el issue y **para**, dejando el PR como este. Reanudas invocando de nuevo cuando quieras.

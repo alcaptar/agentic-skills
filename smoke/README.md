@@ -60,9 +60,9 @@ sample-output/        evidencia del codigo que produce la slice
    ```
 
 Debe: leer el issue, seleccionar `slice-01` (name `fizzbuzz-core`), marcarla `en-curso` en el issue,
-alinear, escribir el test (rojo), implementar `fizzbuzz`, refactor, verificar con un subagente
-independiente, dejar las puertas verdes, abrir PR (`Part of #<N>`), y al llegar a CI verde marcar la
-slice `esperando-merge` en el issue.
+alinear, escribir el test (rojo), implementar `fizzbuzz`, refactor, **dejar las puertas verdes**
+(`gates.py checks`), verificar con el agente `slice-verifier`, abrir PR (`Part of #<N>`), y al llegar a
+CI verde marcar la slice `esperando-merge` en el issue.
 
 Sigue el estado en vivo **desde el propio issue en GitHub** (se actualiza en cada transicion).
 
@@ -72,6 +72,11 @@ Sigue el estado en vivo **desde el propio issue en GitHub** (se actualiza en cad
   `feat(fizzbuzz-core): ...`, y el cuerpo referencia el issue con `Part of #<N>`.
 - El PR tiene CI verde (`make linting && make check-types && make test`).
 - El verificador devuelve `PASA` (AC cubiertos + convenciones OK).
+- **El agente `slice-verifier` resuelve** (`subagent_type: slice-verifier`, symlink instalado) y su
+  mensaje final es el JSON del veredicto **sin prosa alrededor**: la tool `Agent` no valida schemas, asi
+  que esto solo se comprueba aqui.
+- **El verificador no ejecuta puertas.** Su `allowed-tools` deja fuera `pytest`/`ruff`/`make`; si
+  aparece un intento en su transcript, la restriccion no esta aplicando.
 - En el issue, la linea de la slice pasa por `[en-curso]` -> `[esperando-merge] PR #<M>` y, tras el
   merge, `[x] ... [mergeada]`.
 - El diff staged de la PR contiene **solo** `fizzbuzz/core.py` y `tests/test_core.py`: ni borradores

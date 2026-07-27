@@ -83,7 +83,7 @@ Se ejecuta con **ticks acotados en background + notificacion** (o `Monitor`), no
 Comparte la trazabilidad del pipeline con `slice-runner` a traves del **issue de GitHub** de la feature:
 
 - Al arrancar y en el veredicto, **comenta en el issue** (`gh issue comment`) el resultado del deploy de esa slice: `deploy start`, senales `ok|degradada`, `verdict sano|degradado|inconcluso`, y -si aplica- `rca` + `rollback redactado`, con la **tabla de hallazgos vs baseline y las queries reproducibles del hito** (no una por tick). Asi el issue reune diseno, implementacion y despliegue en un solo hilo.
-- **No cambia el estado (marcador/checkbox) de la slice**: ya quedo `mergeada` en el paso 9 de `slice-runner`. El veredicto del deploy es informativo y se registra como comentario, no como estado.
+- **No cambia el estado (marcador/checkbox) de la slice**: ya quedo `mergeada` en el paso 10 de `slice-runner`. El veredicto del deploy es informativo y se registra como comentario, no como estado.
 
 ## Fin
 
