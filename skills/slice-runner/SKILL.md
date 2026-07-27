@@ -255,10 +255,14 @@ Lanza un Agent con `subagent_type: slice-verifier`. Es un **agente definido**
 - **La rubrica va en su system prompt**, verbatim en cada invocacion, en vez de que tu la relates y
   puedas parafrasearla o saltarte items. La parte mas importante del loop no debe depender de una
   transcripcion.
-- **Su allowlist de tools no incluye ejecutores de test** (`Read`, `Grep`, `Glob` y solo
-  `Bash(git diff|log|show|status *)`). La prohibicion de re-ejecutar puertas es estructural, no un ruego
-  en el prompt. `model: inherit` conserva el modelo fuerte de la sesion, que el juicio mas sutil -el
-  patron de rollout- requiere.
+- **Declara su superficie de tools** (`Read`, `Grep`, `Glob` y `allowed-tools` con solo
+  `Bash(git diff|log|show|status *)`), y su system prompt le prohibe ejecutar puertas.
+  **Aviso verificado en smoke (2026-07-27): `allowed-tools` en el frontmatter NO bloquea lo no
+  listado** -el agente ejecuto `ls`, que no esta en su lista, sin friccion-, asi que hoy la
+  prohibicion se sostiene por instruccion, no por el permission system. El smoke confirmo que se
+  sostiene (rechazo ejecutar `pytest` incluso cuando el orquestador se lo pidio explicitamente), pero
+  no cuentes con un filtro tecnico que no existe. `model: inherit` conserva el modelo fuerte de la
+  sesion, que el juicio mas sutil -el patron de rollout- requiere.
 
 **No le pases nada de las puertas**: cuando llega aqui estan verdes por construccion (paso 6), asi que
 un resumen seria cero informacion y solo gastaria contexto. Tampoco le pases el "resumen del enfoque"

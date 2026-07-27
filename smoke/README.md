@@ -75,8 +75,11 @@ Sigue el estado en vivo **desde el propio issue en GitHub** (se actualiza en cad
 - **El agente `slice-verifier` resuelve** (`subagent_type: slice-verifier`, symlink instalado) y su
   mensaje final es el JSON del veredicto **sin prosa alrededor**: la tool `Agent` no valida schemas, asi
   que esto solo se comprueba aqui.
-- **El verificador no ejecuta puertas.** Su `allowed-tools` deja fuera `pytest`/`ruff`/`make`; si
-  aparece un intento en su transcript, la restriccion no esta aplicando.
+- **El verificador no ejecuta puertas.** Se sostiene **por instruccion, no por el permission system**:
+  el smoke del 2026-07-27 comprobo que `allowed-tools` en el frontmatter de un agente **no bloquea** lo
+  no listado (ejecuto `ls`, ausente de su lista). Asi que hay que mirarlo en su transcript en cada
+  smoke, no darlo por garantizado: si aparece un `pytest`/`make`/`ruff`, la instruccion no esta
+  aguantando y hace falta enforcement real.
 - En el issue, la linea de la slice pasa por `[en-curso]` -> `[esperando-merge] PR #<M>` y, tras el
   merge, `[x] ... [mergeada]`.
 - El diff staged de la PR contiene **solo** `fizzbuzz/core.py` y `tests/test_core.py`: ni borradores

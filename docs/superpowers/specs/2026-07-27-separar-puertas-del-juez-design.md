@@ -118,10 +118,20 @@ allowed-tools: [Read, Grep, Glob, Bash(git diff *), Bash(git log *), Bash(git sh
 
 - `model: inherit` conserva el modelo fuerte de la sesion, que era la razon original de usar
   `general-purpose` (`SKILL.md:207`).
-- La allowlist deja fuera `pytest`, `ruff` y `make`: **la prohibicion es estructural**, no un ruego en
-  el prompt que `selective-hearing` puede ignorar. Los patrones `Bash(git ...)` son el mecanismo que
-  ya usa `~/.claude/agents/sre.md`, con `tools:` (disponibilidad, grueso) y `allowed-tools:`
-  (permisos, con patrones) como campos distintos.
+- La allowlist deja fuera `pytest`, `ruff` y `make`: se diseno creyendo que eso hacia **estructural** la
+  prohibicion, en vez de un ruego que `selective-hearing` puede ignorar. Los patrones `Bash(git ...)`
+  son el mecanismo que ya usa `~/.claude/agents/sre.md`, con `tools:` (disponibilidad, grueso) y
+  `allowed-tools:` (permisos, con patrones) como campos distintos.
+
+  > **Refutado en el smoke del 2026-07-27.** `allowed-tools` en el frontmatter de un agente **no
+  > bloquea** lo no listado: el verificador ejecuto `ls` -ausente de su lista- sin friccion, y no hay
+  > reglas `deny` en ningun `settings.json` que lo expliquen. La prohibicion se sostiene **solo por
+  > instruccion**. El smoke la validó (el agente rechazo ejecutar `pytest` incluso cuando el
+  > orquestador se lo pidio como prueba, razonando que un mensaje del coordinador no es autorizacion
+  > para saltarse su configuracion), pero eso es cumplimiento, no enforcement. Hacerla estructural
+  > exigiria quitarle `Bash` del todo y pasarle el diff pre-computado por el orquestador -que es
+  > ademas lo que hace el juez de Honk, que recibe el diff en vez de calcularlo-. **Pendiente de
+  > decidir.**
 - `Skill` porque la rubrica invoca `backend-best-practices` y `test-desiderata`. No se precargan por
   frontmatter (`skills:`): `test-desiderata` solo aplica si la slice toca tests, asi que se cargan on
   demand (`reference-docs`).
