@@ -42,8 +42,12 @@ Dos modos:
   slicing; `hamburger-method`/`story-splitting` son profundizacion opcional, no el motor.
 - **Slices verticales y pequenas.** Cada slice es una rebanada entregable de punta a punta con AC
   propios, no una capa tecnica suelta.
-- **AC obligatorios por slice.** Sin AC no hay puerta de verificacion en slice-runner: toda slice
-  declara criterios de aceptacion concretos y comprobables.
+- **AC obligatorios y falsables.** Sin AC no hay puerta de verificacion en slice-runner: toda slice
+  declara criterios de aceptacion concretos. **Vara de falsabilidad:** un AC vale si puedes nombrar
+  el **cambio de produccion que lo haria fallar**; si no puedes nombrarlo, es prosa y hay que
+  reescribirlo. Es la contraparte upstream de "los tests son ciudadanos de primera categoria" de
+  slice-runner: su verificador bloquea con severidad alta el mapeo AC↔test, y ese check solo tiene
+  con que medir si el AC es falsable.
 - **Declara las fuentes de convencion.** La spec incluye una seccion `## Fuentes de convencion` con
   **punteros** (no contenido) a la vara de medir del repo: docs de convencion y skills de proyecto.
   slice-runner las lee para que implementador y verificador midan contra las convenciones **reales**
@@ -86,6 +90,10 @@ Reglas duras:
 - Debajo de cada slice, una o mas lineas indentadas con `AC:` describiendo criterios concretos
   (y donde viven los tests si aplica). Las **restricciones duras** (p. ej. "no toca infra
   directamente") se expresan como un AC comprobable mas.
+- **Cada AC debe ser falsable**: tiene que poder nombrarse el cambio de produccion que lo haria
+  fallar. `AC: rechaza cantidades negativas con ValueError` lo es (borra la validacion y falla);
+  `AC: el flujo funciona correctamente` no lo es (nada lo puede refutar). Un AC no falsable deja al
+  verificador de slice-runner sin nada contra lo que mapear el test, asi que no cumple el contrato.
 - Cada slice arranca `[ ] ... [pendiente]`. slice-runner actualiza el marcador de estado durante el
   run (`en-curso`, `esperando-merge`, `mergeada` con `[x]`, `bloqueada`, `abortada`).
 - Una feature de **una sola slice** = un checklist con una unica linea.
@@ -130,6 +138,10 @@ corregirlas. Checklist:
 - Checkboxes `[ ]`/`[x]` y, si hay marcador `[estado]`, es uno canonico (pendiente, en-curso,
   esperando-merge, mergeada, bloqueada, abortada).
 - Ninguna slice sin AC (sin AC no hay puerta de verificacion en slice-runner).
+- **Cada AC es falsable** (no basta con que exista). Por cada AC, nombra el cambio de produccion que
+  lo haria fallar; si no puedes nombrarlo, **es la desviacion a corregir**: reescribe el AC con la
+  persona hasta que sea refutable (o pregunta que se pretendia). Un AC vago pasa el check de
+  existencia pero deja sin dientes el mapeo AC↔test del verificador de slice-runner.
 - Tiene una seccion `## Fuentes de convencion` con al menos un puntero (`- doc:` / `- skill:`). Si
   falta (p. ej. un issue legacy anterior a este mecanismo), **es la desviacion a corregir**: corre el
   descubrimiento (paso 3), confirmala con la persona y anadela al cuerpo con

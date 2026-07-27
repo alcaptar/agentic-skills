@@ -84,6 +84,24 @@ codigo. Sin esa frase, el proximo que compare las dos skills lo lee como un olvi
 Ademas, el item `[sem]` de TDD consciente de capa cita que la vara es la del paso 5 (delegada), para
 que implementador y verificador no midan con reglas distintas si una de las dos cambia.
 
+### 5. Contraparte upstream: los AC de `slice-spec` deben ser falsables
+
+El principio de la decision 2 tiene dientes via el **mapeo AC↔test** del paso 6, y ese check solo
+puede medir si el AC es refutable. `slice-spec` declaraba en sus principios AC "concretos y
+comprobables", pero su checklist de `validate` solo comprobaba que **existieran** (`al menos una
+linea AC:`): un AC como "el flujo funciona correctamente" pasaba el gate y luego dejaba al verificador
+sin nada contra lo que mapear, tumbando el principio en origen.
+
+Se anade la **vara de falsabilidad**, la misma que superpowers usa para los tests en
+`writing-good-tests.md`: un AC vale si puedes nombrar el **cambio de produccion que lo haria fallar**.
+Entra en tres sitios de `slice-spec/SKILL.md` -principio, regla dura del contrato (con ejemplo
+valido/invalido) y checklist de `validate`, donde un AC no falsable pasa a ser **la desviacion a
+corregir**-. El modo autoria lo hereda: su paso 5 ya aplica el checklist de `validate` antes de crear
+el issue, asi que no se duplica prosa en el paso 2.
+
+No cambia el contrato de parseo: `issue_body.py` sigue viendo las mismas lineas `AC:`. La
+falsabilidad es un juicio `[sem]`, no una regla mecanica, asi que no se puede offloadear a script.
+
 ## Fuera de alcance
 
 - **`superpowers:verification-before-completion`**: las puertas de `slice-runner` ya son
