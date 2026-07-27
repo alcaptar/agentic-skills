@@ -66,6 +66,17 @@ CI verde marcar la slice `esperando-merge` en el issue.
 
 Sigue el estado en vivo **desde el propio issue en GitHub** (se actualiza en cada transicion).
 
+## Antes de smokear el verificador: sesion nueva
+
+Si has tocado `agents/slice-verifier.md`, **abre una sesion nueva de Claude Code antes de probarlo**. El
+registro de agentes se cachea al primer load y no relee ediciones (a diferencia de las skills, que si se
+releen). Si no, el smoke valida la definicion vieja y no avisa de nada.
+
+Comprobacion rapida de que estas smokeando la version que crees: pon en el prompt de invocacion algo
+que solo la version nueva pueda saber, o al reves, mira si el agente cita campos o nombres de regla que
+ya borraste. En el smoke del 2026-07-27 se detecto asi: el agente reclamaba un campo `Base ref` que la
+version en disco ya no declaraba, y usaba `Bash`, que ya no estaba en su `tools`.
+
 ## Criterio de "smoke OK"
 
 - El commit y el titulo de PR son conventional commits con el name como scope:
@@ -75,11 +86,16 @@ Sigue el estado en vivo **desde el propio issue en GitHub** (se actualiza en cad
 - **El agente `slice-verifier` resuelve** (`subagent_type: slice-verifier`, symlink instalado) y su
   mensaje final es el JSON del veredicto **sin prosa alrededor**: la tool `Agent` no valida schemas, asi
   que esto solo se comprueba aqui.
-- **El verificador no ejecuta puertas.** Se sostiene **por instruccion, no por el permission system**:
-  el smoke del 2026-07-27 comprobo que `allowed-tools` en el frontmatter de un agente **no bloquea** lo
-  no listado (ejecuto `ls`, ausente de su lista). Asi que hay que mirarlo en su transcript en cada
-  smoke, no darlo por garantizado: si aparece un `pytest`/`make`/`ruff`, la instruccion no esta
-  aguantando y hace falta enforcement real.
+- **El verificador no ejecuta puertas**, y ahora es estructural: no tiene `Bash`. Ojo con "arreglarlo"
+  devolviendoselo -el smoke del 2026-07-27 comprobo que un `allowed-tools` restringido **no bloquea** lo
+  no listado (ejecuto `ls`, ausente de su lista), asi que `Bash` con allowlist no es una alternativa
+  valida a no tener `Bash`-.
+- **El verificador recibe el diff en disco** (`gates.py diff-bundle`), no lo calcula. Comprueba que
+  `--out` apunta **fuera del repo**: un fichero de trabajo dentro no debe poder acabar en la PR.
+- **Sin hallazgos de ruido.** Dos que el smoke ya cazo y no deben reaparecer: un hallazgo sobre "no
+  puedo constatar que el test precediera a la implementacion" (inverificable con un solo commit, prohibido
+  reportarlo) y el mismo assert debilitado contado dos veces como `alta` (`manipulacion-tests` +
+  `test-desiderata`). Si vuelven, la rubrica ha regresado.
 - En el issue, la linea de la slice pasa por `[en-curso]` -> `[esperando-merge] PR #<M>` y, tras el
   merge, `[x] ... [mergeada]`.
 - El diff staged de la PR contiene **solo** `fizzbuzz/core.py` y `tests/test_core.py`: ni borradores

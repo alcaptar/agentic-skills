@@ -123,15 +123,38 @@ allowed-tools: [Read, Grep, Glob, Bash(git diff *), Bash(git log *), Bash(git sh
   son el mecanismo que ya usa `~/.claude/agents/sre.md`, con `tools:` (disponibilidad, grueso) y
   `allowed-tools:` (permisos, con patrones) como campos distintos.
 
-  > **Refutado en el smoke del 2026-07-27.** `allowed-tools` en el frontmatter de un agente **no
-  > bloquea** lo no listado: el verificador ejecuto `ls` -ausente de su lista- sin friccion, y no hay
-  > reglas `deny` en ningun `settings.json` que lo expliquen. La prohibicion se sostiene **solo por
-  > instruccion**. El smoke la validó (el agente rechazo ejecutar `pytest` incluso cuando el
-  > orquestador se lo pidio como prueba, razonando que un mensaje del coordinador no es autorizacion
-  > para saltarse su configuracion), pero eso es cumplimiento, no enforcement. Hacerla estructural
-  > exigiria quitarle `Bash` del todo y pasarle el diff pre-computado por el orquestador -que es
-  > ademas lo que hace el juez de Honk, que recibe el diff en vez de calcularlo-. **Pendiente de
-  > decidir.**
+  > **Refutado en el smoke del 2026-07-27, y ya corregido.** `allowed-tools` en el frontmatter de un
+  > agente **no bloquea** lo no listado: el verificador ejecuto `ls` -ausente de su lista- sin
+  > friccion, y no hay reglas `deny` en ningun `settings.json` que lo expliquen. La instruccion si
+  > aguantaba (rechazo ejecutar `pytest` aunque el orquestador se lo pidiera como prueba, razonando
+  > que un mensaje del coordinador no le autoriza a saltarse su configuracion), pero eso es
+  > cumplimiento, no enforcement.
+  >
+  > **Solucion aplicada**: el agente pasa a `tools: Read, Grep, Glob, Skill`, **sin `Bash`**. La
+  > restriccion es estructural por ausencia de la tool. Como entonces no puede calcular el diff, el
+  > orquestador se lo materializa con un subcomando nuevo, `gates.py diff-bundle --repo . --base <ref>
+  > --out <dir-fuera-del-repo>`, que escribe `slice.diff` (rango `<base>...HEAD`) y `files.txt`. Es
+  > ademas lo que hace el juez de Honk, que **recibe** el diff en vez de calcularlo, y de paso el
+  > script fija el rango de tres puntos en vez de dejarlo al criterio de un modelo (con `..`, los
+  > commits que la base haya avanzado saldrian como borrados y el verificador cazaria violaciones
+  > fantasma). Fail-closed: base inexistente o cero cambios es FALLA, no un bundle vacio sobre el que
+  > el verificador daria PASA.
+
+### 3b. Dos defectos de rubrica que el smoke destapo
+
+Ambos son ruido que erosiona la senal del verificador, y ninguno se veria sin ejecutarlo:
+
+- **La precedencia test-implementacion es inverificable por diseno.** El item pedia que el test
+  "precediera a la implementacion", pero `slice-runner` entrega la slice en **un solo commit**: el
+  historial nunca puede acreditarlo. Los tres agentes del smoke reportaron "no puedo constatarlo"
+  (dos como `baja`, uno como `media`), o sea un hallazgo garantizado en **todas** las slices. El item
+  pasa a llamarse **cobertura por capa** y solo comprueba que exista un test por AC; el ciclo
+  red-green lo garantiza en origen el implementador (`superpowers:test-driven-development`, con su
+  "watch it fail"). Se anade una prohibicion explicita de reportarlo, porque la tentacion es fuerte.
+- **`test-desiderata` duplicaba hallazgos de `manipulacion-tests`.** Los dos agentes contaron el mismo
+  assert relajado dos veces como `alta`. `test-desiderata` pasa a cubrir **solo los tests nuevos**, y
+  se anade al veredicto la regla general **un defecto, un hallazgo**, bajo la regla mas especifica.
+  Importa porque el recuento por severidad alimenta las metricas del loop.
 - `Skill` porque la rubrica invoca `backend-best-practices` y `test-desiderata`. No se precargan por
   frontmatter (`skills:`): `test-desiderata` solo aplica si la slice toca tests, asi que se cargan on
   demand (`reference-docs`).

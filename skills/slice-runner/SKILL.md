@@ -21,7 +21,7 @@ Nivel de autonomia 1: un ciclo por invocacion. Para encadenar slices, envolver e
 - **Las convenciones del repo mandan.** Implementador y verificador cargan como vara de medir las **fuentes de convencion declaradas en el issue** (seccion `## Fuentes de convencion`: docs y skills de proyecto), por encima de cualquier default generico de hexagonal/DDD. En conflicto, ganan las convenciones del repo. No se asumen rutas fijas: las fuentes se descubren por repo y las declara `slice-spec` en el issue; `slice-runner` solo las lee. Si el issue no trae esa seccion, **para** y pide anadirla con `slice-spec` (no ejecutes con la vara vacia: fue la causa raiz de desviaciones silenciosas de convencion). Sin la vara, el verificador no puede cazar violaciones reales (p. ej. una migracion que siembra datos donde la convencion lo prohibe).
 - **Puertas de parada objetivas.** No hay PR mergeable sin lint limpio, tipos limpios, tests verdes y **CI verde**, ejecutados con los comandos reales del repo (paso 2), no con binarios asumidos.
 - **El juez no ejecuta puertas ni ve output de build.** Las puertas deterministas (lint, tipos, tests) corren **antes** del verificador: el implementador las corre en su ciclo para tener feedback incremental, y el orquestador las re-corre como backstop (paso 6) porque el auto-reporte del implementador no es fuente de verdad. Cuando se invoca al verificador (paso 7) ya estan verdes por construccion, asi que no recibe nada de ellas: su presupuesto entero se gasta en lo semantico. Meter un traceback de pytest en el contexto del unico agente cuyo valor es el juicio es `limited-focus` autoinfligido, y un `ruff` sucio no debe consumir un reintento adversarial.
-- **Determinista lo que es regla exacta (`offload-deterministic`).** Lo mecanico NO se delega al juicio de un agente: lo resuelve el script `scripts/gates.py`, cuyo exit code es autoritativo. Dos puertas: `pr-hygiene` (higiene del diff staged, paso 8) y `checks` (ejecutar lint/tipos/tests con los comandos del paso 2 y devolver exit code + salida truncada, pasos 5 y 6). No se pide dos veces a la IA lo que un script decide una vez, y ningun agente ve output crudo de build.
+- **Determinista lo que es regla exacta (`offload-deterministic`).** Lo mecanico NO se delega al juicio de un agente: lo resuelve el script `scripts/gates.py`, cuyo exit code es autoritativo. Tres subcomandos: `pr-hygiene` (higiene del diff staged, paso 8), `checks` (ejecutar lint/tipos/tests con los comandos del paso 2 y devolver exit code + salida truncada, pasos 5 y 6) y `diff-bundle` (materializar el diff de la slice para el verificador, paso 7). No se pide dos veces a la IA lo que un script decide una vez, y ningun agente ve output crudo de build.
 - **Los tests son ciudadanos de primera categoria.** Valen tanto o mas que el codigo de produccion: ahi va el mayor esfuerzo de calidad, y sobre todo la exigencia de que **testeen de verdad lo que la slice pretende construir**, no una version debilitada ni un proxy que pasa por casualidad. Un test que pasa sin fijar su AC es un fallo tan grave como codigo roto. Con dientes, no como declaracion: el implementador aplica `writing-good-tests.md` de `superpowers:test-driven-development` (nombrar el cambio de produccion que haria fallar el test **antes** de escribirlo; asertar comportamiento real, nunca mocks; codigo de test fuera de produccion), y el verificador lo bloquea con severidad **alta** en el paso 7 (mapeo AC↔test, fixture/wiring theater, manipulacion de tests, test-desiderata).
 - **TDD consciente de capa.** El ciclo TDD lo define `superpowers:test-driven-development` (lo invoca el implementador, paso 5); aqui vive solo el delta: si las convenciones del repo eximen una capa (p. ej. modelos ORM y migraciones que no se testean por separado), la puerta de esa slice es "suite intacta + verificacion de datos/efecto" en vez del test-first por AC. Decide la convencion del repo, no este documento ni superpowers.
 - **Alinear antes de implementar.** Antes de escribir codigo, mostrar el entendimiento de la slice (alcance, AC, capa afectada, comando de validacion) y esperar go/no-go. Nunca transcribir a ciegas el codigo pre-horneado de una spec: validalo contra las convenciones primero.
@@ -255,14 +255,24 @@ Lanza un Agent con `subagent_type: slice-verifier`. Es un **agente definido**
 - **La rubrica va en su system prompt**, verbatim en cada invocacion, en vez de que tu la relates y
   puedas parafrasearla o saltarte items. La parte mas importante del loop no debe depender de una
   transcripcion.
-- **Declara su superficie de tools** (`Read`, `Grep`, `Glob` y `allowed-tools` con solo
-  `Bash(git diff|log|show|status *)`), y su system prompt le prohibe ejecutar puertas.
-  **Aviso verificado en smoke (2026-07-27): `allowed-tools` en el frontmatter NO bloquea lo no
-  listado** -el agente ejecuto `ls`, que no esta en su lista, sin friccion-, asi que hoy la
-  prohibicion se sostiene por instruccion, no por el permission system. El smoke confirmo que se
-  sostiene (rechazo ejecutar `pytest` incluso cuando el orquestador se lo pidio explicitamente), pero
-  no cuentes con un filtro tecnico que no existe. `model: inherit` conserva el modelo fuerte de la
-  sesion, que el juicio mas sutil -el patron de rollout- requiere.
+- **No tiene `Bash`** (`tools: Read, Grep, Glob, Skill`): no puede ejecutar puertas aunque quisiera. La
+  restriccion es **estructural**, por ausencia de la tool. No basta con `allowed-tools`: el smoke del
+  2026-07-27 comprobo que un `allowed-tools` en el frontmatter **no bloquea** lo no listado (el agente
+  ejecuto `ls`, ausente de su lista, sin friccion), asi que la unica forma de que sea enforcement y no
+  cumplimiento es no darle la tool. `model: inherit` conserva el modelo fuerte de la sesion, que el
+  juicio mas sutil -el patron de rollout- requiere.
+
+**Antes de invocarlo, materializa el diff (`[det]`).** Como no tiene `Bash`, no puede calcularlo:
+
+    python3 ~/.claude/skills/slice-runner/scripts/gates.py diff-bundle --repo . \
+      --base <base> --out <dir-fuera-del-repo> --json
+
+Escribe `slice.diff` (rango `<base>...HEAD`) y `files.txt`, y devuelve sus rutas. El `--out` va **fuera
+del repo** (p. ej. bajo `/tmp`): un fichero de trabajo dentro nunca debe poder acabar en la PR. El rango
+lo fija el script -tres puntos, desde el branch-point- y no tu criterio: con `..`, los commits que la
+base haya avanzado desde entonces saldrian como borrados y el verificador cazaria violaciones fantasma.
+Si devuelve FALLA (base inexistente, o cero cambios), arreglalo antes de invocar: sin diff no hay nada
+que verificar.
 
 **No le pases nada de las puertas**: cuando llega aqui estan verdes por construccion (paso 6), asi que
 un resumen seria cero informacion y solo gastaria contexto. Tampoco le pases el "resumen del enfoque"
@@ -278,7 +288,8 @@ completo esta en `agents/slice-verifier.md`; no sustituyas ese agente por `reque
 - numero de issue, `slice_id` y `name`;
 - los **AC** de la slice, tal cual estan en el issue;
 - las **fuentes de convencion** declaradas en el issue (paso 1);
-- la **base ref** de la rama, para `git diff <base>...HEAD`;
+- las **rutas de `slice.diff` y `files.txt`** que devolvio `diff-bundle`;
+- la **ruta del repo**, para que lea el codigo alrededor del diff;
 - la **lista etiquetada produccion/test** que devolvio el implementador (paso 5).
 
 **Veredicto.** Devuelve como mensaje final exactamente este objeto JSON (lo exige su system prompt; la

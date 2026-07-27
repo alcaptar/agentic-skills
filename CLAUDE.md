@@ -39,6 +39,12 @@ coherencia con `ai-patterns`.
 - **Cada slice tiene nombre**: `name` kebab-case en la spec; alimenta rama (`slice/NN-name`) y
   scope de commit de forma determinista. La skill `slice-spec` produce specs bien formadas.
 
+## Tras tocar el agente verificador
+
+`agents/slice-verifier.md` no se relee en caliente: el registro de agentes se cachea al primer load de la
+sesion, al contrario que las skills. Si lo editas, **la sesion en curso sigue usando la version vieja**.
+Para probarlo hace falta sesion nueva; si no, el smoke valida la definicion equivocada en silencio.
+
 ## Verificacion tras tocar los scripts
 
 ```bash

@@ -44,6 +44,13 @@ ln -s "$PWD/agents/slice-verifier.md" ~/.claude/agents/slice-verifier.md
 El del agente **no es opcional**: sin el, `subagent_type: slice-verifier` no resuelve y el paso de
 verificacion de `slice-runner` rompe.
 
+> **Gotcha verificado (2026-07-27): las skills se releen, los agentes no.** Editar un `SKILL.md` cambia
+> el comportamiento en la sesion en curso; editar `agents/slice-verifier.md` **no**. El registro de
+> agentes se cachea al primer load, asi que la sesion sigue usando la definicion vieja: se comprobo
+> lanzandolo tras reescribirlo y viendo que citaba campos de su system prompt anterior y usaba una tool
+> que la version nueva ya no declara. **Tras tocar el agente hay que abrir sesion nueva antes de
+> probarlo**, o el smoke valida la version equivocada sin avisar.
+
 ## El pipeline
 
 ```

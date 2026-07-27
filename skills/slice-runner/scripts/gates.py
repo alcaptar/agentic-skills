@@ -3,7 +3,7 @@
 
 Se offloada a script la regla mecanica con coste de error alto que el modelo no
 garantiza por si mismo. Redactar un conventional commit lo hace bien el agente, asi
-que no hay puerta para eso. Hay dos:
+que no hay puerta para eso. Hay tres:
 
     pr-hygiene   el diff staged solo puede contener los ficheros de codigo/test
                  que declaro el implementador; nunca planes ni design-docs (la spec
@@ -18,6 +18,14 @@ que no hay puerta para eso. Hay dos:
                  NO se copia, porque aqui los comandos se autodetectan por repo y un
                  regex que no matchea oculta el error real.
 
+    diff-bundle  materializa `slice.diff` y `files.txt` (rango `<base>...HEAD`) en un
+                 directorio fuera del repo. Existe para que el verificador adversarial
+                 no necesite `Bash`: recibe el diff en disco en vez de calcularlo, lo
+                 que hace **estructural** su incapacidad de ejecutar puertas (un
+                 `allowed-tools` en el frontmatter del agente NO bloquea lo no listado;
+                 se comprobo en smoke). De paso el rango lo fija el script -tres
+                 puntos, desde el branch-point- y no el juicio de un modelo.
+
 Exit code 0 = PASA, 1 = FALLA, 2 = error de uso. Con --json imprime el resultado
 estructurado en stdout para que el orquestador lo consuma sin parsear prosa.
 
@@ -25,6 +33,7 @@ Uso:
     gates.py pr-hygiene --repo . --allow src/a.py --allow test/a.py [--spec ruta] [--json]
     gates.py checks --repo . --check lint="make linting" --check tests="make test" \\
         [--tail 30] [--timeout 600] [--json]
+    gates.py diff-bundle --repo . --base master --out /tmp/slice-02 [--json]
 """
 
 from __future__ import annotations
@@ -34,7 +43,7 @@ import json
 import subprocess
 import sys
 from dataclasses import dataclass, field
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 
 # Truncado de la salida de una puerta que falla, y tope de duracion por puerta.
 DEFAULT_TAIL = 30
@@ -216,6 +225,90 @@ def run_checks(
     return ChecksResult([run_check(repo, n, c, tail_lines, timeout) for n, c in specs])
 
 
+@dataclass
+class BundleResult:
+    """Resultado de materializar el diff de la slice en disco."""
+
+    passed: bool
+    slice_diff: str = ""
+    files: str = ""
+    n_files: int = 0
+    hallazgos: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "gate": "diff-bundle",
+            "veredicto": "PASA" if self.passed else "FALLA",
+            "slice_diff": self.slice_diff,
+            "files": self.files,
+            "n_files": self.n_files,
+            "hallazgos": self.hallazgos,
+        }
+
+
+def write_diff_bundle(repo: str, base: str, out: str) -> BundleResult:
+    """Escribe `slice.diff` y `files.txt` en `out` para que el verificador los lea.
+
+    El verificador no tiene `Bash`: recibe el diff en disco en vez de calcularlo. De
+    paso el rango lo fija el script y no el juicio de un modelo: siempre
+    `base...HEAD` (tres puntos, desde el branch-point), porque con `..` los commits
+    que la base haya avanzado desde entonces apareceran como borrados y el
+    verificador cazaria violaciones fantasma.
+    """
+    rango = f"{base}...HEAD"
+    result = BundleResult(passed=True)
+    try:
+        diff = subprocess.run(
+            ["git", "-C", repo, "diff", rango],
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout
+        names = subprocess.run(
+            ["git", "-C", repo, "diff", "--name-only", rango],
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout
+    except subprocess.CalledProcessError as exc:
+        return BundleResult(
+            passed=False,
+            hallazgos=[f"no se pudo diffear contra {base!r}: {exc.stderr.strip() or exc}"],
+        )
+
+    ficheros = [line for line in names.splitlines() if line.strip()]
+    if not ficheros:
+        # Fail-closed, igual que `pr-hygiene` con nada staged: sin cambios no hay
+        # nada que verificar, y un bundle vacio haria que el verificador diera PASA
+        # sobre la nada.
+        return BundleResult(passed=False, hallazgos=[f"sin cambios respecto a {base}: nada que verificar"])
+
+    out_dir = Path(out)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    slice_diff = out_dir / "slice.diff"
+    files_txt = out_dir / "files.txt"
+    slice_diff.write_text(diff, encoding="utf-8")
+    files_txt.write_text("\n".join(ficheros) + "\n", encoding="utf-8")
+
+    result.slice_diff = str(slice_diff)
+    result.files = str(files_txt)
+    result.n_files = len(ficheros)
+    return result
+
+
+def _emit_bundle(result: BundleResult, as_json: bool) -> int:
+    if as_json:
+        print(json.dumps(result.to_dict(), ensure_ascii=False))
+    else:
+        print(f"[diff-bundle] {'PASA' if result.passed else 'FALLA'}")
+        if result.passed:
+            print(f"  slice.diff  {result.slice_diff}")
+            print(f"  files.txt   {result.files} ({result.n_files} ficheros)")
+        for h in result.hallazgos:
+            print(f"  - {h}")
+    return 0 if result.passed else 1
+
+
 def _emit(result: GateResult, as_json: bool) -> int:
     if as_json:
         print(json.dumps(result.to_dict(), ensure_ascii=False))
@@ -272,10 +365,19 @@ def main(argv: list[str] | None = None) -> int:
     )
     chk.add_argument("--json", action="store_true", help="salida estructurada JSON")
 
+    bun = sub.add_parser("diff-bundle", help="materializa el diff de la slice para el verificador")
+    bun.add_argument("--repo", default=".", help="ruta del repo (default: cwd)")
+    bun.add_argument("--base", required=True, help="rama base (el rango es <base>...HEAD)")
+    bun.add_argument("--out", required=True, help="directorio destino, FUERA del repo")
+    bun.add_argument("--json", action="store_true", help="salida estructurada JSON")
+
     args = parser.parse_args(argv)
 
     if args.gate == "pr-hygiene":
         return _emit(check_pr_hygiene(args.repo, args.allow, args.spec), args.json)
+
+    if args.gate == "diff-bundle":
+        return _emit_bundle(write_diff_bundle(args.repo, args.base, args.out), args.json)
 
     # Error de uso (exit 2), no FALLA de puerta: confundirlos haria que el orquestador
     # reintentara el paso 5 por un fallo que esta en su propia invocacion.

@@ -207,3 +207,89 @@ def test_main_checks_exit_2_si_el_spec_es_malo(repo: Path) -> None:
 def test_main_checks_exit_2_sin_ningun_check(repo: Path) -> None:
     code = gates.main(["checks", "--repo", str(repo)])
     assert code == 2
+
+
+# --- puerta `diff-bundle` --------------------------------------------------
+#
+# Existe para que el verificador no necesite `Bash`: el orquestador le deja el diff
+# y la lista de ficheros en disco, y el agente solo los lee. Ademas quita de encima
+# el footgun de `..` vs `...` al derivar el rango.
+
+
+@pytest.fixture
+def repo_con_rama(repo: Path) -> Path:
+    _stage(repo, "src/a.py", "def f() -> int:\n    return 1\n")
+    _stage(repo, "tests/test_a.py", "def test_f() -> None:\n    assert f() == 1\n")
+    _git(repo, "commit", "-m", "baseline")
+    _git(repo, "switch", "-c", "slice/01-x")
+    _stage(repo, "src/a.py", "def f() -> int:\n    return 2\n")
+    _stage(repo, "tests/test_a.py", "def test_f() -> None:\n    assert f() is not None\n")
+    _git(repo, "commit", "-m", "slice")
+    return repo
+
+
+def test_diff_bundle_escribe_diff_y_lista(repo_con_rama: Path, tmp_path: Path) -> None:
+    out = tmp_path / "bundle"
+    res = gates.write_diff_bundle(str(repo_con_rama), "master", str(out))
+    assert res.passed
+    assert sorted((out / "files.txt").read_text(encoding="utf-8").split()) == [
+        "src/a.py",
+        "tests/test_a.py",
+    ]
+    diff = (out / "slice.diff").read_text(encoding="utf-8")
+    # El debilitamiento del test preexistente tiene que ser visible como linea `-`:
+    # es lo unico con lo que el verificador puede cazarlo sin `git`.
+    assert "-    assert f() == 1" in diff
+    assert "+    assert f() is not None" in diff
+
+
+def test_diff_bundle_usa_el_rango_de_tres_puntos(repo_con_rama: Path, tmp_path: Path) -> None:
+    # Un commit en la base posterior al branch-point NO debe aparecer en el bundle:
+    # con `..` saldria como borrado y el verificador cazaria un fantasma.
+    _git(repo_con_rama, "switch", "master")
+    _stage(repo_con_rama, "src/otro.py", "x = 1\n")
+    _git(repo_con_rama, "commit", "-m", "avanza la base")
+    _git(repo_con_rama, "switch", "slice/01-x")
+
+    out = tmp_path / "bundle"
+    gates.write_diff_bundle(str(repo_con_rama), "master", str(out))
+    assert "src/otro.py" not in (out / "files.txt").read_text(encoding="utf-8")
+
+
+def test_diff_bundle_falla_si_la_base_no_existe(repo_con_rama: Path, tmp_path: Path) -> None:
+    res = gates.write_diff_bundle(str(repo_con_rama), "no-existe", str(tmp_path / "b"))
+    assert not res.passed
+    assert any("no-existe" in h for h in res.hallazgos)
+
+
+def test_diff_bundle_falla_si_el_diff_esta_vacio(repo: Path, tmp_path: Path) -> None:
+    # Sin cambios respecto a la base no hay nada que verificar: fail-closed, como
+    # `pr-hygiene` con nada staged.
+    _stage(repo, "src/a.py")
+    _git(repo, "commit", "-m", "baseline")
+    res = gates.write_diff_bundle(str(repo), "master", str(tmp_path / "b"))
+    assert not res.passed
+    assert any("sin cambios" in h for h in res.hallazgos)
+
+
+def test_main_diff_bundle_json_imprime_las_rutas(
+    repo_con_rama: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    out = tmp_path / "bundle"
+    code = gates.main(
+        ["diff-bundle", "--repo", str(repo_con_rama), "--base", "master", "--out", str(out), "--json"]
+    )
+    assert code == 0
+    data = json.loads(capsys.readouterr().out)
+    assert data["gate"] == "diff-bundle"
+    assert data["veredicto"] == "PASA"
+    assert data["slice_diff"] == str(out / "slice.diff")
+    assert data["files"] == str(out / "files.txt")
+    assert data["n_files"] == 2
+
+
+def test_main_diff_bundle_exit_1_si_falla(repo_con_rama: Path, tmp_path: Path) -> None:
+    code = gates.main(
+        ["diff-bundle", "--repo", str(repo_con_rama), "--base", "nope", "--out", str(tmp_path / "b")]
+    )
+    assert code == 1
