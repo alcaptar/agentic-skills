@@ -119,6 +119,7 @@ metricas del loop (tasa de FALLA, reintentos...) viven fuera del repo en
 ## Principios comunes
 
 - Escritor != verificador, pero el verificador **revisa convenciones/arquitectura, no re-testea** (CI + AC gobiernan la correccion) y **no ejecuta puertas ni ve output de build**: corren antes, y su presupuesto entero es para lo semantico.
+- **Los subagentes son la garantia, no un detalle**: invocar una skill cuenta como pedirlos. Si el entorno los veta, `slice-runner` **para** (una verificacion inline no verifica nada) y `deploy-watch` **degrada avisando** (pierde higiene de contexto, no validez). Requiere la excepcion correspondiente en `~/.claude/CLAUDE.md`.
 - Puertas de parada objetivas y deterministas.
 - Convenciones del repo como vara de medir principal.
 - Estado del run en el **issue de GitHub**: la spec y el estado de cada slice viven en el issue (unica fuente de verdad); el registro duradero son el issue y las PRs mergeadas.

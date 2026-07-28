@@ -18,6 +18,7 @@ Nivel de autonomia 1: un ciclo por invocacion. Para encadenar slices, envolver e
 ## Principios no negociables
 
 - **El que implementa no verifica.** La implementacion y la verificacion las hacen subagentes distintos (Agent tool), con instrucciones distintas. El verificador es adversarial.
+- **Los subagentes no son un detalle de implementacion: son la garantia.** Esta skill **no puede ejecutarse sin ellos**, y por eso **invocarla cuenta como pedirlos**: no es iniciativa del agente, es la skill haciendo su trabajo. Si el entorno los veta (instruccion global de no usar el Agent tool, politica de la organizacion, o cualquier otra restriccion), **para en el paso 3 y dilo**; no continues en modo degradado. Verificar inline es que quien escribio el codigo se apruebe a si mismo, que es justo el fallo que esta skill existe para prevenir: la PR saldria con un PASA que no significa nada, y eso es peor que no producir PR. Fail-closed, igual que `pr-hygiene` y `diff-bundle`: si la garantia no se sostiene, no se produce el artefacto. (`deploy-watch` decide distinto a proposito: ver su skill.)
 - **Las convenciones del repo mandan.** Implementador y verificador cargan como vara de medir las **fuentes de convencion declaradas en el issue** (seccion `## Fuentes de convencion`: docs y skills de proyecto), por encima de cualquier default generico de hexagonal/DDD. En conflicto, ganan las convenciones del repo. No se asumen rutas fijas: las fuentes se descubren por repo y las declara `slice-spec` en el issue; `slice-runner` solo las lee. Si el issue no trae esa seccion, **para** y pide anadirla con `slice-spec` (no ejecutes con la vara vacia: fue la causa raiz de desviaciones silenciosas de convencion). Sin la vara, el verificador no puede cazar violaciones reales (p. ej. una migracion que siembra datos donde la convencion lo prohibe).
 - **Puertas de parada objetivas.** No hay PR mergeable sin lint limpio, tipos limpios, tests verdes y **CI verde**, ejecutados con los comandos reales del repo (paso 2), no con binarios asumidos.
 - **El juez no ejecuta puertas ni ve output de build.** Las puertas deterministas (lint, tipos, tests) corren **antes** del verificador: el implementador las corre en su ciclo para tener feedback incremental, y el orquestador las re-corre como backstop (paso 6) porque el auto-reporte del implementador no es fuente de verdad. Cuando se invoca al verificador (paso 7) ya estan verdes por construccion, asi que no recibe nada de ellas: su presupuesto entero se gasta en lo semantico. Meter un traceback de pytest en el contexto del unico agente cuyo valor es el juicio es `limited-focus` autoinfligido, y un `ruff` sucio no debe consumir un reintento adversarial.
@@ -79,8 +80,9 @@ El estado se codifica en la linea con `[estado]` (y `PR #N` cuando aplica):
 - `en-curso` — implementando/verificando.
 - `esperando-merge` — PR abierta, CI verde, esperando la decision humana de merge.
 - `mergeada` — PR mergeada. **Es el unico estado que marca el checkbox `[x]`.**
-- `bloqueada: <motivo>` — `puertas` (lint/tipos/tests sin arreglar tras los reintentos), `verify`
-  (veto del verificador) o `ci-roja`. En `ci-roja` deja el PR abierto; en `puertas` y `verify` no hay PR.
+- `bloqueada: <motivo>` — `sin-subagentes` (el entorno veta el Agent tool: para en el paso 3 sin escribir
+  codigo), `puertas` (lint/tipos/tests sin arreglar tras los reintentos), `verify` (veto del verificador)
+  o `ci-roja`. En `ci-roja` deja el PR abierto; en los otros tres no hay PR.
 - `abortada: presupuesto` — supero el presupuesto de la slice.
 
 `[x]` solo al merge mantiene la barra de progreso nativa de GitHub fiel a lo que esta en main. El
@@ -164,6 +166,14 @@ se queda aqui y no se duplica dentro del script.
 
 ### 3. Alinear antes de implementar (check-alignment)
 
+- **Puerta de subagentes (fail-closed, lo primero).** Declara que vas a lanzar **dos** Agent: el
+  implementador (paso 5) y el verificador `slice-verifier` (paso 7). Invocar esta skill cuenta como que
+  el usuario los pide, asi que no preguntes permiso. Pero si **no puedes** lanzarlos -veto global al
+  Agent tool, politica de la organizacion, `slice-verifier` sin resolver por symlink ausente-: marca la
+  slice `bloqueada: sin-subagentes` en el issue, explica cual es la restriccion concreta y **para
+  aqui**, sin escribir codigo. No ofrezcas hacerlo inline: la verificacion inline es el fallo que esta
+  skill previene, y una PR con verificacion de teatro es peor que ninguna PR. Que el usuario decida si
+  levanta la restriccion o renuncia al run.
 - Resume: slice elegida (id + `name`), AC, capa(s) afectada(s), comando de validacion que aplicara, `type(name)` de conventional commit que usara el commit/PR, y como piensa abordarla.
 - Si el cambio claramente **no es un `feat`** (p. ej. refactor o fix) y la spec no declaro type, confirma el type con el usuario aqui (barato; evita un scope de commit erroneo).
 - Si la spec pre-hornea codigo, contrastalo contra las fuentes de convencion del issue (paso 1) y **senala cualquier violacion antes de escribir** (no lo transcribas a ciegas).
