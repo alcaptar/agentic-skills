@@ -15,6 +15,10 @@ adaptadas a un monitor ligero):
 - Confirmacion SOSTENIDA: un breach solo cuenta como no-go si persiste `failure_limit`
   ticks seguidos (mata falsos positivos por picos vecinos).
 - Senales CRITICAS vs ADVISORY: solo las criticas fuerzan no-go.
+- Senales DECLARADAS por la spec (`declarada: true`, la linea `SENAL:` del issue) vs
+  inferidas por blast radius: una declarada sin ninguna muestra da `inconclusive`, no
+  `go` -si la serie que la spec prometio no existe, el veredicto no puede afirmar que
+  el cambio funciona-.
 - Veredicto go / no-go / inconclusive, respetando warm-up (grace tras el cambio) y
   min-observe (no declarar `go` hasta cubrir la ventana de rollout+drain).
 
@@ -52,6 +56,10 @@ class SignalConfig:
     warn_abs: float = 0.0
     crit_abs: float = 0.0
     inverted: bool = False  # True si valores BAJOS son malos (p. ej. ready)
+    # True si la senal viene declarada en la spec (linea `SENAL:` del issue) en vez de
+    # inferida por blast radius. Una declarada que no se puede medir NO puede dar `go`:
+    # seria devolver el veredicto generico por la puerta de atras.
+    declarada: bool = False
 
     @staticmethod
     def from_dict(d: dict[str, object]) -> "SignalConfig":
@@ -168,6 +176,10 @@ def build_scorecard(
             "breaches": sum(1 for s in states if s == BREACH),
             "confirmed": _sustained(states, config.failure_limit),
             "critical": cfg.critical,
+            # Sin ninguna muestra no hay `worst` real: `ok` ahi significa "no medido", y
+            # distinguirlo es lo que impide que una senal ilegible pase por sana.
+            "measured": bool(states),
+            "declarada": cfg.declarada,
         }
     return card
 
@@ -189,6 +201,21 @@ def verdict(
     ]
     if blocking:
         return {"verdict": NO_GO, "reason": "senal critica en breach sostenido", "blocking": blocking}
+
+    # Una senal declarada en la spec que no se pudo medir (serie inexistente, query vacia,
+    # fuente caida) no es un `go`: es un fallo de la senal, y hay que decirlo. Va despues del
+    # no-go porque un breach real es informacion mas fuerte que "no se pudo medir".
+    sin_medir = [
+        sig
+        for sig, s in scorecard.items()
+        if s.get("declarada") and not s.get("measured")
+    ]
+    if sin_medir:
+        return {
+            "verdict": INCONCLUSIVE,
+            "reason": "senal declarada en la spec sin medir",
+            "blocking": sin_medir,
+        }
 
     if elapsed_secs < config.min_observe_secs:
         return {

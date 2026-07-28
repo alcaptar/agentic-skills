@@ -13,11 +13,21 @@ modulo NO habla con `gh` (eso es I/O, lo valida el smoke real); solo transforma 
 Formato de una linea de slice en el cuerpo:
 
     - [ ] slice-02 (ajustar-stock): Caso de uso AjustarStock [esperando-merge] PR #12
+          AC: emite evento StockAjustado
+          SENAL: prometheus rate(stock_ajustado_total[5m]) > 0 en 10m post-deploy; critical
     - [x] slice-01 (cantidad-vo): Crear VO [mergeada] PR #11
     - [ ] slice-04 (backfill): Backfill [bloqueada: ci-roja] PR #13
+    - [ ] slice-05 (alerta-ajuste): Alerta de ajustes fallidos [pendiente]
+          REPO: mercadona/mercadona.online.gke
 
 El marcador `[estado]` va al final (antes del opcional `PR #N`). El checkbox `[x]` es la
 verdad de "mergeada": una slice marcada esta mergeada aunque el texto diga otra cosa.
+
+Bajo cada slice, tres tipos de linea indentada:
+
+    AC:     criterio de aceptacion, verificable pre-merge (test + verificador).
+    SENAL:  como se comprueba viva en produccion; la consume `deploy-watch`.
+    REPO:   repo destino de la slice. Ausente = el repo del issue (el de la app).
 """
 
 from __future__ import annotations
@@ -49,12 +59,22 @@ _LINE_RE = re.compile(
     r"\s*(?:PR\s*#(\d+))?\s*$"
 )
 
+# Lineas indentadas bajo una slice. `SENAL` se acepta con y sin tilde (lo escribe una
+# persona en un issue de GitHub, y "SEÑAL:" no debe perderse en silencio); el formato
+# canonico que se documenta y se emite es `SENAL:`.
+_SENAL_LINE_RE = re.compile(r"^SE(?:N|Ñ)AL\s*:\s*(.*)$", re.IGNORECASE)
+_REPO_LINE_RE = re.compile(r"^REPO\s*:\s*(.+?)\s*$", re.IGNORECASE)
+
 # --- Fuentes de convencion (punteros a la vara de medir del repo) ---
 # Viven en una seccion `## Fuentes de convencion` del cuerpo del issue. Son punteros
 # (no contenido): `doc:` para convenciones declarativas y `skill:` para skills de
 # proyecto (patrones procedimentales). `slice-spec` las escribe tras descubrirlas y
 # confirmarlas; `slice-runner` solo las lee como vara de medir. Guardar el "donde" (no
 # el contenido) evita duplicar la fuente de verdad, que sigue viviendo en el repo.
+#
+# Son **por repo**: una slice con `REPO:` se mide con la vara de SU repo destino, no con
+# la del repo de la app. Las lineas antes de cualquier `### <org>/<repo>` son las del
+# repo del issue; cada subseccion `###` declara las de un repo destino.
 FUENTE_TIPOS = ("doc", "skill")
 
 _FUENTES_HEADING = "## Fuentes de convencion"
@@ -62,12 +82,19 @@ _FUENTES_HEADING_RE = re.compile(
     r"^\s*##\s+fuentes\s+de\s+convenci[oó]n\s*$", re.IGNORECASE
 )
 _H2_RE = re.compile(r"^\s*##\s+")
+_FUENTES_SUBHEADING_RE = re.compile(r"^\s*###\s+(.+?)\s*$")
 _FUENTE_LINE_RE = re.compile(r"^\s*-\s*(doc|skill)\s*:\s*(.+?)\s*$", re.IGNORECASE)
 
 
 @dataclass
 class Slice:
-    """Una slice tal como vive en el cuerpo del issue."""
+    """Una slice tal como vive en el cuerpo del issue.
+
+    `ac` son los criterios verificables pre-merge; `senal` es como se comprueba viva en
+    produccion (la consume `deploy-watch`). `repo` es el repo destino: `None` = el repo
+    del issue, y cualquier otro valor = slice cross-repo (p. ej. una alerta que vive en
+    el repo de manifiestos, o un panel de Grafana).
+    """
 
     slice_id: str
     name: str
@@ -77,18 +104,22 @@ class Slice:
     motivo: str = ""
     pr: int | None = None
     ac: list[str] = field(default_factory=list)
+    senal: list[str] = field(default_factory=list)
+    repo: str | None = None
 
 
 @dataclass
 class Fuente:
-    """Un puntero a una fuente de convencion del repo.
+    """Un puntero a una fuente de convencion de un repo.
 
     `tipo` es `doc` (convencion declarativa: CLAUDE.md, docs de reglas...) o `skill`
     (skill de proyecto que codifica un patron). `ruta` es la ruta relativa al repo.
+    `repo` es el repo al que aplica: `None` = el repo del issue (el de la app).
     """
 
     tipo: str
     ruta: str
+    repo: str | None = None
 
 
 def _split_type_name(paren: str | None) -> tuple[str, str]:
@@ -138,7 +169,7 @@ def render_slice_line(sl: Slice) -> str:
 
 
 def parse_body(body: str) -> list[Slice]:
-    """Extrae las slices (con estado y AC) del cuerpo del issue, en orden de aparicion."""
+    """Extrae las slices (estado, AC, SENAL y REPO) del cuerpo, en orden de aparicion."""
     slices: list[Slice] = []
     current: Slice | None = None
     for line in body.splitlines():
@@ -147,10 +178,17 @@ def parse_body(body: str) -> list[Slice]:
             current = _slice_from_match(m)
             slices.append(current)
             continue
-        if current is not None:
-            stripped = line.strip()
-            if stripped.startswith("AC:"):
-                current.ac.append(stripped[len("AC:"):].strip())
+        if current is None:
+            continue
+        stripped = line.strip()
+        if stripped.startswith("AC:"):
+            current.ac.append(stripped[len("AC:"):].strip())
+            continue
+        if senal := _SENAL_LINE_RE.match(stripped):
+            current.senal.append(senal.group(1).strip())
+            continue
+        if repo := _REPO_LINE_RE.match(stripped):
+            current.repo = repo.group(1)
     return slices
 
 
@@ -206,10 +244,13 @@ def parse_fuentes(body: str) -> list[Fuente]:
     """Extrae los punteros de la seccion `## Fuentes de convencion`, en orden.
 
     Devuelve `[]` si la seccion no existe o esta vacia. Solo lee las lineas `- doc: ...`
-    y `- skill: ...` que van bajo el heading, hasta el siguiente `## `.
+    y `- skill: ...` que van bajo el heading, hasta el siguiente `## `. Una subseccion
+    `### <org>/<repo>` atribuye las lineas que le siguen a ese repo destino; las de antes
+    quedan con `repo=None` (el repo del issue). Para filtrar, `fuentes_para`.
     """
     fuentes: list[Fuente] = []
     in_section = False
+    repo: str | None = None
     for line in body.splitlines():
         if _FUENTES_HEADING_RE.match(line):
             in_section = True
@@ -217,24 +258,49 @@ def parse_fuentes(body: str) -> list[Fuente]:
         if in_section:
             if _H2_RE.match(line):  # empieza otra seccion: la de fuentes acabo
                 break
+            if sub := _FUENTES_SUBHEADING_RE.match(line):
+                repo = sub.group(1)
+                continue
             m = _FUENTE_LINE_RE.match(line)
             if m:
-                fuentes.append(Fuente(m.group(1).lower(), m.group(2).strip()))
+                fuentes.append(Fuente(m.group(1).lower(), m.group(2).strip(), repo))
     return fuentes
+
+
+def fuentes_para(fuentes: Iterable[Fuente], repo: str | None = None) -> list[Fuente]:
+    """Las fuentes que aplican a `repo` (`None` = el repo del issue).
+
+    La vara de medir de una slice es la de SU repo destino: medir una alerta del repo de
+    manifiestos con las convenciones del repo de la app es el `silent-misalignment` que la
+    seccion de fuentes existe para evitar.
+    """
+    return [f for f in fuentes if f.repo == repo]
 
 
 def render_fuentes_section(fuentes: Iterable[Fuente]) -> str:
     """Renderiza la seccion completa (heading + lineas) en formato canonico, sin `\\n` final.
 
-    Lanza ValueError si algun `tipo` no es canonico (`doc`/`skill`).
+    Las del repo del issue van primero; cada repo destino va en su subseccion
+    `### <repo>`, en orden de aparicion. Lanza ValueError si algun `tipo` no es canonico.
     """
-    lines = [_FUENTES_HEADING]
+    fuentes = list(fuentes)
     for f in fuentes:
         if f.tipo not in FUENTE_TIPOS:
             raise ValueError(
                 f"tipo de fuente no valido: {f.tipo!r} (validos: {', '.join(FUENTE_TIPOS)})"
             )
-        lines.append(f"- {f.tipo}: {f.ruta}")
+
+    lines = [_FUENTES_HEADING]
+    lines += [f"- {f.tipo}: {f.ruta}" for f in fuentes if f.repo is None]
+
+    repos: list[str] = []
+    for f in fuentes:
+        if f.repo is not None and f.repo not in repos:
+            repos.append(f.repo)
+    for repo in repos:
+        lines += ["", f"### {repo}"]
+        lines += [f"- {f.tipo}: {f.ruta}" for f in fuentes if f.repo == repo]
+
     return "\n".join(lines)
 
 

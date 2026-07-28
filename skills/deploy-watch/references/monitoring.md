@@ -32,9 +32,43 @@ RCA ante anomalia: agente `sre`. Postmortem formal (opcional): `incident-postmor
 
 **Quien elige vs quien ejecuta.** La **eleccion** de senales (que medir por blast radius) es juicio y se queda en el **hilo principal**, guiada por este doc. La **ejecucion** (construir la query concreta, componer la `query-*`, absorber la salida cruda y extraer el valor) la hace el **subagente colector**, uno por tick, que devuelve la muestra plana + una tabla con las queries reproducibles. Asi la salida verbosa no ensucia el contexto principal (`focused-agent`, `context-management`).
 
+## La senal declarada por la slice va primero
+
+Antes de inferir nada: si la slice trae una linea `SENAL:` en el issue, **esa es la senal principal** y
+entra con la criticidad que declara. La inferencia por blast radius de abajo es lo que se anade
+**alrededor**, no lo que la sustituye.
+
+El motivo es lo que la inferencia **no puede** hacer: el blast radius mira el diff y elige senales
+genericas del servicio, asi que su veredicto solo puede afirmar "el servicio esta sano". La senal
+declarada la eligio quien diseno la slice sabiendo que comportamiento introducia, asi que permite
+afirmar "el comportamiento de esta slice esta pasando en produccion". Son afirmaciones distintas.
+
+Como leerla: la linea tiene la forma `<fuente> <serie/expresion>; <assert vivo con ventana>;
+critical|advisory`. La fuente dice que `query-*` compone el colector; el assert, cuando cuenta como
+cumplida; la ultima parte, si frena el `go`. Ejemplos:
+
+```
+SENAL: prometheus rate(application_stock_ajustado_total[5m]) > 0 en 10m post-deploy; critical
+SENAL: prometheus ALERTS{alertname="ShopAjusteFallido"} presente y == 0 en 24h; advisory
+SENAL: exenta - refactor puro
+```
+
+**Si no se puede medir, es `inconclusive`, no `go`.** Serie inexistente, query vacia o fuente caida
+significan que la senal no cumplio su cometido; darla por buena devolveria el veredicto generico por la
+puerta de atras. Una serie que **existe y vale 0** es otra cosa: eso es un dato, y se juzga contra el
+assert.
+
+Eso **lo decide el core, no el criterio del agente**: marca la senal con `declarada: true` en la config
+de `deploy_core`, y si no llega ninguna muestra suya, `verdict` devuelve `inconclusive` con la senal en
+`blocking`. Las inferidas sin muestras no frenan el `go` (son best-effort), pero el scorecard expone
+`measured` de todas para que el informe no confunda "sana" con "no medida".
+
+**Slices de otro repo** (`REPO:`, alertas o paneles): no hay rollout de la app ni recursos que mirar; el
+veredicto se apoya solo en la senal declarada.
+
 ## Eleccion de senales por blast radius
 
-Elige 4-8 senales segun **que toca el cambio** (no siempre las mismas):
+Elige 4-8 senales segun **que toca el cambio** (no siempre las mismas), **ademas** de la declarada:
 
 - **Caso general**: prometheus (rollout + recursos) + elasticsearch/prometheus (5xx + latencia en el
   edge) + sentry. Anade `query-gcloud-logs` para los 5xx del Load Balancer.

@@ -8,6 +8,7 @@ import issue_body
 from issue_body import (
     Fuente,
     Slice,
+    fuentes_para,
     parse_body,
     parse_fuentes,
     render_fuentes_section,
@@ -249,3 +250,131 @@ def test_roundtrip_render_parse_fuentes() -> None:
     fuentes = [Fuente("doc", "docs/conventions/"), Fuente("skill", ".claude/skills/x")]
     parsed = parse_fuentes(render_fuentes_section(fuentes) + "\n")
     assert parsed == fuentes
+
+
+# --- SENAL y REPO: observabilidad y slices cross-repo ---
+
+_GKE = "mercadona/mercadona.online.gke"
+
+_BODY_CON_SENAL = """\
+# Feature Z
+
+## Fuentes de convencion
+- doc: CLAUDE.md
+
+### mercadona/mercadona.online.gke
+- doc: templates/CLAUDE.md
+- doc: tests/prometheus/README.md
+
+## Slices
+- [ ] slice-01 (ajustar-stock): Caso de uso AjustarStock [pendiente]
+      AC: incrementa stock_ajustado_total{motivo}
+      SENAL: prometheus rate(stock_ajustado_total[5m]) > 0 en 10m post-deploy; critical
+- [ ] slice-02 (alerta-ajuste): Alerta de ajustes fallidos [pendiente]
+      REPO: mercadona/mercadona.online.gke
+      AC: promtool test dispara ShopAjusteFallido con 3 fallos
+      SENAL: prometheus ALERTS{alertname="ShopAjusteFallido"} presente y == 0 en 24h; advisory
+- [ ] slice-03 (extraer-repo): Extraer repositorio [pendiente]
+      AC: sin cambio de comportamiento
+      SENAL: exenta - refactor puro
+"""
+
+
+def test_parse_body_recoge_senal() -> None:
+    by_id = {s.slice_id: s for s in parse_body(_BODY_CON_SENAL)}
+    assert by_id["slice-01"].senal == [
+        "prometheus rate(stock_ajustado_total[5m]) > 0 en 10m post-deploy; critical"
+    ]
+    assert by_id["slice-03"].senal == ["exenta - refactor puro"]
+
+
+def test_parse_body_senal_ausente_es_lista_vacia() -> None:
+    # Una spec legacy sin SENAL no revienta: slice-runner avisa, no bloquea.
+    assert parse_body(_BODY)[0].senal == []
+
+
+def test_parse_body_acepta_senal_con_tilde() -> None:
+    body = "## Slices\n- [ ] slice-01 (x): T [pendiente]\n      SEÑAL: prometheus foo > 0\n"
+    assert parse_body(body)[0].senal == ["prometheus foo > 0"]
+
+
+def test_parse_body_senal_no_se_confunde_con_ac() -> None:
+    s01 = {s.slice_id: s for s in parse_body(_BODY_CON_SENAL)}["slice-01"]
+    assert s01.ac == ["incrementa stock_ajustado_total{motivo}"]
+
+
+def test_parse_body_recoge_repo_destino() -> None:
+    by_id = {s.slice_id: s for s in parse_body(_BODY_CON_SENAL)}
+    assert by_id["slice-02"].repo == _GKE
+    # ausente = el repo del issue
+    assert by_id["slice-01"].repo is None
+
+
+def test_set_estado_preserva_senal_y_repo() -> None:
+    nuevo = set_slice_estado(_BODY_CON_SENAL, "slice-02", "en-curso", pr=7)
+    s02 = {s.slice_id: s for s in parse_body(nuevo)}["slice-02"]
+    assert s02.estado == "en-curso"
+    assert s02.pr == 7
+    assert s02.repo == _GKE
+    assert s02.senal == [
+        'prometheus ALERTS{alertname="ShopAjusteFallido"} presente y == 0 en 24h; advisory'
+    ]
+
+
+def test_parse_fuentes_atribuye_subseccion_al_repo_destino() -> None:
+    assert parse_fuentes(_BODY_CON_SENAL) == [
+        Fuente("doc", "CLAUDE.md"),
+        Fuente("doc", "templates/CLAUDE.md", _GKE),
+        Fuente("doc", "tests/prometheus/README.md", _GKE),
+    ]
+
+
+def test_fuentes_para_filtra_por_repo() -> None:
+    fuentes = parse_fuentes(_BODY_CON_SENAL)
+    assert fuentes_para(fuentes) == [Fuente("doc", "CLAUDE.md")]
+    assert [f.ruta for f in fuentes_para(fuentes, _GKE)] == [
+        "templates/CLAUDE.md",
+        "tests/prometheus/README.md",
+    ]
+
+
+def test_fuentes_para_repo_sin_vara_declarada() -> None:
+    # No inventa una vara heredada: si el repo destino no declara fuentes, esta vacio
+    # y slice-runner para en el paso 1 en vez de medir con la del repo de la app.
+    assert fuentes_para(parse_fuentes(_BODY_CON_SENAL), "mercadona/otro") == []
+
+
+def test_render_fuentes_agrupa_por_repo_en_subsecciones() -> None:
+    section = render_fuentes_section(
+        [
+            Fuente("doc", "CLAUDE.md"),
+            Fuente("doc", "templates/CLAUDE.md", _GKE),
+            Fuente("skill", ".claude/skills/x"),
+        ]
+    )
+    assert section == (
+        "## Fuentes de convencion\n"
+        "- doc: CLAUDE.md\n"
+        "- skill: .claude/skills/x\n"
+        "\n"
+        f"### {_GKE}\n"
+        "- doc: templates/CLAUDE.md"
+    )
+
+
+def test_roundtrip_render_parse_fuentes_por_repo() -> None:
+    fuentes = [
+        Fuente("doc", "CLAUDE.md"),
+        Fuente("doc", "templates/CLAUDE.md", _GKE),
+        Fuente("skill", "settings/README.md", "mercadona/mo.sre.grafana-configs"),
+    ]
+    assert parse_fuentes(render_fuentes_section(fuentes) + "\n") == fuentes
+
+
+def test_set_fuentes_reemplaza_tambien_las_subsecciones_de_repo() -> None:
+    nuevo = set_fuentes(_BODY_CON_SENAL, [Fuente("doc", "CLAUDE.md")])
+    assert parse_fuentes(nuevo) == [Fuente("doc", "CLAUDE.md")]
+    assert "tests/prometheus/README.md" not in nuevo
+    # las slices y sus SENAL siguen intactas
+    by_id = {s.slice_id: s for s in parse_body(nuevo)}
+    assert by_id["slice-03"].senal == ["exenta - refactor puro"]

@@ -101,6 +101,62 @@ def test_verdict_inconclusive_hasta_min_observe() -> None:
     assert verdict(card, cfg, elapsed_secs=400)["verdict"] == dc.GO
 
 
+def test_scorecard_marca_la_senal_sin_muestras_como_no_medida() -> None:
+    cfg = MonitorConfig(
+        signals={
+            "ajustes": SignalConfig(declarada=True),
+            "cpu": SignalConfig(critical=False),
+        }
+    )
+
+    card = build_scorecard([{"cpu": 10.0}], {}, cfg)
+
+    assert card["ajustes"]["measured"] is False
+    assert card["ajustes"]["declarada"] is True
+    assert card["cpu"]["measured"] is True
+
+
+def test_verdict_senal_declarada_sin_medir_no_es_go() -> None:
+    # La serie que la spec prometio no existe en prod: el veredicto no puede ser `go`,
+    # o el generico ("el servicio esta sano") volveria por la puerta de atras.
+    cfg = MonitorConfig(warmup_secs=60, min_observe_secs=100)
+    card = {
+        "ajustes": {"critical": True, "confirmed": False, "worst": dc.OK, "breaches": 0,
+                    "measured": False, "declarada": True},
+    }
+
+    v = verdict(card, cfg, elapsed_secs=400)
+
+    assert v["verdict"] == dc.INCONCLUSIVE
+    assert v["blocking"] == ["ajustes"]
+
+
+def test_verdict_senal_inferida_sin_medir_no_frena_el_go() -> None:
+    # Solo la declarada en la spec tiene esa fuerza: las inferidas son best-effort.
+    cfg = MonitorConfig(warmup_secs=60, min_observe_secs=100)
+    card = {
+        "cpu": {"critical": False, "confirmed": False, "worst": dc.OK, "breaches": 0,
+                "measured": False, "declarada": False},
+    }
+
+    assert verdict(card, cfg, elapsed_secs=400)["verdict"] == dc.GO
+
+
+def test_verdict_breach_real_manda_sobre_senal_sin_medir() -> None:
+    cfg = MonitorConfig(warmup_secs=60, min_observe_secs=100)
+    card = {
+        "err": {"critical": True, "confirmed": True, "worst": dc.BREACH, "breaches": 3,
+                "measured": True, "declarada": False},
+        "ajustes": {"critical": True, "confirmed": False, "worst": dc.OK, "breaches": 0,
+                    "measured": False, "declarada": True},
+    }
+
+    v = verdict(card, cfg, elapsed_secs=400)
+
+    assert v["verdict"] == dc.NO_GO  # un breach confirmado es informacion mas fuerte
+    assert v["blocking"] == ["err"]
+
+
 def test_cli_verdict_json() -> None:
     payload = {
         "config": {

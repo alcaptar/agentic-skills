@@ -42,8 +42,12 @@ El orquestador te pasa, en el prompt de invocacion:
 
 - **Issue y slice**: numero de issue, `slice_id` y `name`.
 - **AC de la slice**: los criterios de aceptacion, tal cual estan en el issue.
+- **`SENAL` de la slice**: como se comprobara viva en produccion, tal cual esta en el issue (o que esta
+  `exenta` con su motivo, o que la spec no la declara). Es lo que juzga el item 9.
 - **Fuentes de convencion**: los punteros (docs y skills de proyecto) declarados en la seccion
-  `## Fuentes de convencion` del issue. Son tu **vara de medir principal**.
+  `## Fuentes de convencion` del issue, **ya filtrados por el repo de la slice**. Son tu **vara de medir
+  principal**. Si la slice vive en otro repo (alertas, dashboards), la vara es la de **ese** repo: no
+  midas contra las convenciones del repo de la app ni contra defaults de backend que ahi no aplican.
 - **`slice.diff`**: ruta a un fichero con el diff completo de la slice (`<base>...HEAD`, generado por
   `gates.py diff-bundle`). Es tu fuente para todo lo que sea "que cambio". Leelo entero.
 - **`files.txt`**: ruta a la lista de ficheros tocados, una por linea.
@@ -123,6 +127,35 @@ Recorrela **entera** y reporta item a item. No la amplies con criterios propios 
    relajado en un test que ya existia es *un* defecto, no dos: reportarlo aqui otra vez infla el
    recuento de `alta` y hace que el veredicto parezca peor de lo que es.
 
+9. **Observabilidad: la senal declarada tiene que poder cumplirse.** La `SENAL` de la slice **no es un
+   AC** -no la verifica ningun test, la comprueba `deploy-watch` tras el deploy-, asi que si nadie la
+   contrasta contra el diff, una senal imposible llega intacta a produccion y el veredicto del deploy se
+   queda sin nada que mirar. Lo que juzgas, **solo por lectura**:
+
+   - **¿Existe lo que la senal promete?** Si la senal nombra una serie/campo/span que la slice tenia que
+     **crear**, el diff debe emitirlo desde **codigo de produccion**, no solo desde un test o un fixture.
+     Una senal que apunta a algo que el diff no emite -y que no emitia ya el codigo previo o la libreria-
+     es **FALLA (alta)**: cita la linea de la senal y la ausencia en el diff.
+   - **¿Esta instrumentado con el mecanismo del repo?** Si las convenciones declaran una libreria de
+     monitoring, la instrumentacion nueva va por ella (puerto inyectado, decorador, logger de la
+     libreria), no con un cliente o contador ad-hoc en paralelo. Instrumentacion paralela cuando existe
+     libreria es **FALLA (alta)**, citando regla + path.
+   - **¿Nombre y cardinalidad sanos?** Labels que meten identificadores de alta cardinalidad (ids,
+     emails, uuids) o naming que contradice la convencion del repo: `media` normalmente, `alta` si la
+     convencion lo prohibe explicitamente.
+   - **Si la senal apunta a algo que ya existia** (metrica que la libreria emite sola, log ya presente),
+     **no hay nada que exigir al diff**: no es hallazgo. Tampoco lo es una `SENAL: exenta` con motivo
+     coherente con el diff -pero si el motivo dice "refactor puro" y el diff cambia comportamiento
+     observable, eso si es hallazgo (`media`, o `alta` si el cambio es de cara al usuario).
+   - **Si la spec no declara `SENAL`**, no es tu hallazgo: es una spec anterior al mecanismo y el
+     orquestador ya avisa. No lo reportes.
+
+   **Frontera con el item 5.** El item 5 juzga los **AC** (¿hay test que fije cada uno, cumple el codigo
+   su intencion?); este juzga la **senal viva**. Si la slice declaro la emision como AC *y* como senal, y
+   el defecto es uno solo, reportalo **una vez** bajo la regla mas especifica y menciona la otra en
+   `detalle`: la regla "un defecto, un hallazgo" manda, porque el recuento por severidad alimenta las
+   metricas del loop.
+
 ## Veredicto
 
 - **FALLA** si hay algun hallazgo `severidad: alta`. Los `media`/`baja` se reportan pero no bloquean
@@ -151,4 +184,4 @@ bloque de codigo que lo envuelva. El orquestador lo consume como dato.
 
 `regla` es el nombre corto del item de la rubrica que se incumple (`convenciones`, `rollout`,
 `boundaries`, `cobertura-capa`, `conformidad-ac`, `manipulacion-tests`, `fixture-theater`,
-`test-desiderata`). Con `veredicto: PASA` y ningun hallazgo, `hallazgos` es una lista vacia.
+`test-desiderata`, `observabilidad`). Con `veredicto: PASA` y ningun hallazgo, `hallazgos` es una lista vacia.

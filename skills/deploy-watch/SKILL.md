@@ -26,6 +26,14 @@ El agente orquesta el flujo (lanza el **colector** por tick -> `deploy_core` dec
 - **Componer, no reinventar.** Los datos vienen de las **skills de observabilidad** (catalogo abierto; anadir una nueva no debe requerir tocar esta skill); la decision la hace `deploy_core.py`; el RCA lo hace el agente `sre`. Nada de HTTP directo a Prometheus/ES ni de reimplementar acceso a datos.
 - **Recogida aislada en un colector (`focused-agent`, `context-management`).** La salida cruda y verbosa de las `query-*` no se acumula en el hilo principal: un **subagente colector efimero (uno por tick, y en el baseline)** la absorbe en su contexto y devuelve solo la muestra plana `{senal: valor}` mas una tabla de hallazgos con las **queries reproducibles**. El hilo principal elige QUE senales (juicio, por blast radius) y decide/orquesta; el colector solo ejecuta y extrae. `deploy_core` no cambia: sigue recibiendo la misma muestra.
 - **Si el entorno veta los subagentes, degrada y declaralo.** Invocar esta skill **cuenta como pedir** el colector y el `sre`: no es iniciativa del agente, asi que no pidas permiso para lanzarlos. Si una restriccion los impide (veto global al Agent tool, politica de la organizacion), **dilo siempre** y decide con este criterio: **¿se puede declarar la degradacion en el artefacto que produces?** Si se puede, degrada y declaralo **ahi**, no solo en el chat; si el artefacto entero significa justo la garantia que has perdido, para. Esta skill cae del lado de **degradar**: su artefacto -el veredicto comentado en el issue- **puede declarar su propia procedencia**, y ademas lo calcula `deploy_core.py` y no la impresion del agente, asi que la afirmacion sigue siendo verdadera si dice como se obtuvo. Lo que se pierde es higiene de contexto, no validez. Por eso **declararlo no es cortesia, es la condicion que autoriza a degradar**: al arrancar **y** en el informe final, con cuantos ticks se acumularon y el aviso de que una ventana larga pierde fiabilidad (si es larga, propon acortarla o vigilar menos senales). Lo que **no** se degrada nunca: `deploy_core.py` decide siempre. Y quedarte sin monitorizar un deploy ya mergeado seria peor: perderias la vigilancia sin ganar ninguna garantia. (`slice-runner` aplica el **mismo criterio** y para, porque su PR con PASA no puede declararlo: artefacto distinto, no incoherencia.)
+- **La senal declarada por la slice manda.** Si la slice trae una linea `SENAL:` en el issue, esa senal
+  entra **siempre** en el set vigilado, con la criticidad que declara, **por delante** de las inferidas
+  por blast radius (que siguen entrando como complemento). Es la diferencia entre afirmar "el servicio
+  esta sano" -lo unico que permite la inferencia generica- y afirmar "el comportamiento que introdujo
+  esta slice esta pasando en produccion". Y si la senal declarada **no se puede medir** (la serie no
+  existe, la query no devuelve nada, la fuente no responde), el veredicto de esa senal es
+  **`inconclusive`, nunca `go`**: tragarselo devolveria el veredicto generico por la puerta de atras, que
+  es justo lo que la senal declarada viene a corregir. Dilo en el informe y en el comentario del issue.
 - **Veredicto por senales criticas, sostenido.** Solo las senales `critical` fuerzan `no-go`, y solo si el breach **persiste** (`failure_limit` ticks); las `advisory` informan sin bloquear. `deploy_core` respeta warm-up (grace tras el cambio) y min-observe (no declara `go` antes de cubrir rollout+drain). Un pico aislado no dispara anomalia.
 - **Esperas no bloqueantes.** El poll de estabilizacion se hace con **ticks acotados en background + notificacion** (o `Monitor`), devolviendo el control entre ticks. Prohibido una unica shell bloqueante que se quede colgada toda la ventana (30-60 min): es trabajo deterministico del harness, no la IA poll-eando (`offload-deterministic`).
 - **Sin loop infinito.** `max_runtime` (timeout de ventana) + circuit breaker: si no converge, reporte inconcluso con datos, nunca poll eterno.
@@ -41,7 +49,16 @@ El agente orquesta el flujo (lanza el **colector** por tick -> `deploy_core` dec
 
 ### 2. Baseline
 
-- Elige las senales segun el **blast radius** del cambio (ver `references/monitoring.md`: RED en el edge + USE del recurso; toca auth -> `query-keycloak`; toca DB/migracion -> `query-gcloud-logs`/`query-postgres-readonly`). Marca cada senal `critical` o `advisory`.
+- **Empieza por la `SENAL` declarada en el issue** para la slice recien mergeada (si `slice-runner` te
+  la paso, o leela con `issue_body.parse_body`): entra en el set con su criticidad, tal cual. Si dice
+  `exenta`, no hay senal propia y vigilas solo lo generico.
+  Marcala en la config de `deploy_core` con **`declarada: true`** (y su `critical`): es lo que hace que
+  el core la trate distinto -si no llega ninguna muestra suya, el veredicto es `inconclusive` en vez de
+  `go`-. Sin ese flag, la regla seria prosa que el core no aplica.
+- Completa con las senales que pide el **blast radius** del cambio (ver `references/monitoring.md`: RED en el edge + USE del recurso; toca auth -> `query-keycloak`; toca DB/migracion -> `query-gcloud-logs`/`query-postgres-readonly`). Marca cada senal `critical` o `advisory`.
+- **Si la slice vino de otro repo** (`REPO:`: una alerta o un panel), lo desplegado no es el workload de
+  la app: no hay rollout que vigilar y las senales de recursos no dicen nada. El veredicto se apoya en la
+  senal declarada (p. ej. que la regla de alerta cargo y no dispara falsos positivos).
 - Toma varias muestras **pre-cambio lanzando el colector** (mismo mecanismo que el poll, ver paso 3) y agregalas con `deploy_core.aggregate_baseline` (media + std). Comprueba el **gate de baseline ruidoso**; si avisa, alarga el baseline.
 - El baseline es la vara contra la que se comparan los ticks posteriores.
 
@@ -71,7 +88,9 @@ Se ejecuta con **ticks acotados en background + notificacion** (o `Monitor`), no
 
 - **go** (sano): ninguna senal `critical` en breach **sostenido** y cubierta la ventana `min_observe` -> reporte verde, la slice queda **validada en deploy** (veredicto en vivo, no se persiste) y **para**.
 - **no-go** (degradado): una senal `critical` en breach sostenido -> rama de anomalia (paso 5).
-- **inconclusive**: dentro del warm-up, o agotado `max_runtime` sin converger -> reporte con datos y **para**.
+- **inconclusive**: dentro del warm-up, agotado `max_runtime` sin converger, **o una senal declarada por
+  la slice que no se ha podido medir** -> reporte con datos y **para**. Una senal declarada que nadie
+  pudo leer no es un `go`: es un fallo de la senal, y se dice.
 
 ### 5. Rama de anomalia
 
@@ -83,7 +102,11 @@ Se ejecuta con **ticks acotados en background + notificacion** (o `Monitor`), no
 
 Comparte la trazabilidad del pipeline con `slice-runner` a traves del **issue de GitHub** de la feature:
 
-- Al arrancar y en el veredicto, **comenta en el issue** (`gh issue comment`) el resultado del deploy de esa slice: `deploy start`, senales `ok|degradada`, `verdict sano|degradado|inconcluso`, y -si aplica- `rca` + `rollback redactado`, con la **tabla de hallazgos vs baseline y las queries reproducibles del hito** (no una por tick). Asi el issue reune diseno, implementacion y despliegue en un solo hilo.
+- Al arrancar y en el veredicto, **comenta en el issue** (`gh issue comment`) el resultado del deploy de esa slice: `deploy start`, senales `ok|degradada`, `verdict sano|degradado|inconcluso`, y -si aplica- `rca` + `rollback redactado`, con la **tabla de hallazgos vs baseline y las queries reproducibles del hito** (no una por tick).
+- **Di siempre de donde salio la senal**: si la slice declaro `SENAL`, cita su linea y el resultado; si
+  no la declaro (o estaba `exenta`), dilo -el veredicto es entonces la salud generica del servicio, no una
+  comprobacion de *este* cambio-. Es la misma logica que el modo degradado sin subagentes: se puede
+  degradar porque el artefacto **declara** su procedencia. Asi el issue reune diseno, implementacion y despliegue en un solo hilo.
 - **No cambia el estado (marcador/checkbox) de la slice**: ya quedo `mergeada` en el paso 10 de `slice-runner`. El veredicto del deploy es informativo y se registra como comentario, no como estado.
 
 ## Fin

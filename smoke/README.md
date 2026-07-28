@@ -100,6 +100,25 @@ version en disco ya no declaraba, y usaba `Bash`, que ya no estaba en su `tools`
   merge, `[x] ... [mergeada]`.
 - El diff staged de la PR contiene **solo** `fizzbuzz/core.py` y `tests/test_core.py`: ni borradores
   ni artefactos (lo garantiza `gates.py pr-hygiene`).
+- **La `SENAL` viaja y no genera ruido.** La spec de la fixture declara `SENAL: exenta - <motivo>`
+  (libreria pura, sin runtime que observar). El verificador debe **aceptarla** sin hallazgos de
+  `observabilidad`: exigir instrumentacion a una libreria sin despliegue seria un falso positivo, y es
+  justo el modo de fallo del item 9 recien anadido. Comprueba tambien que el resumen del paso 3 y el
+  cuerpo del PR mencionan la senal (o su exencion): si no aparecen, la linea se esta perdiendo entre
+  paso 1 y el implementador.
+
+## Pendiente de smokear (I/O aun no validada)
+
+Lo que los unit tests no pueden cubrir y este smoke **todavia no ejecuta**:
+
+- **Slice cross-repo** (`REPO: <org>/<repo>`): rama, puertas, `gh pr create` y CI **en el repo
+  destino**, con `Part of <org>/<repo-del-issue>#<N>` como referencia cross-repo, y las fuentes de
+  convencion leidas de su subseccion `### <org>/<repo>`. Necesita un segundo repo remoto de pruebas.
+  Hasta que se smokee, esa ruta esta validada solo por la logica pura (`fuentes_para`, parseo de
+  `REPO:`) y por que `gates.py` ya aceptaba `--repo`.
+- **`deploy-watch` con senal declarada**: que una senal `declarada: true` sin muestras devuelva
+  `inconclusive` esta cubierto offline (`tests/test_deploy_core.py`, y el CLI), pero la recogida real
+  de una serie de negocio recien creada no.
 
 ## Evidencia de referencia
 

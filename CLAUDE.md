@@ -38,6 +38,14 @@ coherencia con `ai-patterns`.
   (`feat(name): ...`); la PR referencia el issue con `Part of #N`.
 - **Cada slice tiene nombre**: `name` kebab-case en la spec; alimenta rama (`slice/NN-name`) y
   scope de commit de forma determinista. La skill `slice-spec` produce specs bien formadas.
+- **La observabilidad es parte de la slice**: cada slice que cambia comportamiento en prod declara su
+  linea `SENAL:` (como se comprueba viva; la consume `deploy-watch`), y las exentas lo declaran con
+  motivo. La emision de una senal nueva es un AC mas (test de emision, pre-merge); el valor vivo se
+  comprueba post-deploy. Alertas y paneles son **slices propias**, en su repo (`REPO:`) y **detras** de
+  la slice que emite la serie. El cerebro esta en `skills/slice-spec/references/observabilidad.md`.
+- **Una slice puede vivir en otro repo**: `REPO:` fija el repo destino y **todo** el ciclo ocurre ahi
+  (comandos, rama, puertas, PR, CI), medido con la vara de **ese** repo (su subseccion `### org/repo` en
+  las fuentes de convencion). El issue sigue siendo uno: una feature = un issue.
 
 ## Tras tocar el agente verificador
 

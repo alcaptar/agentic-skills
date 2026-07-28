@@ -70,8 +70,11 @@ Stories* (Richard Lawrence / Humanizing Work) y de SPIDR (Mike Cohn):
 8. **Esfuerzo / simple-complejo** — version hardcodeada o manual primero, automatizacion despues. O
    extrae el nucleo de complejidad como slice aparte (**major effort**: construye la infra con el
    primer caso y los demas salen casi gratis).
-9. **Capacidades transversales aplazables** — performance, telemetria avanzada, i18n, accesibilidad
-   fina: slices propios cuando aporten valor, no bloqueando el core.
+9. **Capacidades transversales aplazables** — performance, i18n, accesibilidad fina, **alertas y
+   paneles**: slices propios cuando aporten valor, no bloqueando el core. **Ojo con la telemetria**:
+   lo aplazable es la telemetria *fina* (dashboards, alerting calibrado, tracing exhaustivo); la
+   **senal minima que hace observable la slice no es aplazable** y va dentro de ella (ver
+   "Observabilidad de la slice").
 10. **Spike** — si hay incertidumbre tecnica, un spike timeboxed que produce **conocimiento** (no
     codigo a prod) es una slice valida y explicita.
 
@@ -105,6 +108,26 @@ fijo hardcodeado; (3) leer estado y elegir tax de una tabla; (4) primer tramo de
 resto de tramos; (6) formato de salida. Cada loncha se commitea, prueba y "entrega" antes de la
 siguiente.
 
+## Observabilidad de la slice
+
+Cortar bien incluye decidir **como se vera vivo** lo que cortas. La regla: toda slice que cambia
+comportamiento observable en produccion declara su linea `SENAL:` (como se comprueba viva); las demas
+declaran `SENAL: exenta - <motivo>`. Ausencia silenciosa no es exencion.
+
+El detalle -la escalera para decidir si hace falta instrumentar o la senal ya existe, el stack
+concreto (libreria de monitoring, repo de alertas, repo de paneles), y como se redacta la linea- vive
+en **`observabilidad.md`**: cargalo cuando el corte tenga senal que disenar.
+
+Lo que si es del troceo:
+
+- **Alertas y paneles son slices propias.** Viven en otros repos (⇒ PRs distintas por definicion) y se
+  declaran con `REPO:` en su linea de slice.
+- **Orden forzoso**: no se puede alertar ni pintar una serie que nadie emite. Primero la slice que
+  emite la senal, luego (tras deploy y senal viva) la alerta, y por ultimo el panel. Es el mismo
+  razonamiento que "Aislamiento de infra": despliega, observa, y luego el paso siguiente.
+- **El panel es el mejor candidato al test de despriorizacion**: si tu set de slices no tiene ninguna
+  posponible, el panel casi siempre lo es.
+
 ## Validacion del corte
 
 Ademas de validar cada slice contra los criterios, valida el **conjunto**:
@@ -113,6 +136,9 @@ Ademas de validar cada slice contra los criterios, valida el **conjunto**:
   tirar o posponer** sin perder el core. Si no puedes despriorizar ninguna, probablemente cortaste
   por trocear (horizontal disfrazado) en vez de por valor. Es el mejor detector de "slices sin
   valor".
+- **Cadena de observabilidad completa** — si alguna slice emite una senal nueva relevante, el conjunto
+  debe tener su slice de alerta (y de panel si aporta), o una **decision explicita** de no tenerlas. Que
+  falten por olvido es como cortar sin AC: se descubre en el incidente.
 - **Igualdad de tamano** — prefiere slices de tamano parecido (cuatro de ~2 mejor que una de 5 + una
   de 3): maximiza la flexibilidad de priorizacion y evita la slice-monstruo escondida.
 
@@ -146,10 +172,11 @@ Como llega una slice vertical a prod siendo reversible y desplegable sola sin ro
 - **Budget de tamano:** **~300-400 lineas de diff por PR** como default recomendado. Es una guia de
   blast radius, no una ley fisica; un repo puede afinarlo. Si una slice lo supera, trocearla.
 - **Verificacion post-deploy:** cada slice que llega a prod define **como se comprueba su
-  comportamiento vivo** — evidencia observable, ejecutable, con su assert y su via de rollback. La
-  **forma** depende del repo: un servicio HTTP usara `curl` + assert de status/body; una lib o CLI,
-  una invocacion + salida esperada; un job, un efecto observable. No hardcodees el mecanismo HTTP
-  como si fuera universal.
+  comportamiento vivo** — evidencia observable, ejecutable, con su assert y su via de rollback. Eso
+  es exactamente la linea `SENAL:` del contrato de la spec, y quien la consume es `deploy-watch`. La
+  **forma** depende del repo: un servicio HTTP mirara errores/latencia en el edge; una lib o CLI, una
+  invocacion + salida esperada; un job, un efecto observable. No hardcodees el mecanismo HTTP como si
+  fuera universal.
 
 ## Anti-patterns
 
@@ -162,6 +189,9 @@ Como llega una slice vertical a prod siendo reversible y desplegable sola sin ro
 - PRs que dependen de un orden concreto de merge para no romper produccion.
 - Nombrar slices por capa tecnica cuando el corte vertical SI cabia en el budget (el horizontal es
   para cuando el vertical no entra, no por defecto).
+- Slices que cambian comportamiento en prod **sin senal declarada** (ni exencion escrita): el deploy se
+  valida entonces con el veredicto generico y nadie lo decidio.
+- Meter la alerta o el panel **en la misma PR** que la metrica que consumen.
 - Dejar el caso mas arriesgado para el final.
 - Slices con "y"/"o" en el titulo que esconden varias features.
 - Un set de slices donde **no puedes despriorizar ninguna** (senal de corte horizontal disfrazado).
