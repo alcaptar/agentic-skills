@@ -89,7 +89,9 @@ def test_staged_fuera_de_lo_declarado(repo: Path) -> None:
     assert any("src/extra.py" in h for h in res.hallazgos)
 
 
-def test_main_json_funciona_tras_el_subcomando(repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
+def test_main_json_funciona_tras_el_subcomando(
+    repo: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
     # Regresion #1: --json debe aceptarse DESPUES del subcomando (como documenta el uso).
     _stage(repo, "src/a.py")
     code = gates.main(["pr-hygiene", "--repo", str(repo), "--allow", "src/a.py", "--json"])
@@ -137,7 +139,9 @@ def test_tail_no_recorta_si_cabe() -> None:
 
 def test_check_que_pasa_no_trae_salida(repo: Path) -> None:
     # En PASA solo interesa el veredicto: la salida se descarta (mensaje corto de exito).
-    res = gates.run_checks(str(repo), [("ok", "echo mucho ruido de build")], tail_lines=30, timeout=10)
+    res = gates.run_checks(
+        str(repo), [("ok", "echo mucho ruido de build")], tail_lines=30, timeout=10
+    )
     assert res.passed
     assert res.checks[0].exit_code == 0
     assert res.checks[0].salida == ""
@@ -277,7 +281,16 @@ def test_main_diff_bundle_json_imprime_las_rutas(
 ) -> None:
     out = tmp_path / "bundle"
     code = gates.main(
-        ["diff-bundle", "--repo", str(repo_con_rama), "--base", "master", "--out", str(out), "--json"]
+        [
+            "diff-bundle",
+            "--repo",
+            str(repo_con_rama),
+            "--base",
+            "master",
+            "--out",
+            str(out),
+            "--json",
+        ]
     )
     assert code == 0
     data = json.loads(capsys.readouterr().out)
@@ -290,6 +303,14 @@ def test_main_diff_bundle_json_imprime_las_rutas(
 
 def test_main_diff_bundle_exit_1_si_falla(repo_con_rama: Path, tmp_path: Path) -> None:
     code = gates.main(
-        ["diff-bundle", "--repo", str(repo_con_rama), "--base", "nope", "--out", str(tmp_path / "b")]
+        [
+            "diff-bundle",
+            "--repo",
+            str(repo_con_rama),
+            "--base",
+            "nope",
+            "--out",
+            str(tmp_path / "b"),
+        ]
     )
     assert code == 1

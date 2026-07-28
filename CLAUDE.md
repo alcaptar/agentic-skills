@@ -56,8 +56,17 @@ Para probarlo hace falta sesion nueva; si no, el smoke valida la definicion equi
 ## Verificacion tras tocar los scripts
 
 ```bash
-python3 -m pytest   # logica pura del cuerpo del issue + gates + metrics; debe estar verde
+make check   # linting (ruff check + format) + mypy strict + pytest; todo debe estar verde
 ```
+
+Targets sueltos: `make test`, `make check-types`, `make check-style`, `make check-format`,
+`make fix-linting`. El toolchain lo gestiona `uv` (grupo `dev` de `pyproject.toml`), asi que no
+hay que instalar nada a mano: `uv run` lo resuelve la primera vez. `python3 -m pytest` tambien
+funciona si tienes pytest global, pero `make check` es la vara completa.
+
+Dos decisiones de config que no hay que re-litigar (razonadas en `pyproject.toml`): `ruff` **no**
+formatea los `.md` -aqui los `.md` son el producto- y las reglas `S` (bandit) estan **desactivadas**
+porque sus hallazgos viven todos en `gates.py`, donde lanzar procesos es el cometido del fichero.
 
 El estado del run vive en el issue de GitHub: no hay panel ni estado local que verificar. La I/O
 contra `gh` la valida el smoke real (ver `smoke/README.md`).

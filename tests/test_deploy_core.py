@@ -19,7 +19,13 @@ from deploy_core import (
     verdict,
 )
 
-_CORE = Path(__file__).resolve().parent.parent / "skills" / "deploy-watch" / "scripts" / "deploy_core.py"
+_CORE = (
+    Path(__file__).resolve().parent.parent
+    / "skills"
+    / "deploy-watch"
+    / "scripts"
+    / "deploy_core.py"
+)
 
 
 def test_aggregate_baseline_mean_std() -> None:
@@ -61,7 +67,9 @@ def test_classify_inverted_ready() -> None:
 
 def test_scorecard_confirmacion_sostenida() -> None:
     # un unico breach aislado NO se confirma con failure_limit=2
-    cfg = MonitorConfig(signals={"e": SignalConfig(mode="absolute", warn_abs=1, crit_abs=5)}, failure_limit=2)
+    cfg = MonitorConfig(
+        signals={"e": SignalConfig(mode="absolute", warn_abs=1, crit_abs=5)}, failure_limit=2
+    )
     hist_pico = [{"e": 0.0}, {"e": 9.0}, {"e": 0.0}]
     card = build_scorecard(hist_pico, {}, cfg)
     assert card["e"]["breaches"] == 1
@@ -121,8 +129,14 @@ def test_verdict_senal_declarada_sin_medir_no_es_go() -> None:
     # o el generico ("el servicio esta sano") volveria por la puerta de atras.
     cfg = MonitorConfig(warmup_secs=60, min_observe_secs=100)
     card = {
-        "ajustes": {"critical": True, "confirmed": False, "worst": dc.OK, "breaches": 0,
-                    "measured": False, "declarada": True},
+        "ajustes": {
+            "critical": True,
+            "confirmed": False,
+            "worst": dc.OK,
+            "breaches": 0,
+            "measured": False,
+            "declarada": True,
+        },
     }
 
     v = verdict(card, cfg, elapsed_secs=400)
@@ -135,8 +149,14 @@ def test_verdict_senal_inferida_sin_medir_no_frena_el_go() -> None:
     # Solo la declarada en la spec tiene esa fuerza: las inferidas son best-effort.
     cfg = MonitorConfig(warmup_secs=60, min_observe_secs=100)
     card = {
-        "cpu": {"critical": False, "confirmed": False, "worst": dc.OK, "breaches": 0,
-                "measured": False, "declarada": False},
+        "cpu": {
+            "critical": False,
+            "confirmed": False,
+            "worst": dc.OK,
+            "breaches": 0,
+            "measured": False,
+            "declarada": False,
+        },
     }
 
     assert verdict(card, cfg, elapsed_secs=400)["verdict"] == dc.GO
@@ -145,10 +165,22 @@ def test_verdict_senal_inferida_sin_medir_no_frena_el_go() -> None:
 def test_verdict_breach_real_manda_sobre_senal_sin_medir() -> None:
     cfg = MonitorConfig(warmup_secs=60, min_observe_secs=100)
     card = {
-        "err": {"critical": True, "confirmed": True, "worst": dc.BREACH, "breaches": 3,
-                "measured": True, "declarada": False},
-        "ajustes": {"critical": True, "confirmed": False, "worst": dc.OK, "breaches": 0,
-                    "measured": False, "declarada": True},
+        "err": {
+            "critical": True,
+            "confirmed": True,
+            "worst": dc.BREACH,
+            "breaches": 3,
+            "measured": True,
+            "declarada": False,
+        },
+        "ajustes": {
+            "critical": True,
+            "confirmed": False,
+            "worst": dc.OK,
+            "breaches": 0,
+            "measured": False,
+            "declarada": True,
+        },
     }
 
     v = verdict(card, cfg, elapsed_secs=400)
@@ -160,7 +192,9 @@ def test_verdict_breach_real_manda_sobre_senal_sin_medir() -> None:
 def test_cli_verdict_json() -> None:
     payload = {
         "config": {
-            "signals": {"err": {"critical": True, "mode": "absolute", "warn_abs": 1, "crit_abs": 5}},
+            "signals": {
+                "err": {"critical": True, "mode": "absolute", "warn_abs": 1, "crit_abs": 5}
+            },
             "failure_limit": 2,
             "warmup_secs": 0,
             "min_observe_secs": 0,

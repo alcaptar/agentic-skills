@@ -194,9 +194,13 @@ def tail(text: str, lines: int) -> str:
 def run_check(repo: str, nombre: str, comando: str, tail_lines: int, timeout: int) -> CheckResult:
     """Ejecuta una puerta y devuelve exit code + salida truncada solo si falla."""
     try:
+        # `shell=True` es deliberado: el comando lo autodetecta el paso 2 del propio repo
+        # (`make test`, `uv run pytest`...) y llega como una linea de shell, no como argv.
+        # `check=False` tambien: el exit code ES el resultado que devolvemos, no una excepcion.
         out = subprocess.run(
             comando,
-            shell=True,  # noqa: S602 - el comando lo autodetecto el paso 2 del propio repo
+            shell=True,
+            check=False,
             cwd=repo,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
@@ -208,7 +212,9 @@ def run_check(repo: str, nombre: str, comando: str, tail_lines: int, timeout: in
     passed = out.returncode == 0
     # En PASA la salida se descarta: el mensaje corto de exito evita meter ruido de
     # build en el contexto de quien consuma esto.
-    return CheckResult(nombre, comando, passed, out.returncode, "" if passed else tail(out.stdout, tail_lines))
+    return CheckResult(
+        nombre, comando, passed, out.returncode, "" if passed else tail(out.stdout, tail_lines)
+    )
 
 
 def run_checks(
@@ -281,7 +287,9 @@ def write_diff_bundle(repo: str, base: str, out: str) -> BundleResult:
         # Fail-closed, igual que `pr-hygiene` con nada staged: sin cambios no hay
         # nada que verificar, y un bundle vacio haria que el verificador diera PASA
         # sobre la nada.
-        return BundleResult(passed=False, hallazgos=[f"sin cambios respecto a {base}: nada que verificar"])
+        return BundleResult(
+            passed=False, hallazgos=[f"sin cambios respecto a {base}: nada que verificar"]
+        )
 
     out_dir = Path(out)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -356,7 +364,12 @@ def main(argv: list[str] | None = None) -> int:
         default=[],
         help="puerta como nombre=comando, p. ej. lint='make linting' (repetible)",
     )
-    chk.add_argument("--tail", type=int, default=DEFAULT_TAIL, help=f"lineas de salida en fallo (default {DEFAULT_TAIL})")
+    chk.add_argument(
+        "--tail",
+        type=int,
+        default=DEFAULT_TAIL,
+        help=f"lineas de salida en fallo (default {DEFAULT_TAIL})",
+    )
     chk.add_argument(
         "--timeout",
         type=int,

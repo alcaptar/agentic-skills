@@ -140,9 +140,21 @@ def test_cli_acepta_bloqueada_puertas_y_reintentos_de_puertas(tmp_path: Path) ->
     path = tmp_path / "m.jsonl"
     code = metrics.main(
         [
-            "record", "--repo", "r", "--slice", "slice-01", "--name", "x",
-            "--veredicto", "bloqueada-puertas", "--ci", "none",
-            "--reintentos-puertas", "2", "--path", str(path),
+            "record",
+            "--repo",
+            "r",
+            "--slice",
+            "slice-01",
+            "--name",
+            "x",
+            "--veredicto",
+            "bloqueada-puertas",
+            "--ci",
+            "none",
+            "--reintentos-puertas",
+            "2",
+            "--path",
+            str(path),
         ]
     )
     assert code == 0

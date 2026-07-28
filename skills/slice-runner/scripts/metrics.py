@@ -32,7 +32,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 DEFAULT_PATH = Path.home() / ".claude" / "slice-runner" / "metrics.jsonl"
@@ -49,7 +49,7 @@ def _path(arg: str | None) -> Path:
 
 
 def record(args: argparse.Namespace) -> int:
-    ts = args.ts or datetime.now(timezone.utc).isoformat()
+    ts = args.ts or datetime.now(UTC).isoformat()
     entry: dict[str, object] = {
         "ts": ts,
         "repo": args.repo,
@@ -169,7 +169,9 @@ def report(args: argparse.Namespace) -> int:
     print(f"  reintentos CI          {agg['reintentos_ci_media']} media")
     print(f"  duracion               {agg['duracion_s_media']}s media")
     if agg["coste_tokens_media"] is not None:
-        print(f"  coste tokens           {agg['coste_tokens_media']} media ({agg['coste_muestras']} muestras)")
+        print(
+            f"  coste tokens           {agg['coste_tokens_media']} media ({agg['coste_muestras']} muestras)"
+        )
     else:
         print("  coste tokens           sin datos (ver OTel de Claude Code)")
     return 0
@@ -194,7 +196,11 @@ def main(argv: list[str] | None = None) -> int:
     rec.add_argument("--duracion-s", type=int, default=None)
     rec.add_argument("--coste-tokens", type=int, default=None)
     rec.add_argument("--ts", default=None, help="ISO ts; default now(UTC)")
-    rec.add_argument("--path", default=None, help="override del log (default ~/.claude/slice-runner/metrics.jsonl)")
+    rec.add_argument(
+        "--path",
+        default=None,
+        help="override del log (default ~/.claude/slice-runner/metrics.jsonl)",
+    )
     rec.set_defaults(func=record)
 
     rep = sub.add_parser("report", help="agrega el log y calcula las cifras de nivel")

@@ -210,9 +210,7 @@ def test_render_fuentes_section_formato_canonico() -> None:
         [Fuente("doc", ".claude/CLAUDE.md"), Fuente("skill", ".claude/skills/pr")]
     )
     assert section == (
-        "## Fuentes de convencion\n"
-        "- doc: .claude/CLAUDE.md\n"
-        "- skill: .claude/skills/pr"
+        "## Fuentes de convencion\n- doc: .claude/CLAUDE.md\n- skill: .claude/skills/pr"
     )
 
 

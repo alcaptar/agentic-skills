@@ -62,7 +62,7 @@ class SignalConfig:
     declarada: bool = False
 
     @staticmethod
-    def from_dict(d: dict[str, object]) -> "SignalConfig":
+    def from_dict(d: dict[str, object]) -> SignalConfig:
         f = SignalConfig()
         for k, v in d.items():
             if hasattr(f, k):
@@ -73,13 +73,13 @@ class SignalConfig:
 @dataclass
 class MonitorConfig:
     signals: dict[str, SignalConfig] = field(default_factory=dict)
-    failure_limit: int = 2       # ticks seguidos en breach para confirmarlo
-    warmup_secs: int = 60        # grace tras el cambio: breaches se ven pero no cuentan
+    failure_limit: int = 2  # ticks seguidos en breach para confirmarlo
+    warmup_secs: int = 60  # grace tras el cambio: breaches se ven pero no cuentan
     min_observe_secs: int = 300  # no declarar `go` antes de cubrir esta ventana
-    noisy_cv: float = 0.5        # coef. de variacion del baseline por encima del cual se avisa
+    noisy_cv: float = 0.5  # coef. de variacion del baseline por encima del cual se avisa
 
     @staticmethod
-    def from_dict(d: dict[str, object]) -> "MonitorConfig":
+    def from_dict(d: dict[str, object]) -> MonitorConfig:
         cfg = MonitorConfig()
         signals = d.get("signals", {})
         if isinstance(signals, dict):
@@ -167,7 +167,9 @@ def build_scorecard(
     """Por senal: peor estado, nº de breaches y si el breach esta confirmado (sostenido)."""
     card: dict[str, dict[str, object]] = {}
     order = {OK: 0, WARN: 1, BREACH: 2}
-    signals = config.signals or {k: SignalConfig() for k in (tick_history[0] if tick_history else {})}
+    signals = config.signals or {
+        k: SignalConfig() for k in (tick_history[0] if tick_history else {})
+    }
     for sig, cfg in signals.items():
         states = [classify(float(t[sig]), baseline.get(sig), cfg) for t in tick_history if sig in t]
         worst = max(states, key=lambda s: order[s]) if states else OK
@@ -194,21 +196,19 @@ def verdict(
     if elapsed_secs < config.warmup_secs:
         return {"verdict": INCONCLUSIVE, "reason": "en warm-up", "blocking": []}
 
-    blocking = [
-        sig
-        for sig, s in scorecard.items()
-        if s.get("critical") and s.get("confirmed")
-    ]
+    blocking = [sig for sig, s in scorecard.items() if s.get("critical") and s.get("confirmed")]
     if blocking:
-        return {"verdict": NO_GO, "reason": "senal critica en breach sostenido", "blocking": blocking}
+        return {
+            "verdict": NO_GO,
+            "reason": "senal critica en breach sostenido",
+            "blocking": blocking,
+        }
 
     # Una senal declarada en la spec que no se pudo medir (serie inexistente, query vacia,
     # fuente caida) no es un `go`: es un fallo de la senal, y hay que decirlo. Va despues del
     # no-go porque un breach real es informacion mas fuerte que "no se pudo medir".
     sin_medir = [
-        sig
-        for sig, s in scorecard.items()
-        if s.get("declarada") and not s.get("measured")
+        sig for sig, s in scorecard.items() if s.get("declarada") and not s.get("measured")
     ]
     if sin_medir:
         return {

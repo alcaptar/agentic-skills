@@ -78,9 +78,7 @@ _REPO_LINE_RE = re.compile(r"^REPO\s*:\s*(.+?)\s*$", re.IGNORECASE)
 FUENTE_TIPOS = ("doc", "skill")
 
 _FUENTES_HEADING = "## Fuentes de convencion"
-_FUENTES_HEADING_RE = re.compile(
-    r"^\s*##\s+fuentes\s+de\s+convenci[oó]n\s*$", re.IGNORECASE
-)
+_FUENTES_HEADING_RE = re.compile(r"^\s*##\s+fuentes\s+de\s+convenci[oó]n\s*$", re.IGNORECASE)
 _H2_RE = re.compile(r"^\s*##\s+")
 _FUENTES_SUBHEADING_RE = re.compile(r"^\s*###\s+(.+?)\s*$")
 _FUENTE_LINE_RE = re.compile(r"^\s*-\s*(doc|skill)\s*:\s*(.+?)\s*$", re.IGNORECASE)
@@ -182,7 +180,7 @@ def parse_body(body: str) -> list[Slice]:
             continue
         stripped = line.strip()
         if stripped.startswith("AC:"):
-            current.ac.append(stripped[len("AC:"):].strip())
+            current.ac.append(stripped[len("AC:") :].strip())
             continue
         if senal := _SENAL_LINE_RE.match(stripped):
             current.senal.append(senal.group(1).strip())
