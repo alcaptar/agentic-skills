@@ -32,22 +32,24 @@ coherencia con `ai-patterns`.
   cuerpo de un issue (una feature = un issue), unica fuente de verdad viva y duradera. No hay estado
   local (`.slice-runner/`, ledger, panel). El registro duradero son el issue (intencion + estado) y
   las PRs mergeadas (codigo), no ficheros de estado en el repo.
-- **La intencion se declara y viaja**: el issue abre con `## Intencion` (que esta mal hoy) y cada slice
-  lleva su linea `INTENCION:` (el coste de no hacerla). De ahi sale el cuerpo de cada PR, que cuenta el
-  **por que** en lugar de resumir el codigo -eso ya lo cuenta el diff-. Vara: si borras la slice, ¿que
-  queda roto o imposible? Si no puedes nombrarlo, la linea es relleno. No hay exencion, a diferencia de
-  `SENAL:`. Si un issue viejo no la trae, la PR la reconstruye y **declara que la infirio**.
+- **La intencion se declara y viaja**: el issue abre con `## Intencion` (que esta mal hoy) y cada
+  slice lleva su linea `INTENCION:` (el coste de no hacerla). De ahi sale el cuerpo de cada PR, que
+  cuenta el **por que** en lugar de resumir el codigo -eso ya lo cuenta el diff-. Vara: si borras la
+  slice, ¿que queda roto o imposible? Si no puedes nombrarlo, la linea es relleno. No hay exencion,
+  a diferencia de `SENAL:`. Si un issue viejo no la trae, la PR la reconstruye y **declara que la
+  infirio**.
 - **La PR solo lleva el codigo de la slice**: el commit stagea unicamente los ficheros de
   codigo/test de la slice (`git add` explicito, nunca `-A`/`.`); planes y design-docs jamas entran
   en la PR (la spec vive en el issue). Conventional commits con el `name` de la slice como scope
   (`feat(name): ...`); la PR referencia el issue con `Part of #N`.
 - **Cada slice tiene nombre**: `name` kebab-case en la spec; alimenta rama (`slice/NN-name`) y
   scope de commit de forma determinista. La skill `slice-spec` produce specs bien formadas.
-- **La observabilidad es parte de la slice**: cada slice que cambia comportamiento en prod declara su
-  linea `SENAL:` (como se comprueba viva; la consume `deploy-watch`), y las exentas lo declaran con
-  motivo. La emision de una senal nueva es un AC mas (test de emision, pre-merge); el valor vivo se
-  comprueba post-deploy. Alertas y paneles son **slices propias**, en su repo (`REPO:`) y **detras** de
-  la slice que emite la serie. El cerebro esta en `skills/slice-spec/references/observabilidad.md`.
+- **La observabilidad es parte de la slice**: cada slice que cambia comportamiento en prod declara
+  su linea `SENAL:` (como se comprueba viva; la consume `deploy-watch`), y las exentas lo declaran
+  con motivo. La emision de una senal nueva es un criterio de aceptacion mas (test de emision,
+  pre-merge); el valor vivo se comprueba post-deploy. Alertas y paneles son **slices propias**, en
+  su repo (`REPO:`) y **detras** de la slice que emite la serie. El cerebro esta en
+  `skills/slice-spec/references/observabilidad.md`.
 - **Una slice puede vivir en otro repo**: `REPO:` fija el repo destino y **todo** el ciclo ocurre ahi
   (comandos, rama, puertas, PR, CI), medido con la vara de **ese** repo (su subseccion `### org/repo` en
   las fuentes de convencion). El issue sigue siendo uno: una feature = un issue.

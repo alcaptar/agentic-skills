@@ -138,7 +138,7 @@ Ademas de validar cada slice contra los criterios, valida el **conjunto**:
   valor".
 - **Cadena de observabilidad completa** — si alguna slice emite una senal nueva relevante, el conjunto
   debe tener su slice de alerta (y de panel si aporta), o una **decision explicita** de no tenerlas. Que
-  falten por olvido es como cortar sin AC: se descubre en el incidente.
+  falten por olvido es como cortar sin criterios de aceptacion: se descubre en el incidente.
 - **Igualdad de tamano** — prefiere slices de tamano parecido (cuatro de ~2 mejor que una de 5 + una
   de 3): maximiza la flexibilidad de priorizacion y evita la slice-monstruo escondida.
 

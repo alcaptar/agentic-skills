@@ -56,11 +56,11 @@ verificacion de `slice-runner` rompe.
 ```
 idea
   -> [slice-spec]    brainstorming + crea un issue de GitHub con la spec de slices
-                     (intencion + name + AC + senal)
+                     (intencion + name + criterios de aceptacion + senal)
 issue de GitHub (1 feature = 1 issue; estado de cada slice en su linea)
   -> [slice-runner]  implementa (TDD por capa + refactor tras verde)
                      verifica (convenciones del repo + boundaries + test-desiderata)
-                     abre PR (intencion + AC + senal, Part of #N), espera CI verde
+                     abre PR (intencion + criterios + senal, Part of #N), espera CI verde
                      marca la slice "esperando-merge" en el issue y vigila la PR
   -> (tu mergeas en GitHub: el merge sigue siendo humano; la slice pasa a [x] mergeada)
   -> [deploy-watch]  se encadena AUTO al detectar el merge; arranca sola
@@ -72,9 +72,10 @@ issue de GitHub (1 feature = 1 issue; estado de cada slice en su linea)
 ### slice-spec
 
 Convierte una idea en una **spec bien formada** que `slice-runner` sabe ejecutar. Envuelve
-`superpowers:brainstorming` para el diseno y luego emite el formato exacto (checklist de slices)
-con un **nombre kebab-case por slice** y AC. Modo `validate` para revisar una spec existente contra el
-contrato. No implementa codigo: **crea el issue de GitHub** con la spec (1 feature = 1 issue).
+`superpowers:brainstorming` para el diseno y luego emite el formato exacto (checklist de slices) con
+un **nombre kebab-case por slice** y criterios de aceptacion. Modo `validate` para revisar una spec
+existente contra el contrato. No implementa codigo: **crea el issue de GitHub** con la spec (1
+feature = 1 issue).
 
 El issue abre con la **intencion**: que esta mal hoy y como se nota, y una linea por slice con el coste
 de no hacerla. La vara es esa: si borras la slice, ¿que queda roto o imposible? Si no puedes nombrarlo,
@@ -83,24 +84,25 @@ la linea es relleno. Es lo que despues rellena el cuerpo de cada PR.
 ### slice-runner
 
 Nivel 1 (una slice por invocacion; envolver en `/loop` para Nivel 2). La spec es un **checklist de
-slices**: `## Slices` con una linea `- [ ] slice-NN (name): ...` por slice y sus AC. Una feature de
-una sola slice es un checklist con una unica linea.
+slices**: `## Slices` con una linea `- [ ] slice-NN (name): ...` por slice y sus criterios de
+aceptacion. Una feature de una sola slice es un checklist con una unica linea.
 
-La spec y el estado de cada slice viven en el **issue de GitHub** (unica fuente de verdad). Cada slice
-tiene **nombre**: alimenta la rama (`slice/NN-name`) y el scope de conventional commit
-(`feat(name): ...`). Puertas antes de abrir PR, **en este orden**: lint/tipos/tests (deterministas, via
-`gates.py checks`) -> verificador adversarial (convenciones del repo -> `backend-best-practices` -> TDD
-por capa -> `test-desiderata` -> constraints/boundaries) -> CI verde. Las deterministas van **primero** a
-proposito: cuando corre el verificador ya estan verdes, asi que no ve output de build y no gasta un
-reintento adversarial en un `ruff` sucio. **La PR
-solo lleva el codigo de la slice**: se stagean unicamente los ficheros que produjo el implementador,
-nunca planes ni design-docs (la spec vive en el issue), y referencia el issue con `Part of #N`. Su
-cuerpo cuenta **la intencion** (que estaba mal y deja de estarlo), los AC cumplidos y la senal a
-comprobar tras el despliegue; nunca enumera ficheros ni narra el diff, que eso ya lo cuenta GitHub. No hace
+La spec y el estado de cada slice viven en el **issue de GitHub** (unica fuente de verdad). Cada
+slice tiene **nombre**: alimenta la rama (`slice/NN-name`) y el scope de conventional commit
+(`feat(name): ...`). Puertas antes de abrir PR, **en este orden**: lint/tipos/tests (deterministas,
+via `gates.py checks`) -> verificador adversarial (convenciones del repo -> `backend-best-practices`
+-> TDD por capa -> `test-desiderata` -> constraints/boundaries) -> CI verde. Las deterministas van
+**primero** a proposito: cuando corre el verificador ya estan verdes, asi que no ve output de build
+y no gasta un reintento adversarial en un `ruff` sucio. **La PR solo lleva el codigo de la slice**:
+se stagean unicamente los ficheros que produjo el implementador, nunca planes ni design-docs (la
+spec vive en el issue), y referencia el issue con `Part of #N`. Su cuerpo cuenta **la intencion**
+(que estaba mal y deja de estarlo), los criterios de aceptacion cumplidos y la senal a comprobar
+tras el despliegue; nunca enumera ficheros ni narra el diff, que eso ya lo cuenta GitHub. No hace
 merge. Por defecto trabaja en una **rama normal** (no asume worktree; solo lo usa si se paralelizan
 slices). Tras CI verde marca la slice **esperando-merge** en el issue y vigila la PR; al detectar el
 merge la marca **`[x]` mergeada** y encadena `deploy-watch`. Las esperas (CI, merge) son ticks en
-background, nunca una shell bloqueante. No hay estado local que descartar: el estado vive en el issue.
+background, nunca una shell bloqueante. No hay estado local que descartar: el estado vive en el
+issue.
 
 ### deploy-watch
 
@@ -125,7 +127,7 @@ metricas del loop (tasa de FALLA, reintentos...) viven fuera del repo en
 
 ## Principios comunes
 
-- Escritor != verificador, pero el verificador **revisa convenciones/arquitectura, no re-testea** (CI + AC gobiernan la correccion) y **no ejecuta puertas ni ve output de build**: corren antes, y su presupuesto entero es para lo semantico.
+- Escritor != verificador, pero el verificador **revisa convenciones/arquitectura, no re-testea** (CI + criterios de aceptacion gobiernan la correccion) y **no ejecuta puertas ni ve output de build**: corren antes, y su presupuesto entero es para lo semantico.
 - **Los subagentes son la garantia, no un detalle**: invocar una skill cuenta como pedirlos. Si el entorno los veta, decide **un solo criterio**: ¿se puede declarar la degradacion en el artefacto? Si si, degrada y declaralo ahi; si el artefacto entero significa la garantia perdida, para. De ahi salen las dos respuestas -`slice-runner` **para** (su PR con PASA seria falsa de forma invisible) y `deploy-watch` **degrada declarandolo** (su veredicto puede decir como se obtuvo, y lo calcula `deploy_core.py`)-, que por eso no son dos reglas sino una. El criterio se escribe **en cada skill**, no en un fichero compartido: se duplica a cambio de que todo quede versionado en este repo y cada skill sea autocontenida.
 - Puertas de parada objetivas y deterministas.
 - Convenciones del repo como vara de medir principal.

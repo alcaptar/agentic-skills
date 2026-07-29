@@ -19,6 +19,8 @@ from issue_body import (
     tiene_seccion_fuentes,
 )
 
+# Este cuerpo usa la etiqueta vieja `AC:` a proposito: es la cobertura de los issues
+# abiertos antes del rename a `ACEPTACION:`.
 _BODY = """\
 # Feature X
 
@@ -68,11 +70,28 @@ def test_parse_body_estados_intermedios() -> None:
     assert by_id["slice-05"].estado == "pendiente"
 
 
-def test_parse_body_recoge_ac() -> None:
+def test_parse_body_recoge_los_criterios_de_aceptacion() -> None:
     by_id = {s.slice_id: s for s in parse_body(_BODY)}
-    assert by_id["slice-01"].ac == ["rechaza negativos; tests en test/domain/test_cantidad.py"]
-    assert by_id["slice-02"].ac == ["emite evento StockAjustado", "no toca infra directamente"]
-    assert by_id["slice-03"].ac == []
+    assert by_id["slice-01"].aceptacion == [
+        "rechaza negativos; tests en test/domain/test_cantidad.py"
+    ]
+    assert by_id["slice-02"].aceptacion == [
+        "emite evento StockAjustado",
+        "no toca infra directamente",
+    ]
+    assert by_id["slice-03"].aceptacion == []
+
+
+def test_parse_body_acepta_la_etiqueta_vieja_ac() -> None:
+    # `AC:` se renombro a `ACEPTACION:`, pero hay issues abiertos escritos con la vieja:
+    # dejar de parsearla los dejaria sin criterios y sin puerta de verificacion.
+    body = "## Slices\n- [ ] slice-01 (x): T [pendiente]\n      AC: rechaza negativos\n"
+    assert parse_body(body)[0].aceptacion == ["rechaza negativos"]
+
+
+def test_parse_body_acepta_aceptacion_con_tilde() -> None:
+    body = "## Slices\n- [ ] slice-01 (x): T [pendiente]\n      ACEPTACIÓN: rechaza negativos\n"
+    assert parse_body(body)[0].aceptacion == ["rechaza negativos"]
 
 
 def test_parse_body_ignora_lineas_no_slice() -> None:
@@ -93,7 +112,7 @@ def test_set_estado_preserva_el_resto_del_cuerpo() -> None:
     nuevo = set_slice_estado(_BODY, "slice-03", "esperando-merge", pr=99)
     # otras slices intactas
     assert "- [x] slice-01 (cantidad-vo): Crear VO [mergeada] PR #11" in nuevo
-    # AC de slice-02 intactos
+    # los criterios de slice-02 intactos
     assert "      AC: no toca infra directamente" in nuevo
     # intro intacta
     assert "Intro de la feature." in nuevo
@@ -163,7 +182,7 @@ Intro de la feature.
 
 ## Slices
 - [ ] slice-01 (vo): Crear VO [pendiente]
-      AC: rechaza negativos
+      ACEPTACION: rechaza negativos
 """
 
 _BODY_SIN_FUENTES = """\
@@ -236,7 +255,7 @@ def test_set_fuentes_reemplaza_seccion_existente_preservando_el_resto() -> None:
     # lo de despues de la seccion sigue intacto
     assert "Intro de la feature." in nuevo
     by_id = {s.slice_id: s for s in parse_body(nuevo)}
-    assert by_id["slice-01"].ac == ["rechaza negativos"]
+    assert by_id["slice-01"].aceptacion == ["rechaza negativos"]
 
 
 def test_set_fuentes_preserva_trailing_newline() -> None:
@@ -267,14 +286,14 @@ _BODY_CON_SENAL = """\
 
 ## Slices
 - [ ] slice-01 (ajustar-stock): Caso de uso AjustarStock [pendiente]
-      AC: incrementa stock_ajustado_total{motivo}
+      ACEPTACION: incrementa stock_ajustado_total{motivo}
       SENAL: prometheus rate(stock_ajustado_total[5m]) > 0 en 10m post-deploy; critical
 - [ ] slice-02 (alerta-ajuste): Alerta de ajustes fallidos [pendiente]
       REPO: mercadona/mercadona.online.gke
-      AC: promtool test dispara ShopAjusteFallido con 3 fallos
+      ACEPTACION: promtool test dispara ShopAjusteFallido con 3 fallos
       SENAL: prometheus ALERTS{alertname="ShopAjusteFallido"} presente y == 0 en 24h; advisory
 - [ ] slice-03 (extraer-repo): Extraer repositorio [pendiente]
-      AC: sin cambio de comportamiento
+      ACEPTACION: sin cambio de comportamiento
       SENAL: exenta - refactor puro
 """
 
@@ -299,7 +318,7 @@ def test_parse_body_acepta_senal_con_tilde() -> None:
 
 def test_parse_body_senal_no_se_confunde_con_ac() -> None:
     s01 = {s.slice_id: s for s in parse_body(_BODY_CON_SENAL)}["slice-01"]
-    assert s01.ac == ["incrementa stock_ajustado_total{motivo}"]
+    assert s01.aceptacion == ["incrementa stock_ajustado_total{motivo}"]
 
 
 def test_parse_body_recoge_repo_destino() -> None:
@@ -394,11 +413,11 @@ Cuando el recuento no cuadra no hay forma de reconstruir que paso.
 ## Slices
 - [ ] slice-01 (ajustar-stock): Caso de uso AjustarStock [pendiente]
       INTENCION: hoy el ajuste se hace a mano y no queda rastro de quien lo hizo
-      AC: emite evento StockAjustado
+      ACEPTACION: emite evento StockAjustado
       SENAL: prometheus rate(stock_ajustado_total[5m]) > 0 en 10m post-deploy; critical
 - [ ] slice-02 (extraer-repo): Extraer repositorio [pendiente]
       INTENCION: hoy el caso de uso habla con la base de datos y no se puede testear sin ella
-      AC: sin cambio de comportamiento
+      ACEPTACION: sin cambio de comportamiento
 """
 
 
@@ -424,7 +443,7 @@ def test_parse_body_acepta_intencion_con_tilde() -> None:
 
 def test_parse_body_intencion_no_se_confunde_con_ac_ni_senal() -> None:
     s01 = {s.slice_id: s for s in parse_body(_BODY_CON_INTENCION)}["slice-01"]
-    assert s01.ac == ["emite evento StockAjustado"]
+    assert s01.aceptacion == ["emite evento StockAjustado"]
     assert s01.senal == [
         "prometheus rate(stock_ajustado_total[5m]) > 0 en 10m post-deploy; critical"
     ]

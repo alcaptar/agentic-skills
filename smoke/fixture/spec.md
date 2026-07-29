@@ -9,5 +9,5 @@ comprobar de punta a punta que el flujo de slice-runner funciona contra GitHub d
 
 - [ ] slice-01 (fizzbuzz-core): Implementar `fizzbuzz(n: int) -> str` en `fizzbuzz/core.py` [pendiente]
       INTENCION: sin esta funcion no hay nada que implementar, y el smoke no puede ejercitar el ciclo completo
-      AC: n divisible por 15 -> "FizzBuzz"; divisible por 3 -> "Fizz"; divisible por 5 -> "Buzz"; resto -> str(n); n <= 0 lanza ValueError. Tests en tests/test_core.py.
+      ACEPTACION: n divisible por 15 -> "FizzBuzz"; divisible por 3 -> "Fizz"; divisible por 5 -> "Buzz"; resto -> str(n); n <= 0 lanza ValueError. Tests en tests/test_core.py.
       SENAL: exenta - libreria pura sin despliegue ni runtime en produccion que observar

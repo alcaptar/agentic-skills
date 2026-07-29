@@ -1,6 +1,6 @@
 ---
 name: slice-spec
-description: Crea (o valida) una spec de slices en el formato exacto que consume slice-runner. Usar cuando el usuario quiera "escribir una spec", "montar el plan de slices", "trocear una feature en slices", "slice-spec", o tenga una idea/feature y necesite convertirla en una spec ejecutable por slice-runner. Envuelve superpowers:brainstorming para el diseno y luego emite la spec en su formato exacto (checklist de slices con nombre y AC). Modo `validate` para revisar una spec existente contra el contrato. No implementa codigo: produce la spec que slice-runner luego ejecuta.
+description: Crea (o valida) una spec de slices en el formato exacto que consume slice-runner. Usar cuando el usuario quiera "escribir una spec", "montar el plan de slices", "trocear una feature en slices", "slice-spec", o tenga una idea/feature y necesite convertirla en una spec ejecutable por slice-runner. Envuelve superpowers:brainstorming para el diseno y luego emite la spec en su formato exacto (checklist de slices con nombre y criterios de aceptacion). Modo `validate` para revisar una spec existente contra el contrato. No implementa codigo: produce la spec que slice-runner luego ejecuta.
 ---
 
 # Slice Spec
@@ -13,9 +13,9 @@ Emite `[slice-spec]` al inicio de cada respuesta mientras ejecutas este proceso,
 
 Skill fina que produce la **spec** que `slice-runner` consume, en su formato exacto. No re-piensa
 el diseno del producto: **delega el diseno en `superpowers:brainstorming`** y su unico trabajo es
-el **contrato de formato** (los nombres de slice, los AC, las lineas de slice que `slice-runner`
-sabe parsear). Es el `check-alignment` + `text-native` del flujo: la spec es el artefacto compartido
-entre humano y agente, y **vive en un issue de GitHub** (una feature = un issue).
+el **contrato de formato** (los nombres de slice, los criterios de aceptacion, las lineas de slice
+que `slice-runner` sabe parsear). Es el `check-alignment` + `text-native` del flujo: la spec es el
+artefacto compartido entre humano y agente, y **vive en un issue de GitHub** (una feature = un issue).
 
 Par natural: `/slice-spec` crea el issue con la spec, `/slice-runner #N` lo ejecuta.
 
@@ -40,8 +40,8 @@ Dos modos:
   (`references/slicing.md`): walking skeleton, heuristica ordenada, hamburger como motor de
   composicion, calibrador de tamano y validacion del corte. La skill es la **fuente de verdad** del
   slicing; `hamburger-method`/`story-splitting` son profundizacion opcional, no el motor.
-- **Slices verticales y pequenas.** Cada slice es una rebanada entregable de punta a punta con AC
-  propios, no una capa tecnica suelta.
+- **Slices verticales y pequenas.** Cada slice es una rebanada entregable de punta a punta con
+  criterios de aceptacion propios, no una capa tecnica suelta.
 - **La intencion es parte de la spec, y es lo primero que se lee.** El issue abre con una seccion
   `## Intencion` (que esta mal hoy, o que no se puede hacer hoy, a quien le pasa y como se nota) y
   cada slice declara su linea `INTENCION:` (que deja de estar mal cuando esa slice entra). No es
@@ -53,21 +53,21 @@ Dos modos:
   nada roto que puedas nombrar). A diferencia de `SENAL:`, **no hay figura de exencion**: una slice
   sin por que no deberia existir. Las slices sin efecto observable en produccion (refactor, value
   object interno) tambien tienen intencion; su coste es interno, pero se puede nombrar.
-- **AC obligatorios y falsables.** Sin AC no hay puerta de verificacion en slice-runner: toda slice
-  declara criterios de aceptacion concretos. **Vara de falsabilidad:** un AC vale si puedes nombrar
-  el **cambio de produccion que lo haria fallar**; si no puedes nombrarlo, es prosa y hay que
-  reescribirlo. Es la contraparte upstream de "los tests son ciudadanos de primera categoria" de
-  slice-runner: su verificador bloquea con severidad alta el mapeo AC↔test, y ese check solo tiene
-  con que medir si el AC es falsable.
+- **Criterios de aceptacion obligatorios y falsables.** Sin ellos no hay puerta de verificacion en
+  slice-runner: toda slice declara criterios concretos. **Vara de falsabilidad:** un criterio vale
+  si puedes nombrar el **cambio de produccion que lo haria fallar**; si no puedes nombrarlo, es
+  prosa y hay que reescribirlo. Es la contraparte upstream de "los tests son ciudadanos de primera
+  categoria" de slice-runner: su verificador bloquea con severidad alta el mapeo criterio↔test, y
+  ese check solo tiene con que medir si el criterio es falsable.
 - **La observabilidad es parte del corte, no un extra.** Toda slice que cambia comportamiento
   observable en produccion declara su linea `SENAL:`: **como se comprueba viva**. Es la contraparte
-  post-deploy de los AC — estos los verifica un test antes de mergear, la senal la verifica
-  `deploy-watch` despues— y la misma vara de falsabilidad aplicada al otro extremo: *nombra la senal
-  que cambiaria si esto se rompe vivo*. Si no puedes nombrarla, la slice no es observable, y eso se
-  arregla **en el slicing**, no en el incidente. Las exentas (refactor puro, VO interno, migracion sin
-  efecto visible) lo declaran con motivo: `SENAL: exenta - <motivo>`; ausencia silenciosa no es
-  exencion. El detalle vive en `references/observabilidad.md` (escalera para decidir si hay que
-  instrumentar o la senal ya existe, stack concreto, redaccion de la linea).
+  post-deploy de los criterios de aceptacion — estos los verifica un test antes de mergear, la senal
+  la verifica `deploy-watch` despues— y la misma vara de falsabilidad aplicada al otro extremo:
+  *nombra la senal que cambiaria si esto se rompe vivo*. Si no puedes nombrarla, la slice no es
+  observable, y eso se arregla **en el slicing**, no en el incidente. Las exentas (refactor puro, VO
+  interno, migracion sin efecto visible) lo declaran con motivo: `SENAL: exenta - <motivo>`;
+  ausencia silenciosa no es exencion. El detalle vive en `references/observabilidad.md` (escalera
+  para decidir si hay que instrumentar o la senal ya existe, stack concreto, redaccion de la linea).
 - **Alertas y paneles son slices propias, en su repo.** Una alerta o un panel no van nunca en la PR de
   la metrica que consumen (repos distintos ⇒ PRs distintas), y el orden es forzoso: primero la slice
   que emite la serie, luego la alerta, luego el panel. Se declaran con `REPO:` en su linea.
@@ -102,16 +102,16 @@ lineas, sin nombrar clases, ficheros ni patrones: el como vive en las slices y e
 ## Slices
 - [ ] slice-01 (nombre-kebab): <titulo de la slice> [pendiente]
       INTENCION: <que deja de estar mal cuando entra esta slice>
-      AC: <criterio 1>; <criterio 2>; tests en <ruta>
+      ACEPTACION: <criterio 1>; <criterio 2>; tests en <ruta>
       SENAL: <fuente> <serie/expresion>; <assert vivo con ventana>; critical|advisory
 - [ ] slice-02 (otro-nombre): <titulo> [pendiente]
       INTENCION: <coste de no hacerla>
-      AC: <criterios>
+      ACEPTACION: <criterios>
       SENAL: exenta - <motivo>
 - [ ] slice-03 (alerta-algo): <titulo> [pendiente]
       REPO: <org>/<repo-destino>
       INTENCION: <coste de no hacerla>
-      AC: <criterios>
+      ACEPTACION: <criterios>
       SENAL: <assert vivo>
 ```
 
@@ -134,22 +134,27 @@ Reglas duras:
   No hace falta declarar la lista de types validos: el commit lo redacta el agente (sabe conventional
   commits) y su unica puerta determinista es la higiene del diff (`gates.py pr-hygiene`).
 - Debajo de cada slice, una linea `INTENCION:` con el coste de no hacerla: que esta mal hoy y deja
-  de estarlo cuando entra. Va **antes** de los `AC:` (primero el por que, luego lo que se comprueba
-  antes de fusionar, luego lo que se comprueba vivo). Obligatoria siempre, sin exencion posible.
-- Debajo de cada slice, una o mas lineas indentadas con `AC:` describiendo criterios concretos
-  (y donde viven los tests si aplica). Las **restricciones duras** (p. ej. "no toca infra
-  directamente") se expresan como un AC comprobable mas.
-- **Cada AC debe ser falsable**: tiene que poder nombrarse el cambio de produccion que lo haria
-  fallar. `AC: rechaza cantidades negativas con ValueError` lo es (borra la validacion y falla);
-  `AC: el flujo funciona correctamente` no lo es (nada lo puede refutar). Un AC no falsable deja al
+  de estarlo cuando entra. Va **antes** de los `ACEPTACION:` (primero el por que, luego lo que se
+  comprueba antes de fusionar, luego lo que se comprueba vivo). Obligatoria siempre, sin exencion
+  posible.
+- La etiqueta canonica es `ACEPTACION:`; se llamaba `AC:` y el parser sigue aceptando esa forma para
+  no romper los issues ya abiertos, pero **lo que emites es el nombre completo**. Si validas un
+  issue viejo, reescribir sus `AC:` es correcto y no cambia nada del contrato.
+- Debajo de cada slice, una o mas lineas indentadas con `ACEPTACION:` describiendo criterios
+  concretos (y donde viven los tests si aplica). Las **restricciones duras** (p. ej. "no toca infra
+  directamente") se expresan como un criterio comprobable mas.
+- **Cada criterio debe ser falsable**: tiene que poder nombrarse el cambio de produccion que lo haria
+  fallar. `ACEPTACION: rechaza cantidades negativas con ValueError` lo es (borra la validacion y falla);
+  `ACEPTACION: el flujo funciona correctamente` no lo es (nada lo puede refutar). Un criterio no
+  falsable deja al
   verificador de slice-runner sin nada contra lo que mapear el test, asi que no cumple el contrato.
 - Debajo de cada slice, una linea `SENAL:` con **como se comprueba viva en produccion** (formato:
   `<fuente> <serie/expresion>; <assert vivo con ventana>; critical|advisory`), o
   `SENAL: exenta - <motivo>`. Es obligatoria cuando la slice cambia comportamiento observable en prod.
   **La senal tambien es falsable**: `SENAL: se monitoriza con Grafana` no vale (no nombra serie,
   ventana ni assert); `SENAL: prometheus rate(application_stock_ajustado_total[5m]) > 0 en 10m
-  post-deploy; critical` si. Si la senal hay que **construirla**, su emision entra ademas como AC
-  normal (el test de emision): la emision se verifica pre-merge, el valor vivo post-deploy.
+  post-deploy; critical` si. Si la senal hay que **construirla**, su emision entra ademas como criterio
+  de aceptacion normal (el test de emision): la emision se verifica pre-merge, el valor vivo post-deploy.
 - Linea `REPO: <org>/<repo>` opcional cuando la slice se implementa en otro repo (alerta, panel).
   Ausente = el repo del issue. Toda slice con `REPO:` exige la subseccion de fuentes de su repo.
 
@@ -180,12 +185,12 @@ Reglas duras:
 2b. **Disena la senal de cada slice (mientras el corte todavia se puede cambiar).** Carga
    `references/observabilidad.md` y, slice a slice, **baja la escalera**: ¿la senal ya existe gratis
    por la libreria del repo? ¿basta enriquecer lo que ya emite? ¿hace falta una metrica de negocio
-   nueva (y entonces su emision es un AC mas, con su test)? ¿o es un **gap de la libreria** que hay que
-   declarar en vez de instrumentar a mano? Escribe la linea `SENAL:` resultante, o la exencion con su
-   motivo. Decide tambien si el conjunto necesita **slice de alerta** y **slice de panel**: si las
-   necesita, van con su `REPO:` y **detras** de la slice que emite la serie (orden forzoso); si no las
-   necesita, que sea una decision explicita, no un olvido. Lo aplazable es la telemetria fina, no la
-   senal minima.
+   nueva (y entonces su emision es un criterio de aceptacion mas, con su test)? ¿o es un **gap de la
+   libreria** que hay que declarar en vez de instrumentar a mano? Escribe la linea `SENAL:`
+   resultante, o la exencion con su motivo. Decide tambien si el conjunto necesita **slice de
+   alerta** y **slice de panel**: si las necesita, van con su `REPO:` y **detras** de la slice que
+   emite la serie (orden forzoso); si no las necesita, que sea una decision explicita, no un olvido.
+   Lo aplazable es la telemetria fina, no la senal minima.
 3. **Descubre y confirma las fuentes de convencion (`offload-deterministic` + `check-alignment`).**
    Corre el helper determinista para no asumir rutas ni inventarlas:
    `python3 ~/.claude/skills/slice-runner/scripts/discover_conventions.py <repo>`. Lista candidatos
@@ -216,7 +221,8 @@ Revisa una spec existente contra el contrato y reporta desviaciones (con `regla 
 corregirlas. Checklist:
 
 - Es un checklist de slices (`## Slices` con lineas `- [ ] slice-NN ...`).
-- Cada slice tiene `slice-NN`, `(name)` kebab-case unico, titulo y al menos una linea `AC:`.
+- Cada slice tiene `slice-NN`, `(name)` kebab-case unico, titulo y al menos una linea `ACEPTACION:`
+  (o la forma vieja `AC:`).
 - Si aparece un `type` en el parentesis, es un type de conventional commit (no hay lista normativa
   que validar aqui: el commit lo redacta y valida el flujo de slice-runner).
 - Checkboxes `[ ]`/`[x]` y, si hay marcador `[estado]`, es uno canonico (pendiente, en-curso,
@@ -225,9 +231,10 @@ corregirlas. Checklist:
   (p. ej. un issue anterior a este mecanismo), **es la desviacion a corregir**: reconstruyela con la
   persona y anadela. Comprueba tambien la **vara** en cada linea: nombra el coste de no hacerla. Si
   dice "mejorar", "limpiar" o "refactorizar" sin decir que esta mal hoy, reescribela. Y si la linea
-  describe el codigo (que clase se introduce, que fichero se toca) en vez del problema, tambien:
-  eso es lo que el diff ya cuenta, y ocupa el sitio de lo que no cuenta.
-- Ninguna slice sin AC (sin AC no hay puerta de verificacion en slice-runner).
+  describe el codigo (que clase se introduce, que fichero se toca) en vez del problema, tambien: eso
+  es lo que el diff ya cuenta, y ocupa el sitio de lo que no cuenta.
+- Ninguna slice sin criterios de aceptacion (sin ellos no hay puerta de verificacion en
+slice-runner).
 - **Ninguna slice que cambie comportamiento en prod sin `SENAL:`**, y ninguna `SENAL: exenta` sin
   motivo escrito. Si falta (p. ej. un issue anterior a este mecanismo), **es la desviacion a corregir**:
   aplica la escalera de `references/observabilidad.md` con la persona y anade la linea. La `SENAL` debe
@@ -238,10 +245,11 @@ corregirlas. Checklist:
   ausencia es una decision explicita. Nunca alerta/panel en la misma slice que la metrica.
 - **Toda slice con `REPO:` tiene su subseccion `### <org>/<repo>`** en las fuentes de convencion. Si
   falta, es desviacion: corre el descubrimiento sobre ese repo y anadela.
-- **Cada AC es falsable** (no basta con que exista). Por cada AC, nombra el cambio de produccion que
-  lo haria fallar; si no puedes nombrarlo, **es la desviacion a corregir**: reescribe el AC con la
-  persona hasta que sea refutable (o pregunta que se pretendia). Un AC vago pasa el check de
-  existencia pero deja sin dientes el mapeo AC↔test del verificador de slice-runner.
+- **Cada criterio es falsable** (no basta con que exista). Por cada uno, nombra el cambio de
+  produccion que lo haria fallar; si no puedes nombrarlo, **es la desviacion a corregir**:
+  reescribelo con la persona hasta que sea refutable (o pregunta que se pretendia). Un criterio vago
+  pasa el check de existencia pero deja sin dientes el mapeo criterio↔test del verificador de
+  slice-runner.
 - Tiene una seccion `## Fuentes de convencion` con al menos un puntero (`- doc:` / `- skill:`). Si
   falta (p. ej. un issue legacy anterior a este mecanismo), **es la desviacion a corregir**: corre el
   descubrimiento (paso 3), confirmala con la persona y anadela al cuerpo con

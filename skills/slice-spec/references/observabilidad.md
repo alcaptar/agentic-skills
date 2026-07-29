@@ -15,15 +15,16 @@ que pretendia**. Eso es *observability-driven development*: decides la telemetri
 implementar, la instrumentacion viaja **con** el codigo (no en una slice "de telemetria" futura), y
 la usas para confirmar el cambio vivo.
 
-**La senal tiene dos asserts, y por eso no basta con un AC:**
+**La senal tiene dos asserts, y por eso no basta con un criterio de aceptacion:**
 
 | | assert | quien lo verifica | cuando |
 |---|---|---|---|
 | **Emision** | el codigo emite la metrica/log/span con sus labels | test + `slice-verifier` | pre-merge |
 | **Valor vivo** | el contador sube / el error no aparece tras el deploy | `deploy-watch` | post-deploy |
 
-La emision es un **AC normal** y falsable (borra la instrumentacion y el test cae). El valor vivo
-**no es testeable**: por eso vive en su propia linea `SENAL:`, que consume `deploy-watch`.
+La emision es un **criterio de aceptacion normal** y falsable (borra la instrumentacion y el test
+cae). El valor vivo **no es testeable**: por eso vive en su propia linea `SENAL:`, que consume
+`deploy-watch`.
 
 ## Cuando procede (y cuando no)
 
@@ -161,8 +162,9 @@ tests:
           - exp_labels: {severity: warning, mo_team: shop, deployment: shop-api}
 ```
 
-AC tipicos de una slice de alerta: el test `promtool` que dispara con la serie esperada, el que **no**
-dispara por debajo del umbral, labels obligatorias presentes y `for:` no-cero.
+Criterios de aceptacion tipicos de una slice de alerta: el test `promtool` que dispara con la serie
+esperada, el que **no** dispara por debajo del umbral, labels obligatorias presentes y `for:`
+no-cero.
 
 `SENAL` tipica: `prometheus ALERTS{alertname="X"} presente y == 0 en 24h; advisory` — es decir, la
 regla **cargo** y **no genera falsos positivos**. Es advisory a proposito: una alerta recien puesta que
@@ -231,8 +233,8 @@ SENAL: revisar que funcione                       <- prosa
 - **Alertar una serie que aun no ha llegado a prod**: la regla se evalua contra nada y no dispara
   nunca (o dispara al reves si es un `absent()`).
 - **Instrumentacion ad-hoc paralela a la libreria** en vez de declarar el gap.
-- **Declarar `SENAL` con lo que el test ya prueba** ("el contador se incrementa" es el AC de emision,
-  no la senal viva).
+- **Declarar `SENAL` con lo que el test ya prueba** ("el contador se incrementa" es el criterio de
+  emision, no la senal viva).
 - **Dejar la telemetria para "la slice de observabilidad" del final**: es la aplazable que nunca llega,
   y es justo lo que este doc corrige de la heuristica 9.
 - **`SENAL` ausente sin declarar exencion**: pasa desapercibida y degrada el veredicto del deploy al

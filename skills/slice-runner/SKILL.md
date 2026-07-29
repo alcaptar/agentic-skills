@@ -1,6 +1,6 @@
 ---
 name: slice-runner
-description: Ejecuta una slice de una spec markdown de principio a fin. Usar cuando el usuario tenga una spec en .md (checklist de slices con nombre y AC) y quiera implementar la siguiente (o una concreta) de forma autonoma - implementar con TDD consciente de capa, verificar con un agente independiente que carga las convenciones del repo, abrir PR y esperar a que la CI este verde, y parar. Aplica si dice "corre la siguiente slice", "implementa la slice X de la spec", "slice-runner", o describe el flujo spec -> slice -> PR -> CI.
+description: Ejecuta una slice de una spec markdown de principio a fin. Usar cuando el usuario tenga una spec en .md (checklist de slices con nombre y criterios de aceptacion) y quiera implementar la siguiente (o una concreta) de forma autonoma - implementar con TDD consciente de capa, verificar con un agente independiente que carga las convenciones del repo, abrir PR y esperar a que la CI este verde, y parar. Aplica si dice "corre la siguiente slice", "implementa la slice X de la spec", "slice-runner", o describe el flujo spec -> slice -> PR -> CI.
 ---
 
 # Slice Runner
@@ -21,14 +21,15 @@ Nivel de autonomia 1: un ciclo por invocacion. Para encadenar slices, envolver e
 - **Los subagentes no son un detalle de implementacion: son la garantia.** Esta skill **no puede ejecutarse sin ellos**, y por eso **invocarla cuenta como pedirlos**: no es iniciativa del agente, es la skill haciendo su trabajo, asi que no pidas permiso para lanzarlos. Si el entorno los veta (veto global al Agent tool, politica de la organizacion, `slice-verifier` sin resolver), **dilo siempre** y decide con este criterio: **¿se puede declarar la degradacion en el artefacto que produces?** Si se puede, degrada y declaralo **ahi**, no solo en el chat; si el artefacto entero significa justo la garantia que has perdido, **para**. Esta skill cae del lado de **parar**, y en el **paso 3**: su artefacto es una **PR con veredicto PASA**, donde el veredicto *es* la afirmacion de haberse verificado, y no hay forma de declarar esa degradacion dentro de la PR -degradado seria falso, y **falso de forma invisible aguas abajo**, porque quien revise asume que paso el pipeline-. Parar no cuesta nada irreversible: no hay nada en produccion. Fail-closed, igual que `pr-hygiene` y `diff-bundle`. (`deploy-watch` aplica el **mismo criterio** y cae del otro lado, porque su veredicto **si** puede declarar su procedencia: artefacto distinto, no incoherencia.)
 - **Las convenciones del repo mandan.** Implementador y verificador cargan como vara de medir las **fuentes de convencion declaradas en el issue** (seccion `## Fuentes de convencion`: docs y skills de proyecto), por encima de cualquier default generico de hexagonal/DDD. En conflicto, ganan las convenciones del repo. No se asumen rutas fijas: las fuentes se descubren por repo y las declara `slice-spec` en el issue; `slice-runner` solo las lee. Si el issue no trae esa seccion, **para** y pide anadirla con `slice-spec` (no ejecutes con la vara vacia: fue la causa raiz de desviaciones silenciosas de convencion). Sin la vara, el verificador no puede cazar violaciones reales (p. ej. una migracion que siembra datos donde la convencion lo prohibe).
 - **La observabilidad es parte de la slice.** Si la slice declara `SENAL:` y la senal **no existe
-  todavia**, instrumentarla es codigo de produccion de **esta** slice (con la libreria de monitoring del
-  repo, nunca ad-hoc en paralelo) y su **emision** se fija con un test, igual que cualquier AC. El
-  valor vivo lo comprueba `deploy-watch` despues (paso 10). La escalera para decidir si hay que
-  instrumentar o la senal ya existe gratis esta en `~/.claude/skills/slice-spec/references/observabilidad.md`.
-  Si la slice **no** trae `SENAL` (spec anterior a este mecanismo), **avisa y sigue**: no bloquea. A
-  diferencia de las fuentes de convencion, cuya ausencia hace imposible verificar, la ausencia de senal
-  solo degrada la comprobacion post-deploy al veredicto generico, y eso `deploy-watch` **si** lo puede
-  declarar en el issue.
+  todavia**, instrumentarla es codigo de produccion de **esta** slice (con la libreria de monitoring
+  del repo, nunca ad-hoc en paralelo) y su **emision** se fija con un test, igual que cualquier
+  criterio de aceptacion. El valor vivo lo comprueba `deploy-watch` despues (paso 10). La escalera
+  para decidir si hay que instrumentar o la senal ya existe gratis esta en
+  `~/.claude/skills/slice-spec/references/observabilidad.md`. Si la slice **no** trae `SENAL` (spec
+  anterior a este mecanismo), **avisa y sigue**: no bloquea. A diferencia de las fuentes de
+  convencion, cuya ausencia hace imposible verificar, la ausencia de senal solo degrada la
+  comprobacion post-deploy al veredicto generico, y eso `deploy-watch` **si** lo puede declarar en
+  el issue.
 - **Una slice puede vivir en otro repo.** La linea `REPO: <org>/<repo>` de la slice fija el repo
   destino (alertas en el repo de manifiestos, paneles en el de Grafana); ausente = el repo del issue.
   Cuando la hay, **todo el ciclo ocurre en ese repo**: comandos autodetectados (paso 2), rama (paso 4),
@@ -38,17 +39,18 @@ Nivel de autonomia 1: un ciclo por invocacion. Para encadenar slices, envolver e
 - **Puertas de parada objetivas.** No hay PR mergeable sin lint limpio, tipos limpios, tests verdes y **CI verde**, ejecutados con los comandos reales del repo (paso 2), no con binarios asumidos.
 - **El juez no ejecuta puertas ni ve output de build.** Las puertas deterministas (lint, tipos, tests) corren **antes** del verificador: el implementador las corre en su ciclo para tener feedback incremental, y el orquestador las re-corre como backstop (paso 6) porque el auto-reporte del implementador no es fuente de verdad. Cuando se invoca al verificador (paso 7) ya estan verdes por construccion, asi que no recibe nada de ellas: su presupuesto entero se gasta en lo semantico. Meter un traceback de pytest en el contexto del unico agente cuyo valor es el juicio es `limited-focus` autoinfligido, y un `ruff` sucio no debe consumir un reintento adversarial.
 - **Determinista lo que es regla exacta (`offload-deterministic`).** Lo mecanico NO se delega al juicio de un agente: lo resuelve el script `scripts/gates.py`, cuyo exit code es autoritativo. Tres subcomandos: `pr-hygiene` (higiene del diff staged, paso 8), `checks` (ejecutar lint/tipos/tests con los comandos del paso 2 y devolver exit code + salida truncada, pasos 5 y 6) y `diff-bundle` (materializar el diff de la slice para el verificador, paso 7). No se pide dos veces a la IA lo que un script decide una vez, y ningun agente ve output crudo de build.
-- **Los tests son ciudadanos de primera categoria.** Valen tanto o mas que el codigo de produccion: ahi va el mayor esfuerzo de calidad, y sobre todo la exigencia de que **testeen de verdad lo que la slice pretende construir**, no una version debilitada ni un proxy que pasa por casualidad. Un test que pasa sin fijar su AC es un fallo tan grave como codigo roto. Con dientes, no como declaracion: el implementador aplica `writing-good-tests.md` de `superpowers:test-driven-development` (nombrar el cambio de produccion que haria fallar el test **antes** de escribirlo; asertar comportamiento real, nunca mocks; codigo de test fuera de produccion), y el verificador lo bloquea con severidad **alta** en el paso 7 (mapeo AC↔test, fixture/wiring theater, manipulacion de tests, test-desiderata).
-- **TDD consciente de capa.** El ciclo TDD lo define `superpowers:test-driven-development` (lo invoca el implementador, paso 5); aqui vive solo el delta: si las convenciones del repo eximen una capa (p. ej. modelos ORM y migraciones que no se testean por separado), la puerta de esa slice es "suite intacta + verificacion de datos/efecto" en vez del test-first por AC. Decide la convencion del repo, no este documento ni superpowers.
-- **Alinear antes de implementar.** Antes de escribir codigo, mostrar el entendimiento de la slice (alcance, AC, capa afectada, comando de validacion) y esperar go/no-go. Nunca transcribir a ciegas el codigo pre-horneado de una spec: validalo contra las convenciones primero.
+- **Los tests son ciudadanos de primera categoria.** Valen tanto o mas que el codigo de produccion: ahi va el mayor esfuerzo de calidad, y sobre todo la exigencia de que **testeen de verdad lo que la slice pretende construir**, no una version debilitada ni un proxy que pasa por casualidad. Un test que pasa sin fijar su criterio de aceptacion es un fallo tan grave como codigo roto. Con dientes, no como declaracion: el implementador aplica `writing-good-tests.md` de `superpowers:test-driven-development` (nombrar el cambio de produccion que haria fallar el test **antes** de escribirlo; asertar comportamiento real, nunca mocks; codigo de test fuera de produccion), y el verificador lo bloquea con severidad **alta** en el paso 7 (mapeo criterio↔test, fixture/wiring theater, manipulacion de tests, test-desiderata).
+- **TDD consciente de capa.** El ciclo TDD lo define `superpowers:test-driven-development` (lo invoca el implementador, paso 5); aqui vive solo el delta: si las convenciones del repo eximen una capa (p. ej. modelos ORM y migraciones que no se testean por separado), la puerta de esa slice es "suite intacta + verificacion de datos/efecto" en vez del test-first por criterio. Decide la convencion del repo, no este documento ni superpowers.
+- **Alinear antes de implementar.** Antes de escribir codigo, mostrar el entendimiento de la slice (alcance, criterios de aceptacion, capa afectada, comando de validacion) y esperar go/no-go. Nunca transcribir a ciegas el codigo pre-horneado de una spec: validalo contra las convenciones primero.
 - **Seguir `backend-best-practices`.** El implementador carga esa skill y respeta hexagonal/DDD, DI, Pydantic en boundaries, subordinada siempre a las convenciones del repo.
 - **El estado del run vive en el issue de GitHub.** La spec y el estado de cada slice viven en el cuerpo de un issue de GitHub (una feature = un issue): es la **unica fuente de verdad**, viva y duradera. No hay estado local (`.slice-runner/`, ledger ni panel). El agente olvida entre slices; al arrancar re-lee el issue. Registro duradero = issue (intencion + estado) + PRs mergeadas (codigo).
 - **La PR cuenta la intencion, no el codigo.** El cuerpo de la pull request dice **que estaba mal y
-  deja de estarlo** (la `INTENCION:` de la slice, encuadrada en la del issue), los AC cumplidos y la
-  `SENAL` a comprobar tras el despliegue. Nunca enumera ficheros, clases ni modulos: eso ya lo cuenta
-  el diff, y repetirlo en prosa ocupa el sitio de lo unico que el diff no puede contar. Si el issue no
-  declaraba intencion, la PR la reconstruye y **lo dice en el encabezado**: afirmar como declarado lo
-  que se ha inferido es la clase de falsedad invisible aguas abajo que esta skill evita en todas partes.
+  deja de estarlo** (la `INTENCION:` de la slice, encuadrada en la del issue), los criterios de
+  aceptacion cumplidos y la `SENAL` a comprobar tras el despliegue. Nunca enumera ficheros, clases
+  ni modulos: eso ya lo cuenta el diff, y repetirlo en prosa ocupa el sitio de lo unico que el diff
+  no puede contar. Si el issue no declaraba intencion, la PR la reconstruye y **lo dice en el
+  encabezado**: afirmar como declarado lo que se ha inferido es la clase de falsedad invisible aguas
+  abajo que esta skill evita en todas partes.
 - **La PR solo lleva el codigo de la slice.** El commit stagea unicamente los ficheros de codigo/test que produjo el implementador (`git add` explicito, nunca `-A`/`.`). Planes y design-docs jamas entran en la PR (la spec ya no es un fichero: vive en el issue).
 - **Contexto fresco por slice.** Cada slice arranca sin arrastrar la conversacion de la anterior; lo que persiste entre slices es el **issue** (spec + estado), que se re-lee al empezar. Evita la degradacion de contexto (patron Ralph) y hace seguro el Nivel 2 (`/loop`).
 - **Circuit breaker.** Maximo 2 reintentos por fase, y las **puertas tienen presupuesto propio** (2), separado del del verificador (2): gastar el presupuesto adversarial en un fallo mecanico es justo lo que este reparto evita. Ademas, **presupuesto de coste**: si la slice supera el limite de tokens/$ configurado, para con estado `abortada-presupuesto`. Si la CI sigue roja tras el reintento, para, deja el PR abierto y reporta con logs.
@@ -58,9 +60,9 @@ Nivel de autonomia 1: un ciclo por invocacion. Para encadenar slices, envolver e
 ## Formato de spec (cuerpo del issue)
 
 La spec vive en el **cuerpo de un issue de GitHub** (una feature = un issue). Es un **checklist de
-slices**: cada slice es una linea de task-list con **nombre**, AC embebidos y un **marcador de
-estado**. Si el issue no encaja en este formato, para y pide una spec valida (o sugiere
-`/slice-spec` para generarla).
+slices**: cada slice es una linea de task-list con **nombre**, criterios de aceptacion embebidos y
+un **marcador de estado**. Si el issue no encaja en este formato, para y pide una spec valida (o
+sugiere `/slice-spec` para generarla).
 
 ```markdown
 ## Intencion
@@ -78,16 +80,16 @@ y cuando el recuento no cuadra no hay forma de reconstruir que paso.
 ## Slices
 - [x] slice-01 (cantidad-vo): Crear value object `Cantidad` [mergeada] PR #11
       INTENCION: hoy cada endpoint revalida la cantidad a mano y ya se olvido en dos sitios
-      AC: rechaza negativos; tests en test/domain/test_cantidad.py
+      ACEPTACION: rechaza negativos; tests en test/domain/test_cantidad.py
       SENAL: exenta - value object interno sin efecto observable
 - [ ] slice-02 (ajustar-stock): Caso de uso `AjustarStock` [esperando-merge] PR #12
       INTENCION: hoy el ajuste se hace a mano y no queda rastro de quien lo hizo
-      AC: emite evento StockAjustado; no toca infra directamente
+      ACEPTACION: emite evento StockAjustado; no toca infra directamente
       SENAL: prometheus rate(application_stock_ajustado_total[5m]) > 0 en 10m post-deploy; critical
 - [ ] slice-03 (alerta-ajuste): Alerta de ajustes fallidos [pendiente]
       REPO: mercadona/mercadona.online.gke
       INTENCION: hoy un ajuste fallido solo se descubre cuando alguien mira el panel
-      AC: ...
+      ACEPTACION: ...
       SENAL: prometheus ALERTS{alertname="ShopAjusteFallido"} presente y == 0 en 24h; advisory
 ```
 
@@ -100,9 +102,12 @@ checklist con una unica linea. El parseo y la reescritura de estas lineas los ha
 
 - **`## Intencion` e `INTENCION:`** — el por que, a nivel de feature y de slice: que esta mal hoy y
   deja de estarlo. Es lo que va al cuerpo de la pull request (paso 8). Se leen con
-  `issue_body.parse_intencion(body)` y `slice.intencion`. Si faltan (issue anterior a este mecanismo),
-  **avisa y sigue**: la PR reconstruye la intencion y declara que la infirio. La obligatoriedad vive
-  en el contrato de `slice-spec`, no aqui.
+  `issue_body.parse_intencion(body)` y `slice.intencion`. Si faltan (issue anterior a este
+  mecanismo), **avisa y sigue**: la PR reconstruye la intencion y declara que la infirio. La
+  obligatoriedad vive en el contrato de `slice-spec`, no aqui.
+- **`ACEPTACION:` (una o mas lineas)** — los criterios verificables antes de fusionar; los lee
+  `slice.aceptacion`. La etiqueta **se llamaba `AC:`** y el parser sigue aceptando esa forma, porque
+  hay issues abiertos escritos con ella; lo que se emite y se documenta es el nombre completo.
 - **`SENAL:` (una o mas lineas)** — como se comprueba la slice **viva en produccion**; la consume
   `deploy-watch` (paso 10). `SENAL: exenta - <motivo>` cuando no aplica. Si falta, **avisa y sigue**
   (mismo trato que un `(name)` ausente): la obligatoriedad vive en el contrato de `slice-spec`.
@@ -114,8 +119,8 @@ checklist con una unica linea. El parseo y la reescritura de estas lineas los ha
   slugs de texto libre.
 - **Type opcional.** Por defecto el commit es `feat`. Para otro type, prefijalo dentro del
   parentesis: `slice-03 (refactor: extraer-repo): ...` ⇒ `refactor(extraer-repo): ...`.
-- **Restricciones duras = AC.** Lo que la slice debe respetar (p. ej. "no toca infra directamente")
-  se expresa como un AC comprobable mas; el verificador comprueba los AC.
+- **Restricciones duras = criterio de aceptacion.** Lo que la slice debe respetar (p. ej. "no toca
+  infra directamente") se expresa como un criterio comprobable mas; el verificador los comprueba.
 - **Compatibilidad.** Si una slice no trae `(name)`, deriva un slug del titulo y **avisa** de que la
   spec deberia declarar nombre. No bloquea el run.
 
@@ -145,7 +150,7 @@ GitHub: cualquiera con acceso al repo ve el estado de cada slice en todo momento
 - **Fuente de verdad**: el marcador `[estado]` de cada linea de slice en el cuerpo del issue.
 - **Actualizacion**: en cada transicion macro, `slice-runner` reescribe **solo la linea de esa
   slice** (read-modify-write: `gh issue view --json body` -> `issue_body.set_slice_estado(...)` ->
-  `gh issue edit --body`). No toca las demas lineas ni los AC.
+  `gh issue edit --body`). No toca las demas lineas ni los criterios.
 - **Memoria intra-run**: al arrancar (o reanudar con `/loop`), lee el issue para saber que slices
   estan `mergeada` (`[x]`) y cual es la siguiente `pendiente`. Una slice en `esperando-merge` se
   retoma ahi.
@@ -201,12 +206,14 @@ caerian en cubos distintos y la calibracion del loop dejaria de agregar bien.
   otro repo -es justo la desviacion silenciosa que esta seccion evita-. Estos punteros son la vara que
   cargaran implementador (paso 5) y verificador (paso 7); las skills de proyecto se leen/invocan y se
   citan igual que una regla.
-- Extrae titulo, alcance y AC de la slice. Si no hay AC, para y pidelos: sin AC no hay puerta de verificacion.
-- **Toma la intencion**, en sus dos niveles: la de la feature (`issue_body.parse_intencion(body)`) y la
-  de la slice (`slice.intencion`). Viaja al implementador (paso 5) y al cuerpo de la PR (paso 8). Si
-  alguna falta (`None`, `""` o lista vacia), **avisa y sigue**: no bloquea, pero **anota que habra que
-  inferirla**, porque el encabezado de la PR tiene que decirlo. Que la ausencia la detecte el script y
-  no tu criterio es lo que impide que una PR presente como declarado lo que en realidad se invento.
+- Extrae titulo, alcance y criterios de aceptacion de la slice. Si no los hay, para y pidelos: sin
+  criterios no hay puerta de verificacion.
+- **Toma la intencion**, en sus dos niveles: la de la feature (`issue_body.parse_intencion(body)`) y
+  la de la slice (`slice.intencion`). Viaja al implementador (paso 5) y al cuerpo de la PR (paso 8).
+  Si alguna falta (`None`, `""` o lista vacia), **avisa y sigue**: no bloquea, pero **anota que
+  habra que inferirla**, porque el encabezado de la PR tiene que decirlo. Que la ausencia la detecte
+  el script y no tu criterio es lo que impide que una PR presente como declarado lo que en realidad
+  se invento.
 - **Toma la `SENAL`** (`slice.senal`). Si la trae, viaja al implementador (paso 5), al verificador
   (paso 7) y a `deploy-watch` (paso 10). Si **no** la trae, **avisa** de que la spec deberia declararla
   (`slice-spec validate`) y sigue: no bloquea.
@@ -244,9 +251,9 @@ se queda aqui y no se duplica dentro del script.
   skill previene, y una PR con verificacion de teatro es peor que ninguna PR. Que el usuario decida si
   levanta la restriccion o renuncia al run.
 - Resume: slice elegida (id + `name`), **repo de trabajo** (y su ruta local, si no es el del issue),
-  AC, **`SENAL` y que hara con ella** (apunta a una serie que ya existe / hay que instrumentarla y
-  como / exenta), capa(s) afectada(s), comando de validacion que aplicara, `type(name)` de conventional
-  commit que usara el commit/PR, y como piensa abordarla.
+  los criterios de aceptacion, **`SENAL` y que hara con ella** (apunta a una serie que ya existe /
+  hay que instrumentarla y como / exenta), capa(s) afectada(s), comando de validacion que aplicara,
+  `type(name)` de conventional commit que usara el commit/PR, y como piensa abordarla.
 - Si el cambio claramente **no es un `feat`** (p. ej. refactor o fix) y la spec no declaro type, confirma el type con el usuario aqui (barato; evita un scope de commit erroneo).
 - Si la spec pre-hornea codigo, contrastalo contra las fuentes de convencion del issue (paso 1) y **senala cualquier violacion antes de escribir** (no lo transcribas a ciegas).
 - Espera go/no-go del usuario. Esto evita `silent-misalignment` y `ai-slop`.
@@ -269,10 +276,10 @@ agente prestado; todo el criterio se lo da este prompt, subordinado a las conven
   `backend-best-practices` cuando el repo destino sea un backend Python (en un repo de manifiestos o de
   dashboards no aplica: manda su propia convencion). En conflicto, ganan las convenciones del repo.
 - Trabajar **en la ruta del repo de la slice**, no en el repo del issue si son distintos.
-- **Darle la intencion de la slice** (paso 1) junto a los AC: los AC dicen que tiene que cumplirse, la
-  intencion dice **para que**, y sin ella es facil entregar la solucion tecnicamente correcta y
-  funcionalmente inutil. No es licencia para ampliar el alcance: si la intencion pide mas que los AC,
-  eso se reporta, no se implementa de mas.
+- **Darle la intencion de la slice** (paso 1) junto a los criterios de aceptacion: los criterios
+  dicen que tiene que cumplirse, la intencion dice **para que**, y sin ella es facil entregar la
+  solucion tecnicamente correcta y funcionalmente inutil. No es licencia para ampliar el alcance: si
+  la intencion pide mas que los criterios, eso se reporta, no se implementa de mas.
 - **El ciclo TDD: invoca `superpowers:test-driven-development`** y siguelo (RED -> verificar que
   falla por el motivo esperado -> GREEN minimo -> REFACTOR), incluida su referencia
   `writing-good-tests.md`. No se resume aqui: fuente unica, para que no se desincronice.
@@ -281,7 +288,7 @@ agente prestado; todo el criterio se lo da este prompt, subordinado a las conven
 - **Delta 1 - exencion de capa.** En capas que la convencion del repo no testea por separado (p. ej.
   modelos ORM y migraciones alembic), la Iron Law de superpowers **no** aplica: no fuerces
   test-first; la puerta es "suite intacta + verificacion del efecto" (p. ej. el `SELECT` que exige el
-  plan). En capas con test (dominio/aplicacion/API...) aplica el ciclo completo, un test por AC.
+  plan). En capas con test (dominio/aplicacion/API...) aplica el ciclo completo, un test por criterio.
 - **Delta 2 - integridad de tests preexistentes (regla de hierro).** Superpowers dice "test falla ->
   arregla el codigo, no el test"; aqui se concreta: nunca modifiques un test **que ya existia** para
   que pase -no debilites asserts, no lo borres, no lo marques `@skip`/`xfail`-. Si no puedes
@@ -293,7 +300,7 @@ agente prestado; todo el criterio se lo da este prompt, subordinado a las conven
   evidencia empirica senala el refactor tras verde -no el orden test-first- como el verdadero driver
   de calidad y mantenibilidad en agentes.
 - **Delta 4 - el esfuerzo va al test.** Los tests son ciudadanos de primera categoria (ver
-  principios): gasta el presupuesto de calidad en que cada test **fije de verdad su AC**, no en
+  principios): gasta el presupuesto de calidad en que cada test **fije de verdad su criterio**, no en
   ponerlo verde. Antes de escribir un test, nombra el cambio de produccion que lo haria fallar; si no
   sabes nombrarlo, el test no esta testeando lo que la slice pretende construir.
 - **Delta 5 - la senal se construye aqui, si falta.** Si la slice trae `SENAL:` (no exenta), carga
@@ -305,7 +312,7 @@ agente prestado; todo el criterio se lo da este prompt, subordinado a las conven
   expresa idiomaticamente, **para y reportalo como gap** en vez de montar un contador ad-hoc en
   paralelo: la duplicacion del mecanismo se hereda, el gap se arregla una vez. Cuidado con la
   cardinalidad: ids, emails y uuids van al log o al span, jamas como label de metrica.
-- No sobredimensionar: lo minimo para los AC. Nada de andamiaje de slices futuras.
+- No sobredimensionar: lo minimo para los criterios de aceptacion. Nada de andamiaje de slices futuras.
 - **No tocar el issue ni artefactos.** Solo ficheros de codigo/test de la slice. No escribas planes
   ni design-docs, ni edites el issue: el estado del issue lo gestiona el orquestador, no la PR.
 - **Auto-check de wiring antes de entregar.** Corre `git diff --name-only` y confirma que los ficheros
@@ -387,7 +394,7 @@ completo esta en `agents/slice-verifier.md`; no sustituyas ese agente por `reque
 **Inputs de la invocacion** (lo del run; lo estable ya esta en el agente):
 
 - numero de issue, `slice_id` y `name`;
-- los **AC** de la slice, tal cual estan en el issue;
+- los **criterios de aceptacion** de la slice, tal cual estan en el issue;
 - la **`SENAL`** de la slice, tal cual esta en el issue (o que esta exenta, con su motivo, o que la
   spec no la declara);
 - las **fuentes de convencion del repo de la slice** (paso 1, ya filtradas por `fuentes_para`), y el
@@ -444,7 +451,7 @@ reintenta la invocacion, no se parsea a mano):
       hoy y deja de estarlo cuando esto entra>
 
       ## Criterios de aceptacion cumplidos
-      - <un AC por linea, con donde vive su test>
+      - <un criterio por linea, con donde vive su test>
 
       ## Senal a comprobar tras el despliegue
       <la linea SENAL de la slice, o "exenta - <motivo>">

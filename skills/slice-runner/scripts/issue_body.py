@@ -14,7 +14,7 @@ Formato de una linea de slice en el cuerpo:
 
     - [ ] slice-02 (ajustar-stock): Caso de uso AjustarStock [esperando-merge] PR #12
           INTENCION: hoy el ajuste se hace a mano en la consola y nadie sabe quien lo hizo
-          AC: emite evento StockAjustado
+          ACEPTACION: emite evento StockAjustado
           SENAL: prometheus rate(stock_ajustado_total[5m]) > 0 en 10m post-deploy; critical
     - [x] slice-01 (cantidad-vo): Crear VO [mergeada] PR #11
     - [ ] slice-04 (backfill): Backfill [bloqueada: ci-roja] PR #13
@@ -26,10 +26,13 @@ verdad de "mergeada": una slice marcada esta mergeada aunque el texto diga otra 
 
 Bajo cada slice, cuatro tipos de linea indentada:
 
-    INTENCION: que esta mal hoy y deja de estarlo con esta slice; alimenta el cuerpo de la PR.
-    AC:        criterio de aceptacion, verificable pre-merge (test + verificador).
-    SENAL:     como se comprueba viva en produccion; la consume `deploy-watch`.
-    REPO:      repo destino de la slice. Ausente = el repo del issue (el de la app).
+    INTENCION:  que esta mal hoy y deja de estarlo con esta slice; alimenta el cuerpo de la PR.
+    ACEPTACION: criterio de aceptacion, verificable pre-merge (test + verificador).
+    SENAL:      como se comprueba viva en produccion; la consume `deploy-watch`.
+    REPO:       repo destino de la slice. Ausente = el repo del issue (el de la app).
+
+`ACEPTACION:` se llamaba `AC:`, y el parser sigue aceptando la forma vieja: hay issues abiertos
+que la usan. Lo que se documenta y se emite es el nombre completo.
 
 A nivel de feature, la seccion `## Intencion` cuenta el problema entero (ver `parse_intencion`).
 """
@@ -71,6 +74,9 @@ _REPO_LINE_RE = re.compile(r"^REPO\s*:\s*(.+?)\s*$", re.IGNORECASE)
 # `INTENCION` se acepta con y sin tilde por el mismo motivo que `SENAL`: la escribe una
 # persona en un issue de GitHub y no debe perderse en silencio.
 _INTENCION_LINE_RE = re.compile(r"^INTENCI(?:O|Ó)N\s*:\s*(.*)$", re.IGNORECASE)
+# `ACEPTACION` es el nombre canonico; `AC` es la forma vieja, que se sigue aceptando porque
+# hay issues abiertos escritos con ella (misma tolerancia que con `SEÑAL`).
+_ACEPTACION_LINE_RE = re.compile(r"^(?:ACEPTACI(?:O|Ó)N|AC)\s*:\s*(.*)$", re.IGNORECASE)
 
 # --- Intencion de la feature (el problema entero, no el de una slice) ---
 # Vive en una seccion `## Intencion` del cuerpo, antes de las fuentes y las slices. Cuenta
@@ -102,8 +108,8 @@ class Slice:
     """Una slice tal como vive en el cuerpo del issue.
 
     `intencion` es que esta mal hoy y deja de estarlo con esta slice (alimenta el cuerpo de
-    la PR); `ac` son los criterios verificables pre-merge; `senal` es como se comprueba viva
-    en produccion (la consume `deploy-watch`). `repo` es el repo destino: `None` = el repo
+    la PR); `aceptacion` son los criterios verificables pre-merge; `senal` es como se comprueba
+    viva en produccion (la consume `deploy-watch`). `repo` es el repo destino: `None` = el repo
     del issue, y cualquier otro valor = slice cross-repo (p. ej. una alerta que vive en
     el repo de manifiestos, o un panel de Grafana).
     """
@@ -116,7 +122,7 @@ class Slice:
     motivo: str = ""
     pr: int | None = None
     intencion: list[str] = field(default_factory=list)
-    ac: list[str] = field(default_factory=list)
+    aceptacion: list[str] = field(default_factory=list)
     senal: list[str] = field(default_factory=list)
     repo: str | None = None
 
@@ -182,7 +188,7 @@ def render_slice_line(sl: Slice) -> str:
 
 
 def parse_body(body: str) -> list[Slice]:
-    """Extrae las slices (estado, INTENCION, AC, SENAL y REPO) del cuerpo, en orden de aparicion."""
+    """Extrae las slices (estado, INTENCION, ACEPTACION, SENAL y REPO), en orden de aparicion."""
     slices: list[Slice] = []
     current: Slice | None = None
     for line in body.splitlines():
@@ -197,8 +203,8 @@ def parse_body(body: str) -> list[Slice]:
         if intencion := _INTENCION_LINE_RE.match(stripped):
             current.intencion.append(intencion.group(1).strip())
             continue
-        if stripped.startswith("AC:"):
-            current.ac.append(stripped[len("AC:") :].strip())
+        if aceptacion := _ACEPTACION_LINE_RE.match(stripped):
+            current.aceptacion.append(aceptacion.group(1).strip())
             continue
         if senal := _SENAL_LINE_RE.match(stripped):
             current.senal.append(senal.group(1).strip())
@@ -218,8 +224,8 @@ def set_slice_estado(
 ) -> str:
     """Reescribe la linea de `slice_id` con el nuevo estado; preserva el resto del cuerpo.
 
-    Read-modify-write puro: mantiene name/type/titulo y las lineas hijas (INTENCION, AC,
-    SENAL, REPO) intactos. Si `pr` es None, conserva
+    Read-modify-write puro: mantiene name/type/titulo y las lineas hijas (INTENCION,
+    ACEPTACION, SENAL, REPO) intactos. Si `pr` es None, conserva
     el PR que ya tuviera la linea. Lanza KeyError si la slice no esta en el cuerpo y ValueError
     si el estado no es canonico.
     """
@@ -348,7 +354,7 @@ def render_fuentes_section(fuentes: Iterable[Fuente]) -> str:
 def set_fuentes(body: str, fuentes: Iterable[Fuente]) -> str:
     """Upsert de la seccion de fuentes: reemplaza si existe, la anade al final si no.
 
-    Read-modify-write puro que preserva el resto del cuerpo (intro, slices, AC). Valida
+    Read-modify-write puro que preserva el resto del cuerpo (intro, slices, criterios). Valida
     los tipos via `render_fuentes_section`.
     """
     section_lines = render_fuentes_section(fuentes).splitlines()
