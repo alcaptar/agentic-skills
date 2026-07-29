@@ -4,7 +4,8 @@
 contract they share with a script -- or with each other -- is currently stated twice. Two
 copies drift the moment only one is edited, and nothing fails when they do: the runner keeps
 emitting a marker the parser no longer knows, or one half of a deliberately duplicated policy
-gets "fixed" on its own.
+gets "fixed" on its own. The last test covers a third kind of claim the prose makes and nobody
+checks: a path into this repo's own tree.
 
 Each test here extracts a vocabulary from one surface and compares it against the other,
 rather than asserting that a given sentence is present. Rewording that keeps both sides in
@@ -15,6 +16,7 @@ from __future__ import annotations
 
 import json
 import re
+import subprocess
 from pathlib import Path
 
 import issue_body
@@ -32,6 +34,17 @@ def _read(path: Path) -> str:
 
 def _rel(path: Path) -> str:
     return str(path.relative_to(_ROOT))
+
+
+def _tracked(*patterns: str) -> list[str]:
+    """Paths git tracks, so the check measures the repo as published, not the local mess."""
+    out = subprocess.run(
+        ["git", "-C", str(_ROOT), "ls-files", "-z", "--", *patterns],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    return sorted(p for p in out.split("\0") if p)
 
 
 # --- slice state vocabulary -------------------------------------------------------------
@@ -163,4 +176,89 @@ def test_each_skill_names_the_other_when_declaring_its_side_of_the_criterion() -
     )
     assert "slice-runner" in _read(_DEPLOY_WATCH), (
         f"{_rel(_DEPLOY_WATCH)} no longer cites slice-runner; the asymmetry then reads as a bug"
+    )
+
+
+# --- paths the prose claims about this repo's own tree -----------------------------------
+
+# The docs here do not use markdown links for local files; they cite paths in backticks. So
+# the thing to validate is not `[x](y)` -- there are none -- but every backticked token that
+# claims something about this tree. A token qualifies only when its first component is a
+# tracked top-level entry: that keeps bare filenames (`controles.py`), paths in other repos
+# (`monitoring/metrics.py`), and branch patterns (`slice/NN-name`) out by construction,
+# instead of by an allowlist that would have to grow forever.
+
+# Two files are not scanned at all, each for a reason about what the file IS:
+_UNSCANNED = {
+    # Dated design records. They describe the tree as it was on their date and are
+    # deliberately never updated, so a path they cite going away is correct, not a defect.
+    "docs/superpowers/specs": "registro fechado, no se actualiza",
+    # A reference doc about OTHER repos: every path in it belongs to a Mercadona tree
+    # (mo.pypi.monitoring, mercadona.online.gke), not to this one.
+    "skills/slice-spec/references/observabilidad.md": "documenta rutas de otros repos",
+}
+
+# One token is exempt rather than its whole file: `smoke/README.md` is worth scanning (it
+# cites agents/ and tests/ paths of ours) but it also speaks in the smoke fixture's own
+# coordinates, and the fixture happens to have a `tests/` directory just like the repo root.
+_EXEMPT = {
+    "tests/test_core.py": "ruta de la fixture de smoke, que la slice crea al correr",
+}
+
+_BACKTICKED = re.compile(r"`([^`\n]+)`")
+_PATHLIKE = re.compile(r"^[\w.][\w./-]*$")
+
+
+def _parent_dirs(path: str) -> list[str]:
+    parts = path.split("/")[:-1]
+    return ["/".join(parts[: index + 1]) for index in range(len(parts))]
+
+
+def _claimed_repo_paths(markdown: str, top_level: frozenset[str]) -> set[str]:
+    """Backticked tokens that read as a path into this repo's tree."""
+    claimed = set()
+    for raw in _BACKTICKED.findall(markdown):
+        token = raw.strip().rstrip("/")
+        if not _PATHLIKE.match(token) or "/" not in token:
+            continue
+        if token.split("/", 1)[0] in top_level:
+            claimed.add(token)
+    return claimed
+
+
+def test_every_repo_path_cited_in_the_docs_still_exists() -> None:
+    """A path in the prose is a claim about the tree, and a rename breaks it silently.
+
+    Not hypothetical: `removed old specs` (fa804ba) deleted nine design docs and left five
+    pointers to them in `docs/design-notes.md`, the record we read precisely to avoid
+    re-deriving past decisions. Nothing failed, and they stayed dead until this check existed.
+    """
+    tracked = _tracked("*")
+    top_level = frozenset(path.split("/", 1)[0] for path in tracked)
+    known = set(tracked) | {parent for path in tracked for parent in _parent_dirs(path)}
+
+    for skipped, reason in _UNSCANNED.items():
+        assert skipped in known, (
+            f"the unscanned entry `{skipped}` ({reason}) is gone; drop it from _UNSCANNED "
+            f"instead of leaving a stale exemption that silently widens the check"
+        )
+
+    broken: dict[str, list[str]] = {}
+    still_cited: set[str] = set()
+    for source in _tracked("*.md"):
+        if any(source == skip or source.startswith(f"{skip}/") for skip in _UNSCANNED):
+            continue
+        for claimed in _claimed_repo_paths(_read(_ROOT / source), top_level):
+            if claimed in _EXEMPT:
+                still_cited.add(claimed)
+            elif claimed not in known:
+                broken.setdefault(claimed, []).append(source)
+
+    assert still_cited == set(_EXEMPT), (
+        f"these exemptions are no longer cited anywhere and must be removed: "
+        f"{sorted(set(_EXEMPT) - still_cited)}"
+    )
+    assert not broken, "the docs cite paths that are not in the tree:\n" + "\n".join(
+        f"  {path}  <- cited in {', '.join(sorted(sources))}"
+        for path, sources in sorted(broken.items())
     )

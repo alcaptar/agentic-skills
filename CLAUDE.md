@@ -80,6 +80,14 @@ vs `issue_body.py`, veredictos de `metrics.py`, el JSON del verificador en `agen
 compara, asi que reescribir las dos copias a la vez pasa y tocar solo una falla. Si editas una
 skill y `make check` se pone rojo ahi, es que has movido una mitad del contrato: mueve la otra.
 
+El mismo fichero comprueba que **toda ruta de este repo citada en los `.md` existe**. Aqui no se
+enlaza con markdown: se citan rutas en backticks, asi que lo que se valida es el token, no el
+enlace. Solo entran los que empiezan por un directorio de primer nivel del repo -eso deja fuera
+por construccion los nombres sueltos (`controles.py`), las rutas de otros repos y los patrones de
+rama (`slice/NN-name`)-. Dos ficheros no se escanean, cada uno por lo que **es**:
+`docs/superpowers/specs/` (registro fechado, describe el arbol de su dia) y
+`skills/slice-spec/references/observabilidad.md` (documenta rutas de repos ajenos).
+
 Targets sueltos: `make test`, `make check-types`, `make check-style`, `make check-format`,
 `make fix-linting`. El toolchain lo gestiona `uv` (grupo `dev` de `pyproject.toml`), asi que no
 hay que instalar nada a mano: `uv run` lo resuelve la primera vez. `python3 -m pytest` tambien
