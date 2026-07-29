@@ -66,11 +66,19 @@ coherencia con `ai-patterns`.
 sesion, al contrario que las skills. Si lo editas, **la sesion en curso sigue usando la version vieja**.
 Para probarlo hace falta sesion nueva; si no, el smoke valida la definicion equivocada en silencio.
 
-## Verificacion tras tocar los scripts
+## Verificacion tras tocar los scripts o las skills
 
 ```bash
 make check   # linting (ruff check + format) + mypy strict + pytest; todo debe estar verde
 ```
+
+**`make check` tambien cubre los `.md`**, no solo el codigo: `tests/test_skill_contracts.py`
+compara los contratos que hoy estan escritos dos veces (motivos de `bloqueada:` en `SKILL.md`
+vs `issue_body.py`, veredictos de `metrics.py`, el JSON del verificador en `agents/` y en
+`slice-runner`, y el criterio de degradacion sin subagentes duplicado a proposito en
+`slice-runner` y `deploy-watch`). Cada test **extrae** el vocabulario de ambos lados y los
+compara, asi que reescribir las dos copias a la vez pasa y tocar solo una falla. Si editas una
+skill y `make check` se pone rojo ahi, es que has movido una mitad del contrato: mueve la otra.
 
 Targets sueltos: `make test`, `make check-types`, `make check-style`, `make check-format`,
 `make fix-linting`. El toolchain lo gestiona `uv` (grupo `dev` de `pyproject.toml`), asi que no
