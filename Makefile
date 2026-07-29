@@ -1,4 +1,4 @@
-# Puertas de calidad del repo. Mismos nombres de target que exigimos a la fixture de
+# Controles de calidad del repo. Mismos nombres de target que exigimos a la fixture de
 # smoke (`smoke/fixture/Makefile`) y que el paso 2 de `slice-runner` autodetecta: la vara
 # del harness es la misma que la de lo que valida.
 #

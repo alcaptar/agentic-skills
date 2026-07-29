@@ -17,8 +17,8 @@ espera CI verde y **refleja el estado de la slice en el issue** en cada transici
 ## Requisitos
 
 - `gh` autenticado (`gh auth status`) con permiso para crear issues y PRs.
-- Un **repo remoto propio** (p. ej. un fork/clon de la fixture) con GitHub Actions que corra las
-  puertas (`make linting && make check-types && make test`) en `pull_request`.
+- Un **repo remoto propio** (p. ej. un fork/clon de la fixture) con GitHub Actions que corra los
+  controles (`make linting && make check-types && make test`) en `pull_request`.
 - `uv`, `git`, `make` para el proyecto objetivo.
 
 ## Estructura
@@ -28,7 +28,7 @@ fixture/              proyecto uv autocontenido, en estado RESET (fizzbuzz sin i
   pyproject.toml      ruff + mypy strict + pytest via uv
   Makefile            test / check-types / check-style / check-format / linting
   conventions.md      vara de convenciones (para el verificador)
-  spec.md             borrador de la spec (1 slice) que se sube al issue
+  spec.md             spec completa (1 slice, con fuentes y controles) que se sube al issue
   fizzbuzz/core.py    vacio: la slice lo implementa
 sample-output/        evidencia del codigo que produce la slice
   core.py.example     implementacion esperada de fizzbuzz
@@ -60,8 +60,8 @@ sample-output/        evidencia del codigo que produce la slice
    ```
 
 Debe: leer el issue, seleccionar `slice-01` (name `fizzbuzz-core`), marcarla `en-curso` en el issue,
-alinear, escribir el test (rojo), implementar `fizzbuzz`, refactor, **dejar las puertas verdes**
-(`gates.py checks`), verificar con el agente `slice-verifier`, abrir PR (`Part of #<N>`), y al llegar a
+alinear, escribir el test (rojo), implementar `fizzbuzz`, refactor, **dejar los controles verdes**
+(`controles.py controles`), verificar con el agente `slice-verifier`, abrir PR (`Part of #<N>`), y al llegar a
 CI verde marcar la slice `esperando-merge` en el issue.
 
 Sigue el estado en vivo **desde el propio issue en GitHub** (se actualiza en cada transicion).
@@ -92,11 +92,11 @@ version en disco ya no declaraba, y usaba `Bash`, que ya no estaba en su `tools`
 - **El agente `slice-verifier` resuelve** (`subagent_type: slice-verifier`, symlink instalado) y su
   mensaje final es el JSON del veredicto **sin prosa alrededor**: la tool `Agent` no valida schemas, asi
   que esto solo se comprueba aqui.
-- **El verificador no ejecuta puertas**, y ahora es estructural: no tiene `Bash`. Ojo con "arreglarlo"
+- **El verificador no ejecuta controles**, y ahora es estructural: no tiene `Bash`. Ojo con "arreglarlo"
   devolviendoselo -el smoke del 2026-07-27 comprobo que un `allowed-tools` restringido **no bloquea** lo
   no listado (ejecuto `ls`, ausente de su lista), asi que `Bash` con allowlist no es una alternativa
   valida a no tener `Bash`-.
-- **El verificador recibe el diff en disco** (`gates.py diff-bundle`), no lo calcula. Comprueba que
+- **El verificador recibe el diff en disco** (`controles.py diff-bundle`), no lo calcula. Comprueba que
   `--out` apunta **fuera del repo**: un fichero de trabajo dentro no debe poder acabar en la PR.
 - **Sin hallazgos de ruido.** Dos que el smoke ya cazo y no deben reaparecer: un hallazgo sobre "no
   puedo constatar que el test precediera a la implementacion" (inverificable con un solo commit, prohibido
@@ -105,7 +105,7 @@ version en disco ya no declaraba, y usaba `Bash`, que ya no estaba en su `tools`
 - En el issue, la linea de la slice pasa por `[en-curso]` -> `[esperando-merge] PR #<M>` y, tras el
   merge, `[x] ... [mergeada]`.
 - El diff staged de la PR contiene **solo** `fizzbuzz/core.py` y `tests/test_core.py`: ni borradores
-  ni artefactos (lo garantiza `gates.py pr-hygiene`).
+  ni artefactos (lo garantiza `controles.py pr-hygiene`).
 - **La `SENAL` viaja y no genera ruido.** La spec de la fixture declara `SENAL: exenta - <motivo>`
   (libreria pura, sin runtime que observar). El verificador debe **aceptarla** sin hallazgos de
   `observabilidad`: exigir instrumentacion a una libreria sin despliegue seria un falso positivo, y es
@@ -117,11 +117,11 @@ version en disco ya no declaraba, y usaba `Bash`, que ya no estaba en su `tools`
 
 Lo que los unit tests no pueden cubrir y este smoke **todavia no ejecuta**:
 
-- **Slice cross-repo** (`REPO: <org>/<repo>`): rama, puertas, `gh pr create` y CI **en el repo
+- **Slice cross-repo** (`REPO: <org>/<repo>`): rama, controles, `gh pr create` y CI **en el repo
   destino**, con `Part of <org>/<repo-del-issue>#<N>` como referencia cross-repo, y las fuentes de
   convencion leidas de su subseccion `### <org>/<repo>`. Necesita un segundo repo remoto de pruebas.
   Hasta que se smokee, esa ruta esta validada solo por la logica pura (`fuentes_para`, parseo de
-  `REPO:`) y por que `gates.py` ya aceptaba `--repo`.
+  `REPO:`) y por que `controles.py` ya aceptaba `--repo`.
 - **`deploy-watch` con senal declarada**: que una senal `declarada: true` sin muestras devuelva
   `inconclusive` esta cubierto offline (`tests/test_deploy_core.py`, y el CLI), pero la recogida real
   de una serie de negocio recien creada no.

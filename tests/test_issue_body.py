@@ -6,16 +6,23 @@ import pytest
 
 import issue_body
 from issue_body import (
+    Control,
     Fuente,
     Slice,
+    controles_para,
     fuentes_para,
+    normaliza_motivo,
     parse_body,
+    parse_controles,
     parse_fuentes,
     parse_intencion,
+    render_controles_section,
     render_fuentes_section,
     render_slice_line,
+    set_controles,
     set_fuentes,
     set_slice_estado,
+    tiene_seccion_controles,
     tiene_seccion_fuentes,
 )
 
@@ -84,7 +91,7 @@ def test_parse_body_recoge_los_criterios_de_aceptacion() -> None:
 
 def test_parse_body_acepta_la_etiqueta_vieja_ac() -> None:
     # `AC:` se renombro a `ACEPTACION:`, pero hay issues abiertos escritos con la vieja:
-    # dejar de parsearla los dejaria sin criterios y sin puerta de verificacion.
+    # dejar de parsearla los dejaria sin criterios y sin control de verificacion.
     body = "## Slices\n- [ ] slice-01 (x): T [pendiente]\n      AC: rechaza negativos\n"
     assert parse_body(body)[0].aceptacion == ["rechaza negativos"]
 
@@ -484,3 +491,150 @@ def test_set_estado_preserva_la_intencion_de_la_slice() -> None:
 def test_set_fuentes_preserva_la_seccion_de_intencion() -> None:
     nuevo = set_fuentes(_BODY_CON_INTENCION, [Fuente("doc", "otro.md")])
     assert parse_intencion(nuevo) == parse_intencion(_BODY_CON_INTENCION)
+
+
+# --- controles declarados en el issue -------------------------------------
+#
+# Antes los deducia `slice-runner` leyendo el Makefile en cada slice. Ahora los declara
+# `slice-spec` una vez, los confirma una persona y viven en el issue: misma forma por repo
+# que las fuentes de convencion, y por la misma razon.
+
+_BODY_CON_CONTROLES = """\
+# Feature X
+
+## Controles
+- lint: make linting
+- types: make check-types
+- tests: make test ARGS=-x
+
+### mercadona/mercadona.online.gke
+- schema: make test_prometheus_rules
+
+## Slices
+- [ ] slice-01 (vo): Crear VO [pendiente]
+"""
+
+_BODY_CON_EXENCION = """\
+# Feature X
+
+## Controles
+- lint: make linting
+
+### mercadona/grafana
+- ninguno: la CI solo publica en master, no valida en PR
+
+## Slices
+- [ ] slice-01 (panel): Panel [pendiente]
+"""
+
+
+def test_parse_controles_extrae_pares_en_orden() -> None:
+    assert parse_controles(_BODY_CON_CONTROLES) == [
+        Control("lint", "make linting"),
+        Control("types", "make check-types"),
+        Control("tests", "make test ARGS=-x"),
+        Control("schema", "make test_prometheus_rules", "mercadona/mercadona.online.gke"),
+    ]
+
+
+def test_parse_controles_seccion_ausente_lista_vacia() -> None:
+    assert parse_controles(_BODY) == []
+
+
+def test_tiene_seccion_controles_distingue_ausente_de_vacia() -> None:
+    # Ausente = el issue nunca los declaro -> slice-runner para. Vacia = declarada pero sin
+    # lineas, que es un issue mal formado y NO lo mismo que no tener controles.
+    assert tiene_seccion_controles(_BODY_CON_CONTROLES) is True
+    assert tiene_seccion_controles(_BODY) is False
+    assert tiene_seccion_controles("## Controles\n") is True
+
+
+def test_parse_controles_se_detiene_en_la_siguiente_seccion() -> None:
+    # La linea de slice `- [ ] slice-01 (vo): ...` esta bajo `## Slices`: no es un control.
+    assert all(c.nombre != "slice-01" for c in parse_controles(_BODY_CON_CONTROLES))
+
+
+def test_controles_para_filtra_por_repo_destino() -> None:
+    controles = parse_controles(_BODY_CON_CONTROLES)
+    assert [c.nombre for c in controles_para(controles)] == ["lint", "types", "tests"]
+    assert [c.nombre for c in controles_para(controles, "mercadona/mercadona.online.gke")] == [
+        "schema"
+    ]
+
+
+def test_controles_para_repo_sin_subseccion_no_hereda_los_del_issue() -> None:
+    # Heredar los del repo de la app mediria una alerta con `make test` de otro repo: es la
+    # misma desviacion silenciosa que heredar su vara de medir.
+    assert controles_para(parse_controles(_BODY_CON_CONTROLES), "mercadona/otro") == []
+
+
+def test_exencion_ninguno_se_lee_como_exenta_con_motivo() -> None:
+    exencion = controles_para(parse_controles(_BODY_CON_EXENCION), "mercadona/grafana")[0]
+    assert exencion.exento is True
+    assert exencion.motivo == "la CI solo publica en master, no valida en PR"
+
+
+def test_un_control_de_verdad_no_es_exento() -> None:
+    control = controles_para(parse_controles(_BODY_CON_EXENCION))[0]
+    assert control.exento is False
+    assert control.motivo == ""
+
+
+def test_render_controles_section_formato_canonico() -> None:
+    section = render_controles_section(
+        [Control("tests", "make test"), Control("schema", "make validate", "org/manifiestos")]
+    )
+    assert section == (
+        "## Controles\n- tests: make test\n\n### org/manifiestos\n- schema: make validate"
+    )
+
+
+def test_render_controles_rechaza_mezclar_exencion_con_controles() -> None:
+    # "no hay controles" y "hay estos" no pueden ser ciertas a la vez: dejarlo pasar haria
+    # que la ejecucion dependiera de cual se leyera primero.
+    with pytest.raises(ValueError):
+        render_controles_section([Control("ninguno", "no hay CI"), Control("tests", "make test")])
+
+
+def test_render_controles_permite_exencion_en_un_repo_y_controles_en_otro() -> None:
+    section = render_controles_section(
+        [Control("tests", "make test"), Control("ninguno", "no valida en PR", "org/grafana")]
+    )
+    assert "- ninguno: no valida en PR" in section
+
+
+def test_set_controles_anade_seccion_cuando_no_existe() -> None:
+    nuevo = set_controles(_BODY, [Control("tests", "make test")])
+    assert tiene_seccion_controles(nuevo)
+    assert parse_controles(nuevo) == [Control("tests", "make test")]
+
+
+def test_set_controles_reemplaza_preservando_el_resto_del_cuerpo() -> None:
+    nuevo = set_controles(_BODY_CON_CONTROLES, [Control("tests", "make test-unit")])
+    assert parse_controles(nuevo) == [Control("tests", "make test-unit")]
+    assert [s.slice_id for s in parse_body(nuevo)] == ["slice-01"]
+
+
+def test_set_controles_no_toca_las_fuentes_de_convencion() -> None:
+    nuevo = set_controles(_BODY_CON_FUENTES, [Control("tests", "make test")])
+    assert parse_fuentes(nuevo) == parse_fuentes(_BODY_CON_FUENTES)
+
+
+def test_roundtrip_render_parse_controles() -> None:
+    controles = [Control("lint", "make linting"), Control("schema", "make v", "org/repo")]
+    assert parse_controles(render_controles_section(controles) + "\n") == controles
+
+
+# --- compatibilidad del motivo viejo `puertas` ----------------------------
+
+
+def test_normaliza_motivo_traduce_la_forma_vieja() -> None:
+    assert normaliza_motivo("puertas") == "controles"
+    assert normaliza_motivo("ci-roja") == "ci-roja"
+
+
+def test_parse_body_normaliza_bloqueada_puertas_de_un_issue_viejo() -> None:
+    # Hay issues abiertos con este marcador escrito: renombrar no puede dejarlos ilegibles.
+    body = "## Slices\n- [ ] slice-01 (vo): Crear VO [bloqueada: puertas]\n"
+    sl = parse_body(body)[0]
+    assert (sl.estado, sl.motivo) == ("bloqueada", "controles")

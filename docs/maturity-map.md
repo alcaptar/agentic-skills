@@ -20,7 +20,7 @@ Referencia: **"Steps of AI Adoption"**, Boris Cherny (2026-07-16). Modelo de 5 e
 
 | "Para subir de nivel" (Cherny) | Pieza nuestra |
 |---|---|
-| self-verification loop you trust (tests+build+lint+e2e) | puertas objetivas + verificador (1→2) |
+| self-verification loop you trust (tests+build+lint+e2e) | controles objetivos + verificador (1→2) |
 | automate code review | verificador independiente (escritor≠verificador) |
 | run more than one agent, worktree isolation | Nivel 3 (Workflow fan-out + worktrees) |
 | loops and routines (`/loop` `/goal` `/batch`) | Nivel 2 |

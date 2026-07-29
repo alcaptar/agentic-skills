@@ -53,7 +53,7 @@ Dos modos:
   nada roto que puedas nombrar). A diferencia de `SENAL:`, **no hay figura de exencion**: una slice
   sin por que no deberia existir. Las slices sin efecto observable en produccion (refactor, value
   object interno) tambien tienen intencion; su coste es interno, pero se puede nombrar.
-- **Criterios de aceptacion obligatorios y falsables.** Sin ellos no hay puerta de verificacion en
+- **Criterios de aceptacion obligatorios y falsables.** Sin ellos no hay control de verificacion en
   slice-runner: toda slice declara criterios concretos. **Vara de falsabilidad:** un criterio vale
   si puedes nombrar el **cambio de produccion que lo haria fallar**; si no puedes nombrarlo, es
   prosa y hay que reescribirlo. Es la contraparte upstream de "los tests son ciudadanos de primera
@@ -78,6 +78,12 @@ Dos modos:
   fijas: se **descubren** por repo (paso 3) y las **confirma la persona**. Sin esta seccion,
   slice-runner para y no ejecuta con la vara vacia (evita el `silent-misalignment` de trabajar sin
   criterio y no avisar).
+- **Declara los controles.** Si las fuentes son la vara, la seccion `## Controles` son **los comandos
+  con los que se mide**: `lint`, `types`, `tests` y lo que el repo tenga. Tambien se descubren y se
+  confirman (paso 3b), y por el mismo motivo: antes los deducia `slice-runner` leyendo el `Makefile`
+  al empezar cada slice, lo que le metia el toolchain del repo en el contexto que debe durar todo el
+  run y no dejaba rastro que nadie pudiera revisar. Declarados aqui, la vara es **texto publico** que
+  ninguna slice puede debilitar en privado.
 - **La spec vive en el issue de GitHub.** `slice-spec` crea el issue (1 issue = 1 feature): es la
   fuente de verdad duradera del estado, no un fichero en el repo. No la guardes en `docs/` ni la comitees.
 
@@ -98,6 +104,13 @@ lineas, sin nombrar clases, ficheros ni patrones: el como vive en las slices y e
 
 ### <org>/<repo-destino>            # solo si alguna slice lleva REPO:
 - doc: <ruta dentro de ESE repo>
+
+## Controles
+- <nombre>: <comando exacto, p. ej. make linting>
+- tests: <comando exacto, p. ej. make test>
+
+### <org>/<repo-destino>            # solo si alguna slice lleva REPO:
+- ninguno: <motivo, si ese repo no valida en PR>
 
 ## Slices
 - [ ] slice-01 (nombre-kebab): <titulo de la slice> [pendiente]
@@ -127,12 +140,21 @@ Reglas duras:
   issue; cada subseccion `###` declara la vara de un repo destino. Si una slice lleva `REPO:`, su repo
   **tiene que** tener su subseccion: medir una alerta del repo de manifiestos con las convenciones del
   repo de la app es exactamente la desviacion silenciosa que esta seccion evita.
+- Antes de `## Slices`, una seccion `## Controles` con lineas `- <nombre>: <comando>`: los comandos
+  deterministas con los que se mide el repo (la escribe el paso 3b; slice-runner la exige y **no
+  deduce nada** en tiempo de run). Los nombres son libres -`lint`, `types`, `tests`, o `schema` en un
+  repo de manifiestos-, pero el comando tiene que ser **exacto y ejecutable tal cual**, porque nadie
+  lo va a interpretar: se le pasa al script y se ejecuta.
+- **Los controles tambien son por repo**, con la misma forma que las fuentes y por la misma razon:
+  correr `make test` de la app contra el repo de manifiestos no valida nada. Un repo sin controles
+  reales se declara con la linea reservada `- ninguno: <motivo>`; dejarlo vacio hace que slice-runner
+  pare, e inventarse un control finge una garantia que no existe.
 
 - Cada slice es una linea `- [ ] slice-NN (name): titulo`. `NN` = orden de dos digitos; `name` =
   kebab-case unico dentro de la spec.
 - Type opcional para conventional commits: `slice-03 (refactor: extraer-repo): ...`. Sin type ⇒ `feat`.
   No hace falta declarar la lista de types validos: el commit lo redacta el agente (sabe conventional
-  commits) y su unica puerta determinista es la higiene del diff (`gates.py pr-hygiene`).
+  commits) y su unico control determinista es la higiene del diff (`controles.py pr-hygiene`).
 - Debajo de cada slice, una linea `INTENCION:` con el coste de no hacerla: que esta mal hoy y deja
   de estarlo cuando entra. Va **antes** de los `ACEPTACION:` (primero el por que, luego lo que se
   comprueba antes de fusionar, luego lo que se comprueba vivo). Obligatoria siempre, sin exencion
@@ -205,11 +227,28 @@ Reglas duras:
    punteros en la subseccion `### <org>/<repo>`. Cada repo tiene su propia vara: la del repo de
    manifiestos (templating, escaping, politica de labels de alerta) no se parece a la de la app, y
    heredar la equivocada es la desviacion silenciosa que esta seccion existe para evitar.
+3b. **Descubre y confirma los controles del repo (mismo baile de tres pasos).** Si las fuentes son la
+   vara, los controles son **los comandos con los que se mide**, y se declaran aqui por la misma razon:
+   `slice-runner` no puede deducirlos en cada slice sin meter el `Makefile` en el contexto que tiene
+   que durar todo el run, y dejarselo al implementador seria peor -el juzgado eligiendo su propia
+   vara-. Corre el helper determinista:
+   `python3 ~/.claude/skills/slice-runner/scripts/discover_controles.py <repo>`. Lista los targets del
+   `Makefile` (con el comentario de encima como pista) y las herramientas configuradas en
+   `pyproject.toml`/`tox.ini`, **sin decidir**. Propon el mapeo `nombre: comando` y **espera
+   confirmacion**: es el paso que mas valor anade, porque ninguna autodeteccion sabe que este repo
+   necesita `make env-start` antes, o que `make test` tarda 20 minutos y en el bucle va
+   `make test-unit`. Escribe la seccion `## Controles` con lo confirmado.
+
+   - **Una vez por repo destino**, igual que las fuentes: cada `REPO:` lleva su subseccion
+     `### <org>/<repo>`. Correr `make test` de la app contra el repo de manifiestos no valida nada.
+   - **Un repo sin controles reales** (el de paneles de Grafana: la CI solo publica en `master`, no
+     valida en PR) se declara con `- ninguno: <motivo>`. **No lo dejes vacio y no te inventes uno**:
+     vacio hace que `slice-runner` pare, y un control inventado finge una garantia que no existe.
 4. **Crea el issue** de GitHub con la spec en el cuerpo (`gh issue create --title <feature> --body ...`).
    Como es una accion visible/colaborativa (outward-facing), **confirmala antes de crear**. El cuerpo
-   lleva `## Intencion` (paso 2a), luego `## Fuentes de convencion` (paso 3) y luego `## Slices`;
-   cada slice arranca `[ ] slice-NN (name): titulo [pendiente]`. Cumple el contrato de formato al pie
-   de la letra.
+   lleva `## Intencion` (paso 2a), `## Fuentes de convencion` (paso 3), `## Controles` (paso 3b) y
+   luego `## Slices`; cada slice arranca `[ ] slice-NN (name): titulo [pendiente]`. Cumple el contrato
+   de formato al pie de la letra.
 5. **Auto-validacion.** Aplica el checklist de `validate` (abajo) sobre lo que vas a poner en el
    cuerpo y corrige inline antes de crear el issue.
 6. **Cierra** diciendo el numero/URL del issue y que se ejecuta con `/slice-runner #N` (o
@@ -233,7 +272,7 @@ corregirlas. Checklist:
   dice "mejorar", "limpiar" o "refactorizar" sin decir que esta mal hoy, reescribela. Y si la linea
   describe el codigo (que clase se introduce, que fichero se toca) en vez del problema, tambien: eso
   es lo que el diff ya cuenta, y ocupa el sitio de lo que no cuenta.
-- Ninguna slice sin criterios de aceptacion (sin ellos no hay puerta de verificacion en
+- Ninguna slice sin criterios de aceptacion (sin ellos no hay control de verificacion en
 slice-runner).
 - **Ninguna slice que cambie comportamiento en prod sin `SENAL:`**, y ninguna `SENAL: exenta` sin
   motivo escrito. Si falta (p. ej. un issue anterior a este mecanismo), **es la desviacion a corregir**:
@@ -243,8 +282,17 @@ slice-runner).
 - **Cadena de observabilidad**: si alguna slice emite una senal nueva relevante, comprueba que hay slice
   de alerta (y de panel si aporta) **con su `REPO:`** y **detras** de la que emite la serie, o que la
   ausencia es una decision explicita. Nunca alerta/panel en la misma slice que la metrica.
-- **Toda slice con `REPO:` tiene su subseccion `### <org>/<repo>`** en las fuentes de convencion. Si
-  falta, es desviacion: corre el descubrimiento sobre ese repo y anadela.
+- **Toda slice con `REPO:` tiene su subseccion `### <org>/<repo>`** en las fuentes de convencion **y
+  en los controles**. Si falta cualquiera de las dos, es desviacion: corre el descubrimiento
+  correspondiente sobre ese repo y anadela.
+- **Tiene seccion `## Controles` con al menos una linea** para el repo del issue. Si falta (p. ej. un
+  issue de cuando `slice-runner` los autodetectaba), **es la desviacion a corregir**: corre
+  `discover_controles.py`, confirma el mapeo con la persona y anadela; sin ella `slice-runner` para.
+  Un repo que de verdad no tiene controles se declara con `- ninguno: <motivo>`, nunca vacio.
+- **Los comandos declarados siguen resolviendo.** Este es el sitio donde se caza la deriva: si alguien
+  renombro un target del `Makefile` despues de crear el issue, corrigelo aqui. En tiempo de run no hay
+  red -el control falla como cualquier otro y la slice acaba `bloqueada: controles`-, y esa fue una
+  decision consciente para no anadir un pre-flight heuristico.
 - **Cada criterio es falsable** (no basta con que exista). Por cada uno, nombra el cambio de
   produccion que lo haria fallar; si no puedes nombrarlo, **es la desviacion a corregir**:
   reescribelo con la persona hasta que sea refutable (o pregunta que se pretendia). Un criterio vago

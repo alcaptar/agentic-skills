@@ -32,15 +32,18 @@ Bajo cada slice, cuatro tipos de linea indentada:
     REPO:       repo destino de la slice. Ausente = el repo del issue (el de la app).
 
 `ACEPTACION:` se llamaba `AC:`, y el parser sigue aceptando la forma vieja: hay issues abiertos
-que la usan. Lo que se documenta y se emite es el nombre completo.
+que la usan. Lo que se documenta y se emite es el nombre completo. Por el mismo motivo, el
+motivo de bloqueo `puertas` se normaliza a `controles` al parsear (ver `normaliza_motivo`).
 
-A nivel de feature, la seccion `## Intencion` cuenta el problema entero (ver `parse_intencion`).
+A nivel de feature, el cuerpo trae dos secciones que `slice-spec` escribe y `slice-runner` solo
+lee: `## Intencion` (el problema entero, ver `parse_intencion`) y `## Controles` (los comandos
+deterministas del repo, ver `parse_controles`).
 """
 
 from __future__ import annotations
 
 import re
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
 
 # Estados canonicos de una slice.
@@ -52,6 +55,13 @@ ESTADOS = (
     "bloqueada",
     "abortada",
 )
+
+# Motivos canonicos de `bloqueada`. `puertas` es como se llamaba `controles` antes del
+# renombrado, y hay issues abiertos con ese marcador escrito en el cuerpo: se normaliza al
+# parsear para que nadie aguas abajo tenga que conocer las dos formas. Mismo trato que
+# `AC:` -> `ACEPTACION:`.
+MOTIVOS_BLOQUEADA = ("sin-subagentes", "controles", "verify", "ci-roja")
+_MOTIVOS_VIEJOS = {"puertas": "controles"}
 
 # Una linea de slice: checkbox, id `slice-NN`, `(name)` o `(type: name)` opcional, titulo,
 # marcador `[estado]` opcional y `PR #N` opcional. Cualquier `- [ ]` que no sea `slice-NN`
@@ -99,8 +109,28 @@ FUENTE_TIPOS = ("doc", "skill")
 _FUENTES_HEADING = "## Fuentes de convencion"
 _FUENTES_HEADING_RE = re.compile(r"^\s*##\s+fuentes\s+de\s+convenci[oó]n\s*$", re.IGNORECASE)
 _H2_RE = re.compile(r"^\s*##\s+")
-_FUENTES_SUBHEADING_RE = re.compile(r"^\s*###\s+(.+?)\s*$")
+_SUBHEADING_RE = re.compile(r"^\s*###\s+(.+?)\s*$")
 _FUENTE_LINE_RE = re.compile(r"^\s*-\s*(doc|skill)\s*:\s*(.+?)\s*$", re.IGNORECASE)
+
+# --- Controles deterministas (los comandos con los que se mide el repo) ---
+# Viven en una seccion `## Controles` del cuerpo del issue, con la misma forma por repo
+# que las fuentes. Antes los deducia `slice-runner` leyendo el `Makefile` al principio de
+# cada slice: eso metia el Makefile en el contexto del agente de vida mas larga del loop,
+# lo repetia en cada slice y no lo confirmaba nadie. Ahora `slice-spec` los descubre una
+# vez, la persona los confirma y quedan escritos aqui; `slice-runner` solo los lee.
+#
+# Declararlos en el issue tiene un segundo efecto: la vara es texto publico. Si los
+# eligiera el implementador, el juzgado estaria definiendo la vara con la que se le juzga
+# y bastaria `compliance-bias` para que acabara midiendose con `make test-unit`.
+#
+# El nombre reservado `ninguno` declara que el repo no tiene controles reales (el de
+# paneles de Grafana: la CI solo publica en master, no valida en PR). Vacio y eximido no
+# son lo mismo, igual que en `SENAL: exenta`.
+CONTROL_EXENTO = "ninguno"
+
+_CONTROLES_HEADING = "## Controles"
+_CONTROLES_HEADING_RE = re.compile(r"^\s*##\s+controles\s*$", re.IGNORECASE)
+_CONTROL_LINE_RE = re.compile(r"^\s*-\s*([\w-]+)\s*:\s*(.+?)\s*$")
 
 
 @dataclass
@@ -141,6 +171,43 @@ class Fuente:
     repo: str | None = None
 
 
+@dataclass
+class Control:
+    """Un control determinista declarado para un repo: `nombre: comando`.
+
+    Los nombres son libres (`lint`, `types`, `tests`, pero tambien `schema` en un repo de
+    manifiestos): el script que los ejecuta no sabe nada de toolchains, solo corre lo que se
+    le pasa. `repo` es el repo al que aplica: `None` = el repo del issue.
+
+    El nombre reservado `ninguno` no es un control sino una **exencion declarada**: el repo no
+    tiene controles reales y su `comando` es en realidad el motivo (ver `exento` y `motivo`).
+    """
+
+    nombre: str
+    comando: str
+    repo: str | None = None
+
+    @property
+    def exento(self) -> bool:
+        """True si esta linea declara que el repo no tiene controles, en vez de declarar uno."""
+        return self.nombre.lower() == CONTROL_EXENTO
+
+    @property
+    def motivo(self) -> str:
+        """El motivo de la exencion; cadena vacia si esto es un control de verdad."""
+        return self.comando if self.exento else ""
+
+
+def normaliza_motivo(motivo: str) -> str:
+    """Motivo de bloqueo en su forma canonica (`puertas` -> `controles`).
+
+    La forma vieja esta escrita en cuerpos de issues abiertos, que no se pueden renombrar por
+    edicion. Normalizar al parsear deja la compatibilidad en un solo sitio.
+    """
+    limpio = motivo.strip()
+    return _MOTIVOS_VIEJOS.get(limpio.lower(), limpio)
+
+
 def _split_type_name(paren: str | None) -> tuple[str, str]:
     """`(name)` -> (feat, name); `(type: name)` -> (type, name); vacio -> (feat, '')."""
     if not paren:
@@ -164,7 +231,8 @@ def _slice_from_match(m: re.Match[str]) -> Slice:
         estado, motivo = "mergeada", ""
     elif marcador:
         if ":" in marcador:
-            estado, motivo = (p.strip() for p in marcador.split(":", 1))
+            estado, raw_motivo = (p.strip() for p in marcador.split(":", 1))
+            motivo = normaliza_motivo(raw_motivo)
         else:
             estado, motivo = marcador, ""
     else:
@@ -278,39 +346,92 @@ def parse_intencion(body: str) -> str | None:
     return "\n".join(collected).strip()
 
 
+def _tiene_seccion(body: str, heading_re: re.Pattern[str]) -> bool:
+    """True si el cuerpo tiene esa seccion, aunque este vacia."""
+    return any(heading_re.match(line) for line in body.splitlines())
+
+
+def _iter_seccion(body: str, heading_re: re.Pattern[str]) -> Iterator[tuple[str | None, str]]:
+    """Recorre las lineas de una seccion por repo, como `(repo, linea)`.
+
+    Se detiene en el siguiente `## `. Una subseccion `### <org>/<repo>` atribuye las lineas
+    que le siguen a ese repo destino; las de antes van con `repo=None` (el repo del issue).
+    Lo comparten las secciones `## Fuentes de convencion` y `## Controles`, que tienen la
+    misma forma por repo y existen por la misma razon.
+    """
+    in_section = False
+    repo: str | None = None
+    for line in body.splitlines():
+        if heading_re.match(line):
+            in_section = True
+            continue
+        if not in_section:
+            continue
+        if _H2_RE.match(line):  # empieza otra seccion: esta acabo
+            return
+        if sub := _SUBHEADING_RE.match(line):
+            repo = sub.group(1)
+            continue
+        yield repo, line
+
+
+def _repos_en_orden(items: Iterable[Fuente | Control]) -> list[str]:
+    """Los repos destino citados, sin repetir y en orden de aparicion."""
+    repos: list[str] = []
+    for item in items:
+        if item.repo is not None and item.repo not in repos:
+            repos.append(item.repo)
+    return repos
+
+
+def _upsert_seccion(body: str, heading_re: re.Pattern[str], section: str) -> str:
+    """Reemplaza la seccion si existe, la anade al final si no; preserva el resto del cuerpo."""
+    section_lines = section.splitlines()
+    lines = body.splitlines()
+    out: list[str] = []
+    i, n = 0, len(lines)
+    replaced = False
+    while i < n:
+        if heading_re.match(lines[i]):
+            out.extend(section_lines)
+            i += 1
+            while i < n and not _H2_RE.match(lines[i]):  # descarta la seccion vieja
+                i += 1
+            if i < n:  # separa de la siguiente seccion con una linea en blanco
+                out.append("")
+            replaced = True
+            continue
+        out.append(lines[i])
+        i += 1
+
+    if not replaced:
+        if out and out[-1].strip() != "":
+            out.append("")
+        out.extend(section_lines)
+
+    result = "\n".join(out)
+    return result + "\n" if body.endswith("\n") else result
+
+
 def tiene_seccion_fuentes(body: str) -> bool:
     """True si el cuerpo tiene la seccion `## Fuentes de convencion` (aunque este vacia).
 
     Distingue "seccion ausente" (el issue nunca la declaro -> `slice-runner` para y pide
     generarla con `slice-spec`) de "seccion presente pero vacia".
     """
-    return any(_FUENTES_HEADING_RE.match(line) for line in body.splitlines())
+    return _tiene_seccion(body, _FUENTES_HEADING_RE)
 
 
 def parse_fuentes(body: str) -> list[Fuente]:
     """Extrae los punteros de la seccion `## Fuentes de convencion`, en orden.
 
     Devuelve `[]` si la seccion no existe o esta vacia. Solo lee las lineas `- doc: ...`
-    y `- skill: ...` que van bajo el heading, hasta el siguiente `## `. Una subseccion
-    `### <org>/<repo>` atribuye las lineas que le siguen a ese repo destino; las de antes
-    quedan con `repo=None` (el repo del issue). Para filtrar, `fuentes_para`.
+    y `- skill: ...`. Para filtrar por repo destino, `fuentes_para`.
     """
     fuentes: list[Fuente] = []
-    in_section = False
-    repo: str | None = None
-    for line in body.splitlines():
-        if _FUENTES_HEADING_RE.match(line):
-            in_section = True
-            continue
-        if in_section:
-            if _H2_RE.match(line):  # empieza otra seccion: la de fuentes acabo
-                break
-            if sub := _FUENTES_SUBHEADING_RE.match(line):
-                repo = sub.group(1)
-                continue
-            m = _FUENTE_LINE_RE.match(line)
-            if m:
-                fuentes.append(Fuente(m.group(1).lower(), m.group(2).strip(), repo))
+    for repo, line in _iter_seccion(body, _FUENTES_HEADING_RE):
+        if m := _FUENTE_LINE_RE.match(line):
+            fuentes.append(Fuente(m.group(1).lower(), m.group(2).strip(), repo))
     return fuentes
 
 
@@ -339,12 +460,7 @@ def render_fuentes_section(fuentes: Iterable[Fuente]) -> str:
 
     lines = [_FUENTES_HEADING]
     lines += [f"- {f.tipo}: {f.ruta}" for f in fuentes if f.repo is None]
-
-    repos: list[str] = []
-    for f in fuentes:
-        if f.repo is not None and f.repo not in repos:
-            repos.append(f.repo)
-    for repo in repos:
+    for repo in _repos_en_orden(fuentes):
         lines += ["", f"### {repo}"]
         lines += [f"- {f.tipo}: {f.ruta}" for f in fuentes if f.repo == repo]
 
@@ -357,28 +473,70 @@ def set_fuentes(body: str, fuentes: Iterable[Fuente]) -> str:
     Read-modify-write puro que preserva el resto del cuerpo (intro, slices, criterios). Valida
     los tipos via `render_fuentes_section`.
     """
-    section_lines = render_fuentes_section(fuentes).splitlines()
-    lines = body.splitlines()
-    out: list[str] = []
-    i, n = 0, len(lines)
-    replaced = False
-    while i < n:
-        if _FUENTES_HEADING_RE.match(lines[i]):
-            out.extend(section_lines)
-            i += 1
-            while i < n and not _H2_RE.match(lines[i]):  # descarta la seccion vieja
-                i += 1
-            if i < n:  # separa de la siguiente seccion con una linea en blanco
-                out.append("")
-            replaced = True
-            continue
-        out.append(lines[i])
-        i += 1
+    return _upsert_seccion(body, _FUENTES_HEADING_RE, render_fuentes_section(fuentes))
 
-    if not replaced:
-        if out and out[-1].strip() != "":
-            out.append("")
-        out.extend(section_lines)
 
-    result = "\n".join(out)
-    return result + "\n" if body.endswith("\n") else result
+def tiene_seccion_controles(body: str) -> bool:
+    """True si el cuerpo tiene la seccion `## Controles` (aunque este vacia).
+
+    Distingue "seccion ausente" (el issue nunca la declaro -> `slice-runner` para y pide
+    generarla con `slice-spec validate`) de "seccion presente pero vacia". Sin controles
+    declarados no se ejecuta: fail-closed, igual que con las fuentes de convencion.
+    """
+    return _tiene_seccion(body, _CONTROLES_HEADING_RE)
+
+
+def parse_controles(body: str) -> list[Control]:
+    """Extrae los pares `nombre: comando` de la seccion `## Controles`, en orden.
+
+    Devuelve `[]` si la seccion no existe o esta vacia. Una linea `- ninguno: <motivo>` sale
+    como un `Control` con `exento` a True. Para filtrar por repo destino, `controles_para`.
+    """
+    controles: list[Control] = []
+    for repo, line in _iter_seccion(body, _CONTROLES_HEADING_RE):
+        if m := _CONTROL_LINE_RE.match(line):
+            controles.append(Control(m.group(1).strip(), m.group(2).strip(), repo))
+    return controles
+
+
+def controles_para(controles: Iterable[Control], repo: str | None = None) -> list[Control]:
+    """Los controles que aplican a `repo` (`None` = el repo del issue).
+
+    Una slice con `REPO:` se mide con los controles de SU repo destino: correr `make test` de
+    la app contra el repo de manifiestos no valida nada, y heredar los controles del repo del
+    issue es la misma desviacion silenciosa que heredar su vara de medir.
+    """
+    return [c for c in controles if c.repo == repo]
+
+
+def render_controles_section(controles: Iterable[Control]) -> str:
+    """Renderiza la seccion completa (heading + lineas) en formato canonico, sin `\\n` final.
+
+    Los del repo del issue van primero; cada repo destino va en su subseccion `### <repo>`, en
+    orden de aparicion. Lanza ValueError si un repo mezcla la exencion `ninguno` con controles
+    de verdad: "no hay controles" y "hay estos" no pueden ser ciertas a la vez, y dejarlo pasar
+    haria que la ejecucion dependiera de cual se leyera primero.
+    """
+    controles = list(controles)
+    for repo in [None, *_repos_en_orden(controles)]:
+        del_repo = [c for c in controles if c.repo == repo]
+        if any(c.exento for c in del_repo) and len(del_repo) > 1:
+            donde = repo or "el repo del issue"
+            raise ValueError(f"{donde}: la exencion '{CONTROL_EXENTO}' no admite otros controles")
+
+    lines = [_CONTROLES_HEADING]
+    lines += [f"- {c.nombre}: {c.comando}" for c in controles if c.repo is None]
+    for repo in _repos_en_orden(controles):
+        lines += ["", f"### {repo}"]
+        lines += [f"- {c.nombre}: {c.comando}" for c in controles if c.repo == repo]
+
+    return "\n".join(lines)
+
+
+def set_controles(body: str, controles: Iterable[Control]) -> str:
+    """Upsert de la seccion de controles: reemplaza si existe, la anade al final si no.
+
+    Read-modify-write puro que preserva el resto del cuerpo. Valida via
+    `render_controles_section`.
+    """
+    return _upsert_seccion(body, _CONTROLES_HEADING_RE, render_controles_section(controles))

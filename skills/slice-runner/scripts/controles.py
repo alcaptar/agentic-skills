@@ -1,51 +1,57 @@
 #!/usr/bin/env python3
-"""Puertas deterministas de slice-runner (patron offload-deterministic).
+"""Controles deterministas de slice-runner (patron offload-deterministic).
 
 Se offloada a script la regla mecanica con coste de error alto que el modelo no
 garantiza por si mismo. Redactar un conventional commit lo hace bien el agente, asi
-que no hay puerta para eso. Hay tres:
+que no hay control para eso. Hay tres subcomandos:
 
     pr-hygiene   el diff staged solo puede contener los ficheros de codigo/test
                  que declaro el implementador; nunca planes ni design-docs (la spec
                  vive en el issue de GitHub, no como fichero).
 
-    checks       ejecuta lint/tipos/tests con los comandos que autodetecto el paso 2
-                 y devuelve, por puerta, exit code y salida truncada. Existe para que
-                 el output crudo de build no entre en el contexto de ningun agente: el
-                 juez adversarial no ejecuta puertas ni ve su salida, y el
-                 implementador recibe el error ya acotado. Es el patron de los
-                 verificadores de Honk (Spotify); su parseo por regex por herramienta
-                 NO se copia, porque aqui los comandos se autodetectan por repo y un
-                 regex que no matchea oculta el error real.
+    controles    ejecuta los controles declarados en el issue (`## Controles`) y
+                 devuelve, por control, exit code y donde esta su salida. Existe para
+                 que el output crudo de build no entre en el contexto de ningun agente:
+                 el juez adversarial no ejecuta controles ni ve su salida, y con `--out`
+                 el orquestador tampoco -recibe rutas y las reenvia, y el implementador
+                 lee el log entero-. Es el patron de los verificadores de Honk (Spotify);
+                 su parseo por regex por herramienta NO se copia, porque aqui los
+                 comandos los declara cada repo y un regex que no matchea oculta el
+                 error real.
 
     diff-bundle  materializa `slice.diff` y `files.txt` (rango `<base>...HEAD`) en un
                  directorio fuera del repo. Existe para que el verificador adversarial
                  no necesite `Bash`: recibe el diff en disco en vez de calcularlo, lo
-                 que hace **estructural** su incapacidad de ejecutar puertas (un
+                 que hace **estructural** su incapacidad de ejecutar controles (un
                  `allowed-tools` en el frontmatter del agente NO bloquea lo no listado;
                  se comprobo en smoke). De paso el rango lo fija el script -tres
                  puntos, desde el branch-point- y no el juicio de un modelo.
+
+El script no sabe nada de toolchains: solo ejecuta los `nombre=comando` que se le pasan,
+que salen de la seccion `## Controles` del issue (los descubre `slice-spec` una vez y los
+confirma una persona). Por eso no hay autodeteccion aqui dentro.
 
 Exit code 0 = PASA, 1 = FALLA, 2 = error de uso. Con --json imprime el resultado
 estructurado en stdout para que el orquestador lo consuma sin parsear prosa.
 
 Uso:
-    gates.py pr-hygiene --repo . --allow src/a.py --allow test/a.py [--spec ruta] [--json]
-    gates.py checks --repo . --check lint="make linting" --check tests="make test" \\
-        [--tail 30] [--timeout 600] [--json]
-    gates.py diff-bundle --repo . --base master --out /tmp/slice-02 [--json]
+    controles.py pr-hygiene --repo . --allow src/a.py --allow test/a.py [--spec ruta] [--json]
+    controles.py controles --repo . --control lint="make linting" --control tests="make test" \\
+        [--out /tmp/slice-02/logs] [--tail 30] [--timeout 600] [--json]
+    controles.py diff-bundle --repo . --base master --out /tmp/slice-02 [--json]
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import re
 import subprocess
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 
-# Truncado de la salida de una puerta que falla, y tope de duracion por puerta.
+# Truncado de la salida de un control que falla (solo sin `--out`), y tope de duracion.
 DEFAULT_TAIL = 30
 DEFAULT_TIMEOUT = 600
 
@@ -58,18 +64,21 @@ FORBIDDEN_PREFIXES = (
     "docs/superpowers/plans/",
 )
 
+# Todo lo que no sea alfanumerico, punto, guion o guion bajo, al nombrar el fichero de log.
+_UNSAFE_FILENAME_RE = re.compile(r"[^\w.-]+")
+
 
 @dataclass
-class GateResult:
-    """Resultado de una puerta determinista."""
+class Resultado:
+    """Resultado de un control determinista de veredicto unico (higiene del diff staged)."""
 
-    gate: str
+    control: str
     passed: bool
     hallazgos: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, object]:
         return {
-            "gate": self.gate,
+            "control": self.control,
             "veredicto": "PASA" if self.passed else "FALLA",
             "hallazgos": self.hallazgos,
         }
@@ -91,14 +100,14 @@ def _norm(path: str) -> str:
     return PurePosixPath(path).as_posix()
 
 
-def check_pr_hygiene(
+def comprueba_higiene_pr(
     repo: str,
     allow: list[str],
     spec: str | None,
-) -> GateResult:
+) -> Resultado:
     """El diff staged debe ser subconjunto de lo declarado y no tocar artefactos."""
     staged = [_norm(p) for p in _staged_files(repo)]
-    result = GateResult(gate="pr-hygiene", passed=True)
+    result = Resultado(control="pr-hygiene", passed=True)
 
     if not staged:
         result.passed = False
@@ -118,7 +127,7 @@ def check_pr_hygiene(
             result.passed = False
             result.hallazgos.append(f"la spec no puede entrar en la PR: {path}")
             continue
-        # Fail-closed: sin lista declarada, nada esta permitido. La puerta nunca
+        # Fail-closed: sin lista declarada, nada esta permitido. El control nunca
         # debe abrirse por omision del --allow (seria un falso negativo peligroso).
         if path not in allowed:
             result.passed = False
@@ -133,14 +142,21 @@ def check_pr_hygiene(
 
 
 @dataclass
-class CheckResult:
-    """Resultado de una puerta ejecutada (lint, tipos o tests)."""
+class ResultadoControl:
+    """Resultado de un control ejecutado (lint, tipos, tests... lo que declare el repo).
+
+    `salida` y `log` son excluyentes: con `--out`, la salida entera va al fichero `log` y
+    `salida` queda vacia, que es lo que permite al orquestador reenviar una ruta en vez de
+    tragarse output de build. Sin `--out`, `salida` lleva la cola truncada, que es lo util
+    cuando lo lanza una persona en un terminal.
+    """
 
     nombre: str
     comando: str
     passed: bool
     exit_code: int
-    salida: str
+    salida: str = ""
+    log: str = ""
 
     @property
     def veredicto(self) -> str:
@@ -153,36 +169,37 @@ class CheckResult:
             "veredicto": self.veredicto,
             "exit_code": self.exit_code,
             "salida": self.salida,
+            "log": self.log,
         }
 
 
 @dataclass
-class ChecksResult:
-    """Resultado agregado de todas las puertas ejecutadas."""
+class ResultadoControles:
+    """Resultado agregado de todos los controles ejecutados."""
 
-    checks: list[CheckResult] = field(default_factory=list)
+    controles: list[ResultadoControl] = field(default_factory=list)
 
     @property
     def passed(self) -> bool:
-        return all(c.passed for c in self.checks)
+        return all(c.passed for c in self.controles)
 
     def to_dict(self) -> dict[str, object]:
         return {
-            "gate": "checks",
+            "control": "controles",
             "veredicto": "PASA" if self.passed else "FALLA",
-            "checks": [c.to_dict() for c in self.checks],
+            "controles": [c.to_dict() for c in self.controles],
         }
 
 
-def parse_check_spec(spec: str) -> tuple[str, str]:
+def parse_control_spec(spec: str) -> tuple[str, str]:
     """`nombre=comando` -> (nombre, comando). Parte por el PRIMER `=`.
 
     El comando puede llevar `=` (p. ej. `make test ARGS=-x`), asi que solo el primero
-    separa. Nombre y comando vacios son error de uso, no una puerta que falla.
+    separa. Nombre y comando vacios son error de uso, no un control que falla.
     """
     nombre, sep, comando = spec.partition("=")
     if not sep or not nombre.strip() or not comando.strip():
-        raise ValueError(f"--check mal formado, se esperaba nombre=comando: {spec!r}")
+        raise ValueError(f"--control mal formado, se esperaba nombre=comando: {spec!r}")
     return nombre.strip(), comando.strip()
 
 
@@ -191,13 +208,25 @@ def tail(text: str, lines: int) -> str:
     return "\n".join(text.rstrip("\n").splitlines()[-lines:])
 
 
-def run_check(repo: str, nombre: str, comando: str, tail_lines: int, timeout: int) -> CheckResult:
-    """Ejecuta una puerta y devuelve exit code + salida truncada solo si falla."""
+def _log_path(out: str, nombre: str) -> Path:
+    """Ruta del log de un control. El nombre se sanea: llega por linea de comandos."""
+    return Path(out) / f"{_UNSAFE_FILENAME_RE.sub('_', nombre) or 'control'}.log"
+
+
+def ejecuta_control(
+    repo: str,
+    nombre: str,
+    comando: str,
+    tail_lines: int,
+    timeout: int,
+    out: str | None = None,
+) -> ResultadoControl:
+    """Ejecuta un control y devuelve exit code y, solo si falla, donde esta su salida."""
     try:
-        # `shell=True` es deliberado: el comando lo autodetecta el paso 2 del propio repo
+        # `shell=True` es deliberado: el comando lo declara el issue del propio repo
         # (`make test`, `uv run pytest`...) y llega como una linea de shell, no como argv.
         # `check=False` tambien: el exit code ES el resultado que devolvemos, no una excepcion.
-        out = subprocess.run(
+        proc = subprocess.run(
             comando,
             shell=True,
             check=False,
@@ -207,32 +236,45 @@ def run_check(repo: str, nombre: str, comando: str, tail_lines: int, timeout: in
             text=True,
             timeout=timeout,
         )
+        exit_code, salida = proc.returncode, proc.stdout
     except subprocess.TimeoutExpired:
-        return CheckResult(nombre, comando, False, -1, f"timeout tras {timeout}s")
-    passed = out.returncode == 0
+        exit_code, salida = -1, f"timeout tras {timeout}s"
+
     # En PASA la salida se descarta: el mensaje corto de exito evita meter ruido de
     # build en el contexto de quien consuma esto.
-    return CheckResult(
-        nombre, comando, passed, out.returncode, "" if passed else tail(out.stdout, tail_lines)
-    )
+    if exit_code == 0:
+        return ResultadoControl(nombre, comando, True, 0)
+
+    if out is None:
+        return ResultadoControl(nombre, comando, False, exit_code, salida=tail(salida, tail_lines))
+
+    # Con `--out`, el log entero va a disco y aqui solo viaja su ruta: el orquestador la
+    # reenvia sin leerla y el implementador recibe el error completo, no 30 lineas.
+    destino = _log_path(out, nombre)
+    destino.parent.mkdir(parents=True, exist_ok=True)
+    destino.write_text(salida, encoding="utf-8")
+    return ResultadoControl(nombre, comando, False, exit_code, log=str(destino))
 
 
-def run_checks(
+def ejecuta_controles(
     repo: str,
     specs: list[tuple[str, str]],
     tail_lines: int,
     timeout: int,
-) -> ChecksResult:
-    """Ejecuta TODAS las puertas, sin fail-fast.
+    out: str | None = None,
+) -> ResultadoControles:
+    """Ejecuta TODOS los controles, sin fail-fast.
 
     Una vuelta al implementador (spawn de agente + contexto) cuesta mas que volver a
     correr la suite, asi que se recolectan todos los fallos en una pasada.
     """
-    return ChecksResult([run_check(repo, n, c, tail_lines, timeout) for n, c in specs])
+    return ResultadoControles(
+        [ejecuta_control(repo, n, c, tail_lines, timeout, out) for n, c in specs]
+    )
 
 
 @dataclass
-class BundleResult:
+class ResultadoBundle:
     """Resultado de materializar el diff de la slice en disco."""
 
     passed: bool
@@ -243,7 +285,7 @@ class BundleResult:
 
     def to_dict(self) -> dict[str, object]:
         return {
-            "gate": "diff-bundle",
+            "control": "diff-bundle",
             "veredicto": "PASA" if self.passed else "FALLA",
             "slice_diff": self.slice_diff,
             "files": self.files,
@@ -252,7 +294,7 @@ class BundleResult:
         }
 
 
-def write_diff_bundle(repo: str, base: str, out: str) -> BundleResult:
+def escribe_diff_bundle(repo: str, base: str, out: str) -> ResultadoBundle:
     """Escribe `slice.diff` y `files.txt` en `out` para que el verificador los lea.
 
     El verificador no tiene `Bash`: recibe el diff en disco en vez de calcularlo. De
@@ -262,7 +304,7 @@ def write_diff_bundle(repo: str, base: str, out: str) -> BundleResult:
     verificador cazaria violaciones fantasma.
     """
     rango = f"{base}...HEAD"
-    result = BundleResult(passed=True)
+    result = ResultadoBundle(passed=True)
     try:
         diff = subprocess.run(
             ["git", "-C", repo, "diff", rango],
@@ -277,7 +319,7 @@ def write_diff_bundle(repo: str, base: str, out: str) -> BundleResult:
             check=True,
         ).stdout
     except subprocess.CalledProcessError as exc:
-        return BundleResult(
+        return ResultadoBundle(
             passed=False,
             hallazgos=[f"no se pudo diffear contra {base!r}: {exc.stderr.strip() or exc}"],
         )
@@ -287,7 +329,7 @@ def write_diff_bundle(repo: str, base: str, out: str) -> BundleResult:
         # Fail-closed, igual que `pr-hygiene` con nada staged: sin cambios no hay
         # nada que verificar, y un bundle vacio haria que el verificador diera PASA
         # sobre la nada.
-        return BundleResult(
+        return ResultadoBundle(
             passed=False, hallazgos=[f"sin cambios respecto a {base}: nada que verificar"]
         )
 
@@ -304,7 +346,7 @@ def write_diff_bundle(repo: str, base: str, out: str) -> BundleResult:
     return result
 
 
-def _emit_bundle(result: BundleResult, as_json: bool) -> int:
+def _emit_bundle(result: ResultadoBundle, as_json: bool) -> int:
     if as_json:
         print(json.dumps(result.to_dict(), ensure_ascii=False))
     else:
@@ -317,33 +359,34 @@ def _emit_bundle(result: BundleResult, as_json: bool) -> int:
     return 0 if result.passed else 1
 
 
-def _emit(result: GateResult, as_json: bool) -> int:
+def _emit(result: Resultado, as_json: bool) -> int:
     if as_json:
         print(json.dumps(result.to_dict(), ensure_ascii=False))
     else:
         veredicto = "PASA" if result.passed else "FALLA"
-        print(f"[{result.gate}] {veredicto}")
+        print(f"[{result.control}] {veredicto}")
         for h in result.hallazgos:
             print(f"  - {h}")
     return 0 if result.passed else 1
 
 
-def _emit_checks(result: ChecksResult, as_json: bool) -> int:
+def _emit_controles(result: ResultadoControles, as_json: bool) -> int:
     if as_json:
         print(json.dumps(result.to_dict(), ensure_ascii=False))
     else:
-        print(f"[checks] {'PASA' if result.passed else 'FALLA'}")
-        for c in result.checks:
+        print(f"[controles] {'PASA' if result.passed else 'FALLA'}")
+        for c in result.controles:
             print(f"  {c.veredicto} {c.nombre} ({c.comando})")
-            if c.salida:
-                for line in c.salida.splitlines():
-                    print(f"    {line}")
+            if c.log:
+                print(f"    log: {c.log}")
+            for line in c.salida.splitlines():
+                print(f"    {line}")
     return 0 if result.passed else 1
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Puerta determinista de slice-runner")
-    sub = parser.add_subparsers(dest="gate", required=True)
+    parser = argparse.ArgumentParser(description="Control determinista de slice-runner")
+    sub = parser.add_subparsers(dest="subcomando", required=True)
 
     hyg = sub.add_parser("pr-hygiene", help="el diff staged solo lleva codigo/test de la slice")
     hyg.add_argument("--repo", default=".", help="ruta del repo (default: cwd)")
@@ -356,27 +399,32 @@ def main(argv: list[str] | None = None) -> int:
     hyg.add_argument("--spec", default=None, help="ruta de la spec, para prohibirla explicitamente")
     hyg.add_argument("--json", action="store_true", help="salida estructurada JSON")
 
-    chk = sub.add_parser("checks", help="ejecuta lint/tipos/tests y devuelve salida truncada")
-    chk.add_argument("--repo", default=".", help="ruta del repo (default: cwd)")
-    chk.add_argument(
-        "--check",
+    ctl = sub.add_parser("controles", help="ejecuta los controles declarados en el issue")
+    ctl.add_argument("--repo", default=".", help="ruta del repo (default: cwd)")
+    ctl.add_argument(
+        "--control",
         action="append",
         default=[],
-        help="puerta como nombre=comando, p. ej. lint='make linting' (repetible)",
+        help="control como nombre=comando, p. ej. lint='make linting' (repetible)",
     )
-    chk.add_argument(
+    ctl.add_argument(
+        "--out",
+        default=None,
+        help="directorio FUERA del repo donde escribir el log entero de cada control fallido",
+    )
+    ctl.add_argument(
         "--tail",
         type=int,
         default=DEFAULT_TAIL,
-        help=f"lineas de salida en fallo (default {DEFAULT_TAIL})",
+        help=f"lineas de salida en fallo cuando no hay --out (default {DEFAULT_TAIL})",
     )
-    chk.add_argument(
+    ctl.add_argument(
         "--timeout",
         type=int,
         default=DEFAULT_TIMEOUT,
-        help=f"segundos por puerta (default {DEFAULT_TIMEOUT})",
+        help=f"segundos por control (default {DEFAULT_TIMEOUT})",
     )
-    chk.add_argument("--json", action="store_true", help="salida estructurada JSON")
+    ctl.add_argument("--json", action="store_true", help="salida estructurada JSON")
 
     bun = sub.add_parser("diff-bundle", help="materializa el diff de la slice para el verificador")
     bun.add_argument("--repo", default=".", help="ruta del repo (default: cwd)")
@@ -386,24 +434,26 @@ def main(argv: list[str] | None = None) -> int:
 
     args = parser.parse_args(argv)
 
-    if args.gate == "pr-hygiene":
-        return _emit(check_pr_hygiene(args.repo, args.allow, args.spec), args.json)
+    if args.subcomando == "pr-hygiene":
+        return _emit(comprueba_higiene_pr(args.repo, args.allow, args.spec), args.json)
 
-    if args.gate == "diff-bundle":
-        return _emit_bundle(write_diff_bundle(args.repo, args.base, args.out), args.json)
+    if args.subcomando == "diff-bundle":
+        return _emit_bundle(escribe_diff_bundle(args.repo, args.base, args.out), args.json)
 
-    # Error de uso (exit 2), no FALLA de puerta: confundirlos haria que el orquestador
+    # Error de uso (exit 2), no FALLA de control: confundirlos haria que el orquestador
     # reintentara el paso 5 por un fallo que esta en su propia invocacion.
-    if not args.check:
-        print("error: checks necesita al menos un --check nombre=comando", file=sys.stderr)
+    if not args.control:
+        print("error: controles necesita al menos un --control nombre=comando", file=sys.stderr)
         return 2
     try:
-        specs = [parse_check_spec(s) for s in args.check]
+        specs = [parse_control_spec(s) for s in args.control]
     except ValueError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
 
-    return _emit_checks(run_checks(args.repo, specs, args.tail, args.timeout), args.json)
+    return _emit_controles(
+        ejecuta_controles(args.repo, specs, args.tail, args.timeout, args.out), args.json
+    )
 
 
 if __name__ == "__main__":

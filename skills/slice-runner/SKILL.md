@@ -32,15 +32,16 @@ Nivel de autonomia 1: un ciclo por invocacion. Para encadenar slices, envolver e
   el issue.
 - **Una slice puede vivir en otro repo.** La linea `REPO: <org>/<repo>` de la slice fija el repo
   destino (alertas en el repo de manifiestos, paneles en el de Grafana); ausente = el repo del issue.
-  Cuando la hay, **todo el ciclo ocurre en ese repo**: comandos autodetectados (paso 2), rama (paso 4),
-  puertas y diff (pasos 5-7), PR y CI (pasos 8-9). Y la **vara de medir es la de ESE repo** (su
+  Cuando la hay, **todo el ciclo ocurre en ese repo**: controles declarados (paso 2), rama (paso 4),
+  controles y diff (pasos 5-7), PR y CI (pasos 8-9). Y la **vara de medir es la de ESE repo** (su
   subseccion `### <org>/<repo>` en las fuentes del issue), no la del repo de la app. El issue sigue
   siendo uno solo: es la fuente de verdad del run.
-- **Puertas de parada objetivas.** No hay PR mergeable sin lint limpio, tipos limpios, tests verdes y **CI verde**, ejecutados con los comandos reales del repo (paso 2), no con binarios asumidos.
-- **El juez no ejecuta puertas ni ve output de build.** Las puertas deterministas (lint, tipos, tests) corren **antes** del verificador: el implementador las corre en su ciclo para tener feedback incremental, y el orquestador las re-corre como backstop (paso 6) porque el auto-reporte del implementador no es fuente de verdad. Cuando se invoca al verificador (paso 7) ya estan verdes por construccion, asi que no recibe nada de ellas: su presupuesto entero se gasta en lo semantico. Meter un traceback de pytest en el contexto del unico agente cuyo valor es el juicio es `limited-focus` autoinfligido, y un `ruff` sucio no debe consumir un reintento adversarial.
-- **Determinista lo que es regla exacta (`offload-deterministic`).** Lo mecanico NO se delega al juicio de un agente: lo resuelve el script `scripts/gates.py`, cuyo exit code es autoritativo. Tres subcomandos: `pr-hygiene` (higiene del diff staged, paso 8), `checks` (ejecutar lint/tipos/tests con los comandos del paso 2 y devolver exit code + salida truncada, pasos 5 y 6) y `diff-bundle` (materializar el diff de la slice para el verificador, paso 7). No se pide dos veces a la IA lo que un script decide una vez, y ningun agente ve output crudo de build.
+- **Controles de parada objetivos.** No hay PR mergeable sin lint limpio, tipos limpios, tests verdes y **CI verde**, ejecutados con los comandos que **el repo declara en el issue** (paso 2), no con binarios asumidos ni deducidos al vuelo.
+- **Los controles los declara el issue, no los deduce nadie en tiempo de run.** La seccion `## Controles` (que escribe `slice-spec` tras descubrirlos y **confirmarlos contigo**) es la unica fuente: ningun agente abre un `Makefile` durante la slice. Deducirlos en cada slice metia el `Makefile` en el contexto del agente de vida mas larga del loop y no dejaba rastro que nadie pudiera revisar. Y dejarselo al implementador seria peor: el **juzgado estaria definiendo la vara con la que se le juzga**, y basta `compliance-bias` para que acabe midiendose con `make test-unit`.
+- **Nadie que juzgue ve output de build.** Los controles deterministas (lint, tipos, tests) corren **antes** del verificador: el implementador los corre en su ciclo para tener feedback incremental, y el orquestador los re-corre como backstop (paso 6) porque el auto-reporte del implementador no es fuente de verdad. El verificador (paso 7) no recibe nada de ellos -ya estan verdes por construccion- y el orquestador tampoco los lee: con `--out` la salida va a disco y el orquestador solo reenvia rutas. Meter un traceback de pytest en el contexto del unico agente cuyo valor es el juicio es `limited-focus` autoinfligido, y un `ruff` sucio no debe consumir un reintento adversarial.
+- **Determinista lo que es regla exacta (`offload-deterministic`).** Lo mecanico NO se delega al juicio de un agente: lo resuelve el script `scripts/controles.py`, cuyo exit code es autoritativo. Tres subcomandos: `pr-hygiene` (higiene del diff staged, paso 8), `controles` (ejecutar los comandos declarados y devolver exit code + la ruta del log, pasos 5 y 6) y `diff-bundle` (materializar el diff de la slice para el verificador, paso 7). No se pide dos veces a la IA lo que un script decide una vez, y ningun agente ve output crudo de build.
 - **Los tests son ciudadanos de primera categoria.** Valen tanto o mas que el codigo de produccion: ahi va el mayor esfuerzo de calidad, y sobre todo la exigencia de que **testeen de verdad lo que la slice pretende construir**, no una version debilitada ni un proxy que pasa por casualidad. Un test que pasa sin fijar su criterio de aceptacion es un fallo tan grave como codigo roto. Con dientes, no como declaracion: el implementador aplica `writing-good-tests.md` de `superpowers:test-driven-development` (nombrar el cambio de produccion que haria fallar el test **antes** de escribirlo; asertar comportamiento real, nunca mocks; codigo de test fuera de produccion), y el verificador lo bloquea con severidad **alta** en el paso 7 (mapeo criterio↔test, fixture/wiring theater, manipulacion de tests, test-desiderata).
-- **TDD consciente de capa.** El ciclo TDD lo define `superpowers:test-driven-development` (lo invoca el implementador, paso 5); aqui vive solo el delta: si las convenciones del repo eximen una capa (p. ej. modelos ORM y migraciones que no se testean por separado), la puerta de esa slice es "suite intacta + verificacion de datos/efecto" en vez del test-first por criterio. Decide la convencion del repo, no este documento ni superpowers.
+- **TDD consciente de capa.** El ciclo TDD lo define `superpowers:test-driven-development` (lo invoca el implementador, paso 5); aqui vive solo el delta: si las convenciones del repo eximen una capa (p. ej. modelos ORM y migraciones que no se testean por separado), el control de esa slice es "suite intacta + verificacion de datos/efecto" en vez del test-first por criterio. Decide la convencion del repo, no este documento ni superpowers.
 - **Alinear antes de implementar.** Antes de escribir codigo, mostrar el entendimiento de la slice (alcance, criterios de aceptacion, capa afectada, comando de validacion) y esperar go/no-go. Nunca transcribir a ciegas el codigo pre-horneado de una spec: validalo contra las convenciones primero.
 - **Seguir `backend-best-practices`.** El implementador carga esa skill y respeta hexagonal/DDD, DI, Pydantic en boundaries, subordinada siempre a las convenciones del repo.
 - **El estado del run vive en el issue de GitHub.** La spec y el estado de cada slice viven en el cuerpo de un issue de GitHub (una feature = un issue): es la **unica fuente de verdad**, viva y duradera. No hay estado local (`.slice-runner/`, ledger ni panel). El agente olvida entre slices; al arrancar re-lee el issue. Registro duradero = issue (intencion + estado) + PRs mergeadas (codigo).
@@ -53,7 +54,7 @@ Nivel de autonomia 1: un ciclo por invocacion. Para encadenar slices, envolver e
   abajo que esta skill evita en todas partes.
 - **La PR solo lleva el codigo de la slice.** El commit stagea unicamente los ficheros de codigo/test que produjo el implementador (`git add` explicito, nunca `-A`/`.`). Planes y design-docs jamas entran en la PR (la spec ya no es un fichero: vive en el issue).
 - **Contexto fresco por slice.** Cada slice arranca sin arrastrar la conversacion de la anterior; lo que persiste entre slices es el **issue** (spec + estado), que se re-lee al empezar. Evita la degradacion de contexto (patron Ralph) y hace seguro el Nivel 2 (`/loop`).
-- **Circuit breaker.** Maximo 2 reintentos por fase, y las **puertas tienen presupuesto propio** (2), separado del del verificador (2): gastar el presupuesto adversarial en un fallo mecanico es justo lo que este reparto evita. Ademas, **presupuesto de coste**: si la slice supera el limite de tokens/$ configurado, para con estado `abortada-presupuesto`. Si la CI sigue roja tras el reintento, para, deja el PR abierto y reporta con logs.
+- **Circuit breaker.** Maximo 2 reintentos por fase, y los **controles tienen presupuesto propio** (2), separado del del verificador (2): gastar el presupuesto adversarial en un fallo mecanico es justo lo que este reparto evita. Ademas, **presupuesto de coste**: si la slice supera el limite de tokens/$ configurado, para con estado `abortada-presupuesto`. Si la CI sigue roja tras el reintento, para, deja el PR abierto y reporta con logs.
 - **Esperas no bloqueantes.** Prohibido lanzar shells bloqueantes largas para esperar (nada de `gh pr checks --watch`, `sleep` largos, ni polls que se queden colgados 30-60 min). Toda espera (CI verde, merge de la PR) se hace con **ticks acotados en background + notificacion** (o la herramienta `Monitor`), devolviendo el control entre ticks. Una espera nunca debe monopolizar una shell ni la sesion.
 - **No asumir worktree.** Por defecto se trabaja en una rama normal. Solo se usa un git worktree aislado si se van a paralelizar varias slices concurrentes (Nivel 2) o si el repo ya declara config de worktrees.
 
@@ -77,6 +78,14 @@ y cuando el recuento no cuadra no hay forma de reconstruir que paso.
 - doc: templates/CLAUDE.md
 - doc: tests/prometheus/README.md
 
+## Controles
+- lint: make linting
+- types: make check-types
+- tests: make test
+
+### mercadona/mercadona.online.gke
+- schema: make test_prometheus_rules
+
 ## Slices
 - [x] slice-01 (cantidad-vo): Crear value object `Cantidad` [mergeada] PR #11
       INTENCION: hoy cada endpoint revalida la cantidad a mano y ya se olvido en dos sitios
@@ -93,12 +102,20 @@ y cuando el recuento no cuadra no hay forma de reconstruir que paso.
       SENAL: prometheus ALERTS{alertname="ShopAjusteFallido"} presente y == 0 en 24h; advisory
 ```
 
-La seccion `## Fuentes de convencion` (punteros a la vara de medir del repo) la declara
-`slice-spec`; `slice-runner` la exige y para si falta (paso 1). **Es por repo**: las lineas antes de
-cualquier `### <org>/<repo>` son las del repo del issue, y cada subseccion declara la vara de un repo
-destino. Unidad de trabajo = cada item `- [ ] slice-NN ...`. Una feature de una sola slice es un
-checklist con una unica linea. El parseo y la reescritura de estas lineas los hace la logica pura de
-`scripts/issue_body.py` (`offload-deterministic`); la I/O contra el issue es `gh`.
+Las secciones `## Fuentes de convencion` (punteros a la vara de medir del repo) y `## Controles`
+(los comandos con los que se mide) las declara `slice-spec`; `slice-runner` las exige y para si
+faltan (pasos 1 y 2). **Las dos son por repo**: las lineas antes de cualquier `### <org>/<repo>` son
+las del repo del issue, y cada subseccion declara las de un repo destino. Unidad de trabajo = cada
+item `- [ ] slice-NN ...`. Una feature de una sola slice es un checklist con una unica linea. El
+parseo y la reescritura de estas lineas los hace la logica pura de `scripts/issue_body.py`
+(`offload-deterministic`); la I/O contra el issue es `gh`.
+
+- **`## Controles`** — los pares `nombre: comando` que se ejecutan como control determinista, con
+  `parse_controles(body)` y `controles_para(controles, slice.repo)`. Los nombres son libres (`lint`,
+  `types`, `tests`, pero tambien `schema` en un repo de manifiestos): el script no sabe nada de
+  toolchains. Un repo sin controles reales lo declara con la linea reservada
+  `- ninguno: <motivo>`, que sale del parser como un control con `exento` a True: **vacio y eximido
+  no son lo mismo**, igual que en `SENAL: exenta`.
 
 - **`## Intencion` e `INTENCION:`** — el por que, a nivel de feature y de slice: que esta mal hoy y
   deja de estarlo. Es lo que va al cuerpo de la pull request (paso 8). Se leen con
@@ -133,7 +150,7 @@ El estado se codifica en la linea con `[estado]` (y `PR #N` cuando aplica):
 - `esperando-merge` — PR abierta, CI verde, esperando la decision humana de merge.
 - `mergeada` — PR mergeada. **Es el unico estado que marca el checkbox `[x]`.**
 - `bloqueada: <motivo>` — `sin-subagentes` (el entorno veta el Agent tool: para en el paso 3 sin escribir
-  codigo), `puertas` (lint/tipos/tests sin arreglar tras los reintentos), `verify` (veto del verificador)
+  codigo), `controles` (lint/tipos/tests sin arreglar tras los reintentos), `verify` (veto del verificador)
   o `ci-roja`. En `ci-roja` deja el PR abierto; en los otros tres no hay PR.
 - `abortada: presupuesto` — supero el presupuesto de la slice.
 
@@ -169,12 +186,12 @@ telemetria distinto del estado del run (que vive en el issue).
 
     python3 ~/.claude/skills/slice-runner/scripts/metrics.py report [--repo <repo>]
 
-Reporta: tasa de FALLA del verificador, tasa de bloqueo por puertas, % de slices al primer intento,
-media de reintentos (implement, puertas y CI por separado), tasa de CI roja, duracion media. Es el
+Reporta: tasa de FALLA del verificador, tasa de bloqueo por controles, % de slices al primer intento,
+media de reintentos (implement, controles y CI por separado), tasa de CI roja, duracion media. Es el
 instrumento para el "confianza en el loop" del Step 3 del mapa de madurez. Coste en tokens no se mide
 aqui (sale de OTel de Claude Code).
 
-El **veto del juez** (`FALLA`) y el **bloqueo por puertas** (`bloqueada-puertas`) se registran aparte a
+El **veto del juez** (`FALLA`) y el **bloqueo por controles** (`bloqueada-controles`) se registran aparte a
 proposito: uno es un rechazo semantico y el otro un fallo mecanico, y confundirlos deja inservible el
 unico instrumento que hay para calibrar al juez.
 
@@ -207,7 +224,7 @@ caerian en cubos distintos y la calibracion del loop dejaria de agregar bien.
   cargaran implementador (paso 5) y verificador (paso 7); las skills de proyecto se leen/invocan y se
   citan igual que una regla.
 - Extrae titulo, alcance y criterios de aceptacion de la slice. Si no los hay, para y pidelos: sin
-  criterios no hay puerta de verificacion.
+  criterios no hay control de verificacion.
 - **Toma la intencion**, en sus dos niveles: la de la feature (`issue_body.parse_intencion(body)`) y
   la de la slice (`slice.intencion`). Viaja al implementador (paso 5) y al cuerpo de la PR (paso 8).
   Si alguna falta (`None`, `""` o lista vacia), **avisa y sigue**: no bloquea, pero **anota que
@@ -220,29 +237,38 @@ caerian en cubos distintos y la calibracion del loop dejaria de agregar bien.
 - **Toma el `name` de la slice** (entre parentesis tras el id). Si no hay name, deriva un slug del titulo y avisa. La rama es `slice/NN-<name>` (p. ej. `slice/01-cantidad-vo`). Toma tambien el `type` opcional (por defecto `feat`).
 - Marca la slice `en-curso` en el issue (`set_slice_estado(..., "en-curso")` -> `gh issue edit --body`).
 
-### 2. Autodetectar comandos del repo (Makefile primero)
+### 2. Leer los controles declarados en el issue
 
-Infierelos, no los asumas. Cachea lo detectado en la respuesta. **En el repo de trabajo de la slice**
-(paso 1): una slice con `REPO:` se valida con las puertas de **su** repo, no con las de la app.
+**No los deduzcas: leelos.** Estan en la seccion `## Controles` del issue, descubiertos una vez por
+`slice-spec` y confirmados por la persona. No abras el `Makefile`, ni el `pyproject.toml`, ni los
+workflows: ese trabajo ya esta hecho, dejo rastro revisable, y repetirlo aqui solo mete el toolchain
+del repo en el contexto que tiene que durar hasta el paso 10.
 
-- **Prioridad 1 — Makefile**: si hay `Makefile`, usa sus targets (`make test`, `make check-types`, `make check-style`/`make linting`, `make fastapi-migrate`, `make env-start`...). En muchos repos todo corre en Docker via `make`; lanzar `pytest`/`ruff`/`mypy` directos fallaria. Lee el Makefile para saber que target cubre cada puerta.
-- **Prioridad 2 — pyproject/tox**: si no hay Makefile util, cae a `ruff`, `mypy` (leyendo `[tool.mypy]`), `pytest` (rutas/opts de `pyproject.toml`/`tox.ini`).
-- **Workflow de CI**: identifica el workflow de `.github/workflows/*.yml` que corre en `pull_request`.
-- Si una puerta no tiene comando claro, pregunta antes de continuar.
-- **Repo sin puertas reales** (p. ej. el de paneles de Grafana: la CI solo publica en `master`, no
-  valida en PR): no inventes una puerta ni finjas que existe. Declara explicitamente que puertas hay
-  (aunque sea solo "el JSON parsea") y tratala como **capa eximida** (delta 1 del paso 5): la
-  verificacion real es post-deploy.
+- `issue_body.parse_controles(body)`, y **filtra con `controles_para(controles, slice.repo)`**: una
+  slice con `REPO:` se mide con los controles de **su** repo, no con los de la app. Correr `make test`
+  de la app contra el repo de manifiestos no valida nada.
+- **Si la seccion falta o esta vacia**, o si la slice declara `REPO:` y **su** subseccion no existe,
+  **para** y pide anadirla con `slice-spec` (modo `validate` sobre este issue). Fail-closed, igual que
+  con las fuentes de convencion: sin controles declarados no se ejecuta, y **no heredes los del repo
+  de la app** para una slice de otro repo.
+- **Repo sin controles reales** (p. ej. el de paneles de Grafana: la CI solo publica en `master`, no
+  valida en PR): el issue lo declara con `- ninguno: <motivo>` y el parser lo devuelve con `exento` a
+  True. Entonces no se ejecuta ningun control y la slice se trata como **capa eximida** (delta 1 del
+  paso 5): la verificacion real es post-deploy. No inventes un control ni finjas que existe.
+- **Si un comando declarado ya no resuelve** (alguien renombro el target despues de crear el issue),
+  fallara como cualquier control y la slice acabara `bloqueada: controles` con el log. Es el
+  comportamiento elegido: no hay pre-flight. Lo que **no** puedes hacer es arreglar el `Makefile` o
+  cambiar el comando para que pase -eso es bajar la vara, la misma patologia que adaptar un test
+  preexistente-; se corrige en el issue con `slice-spec validate`.
 
-Lo detectado se expresa como los `--check nombre=comando` que consumiran `gates.py checks` en los pasos
-5 y 6. El script no sabe nada del toolchain: solo ejecuta lo que se le pasa, asi que la autodeteccion
-se queda aqui y no se duplica dentro del script.
+Los controles se le pasan al script como `--control nombre=comando`, tal cual estan declarados, en
+los pasos 5 y 6:
 
-    --check lint="make linting" --check types="make check-types" --check tests="make test"
+    --control lint="make linting" --control types="make check-types" --control tests="make test"
 
 ### 3. Alinear antes de implementar (check-alignment)
 
-- **Puerta de subagentes (fail-closed, lo primero).** Declara que vas a lanzar **dos** Agent: el
+- **Control de subagentes (fail-closed, lo primero).** Declara que vas a lanzar **dos** Agent: el
   implementador (paso 5) y el verificador `slice-verifier` (paso 7). Invocar esta skill cuenta como que
   el usuario los pide, asi que no preguntes permiso. Pero si **no puedes** lanzarlos -veto global al
   Agent tool, politica de la organizacion, `slice-verifier` sin resolver por symlink ausente-: marca la
@@ -287,7 +313,7 @@ agente prestado; todo el criterio se lo da este prompt, subordinado a las conven
   superpowers.
 - **Delta 1 - exencion de capa.** En capas que la convencion del repo no testea por separado (p. ej.
   modelos ORM y migraciones alembic), la Iron Law de superpowers **no** aplica: no fuerces
-  test-first; la puerta es "suite intacta + verificacion del efecto" (p. ej. el `SELECT` que exige el
+  test-first; el control es "suite intacta + verificacion del efecto" (p. ej. el `SELECT` que exige el
   plan). En capas con test (dominio/aplicacion/API...) aplica el ciclo completo, un test por criterio.
 - **Delta 2 - integridad de tests preexistentes (regla de hierro).** Superpowers dice "test falla ->
   arregla el codigo, no el test"; aqui se concreta: nunca modifiques un test **que ya existia** para
@@ -319,40 +345,49 @@ agente prestado; todo el criterio se lo da este prompt, subordinado a las conven
   de **produccion** que la slice debia tocar aparecen en el diff, no solo tests: si la suite pasa a
   verde sin tocar produccion, el efecto lo esta produciendo el test/fixture y no el codigo. En slices
   sin codigo de produccion (migracion/infra) no aplica. (El verificador lo cruza en el paso 7.)
-- **Puertas verdes antes de entregar (`[det]`).** No entregues con lint, tipos o tests en rojo: corre
+- **Controles verdes antes de entregar (`[det]`).** No entregues con lint, tipos o tests en rojo: corre
 
-      python3 ~/.claude/skills/slice-runner/scripts/gates.py checks --repo <repo-de-la-slice> \
-        --check lint="<cmd>" --check types="<cmd>" --check tests="<cmd>" --json
+      python3 ~/.claude/skills/slice-runner/scripts/controles.py controles --repo <repo-de-la-slice> \
+        --control lint="<cmd>" --control types="<cmd>" --control tests="<cmd>" \
+        --out <dir-fuera-del-repo> --json
 
-  con los comandos del paso 2, y arregla hasta exit 0. Es feedback incremental mientras trabajas, no un
-  informe final: el script devuelve solo exit code y salida truncada, asi que el error llega acotado y
-  no te inunda el contexto. El orquestador lo re-ejecuta despues (paso 6), asi que entregar en rojo solo
-  te cuesta una vuelta.
+  con los comandos que el issue declara (paso 2), y arregla hasta exit 0. Es feedback incremental
+  mientras trabajas, no un informe final. Los comandos vienen dados: **no los cambies, no los afines y
+  no toques el `Makefile`** para que pasen; si uno no resuelve, reportalo. El orquestador lo re-ejecuta
+  despues (paso 6), asi que entregar en rojo solo te cuesta una vuelta.
 - Devolver: **la lista explicita de rutas creadas o modificadas, marcando cada una como produccion o
   test** (es lo que se stageara en el paso 8 y lo que el verificador usa para el check de wiring; nada
   mas), tests anadidos (si aplica) y resumen del enfoque.
 
-### 6. Puertas deterministas (backstop del orquestador)
+### 6. Controles deterministas (backstop del orquestador)
 
-Antes de invocar al verificador, **re-ejecuta tu mismo** las puertas con los comandos del paso 2:
+Antes de invocar al verificador, **re-ejecuta tu mismo** los controles declarados (paso 2), con
+`--out` a un directorio **fuera del repo**:
 
-    python3 ~/.claude/skills/slice-runner/scripts/gates.py checks --repo <repo-de-la-slice> \
-      --check lint="<cmd>" --check types="<cmd>" --check tests="<cmd>" --json
+    python3 ~/.claude/skills/slice-runner/scripts/controles.py controles --repo <repo-de-la-slice> \
+      --control lint="<cmd>" --control types="<cmd>" --control tests="<cmd>" \
+      --out <dir-fuera-del-repo> --json
 
-El implementador ya las corrio (paso 5), pero **su auto-reporte no es fuente de verdad**: es la misma
-razon por la que el verificador no se cree su resumen del enfoque. Aqui la garantia la da el harness, no
-la buena voluntad del agente. Exit 0 = puedes invocar al verificador.
+El implementador ya los corrio (paso 5), pero **su auto-reporte no es fuente de verdad**. No es que su
+ejecucion valga menos -es el mismo script, mismo exit code-: es que **no ves sus tool calls, solo su
+mensaje final en prosa**, asi que lo que te llega no es un exit code sino un agente afirmando que
+estan verdes. Los modos de fallo son mundanos: los corrio antes de su ultima edicion, corrio un
+subconjunto, o resumio como "verde salvo un warning" lo que era un fallo. Re-lanzar el script cuesta
+segundos y cero juicio; equivocarse cuesta quemar al verificador contra un diff roto. Exit 0 = puedes
+invocar al verificador.
 
 - **Verde**: pasa al paso 7.
-- **Rojo**: vuelve al paso 5 con **solo los checks en FALLA y su `salida`** del JSON. No invoques al
-  verificador: un fallo mecanico no se juzga, se arregla. **Presupuesto propio: 2 reintentos**,
-  separado del del verificador.
-- **Si agota los reintentos**: marca la slice `bloqueada: puertas` en el issue, **registra la metrica
-  durable** (`veredicto=bloqueada-puertas`, `ci=none`, `--reintentos-puertas N`; ver paso 9) y **para**.
-  No se abre PR con puertas en rojo.
+- **Rojo**: vuelve al paso 5 con **solo los controles en FALLA y la `log` (ruta) de cada uno**. No
+  invoques al verificador: un fallo mecanico no se juzga, se arregla. **Presupuesto propio: 2
+  reintentos**, separado del del verificador.
+- **Si agota los reintentos**: marca la slice `bloqueada: controles` en el issue, **registra la metrica
+  durable** (`veredicto=bloqueada-controles`, `ci=none`, `--reintentos-controles N`; ver paso 9) y
+  **para**. No se abre PR con controles en rojo.
 
-No leas ni pegues el output crudo de las puertas en ningun sitio: el script ya devuelve exit code y
-salida truncada, y eso es todo lo que hay que propagar.
+**No abras esos logs.** Con `--out`, el JSON no trae salida de build: trae rutas, y tu trabajo es
+reenviarlas, no leerlas. El implementador abre el fichero y recibe el error **entero** -no una cola de
+30 lineas-, que es mejor feedback ahi abajo y cero contexto aqui arriba. Un traceback de pytest en el
+contexto del orquestador no cambia ninguna decision suya: la decision ya la tomo el exit code.
 
 ### 7. Verificar (agente `slice-verifier`, adversarial)
 
@@ -363,7 +398,7 @@ Lanza un Agent con `subagent_type: slice-verifier`. Es un **agente definido**
 - **La rubrica va en su system prompt**, verbatim en cada invocacion, en vez de que tu la relates y
   puedas parafrasearla o saltarte items. La parte mas importante del loop no debe depender de una
   transcripcion.
-- **No tiene `Bash`** (`tools: Read, Grep, Glob, Skill`): no puede ejecutar puertas aunque quisiera. La
+- **No tiene `Bash`** (`tools: Read, Grep, Glob, Skill`): no puede ejecutar controles aunque quisiera. La
   restriccion es **estructural**, por ausencia de la tool. No basta con `allowed-tools`: el smoke del
   2026-07-27 comprobo que un `allowed-tools` en el frontmatter **no bloquea** lo no listado (el agente
   ejecuto `ls`, ausente de su lista, sin friccion), asi que la unica forma de que sea enforcement y no
@@ -372,7 +407,7 @@ Lanza un Agent con `subagent_type: slice-verifier`. Es un **agente definido**
 
 **Antes de invocarlo, materializa el diff (`[det]`).** Como no tiene `Bash`, no puede calcularlo:
 
-    python3 ~/.claude/skills/slice-runner/scripts/gates.py diff-bundle --repo <repo-de-la-slice> \
+    python3 ~/.claude/skills/slice-runner/scripts/controles.py diff-bundle --repo <repo-de-la-slice> \
       --base <base> --out <dir-fuera-del-repo> --json
 
 Escribe `slice.diff` (rango `<base>...HEAD`) y `files.txt`, y devuelve sus rutas. El `--out` va **fuera
@@ -382,7 +417,7 @@ base haya avanzado desde entonces saldrian como borrados y el verificador cazari
 Si devuelve FALLA (base inexistente, o cero cambios), arreglalo antes de invocar: sin diff no hay nada
 que verificar.
 
-**No le pases nada de las puertas**: cuando llega aqui estan verdes por construccion (paso 6), asi que
+**No le pases nada de los controles**: cuando llega aqui estan verdes por construccion (paso 6), asi que
 un resumen seria cero informacion y solo gastaria contexto. Tampoco le pases el "resumen del enfoque"
 del implementador: juzga el diff, no la narrativa.
 
@@ -418,7 +453,7 @@ reintenta la invocacion, no se parsea a mano):
 ```
 
 - **FALLA** si hay algun hallazgo `severidad: alta` (los `media`/`baja` no bloquean por si solos, pero
-  el agente puede escalar si se acumulan, explicando por que). Las puertas ya no entran en esta regla:
+  el agente puede escalar si se acumulan, explicando por que). Los controles ya no entran en esta regla:
   se decidieron en el paso 6.
 - Si FALLA: devuelve al paso 5 con los `hallazgos` (max 2 reintentos, presupuesto propio del
   verificador). Guarda el conteo de hallazgos por severidad y el veredicto final: alimentan las metricas.
@@ -433,14 +468,14 @@ reintenta la invocacion, no se parsea a mano):
   `git add <ruta1> <ruta2> ...` con la lista explicita; **prohibido `git add -A`, `git add .`
   o `git commit -a`**. Planes y design-docs NO entran en la PR (la spec vive en el issue, no como
   fichero).
-- **Puerta determinista de higiene (`[det]`).** Tras stagear, corre
-  `python3 ~/.claude/skills/slice-runner/scripts/gates.py pr-hygiene --repo <repo-de-la-slice> --allow <ruta1> --allow <ruta2> ...`
+- **Control determinista de higiene (`[det]`).** Tras stagear, corre
+  `python3 ~/.claude/skills/slice-runner/scripts/controles.py pr-hygiene --repo <repo-de-la-slice> --allow <ruta1> --allow <ruta2> ...`
   con la lista exacta que devolvio el implementador. Exit 0 = PASA. Si FALLA (algo staged fuera de
   lo declarado, o un artefacto: plan, design-doc), **corrige el staging** (`git restore --staged`) y
   reintenta; no lo re-interpretes a ojo. No commitees hasta PASA.
 - **Conventional commit.** Mensaje y titulo de PR = `type(name): resumen`, con el `type` (por
   defecto `feat`) y el `name` de la slice como scope: p. ej. `feat(cantidad-vo): add Cantidad value
-  object`. Redactar un conventional commit lo haces bien sin puerta; lo unico determinista aqui es
+  object`. Redactar un conventional commit lo haces bien sin control; lo unico determinista aqui es
   que el `name` (scope) viene de la spec (issue), no de un slug inventado. Cuerpo del commit opcional
   con detalle. Nunca commitees en `master`/`main`. Push de la rama `slice/NN-<name>`.
 - `gh pr create --draft` **en el repo de la slice** (`--repo <org>/<repo>` o desde su ruta) con titulo
@@ -475,7 +510,7 @@ reintenta la invocacion, no se parsea a mano):
   -> `gh issue edit` (el estado pasara a `esperando-merge` en el paso 9 al haber CI verde).
 - No marcar como ready-to-merge automaticamente mas alla de lo normal; el merge es humano.
 
-### 9. Esperar CI verde (puerta final)
+### 9. Esperar CI verde (control final)
 
 - Espera hasta verde o rojo con **ticks acotados en background + notificacion** (o la herramienta `Monitor`), **nunca** `gh pr checks --watch` ni un `sleep` largo que bloquee la shell/sesion (principio de esperas no bloqueantes; es trabajo deterministico que hace el harness, no la IA poll-eando). Cada tick consulta `gh pr checks --json` y devuelve el control. Respeta un timeout de espera razonable.
 - **Verde**: **registra la metrica durable** (ver abajo, `ci=green`), marca la slice `esperando-merge` en el issue (aun **no** `[x]`: el merge es humano; ver paso 10) y **pasa al paso 10** (no paras aqui).
@@ -483,16 +518,16 @@ reintenta la invocacion, no se parsea a mano):
   - Si tras el reintento sigue roja: marca la slice `bloqueada: ci-roja` en el issue, **registra la metrica durable** (`ci=red`), **deja el PR abierto**, resume el fallo con logs y **para** (circuit breaker). No cierres el PR ni descartes la rama/worktree.
 - Si en cualquier momento se supera el presupuesto de tokens/$ de la slice: marca la slice `abortada: presupuesto` en el issue, **registra la metrica durable** (`veredicto=abortada-presupuesto`) y para.
 
-**Registro de la metrica durable (`[det]`).** Al cerrar la slice, en **cualquiera** de los caminos de cierre (puertas agotadas del paso 6, verify terminal FALLA del paso 7, CI verde, CI roja terminal, o presupuesto), anexa un registro con:
+**Registro de la metrica durable (`[det]`).** Al cerrar la slice, en **cualquiera** de los caminos de cierre (controles agotados del paso 6, verify terminal FALLA del paso 7, CI verde, CI roja terminal, o presupuesto), anexa un registro con:
 
 ```
 python3 ~/.claude/skills/slice-runner/scripts/metrics.py record --repo <repo> --slice <slice_id> --name <name> \
-  --veredicto <PASA|FALLA|bloqueada-puertas|abortada-presupuesto> --ci <green|red|none> \
+  --veredicto <PASA|FALLA|bloqueada-controles|abortada-presupuesto> --ci <green|red|none> \
   --hallazgos-alta N --hallazgos-media N --hallazgos-baja N \
-  --reintentos-implement N --reintentos-puertas N --reintentos-ci N --duracion-s N
+  --reintentos-implement N --reintentos-controles N --reintentos-ci N --duracion-s N
 ```
 
-- `veredicto` = el del verificador del paso 7 (`PASA`/`FALLA`), `bloqueada-puertas` si paro en el backstop del paso 6, o `abortada-presupuesto` si paro el presupuesto. Los conteos de `hallazgos` salen del veredicto estructurado del paso 7 (en `bloqueada-puertas` son 0: no hubo juicio semantico). **No uses `FALLA` para un fallo de puertas**: es un fallo mecanico, no un veto del juez, y confundirlos deja inservible la calibracion del verificador.
+- `veredicto` = el del verificador del paso 7 (`PASA`/`FALLA`), `bloqueada-controles` si paro en el backstop del paso 6, o `abortada-presupuesto` si paro el presupuesto. Los conteos de `hallazgos` salen del veredicto estructurado del paso 7 (en `bloqueada-controles` son 0: no hubo juicio semantico). **No uses `FALLA` para un fallo de controles**: es un fallo mecanico, no un veto del juez, y confundirlos deja inservible la calibracion del verificador.
 - Este log vive **fuera del repo** (`~/.claude/slice-runner/metrics.jsonl`) y **nunca entra en una PR**. Coste en tokens: opcional (`--coste-tokens`); si no lo tienes de OTel, no lo inventes (se omite).
 
 ### 10. Esperar el merge y encadenar el deploy

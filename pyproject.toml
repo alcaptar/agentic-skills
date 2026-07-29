@@ -1,7 +1,8 @@
 # Este repo no es un paquete: es la fuente de verdad de las skills, y su codigo Python
-# son los scripts deterministas que las skills invocan (`gates.py`, `issue_body.py`,
-# `deploy_core.py`, `metrics.py`, `discover_conventions.py`). El `[project]` existe solo
-# para que `uv` pueda gestionar el toolchain de calidad; `package = false` lo deja claro.
+# son los scripts deterministas que las skills invocan (`controles.py`, `issue_body.py`,
+# `deploy_core.py`, `metrics.py`, `discover_conventions.py`, `discover_controles.py`). El
+# `[project]` existe solo para que `uv` pueda gestionar el toolchain de calidad;
+# `package = false` lo deja claro.
 #
 # La config replica la que el repo ya exige a su propia fixture de smoke
 # (`smoke/fixture/pyproject.toml`): misma vara para el harness que para lo que valida.
@@ -28,18 +29,24 @@ extend-exclude = ["*.md"]
 # deducir que son first-party y los mezclaria con las dependencias de terceros. Declararlos
 # aqui es lo que hace que la regla refuerce la convencion (stdlib / terceros / propio) en vez
 # de romperla.
-known-first-party = ["deploy_core", "discover_conventions", "gates", "issue_body", "metrics"]
+known-first-party = [
+    "controles",
+    "deploy_core",
+    "discover_controles",
+    "discover_conventions",
+    "issue_body",
+    "metrics",
+]
 
 # `S` (flake8-bandit) NO se activa a proposito. Sus 7 hallazgos en el repo estan todos en
-# `gates.py` y son inherentes a su cometido -ejecutar los comandos que el paso 2 autodetecta
-# del repo-: obligaria a sembrar el fichero de `noqa` sin cambiar ni una decision. Y sobre los
-# tests dispara `S101` (usar `assert`) cientos de veces, que en pytest es absurdo.
+# `controles.py` y son inherentes a su cometido -ejecutar los comandos que el repo declara
+# en el issue-: obligaria a sembrar el fichero de `noqa` sin cambiar ni una decision. Y sobre
+# los tests dispara `S101` (usar `assert`) cientos de veces, que en pytest es absurdo.
 
 [tool.mypy]
 strict = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-# gates.py y metrics.py se importan por nombre; el panel (fichero con guion) se
-# carga con importlib desde conftest.py.
+# controles.py y metrics.py se importan por nombre, via este pythonpath.
 pythonpath = ["skills/slice-runner/scripts", "skills/deploy-watch/scripts"]

@@ -138,7 +138,7 @@ romperia la higiene del diff.
 | Envs | `prod`, `sta`, `mercanetes`, `training` (un `.tpl` por env) |
 | Forma | ConfigMap de k8s dentro de un Go template: **escaping embebido** (`{{"{{"}} $labels.deployment {{"}}"}}`). Se rompe facil; leer `templates/CLAUDE.md` antes de tocar |
 | Labels obligatorias | `severity`, `channel`, `mo_team`, `label_mercadona_es_team_owner` (legacy), y `for:` no-cero — lo fuerza `validate_alerting_rules.sh` |
-| Puertas | `make run-manifestr-local` (render) + `make test_prometheus_rules` (**`promtool test rules`**) |
+| Controles | `make run-manifestr-local` (render) + `make test_prometheus_rules` (**`promtool test rules`**) |
 | Tests | `tests/prometheus/rules/<env>/<equipo>/*.yml` |
 | CI en PR | `.github/workflows/prometheus-alerting-rules-validation.yml` |
 
@@ -180,8 +180,8 @@ Slice **propia**, la ultima de la cadena y la primera candidata a posponer.
 | Envs | `production`, `sta`, `mercanetes` |
 | CI | Jenkinsfile que **solo sube a GCS en `master`**: sin validacion en PR, sin tests |
 
-No hay puerta mas alla de "el JSON parsea", asi que es **capa eximida** (delta 1 de `slice-runner`,
-como los modelos ORM): no fuerces test-first. La puerta es "JSON valido + el panel renderiza y sus
+No hay control mas alla de "el JSON parsea", asi que es **capa eximida** (delta 1 de `slice-runner`,
+como los modelos ORM): no fuerces test-first. El control es "JSON valido + el panel renderiza y sus
 queries devuelven datos", y eso se comprueba tras el deploy. Su `SENAL` normalmente es `exenta`, con el
 motivo escrito.
 

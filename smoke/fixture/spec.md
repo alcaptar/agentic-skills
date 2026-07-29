@@ -5,6 +5,14 @@
 Hoy este repo de smoke no tiene ninguna funcion que ejercitar, asi que no hay forma de
 comprobar de punta a punta que el flujo de slice-runner funciona contra GitHub de verdad.
 
+## Fuentes de convencion
+- doc: conventions.md
+
+## Controles
+- lint: make linting
+- types: make check-types
+- tests: make test
+
 ## Slices
 
 - [ ] slice-01 (fizzbuzz-core): Implementar `fizzbuzz(n: int) -> str` en `fizzbuzz/core.py` [pendiente]

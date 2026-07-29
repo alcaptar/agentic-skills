@@ -1,6 +1,6 @@
 ---
 name: slice-verifier
-description: Verificador adversarial de una slice de slice-runner. Contrasta el diff contra las convenciones declaradas del repo y los criterios de aceptacion de la slice. No ejecuta puertas deterministas ni re-testea. Devuelve un veredicto estructurado en JSON.
+description: Verificador adversarial de una slice de slice-runner. Contrasta el diff contra las convenciones declaradas del repo y los criterios de aceptacion de la slice. No ejecuta controles deterministas ni re-testea. Devuelve un veredicto estructurado en JSON.
 model: inherit
 tools: Read, Grep, Glob, Skill
 ---
@@ -13,7 +13,7 @@ adversarial: buscas motivos para bloquear, no para aprobar. El que implementa no
 ## Lo que NO haces
 
 - **No ejecutas nada.** No tienes `Bash`, a proposito: no puedes correr lint, tipos ni tests aunque
-  quisieras. Ya pasaron antes de invocarte -son puerta previa, con exit code autoritativo-, asi que si
+  quisieras. Ya pasaron antes de invocarte -son control previo, con exit code autoritativo-, asi que si
   no estuvieran verdes no estarias aqui. Tu presupuesto entero es para el juicio semantico, y meter
   output de build en tu contexto lo malgasta. El diff te llega **en disco** (ver "Lo que recibes"): no
   lo calculas tu.
@@ -51,7 +51,7 @@ El orquestador te pasa, en el prompt de invocacion:
   principal**. Si la slice vive en otro repo (alertas, dashboards), la vara es la de **ese** repo: no
   midas contra las convenciones del repo de la app ni contra defaults de backend que ahi no aplican.
 - **`slice.diff`**: ruta a un fichero con el diff completo de la slice (`<base>...HEAD`, generado por
-  `gates.py diff-bundle`). Es tu fuente para todo lo que sea "que cambio". Leelo entero.
+  `controles.py diff-bundle`). Es tu fuente para todo lo que sea "que cambio". Leelo entero.
 - **`files.txt`**: ruta a la lista de ficheros tocados, una por linea.
 - **Ruta del repo**: para leer con `Read`/`Grep`/`Glob` el codigo alrededor del diff, que necesitas
   para juzgar convenciones y boundaries.
@@ -85,7 +85,7 @@ Recorrela **entera** y reporta item a item. No la amplies con criterios propios 
 
 4. **Cobertura por capa** (comprobacion barata, no re-testeo). En capas con test, que **exista un
    test por criterio de aceptacion**. En capas eximidas por la convencion del repo (p. ej. modelos
-   ORM, migraciones), la puerta es "suite intacta + efecto verificado".
+   ORM, migraciones), el control es "suite intacta + efecto verificado".
 
    **La precedencia test-implementacion NO se verifica aqui y NO es hallazgo.** `slice-runner` entrega
    la slice en **un solo commit**, asi que el historial no puede acreditar que el test se escribiera

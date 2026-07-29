@@ -134,7 +134,7 @@ Notas transversales `[media]`:
 ## Síntesis para nuestro pipeline (slice-runner / deploy-watch)
 
 Qué **valida** lo que ya construimos:
-- Slices pequeñas / una cosa por iteración; spec como fuente de verdad y estado; escritor != verificador; puertas objetivas (lint/types/tests/CI); refactor tras verde; convenciones del repo como vara. Todo aparece como patrón recurrente y/o con respaldo académico.
+- Slices pequeñas / una cosa por iteración; spec como fuente de verdad y estado; escritor != verificador; controles objetivos (lint/types/tests/CI); refactor tras verde; convenciones del repo como vara. Todo aparece como patrón recurrente y/o con respaldo académico.
 - Control humano en merge y rollback = el "outer loop" de Osmani.
 
 Qué **sugiere ajustar / vigilar**:

@@ -44,6 +44,12 @@ coherencia con `ai-patterns`.
   (`feat(name): ...`); la PR referencia el issue con `Part of #N`.
 - **Cada slice tiene nombre**: `name` kebab-case en la spec; alimenta rama (`slice/NN-name`) y
   scope de commit de forma determinista. La skill `slice-spec` produce specs bien formadas.
+- **Los controles los declara el issue**: la seccion `## Controles` (pares `nombre: comando`, por repo)
+  fija con que se mide cada repo. La descubre `slice-spec` con `discover_controles.py`, la **confirma
+  la persona**, y `slice-runner` solo la lee: ningun agente abre un `Makefile` en tiempo de run. Se
+  llaman **controles**, no "puertas" -era un calco de *gate*-; el motivo viejo `bloqueada: puertas` se
+  sigue parseando porque esta escrito en issues abiertos. Y nadie que juzgue ve output de build: con
+  `--out`, la salida de un control fallido va a disco y el orquestador solo reenvia la ruta.
 - **La observabilidad es parte de la slice**: cada slice que cambia comportamiento en prod declara
   su linea `SENAL:` (como se comprueba viva; la consume `deploy-watch`), y las exentas lo declaran
   con motivo. La emision de una senal nueva es un criterio de aceptacion mas (test de emision,
@@ -51,7 +57,7 @@ coherencia con `ai-patterns`.
   su repo (`REPO:`) y **detras** de la slice que emite la serie. El cerebro esta en
   `skills/slice-spec/references/observabilidad.md`.
 - **Una slice puede vivir en otro repo**: `REPO:` fija el repo destino y **todo** el ciclo ocurre ahi
-  (comandos, rama, puertas, PR, CI), medido con la vara de **ese** repo (su subseccion `### org/repo` en
+  (comandos, rama, controles, PR, CI), medido con la vara de **ese** repo (su subseccion `### org/repo` en
   las fuentes de convencion). El issue sigue siendo uno: una feature = un issue.
 
 ## Tras tocar el agente verificador
@@ -73,7 +79,7 @@ funciona si tienes pytest global, pero `make check` es la vara completa.
 
 Dos decisiones de config que no hay que re-litigar (razonadas en `pyproject.toml`): `ruff` **no**
 formatea los `.md` -aqui los `.md` son el producto- y las reglas `S` (bandit) estan **desactivadas**
-porque sus hallazgos viven todos en `gates.py`, donde lanzar procesos es el cometido del fichero.
+porque sus hallazgos viven todos en `controles.py`, donde lanzar procesos es el cometido del fichero.
 
 El estado del run vive en el issue de GitHub: no hay panel ni estado local que verificar. La I/O
 contra `gh` la valida el smoke real (ver `smoke/README.md`).
