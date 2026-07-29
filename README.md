@@ -55,11 +55,12 @@ verificacion de `slice-runner` rompe.
 
 ```
 idea
-  -> [slice-spec]    brainstorming + crea un issue de GitHub con la spec de slices (name + AC)
+  -> [slice-spec]    brainstorming + crea un issue de GitHub con la spec de slices
+                     (intencion + name + AC + senal)
 issue de GitHub (1 feature = 1 issue; estado de cada slice en su linea)
   -> [slice-runner]  implementa (TDD por capa + refactor tras verde)
                      verifica (convenciones del repo + boundaries + test-desiderata)
-                     abre PR (Part of #N), espera CI verde (ticks en background)
+                     abre PR (intencion + AC + senal, Part of #N), espera CI verde
                      marca la slice "esperando-merge" en el issue y vigila la PR
   -> (tu mergeas en GitHub: el merge sigue siendo humano; la slice pasa a [x] mergeada)
   -> [deploy-watch]  se encadena AUTO al detectar el merge; arranca sola
@@ -75,6 +76,10 @@ Convierte una idea en una **spec bien formada** que `slice-runner` sabe ejecutar
 con un **nombre kebab-case por slice** y AC. Modo `validate` para revisar una spec existente contra el
 contrato. No implementa codigo: **crea el issue de GitHub** con la spec (1 feature = 1 issue).
 
+El issue abre con la **intencion**: que esta mal hoy y como se nota, y una linea por slice con el coste
+de no hacerla. La vara es esa: si borras la slice, ¿que queda roto o imposible? Si no puedes nombrarlo,
+la linea es relleno. Es lo que despues rellena el cuerpo de cada PR.
+
 ### slice-runner
 
 Nivel 1 (una slice por invocacion; envolver en `/loop` para Nivel 2). La spec es un **checklist de
@@ -89,7 +94,9 @@ por capa -> `test-desiderata` -> constraints/boundaries) -> CI verde. Las determ
 proposito: cuando corre el verificador ya estan verdes, asi que no ve output de build y no gasta un
 reintento adversarial en un `ruff` sucio. **La PR
 solo lleva el codigo de la slice**: se stagean unicamente los ficheros que produjo el implementador,
-nunca planes ni design-docs (la spec vive en el issue), y referencia el issue con `Part of #N`. No hace
+nunca planes ni design-docs (la spec vive en el issue), y referencia el issue con `Part of #N`. Su
+cuerpo cuenta **la intencion** (que estaba mal y deja de estarlo), los AC cumplidos y la senal a
+comprobar tras el despliegue; nunca enumera ficheros ni narra el diff, que eso ya lo cuenta GitHub. No hace
 merge. Por defecto trabaja en una **rama normal** (no asume worktree; solo lo usa si se paralelizan
 slices). Tras CI verde marca la slice **esperando-merge** en el issue y vigila la PR; al detectar el
 merge la marca **`[x]` mergeada** y encadena `deploy-watch`. Las esperas (CI, merge) son ticks en

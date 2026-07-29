@@ -42,6 +42,17 @@ Dos modos:
   slicing; `hamburger-method`/`story-splitting` son profundizacion opcional, no el motor.
 - **Slices verticales y pequenas.** Cada slice es una rebanada entregable de punta a punta con AC
   propios, no una capa tecnica suelta.
+- **La intencion es parte de la spec, y es lo primero que se lee.** El issue abre con una seccion
+  `## Intencion` (que esta mal hoy, o que no se puede hacer hoy, a quien le pasa y como se nota) y
+  cada slice declara su linea `INTENCION:` (que deja de estar mal cuando esa slice entra). No es
+  decoracion: es lo que acaba en el cuerpo de cada pull request, en lugar de un resumen del codigo
+  -que el diff ya cuenta mejor-. **Vara: el coste de no hacerlo.** Si borras la slice, ¿que queda
+  roto o imposible? Si no puedes nombrarlo, la linea es relleno y hay que reescribirla:
+  `INTENCION: hoy se pueden pedir cantidades negativas y el stock queda en negativo sin que nadie
+  se entere` cumple la vara; `INTENCION: mejorar la validacion del dominio` no (borrala y no queda
+  nada roto que puedas nombrar). A diferencia de `SENAL:`, **no hay figura de exencion**: una slice
+  sin por que no deberia existir. Las slices sin efecto observable en produccion (refactor, value
+  object interno) tambien tienen intencion; su coste es interno, pero se puede nombrar.
 - **AC obligatorios y falsables.** Sin AC no hay puerta de verificacion en slice-runner: toda slice
   declara criterios de aceptacion concretos. **Vara de falsabilidad:** un AC vale si puedes nombrar
   el **cambio de produccion que lo haria fallar**; si no puedes nombrarlo, es prosa y hay que
@@ -77,6 +88,10 @@ La spec es un **checklist de slices**. Un solo formato, sin variantes.
 ```markdown
 # <titulo de la feature>
 
+## Intencion
+<que esta mal hoy, o que no se puede hacer hoy; a quien le pasa y como se nota. Tres a seis
+lineas, sin nombrar clases, ficheros ni patrones: el como vive en las slices y en el codigo>
+
 ## Fuentes de convencion
 - doc: <ruta a convencion declarativa, p. ej. .claude/CLAUDE.md>
 - skill: <ruta a skill de proyecto, p. ej. .claude/skills/duplicate-action>
@@ -86,19 +101,25 @@ La spec es un **checklist de slices**. Un solo formato, sin variantes.
 
 ## Slices
 - [ ] slice-01 (nombre-kebab): <titulo de la slice> [pendiente]
+      INTENCION: <que deja de estar mal cuando entra esta slice>
       AC: <criterio 1>; <criterio 2>; tests en <ruta>
       SENAL: <fuente> <serie/expresion>; <assert vivo con ventana>; critical|advisory
 - [ ] slice-02 (otro-nombre): <titulo> [pendiente]
+      INTENCION: <coste de no hacerla>
       AC: <criterios>
       SENAL: exenta - <motivo>
 - [ ] slice-03 (alerta-algo): <titulo> [pendiente]
       REPO: <org>/<repo-destino>
+      INTENCION: <coste de no hacerla>
       AC: <criterios>
       SENAL: <assert vivo>
 ```
 
 Reglas duras:
 
+- Antes de todo, una seccion `## Intencion` con el problema de la feature entera: que esta mal hoy
+  y como se nota. Es la primera cosa que lee una persona al abrir el issue, y la que `slice-runner`
+  reutiliza en el cuerpo de cada pull request. Sin ella la spec no esta terminada.
 - Antes de `## Slices`, una seccion `## Fuentes de convencion` con lineas `- doc: <ruta>` o
   `- skill: <ruta>`: punteros confirmados a la vara de medir del repo (la escribe el paso 3;
   slice-runner la exige). Punteros, nunca el contenido de la convencion.
@@ -112,6 +133,9 @@ Reglas duras:
 - Type opcional para conventional commits: `slice-03 (refactor: extraer-repo): ...`. Sin type ⇒ `feat`.
   No hace falta declarar la lista de types validos: el commit lo redacta el agente (sabe conventional
   commits) y su unica puerta determinista es la higiene del diff (`gates.py pr-hygiene`).
+- Debajo de cada slice, una linea `INTENCION:` con el coste de no hacerla: que esta mal hoy y deja
+  de estarlo cuando entra. Va **antes** de los `AC:` (primero el por que, luego lo que se comprueba
+  antes de fusionar, luego lo que se comprueba vivo). Obligatoria siempre, sin exencion posible.
 - Debajo de cada slice, una o mas lineas indentadas con `AC:` describiendo criterios concretos
   (y donde viven los tests si aplica). Las **restricciones duras** (p. ej. "no toca infra
   directamente") se expresan como un AC comprobable mas.
@@ -145,6 +169,14 @@ Reglas duras:
    slice contra los criterios de validez y el conjunto contra el **test de despriorizacion** e
    **igualdad de tamano**. Elige `name` kebab-case por slice y, si aplica, su `type`.
 
+2a. **Escribe la intencion, la de la feature y la de cada slice.** El brainstorming del paso 1 ya
+   entendio el problema: la seccion `## Intencion` es su destilado, no trabajo nuevo. Redactala con
+   lo que esta mal hoy y como se nota, sin nombrar clases ni ficheros. Luego, slice a slice, escribe
+   su `INTENCION:` y **pasale la vara**: nombra el cambio de mundo que la borraria; si no puedes
+   nombrar nada roto o imposible, reescribela. Si al hacerlo descubres una slice cuya intencion no
+   sabes nombrar, la senal no es "redactar mejor": es que la slice sobra o esta mal cortada, y eso se
+   arregla volviendo al paso 2.
+
 2b. **Disena la senal de cada slice (mientras el corte todavia se puede cambiar).** Carga
    `references/observabilidad.md` y, slice a slice, **baja la escalera**: ¿la senal ya existe gratis
    por la libreria del repo? ¿basta enriquecer lo que ya emite? ¿hace falta una metrica de negocio
@@ -170,8 +202,9 @@ Reglas duras:
    heredar la equivocada es la desviacion silenciosa que esta seccion existe para evitar.
 4. **Crea el issue** de GitHub con la spec en el cuerpo (`gh issue create --title <feature> --body ...`).
    Como es una accion visible/colaborativa (outward-facing), **confirmala antes de crear**. El cuerpo
-   lleva `## Fuentes de convencion` (paso 3) y luego `## Slices`; cada slice arranca
-   `[ ] slice-NN (name): titulo [pendiente]`. Cumple el contrato de formato al pie de la letra.
+   lleva `## Intencion` (paso 2a), luego `## Fuentes de convencion` (paso 3) y luego `## Slices`;
+   cada slice arranca `[ ] slice-NN (name): titulo [pendiente]`. Cumple el contrato de formato al pie
+   de la letra.
 5. **Auto-validacion.** Aplica el checklist de `validate` (abajo) sobre lo que vas a poner en el
    cuerpo y corrige inline antes de crear el issue.
 6. **Cierra** diciendo el numero/URL del issue y que se ejecuta con `/slice-runner #N` (o
@@ -188,6 +221,12 @@ corregirlas. Checklist:
   que validar aqui: el commit lo redacta y valida el flujo de slice-runner).
 - Checkboxes `[ ]`/`[x]` y, si hay marcador `[estado]`, es uno canonico (pendiente, en-curso,
   esperando-merge, mergeada, bloqueada, abortada).
+- **Tiene seccion `## Intencion` con texto**, y **ninguna slice sin linea `INTENCION:`**. Si falta
+  (p. ej. un issue anterior a este mecanismo), **es la desviacion a corregir**: reconstruyela con la
+  persona y anadela. Comprueba tambien la **vara** en cada linea: nombra el coste de no hacerla. Si
+  dice "mejorar", "limpiar" o "refactorizar" sin decir que esta mal hoy, reescribela. Y si la linea
+  describe el codigo (que clase se introduce, que fichero se toca) en vez del problema, tambien:
+  eso es lo que el diff ya cuenta, y ocupa el sitio de lo que no cuenta.
 - Ninguna slice sin AC (sin AC no hay puerta de verificacion en slice-runner).
 - **Ninguna slice que cambie comportamiento en prod sin `SENAL:`**, y ninguna `SENAL: exenta` sin
   motivo escrito. Si falta (p. ej. un issue anterior a este mecanismo), **es la desviacion a corregir**:

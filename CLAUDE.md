@@ -32,6 +32,11 @@ coherencia con `ai-patterns`.
   cuerpo de un issue (una feature = un issue), unica fuente de verdad viva y duradera. No hay estado
   local (`.slice-runner/`, ledger, panel). El registro duradero son el issue (intencion + estado) y
   las PRs mergeadas (codigo), no ficheros de estado en el repo.
+- **La intencion se declara y viaja**: el issue abre con `## Intencion` (que esta mal hoy) y cada slice
+  lleva su linea `INTENCION:` (el coste de no hacerla). De ahi sale el cuerpo de cada PR, que cuenta el
+  **por que** en lugar de resumir el codigo -eso ya lo cuenta el diff-. Vara: si borras la slice, ¿que
+  queda roto o imposible? Si no puedes nombrarlo, la linea es relleno. No hay exencion, a diferencia de
+  `SENAL:`. Si un issue viejo no la trae, la PR la reconstruye y **declara que la infirio**.
 - **La PR solo lleva el codigo de la slice**: el commit stagea unicamente los ficheros de
   codigo/test de la slice (`git add` explicito, nunca `-A`/`.`); planes y design-docs jamas entran
   en la PR (la spec vive en el issue). Conventional commits con el `name` de la slice como scope

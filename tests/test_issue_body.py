@@ -11,6 +11,7 @@ from issue_body import (
     fuentes_para,
     parse_body,
     parse_fuentes,
+    parse_intencion,
     render_fuentes_section,
     render_slice_line,
     set_fuentes,
@@ -376,3 +377,91 @@ def test_set_fuentes_reemplaza_tambien_las_subsecciones_de_repo() -> None:
     # las slices y sus SENAL siguen intactas
     by_id = {s.slice_id: s for s in parse_body(nuevo)}
     assert by_id["slice-03"].senal == ["exenta - refactor puro"]
+
+
+# --- INTENCION: el por que, en la feature y en cada slice ---
+
+_BODY_CON_INTENCION = """\
+# Feature W
+
+## Intencion
+Hoy el ajuste de stock se hace a mano en la consola y nadie sabe quien lo hizo.
+Cuando el recuento no cuadra no hay forma de reconstruir que paso.
+
+## Fuentes de convencion
+- doc: CLAUDE.md
+
+## Slices
+- [ ] slice-01 (ajustar-stock): Caso de uso AjustarStock [pendiente]
+      INTENCION: hoy el ajuste se hace a mano y no queda rastro de quien lo hizo
+      AC: emite evento StockAjustado
+      SENAL: prometheus rate(stock_ajustado_total[5m]) > 0 en 10m post-deploy; critical
+- [ ] slice-02 (extraer-repo): Extraer repositorio [pendiente]
+      INTENCION: hoy el caso de uso habla con la base de datos y no se puede testear sin ella
+      AC: sin cambio de comportamiento
+"""
+
+
+def test_parse_body_recoge_intencion_de_la_slice() -> None:
+    by_id = {s.slice_id: s for s in parse_body(_BODY_CON_INTENCION)}
+    assert by_id["slice-01"].intencion == [
+        "hoy el ajuste se hace a mano y no queda rastro de quien lo hizo"
+    ]
+    assert by_id["slice-02"].intencion == [
+        "hoy el caso de uso habla con la base de datos y no se puede testear sin ella"
+    ]
+
+
+def test_parse_body_intencion_ausente_es_lista_vacia() -> None:
+    # Un issue anterior a este mecanismo no revienta: la PR declara que la infirio.
+    assert parse_body(_BODY)[0].intencion == []
+
+
+def test_parse_body_acepta_intencion_con_tilde() -> None:
+    body = "## Slices\n- [ ] slice-01 (x): T [pendiente]\n      INTENCIÓN: hoy falla en silencio\n"
+    assert parse_body(body)[0].intencion == ["hoy falla en silencio"]
+
+
+def test_parse_body_intencion_no_se_confunde_con_ac_ni_senal() -> None:
+    s01 = {s.slice_id: s for s in parse_body(_BODY_CON_INTENCION)}["slice-01"]
+    assert s01.ac == ["emite evento StockAjustado"]
+    assert s01.senal == [
+        "prometheus rate(stock_ajustado_total[5m]) > 0 en 10m post-deploy; critical"
+    ]
+
+
+def test_parse_intencion_devuelve_el_texto_de_la_seccion() -> None:
+    assert parse_intencion(_BODY_CON_INTENCION) == (
+        "Hoy el ajuste de stock se hace a mano en la consola y nadie sabe quien lo hizo.\n"
+        "Cuando el recuento no cuadra no hay forma de reconstruir que paso."
+    )
+
+
+def test_parse_intencion_seccion_ausente_es_none() -> None:
+    # None y "" son casos distintos a proposito: ambos degradan la PR, pero solo el
+    # script decide cual es, no el criterio del agente.
+    assert parse_intencion(_BODY) is None
+
+
+def test_parse_intencion_seccion_vacia_es_cadena_vacia() -> None:
+    assert parse_intencion("# F\n\n## Intencion\n\n## Slices\n") == ""
+
+
+def test_parse_intencion_no_arrastra_la_seccion_siguiente() -> None:
+    texto = parse_intencion(_BODY_CON_INTENCION)
+    assert texto is not None
+    assert "Fuentes de convencion" not in texto
+    assert "slice-01" not in texto
+
+
+def test_set_estado_preserva_la_intencion_de_la_slice() -> None:
+    nuevo = set_slice_estado(_BODY_CON_INTENCION, "slice-01", "en-curso", pr=7)
+    s01 = {s.slice_id: s for s in parse_body(nuevo)}["slice-01"]
+    assert s01.estado == "en-curso"
+    assert s01.intencion == ["hoy el ajuste se hace a mano y no queda rastro de quien lo hizo"]
+    assert parse_intencion(nuevo) is not None
+
+
+def test_set_fuentes_preserva_la_seccion_de_intencion() -> None:
+    nuevo = set_fuentes(_BODY_CON_INTENCION, [Fuente("doc", "otro.md")])
+    assert parse_intencion(nuevo) == parse_intencion(_BODY_CON_INTENCION)

@@ -43,6 +43,12 @@ Nivel de autonomia 1: un ciclo por invocacion. Para encadenar slices, envolver e
 - **Alinear antes de implementar.** Antes de escribir codigo, mostrar el entendimiento de la slice (alcance, AC, capa afectada, comando de validacion) y esperar go/no-go. Nunca transcribir a ciegas el codigo pre-horneado de una spec: validalo contra las convenciones primero.
 - **Seguir `backend-best-practices`.** El implementador carga esa skill y respeta hexagonal/DDD, DI, Pydantic en boundaries, subordinada siempre a las convenciones del repo.
 - **El estado del run vive en el issue de GitHub.** La spec y el estado de cada slice viven en el cuerpo de un issue de GitHub (una feature = un issue): es la **unica fuente de verdad**, viva y duradera. No hay estado local (`.slice-runner/`, ledger ni panel). El agente olvida entre slices; al arrancar re-lee el issue. Registro duradero = issue (intencion + estado) + PRs mergeadas (codigo).
+- **La PR cuenta la intencion, no el codigo.** El cuerpo de la pull request dice **que estaba mal y
+  deja de estarlo** (la `INTENCION:` de la slice, encuadrada en la del issue), los AC cumplidos y la
+  `SENAL` a comprobar tras el despliegue. Nunca enumera ficheros, clases ni modulos: eso ya lo cuenta
+  el diff, y repetirlo en prosa ocupa el sitio de lo unico que el diff no puede contar. Si el issue no
+  declaraba intencion, la PR la reconstruye y **lo dice en el encabezado**: afirmar como declarado lo
+  que se ha inferido es la clase de falsedad invisible aguas abajo que esta skill evita en todas partes.
 - **La PR solo lleva el codigo de la slice.** El commit stagea unicamente los ficheros de codigo/test que produjo el implementador (`git add` explicito, nunca `-A`/`.`). Planes y design-docs jamas entran en la PR (la spec ya no es un fichero: vive en el issue).
 - **Contexto fresco por slice.** Cada slice arranca sin arrastrar la conversacion de la anterior; lo que persiste entre slices es el **issue** (spec + estado), que se re-lee al empezar. Evita la degradacion de contexto (patron Ralph) y hace seguro el Nivel 2 (`/loop`).
 - **Circuit breaker.** Maximo 2 reintentos por fase, y las **puertas tienen presupuesto propio** (2), separado del del verificador (2): gastar el presupuesto adversarial en un fallo mecanico es justo lo que este reparto evita. Ademas, **presupuesto de coste**: si la slice supera el limite de tokens/$ configurado, para con estado `abortada-presupuesto`. Si la CI sigue roja tras el reintento, para, deja el PR abierto y reporta con logs.
@@ -57,6 +63,10 @@ estado**. Si el issue no encaja en este formato, para y pide una spec valida (o 
 `/slice-spec` para generarla).
 
 ```markdown
+## Intencion
+Hoy el ajuste de stock se hace a mano en la consola: no queda rastro de quien lo hizo
+y cuando el recuento no cuadra no hay forma de reconstruir que paso.
+
 ## Fuentes de convencion
 - doc: .claude/CLAUDE.md
 - skill: .claude/skills/duplicate-action
@@ -67,13 +77,16 @@ estado**. Si el issue no encaja en este formato, para y pide una spec valida (o 
 
 ## Slices
 - [x] slice-01 (cantidad-vo): Crear value object `Cantidad` [mergeada] PR #11
+      INTENCION: hoy cada endpoint revalida la cantidad a mano y ya se olvido en dos sitios
       AC: rechaza negativos; tests en test/domain/test_cantidad.py
       SENAL: exenta - value object interno sin efecto observable
 - [ ] slice-02 (ajustar-stock): Caso de uso `AjustarStock` [esperando-merge] PR #12
+      INTENCION: hoy el ajuste se hace a mano y no queda rastro de quien lo hizo
       AC: emite evento StockAjustado; no toca infra directamente
       SENAL: prometheus rate(application_stock_ajustado_total[5m]) > 0 en 10m post-deploy; critical
 - [ ] slice-03 (alerta-ajuste): Alerta de ajustes fallidos [pendiente]
       REPO: mercadona/mercadona.online.gke
+      INTENCION: hoy un ajuste fallido solo se descubre cuando alguien mira el panel
       AC: ...
       SENAL: prometheus ALERTS{alertname="ShopAjusteFallido"} presente y == 0 en 24h; advisory
 ```
@@ -85,6 +98,11 @@ destino. Unidad de trabajo = cada item `- [ ] slice-NN ...`. Una feature de una 
 checklist con una unica linea. El parseo y la reescritura de estas lineas los hace la logica pura de
 `scripts/issue_body.py` (`offload-deterministic`); la I/O contra el issue es `gh`.
 
+- **`## Intencion` e `INTENCION:`** — el por que, a nivel de feature y de slice: que esta mal hoy y
+  deja de estarlo. Es lo que va al cuerpo de la pull request (paso 8). Se leen con
+  `issue_body.parse_intencion(body)` y `slice.intencion`. Si faltan (issue anterior a este mecanismo),
+  **avisa y sigue**: la PR reconstruye la intencion y declara que la infirio. La obligatoriedad vive
+  en el contrato de `slice-spec`, no aqui.
 - **`SENAL:` (una o mas lineas)** — como se comprueba la slice **viva en produccion**; la consume
   `deploy-watch` (paso 10). `SENAL: exenta - <motivo>` cuando no aplica. Si falta, **avisa y sigue**
   (mismo trato que un `(name)` ausente): la obligatoriedad vive en el contrato de `slice-spec`.
@@ -184,6 +202,11 @@ caerian en cubos distintos y la calibracion del loop dejaria de agregar bien.
   cargaran implementador (paso 5) y verificador (paso 7); las skills de proyecto se leen/invocan y se
   citan igual que una regla.
 - Extrae titulo, alcance y AC de la slice. Si no hay AC, para y pidelos: sin AC no hay puerta de verificacion.
+- **Toma la intencion**, en sus dos niveles: la de la feature (`issue_body.parse_intencion(body)`) y la
+  de la slice (`slice.intencion`). Viaja al implementador (paso 5) y al cuerpo de la PR (paso 8). Si
+  alguna falta (`None`, `""` o lista vacia), **avisa y sigue**: no bloquea, pero **anota que habra que
+  inferirla**, porque el encabezado de la PR tiene que decirlo. Que la ausencia la detecte el script y
+  no tu criterio es lo que impide que una PR presente como declarado lo que en realidad se invento.
 - **Toma la `SENAL`** (`slice.senal`). Si la trae, viaja al implementador (paso 5), al verificador
   (paso 7) y a `deploy-watch` (paso 10). Si **no** la trae, **avisa** de que la spec deberia declararla
   (`slice-spec validate`) y sigue: no bloquea.
@@ -246,6 +269,10 @@ agente prestado; todo el criterio se lo da este prompt, subordinado a las conven
   `backend-best-practices` cuando el repo destino sea un backend Python (en un repo de manifiestos o de
   dashboards no aplica: manda su propia convencion). En conflicto, ganan las convenciones del repo.
 - Trabajar **en la ruta del repo de la slice**, no en el repo del issue si son distintos.
+- **Darle la intencion de la slice** (paso 1) junto a los AC: los AC dicen que tiene que cumplirse, la
+  intencion dice **para que**, y sin ella es facil entregar la solucion tecnicamente correcta y
+  funcionalmente inutil. No es licencia para ampliar el alcance: si la intencion pide mas que los AC,
+  eso se reporta, no se implementa de mas.
 - **El ciclo TDD: invoca `superpowers:test-driven-development`** y siguelo (RED -> verificar que
   falla por el motivo esperado -> GREEN minimo -> REFACTOR), incluida su referencia
   `writing-good-tests.md`. No se resume aqui: fuente unica, para que no se desincronice.
@@ -410,12 +437,33 @@ reintenta la invocacion, no se parsea a mano):
   que el `name` (scope) viene de la spec (issue), no de un slug inventado. Cuerpo del commit opcional
   con detalle. Nunca commitees en `master`/`main`. Push de la rama `slice/NN-<name>`.
 - `gh pr create --draft` **en el repo de la slice** (`--repo <org>/<repo>` o desde su ruta) con titulo
-  `type(name): resumen` y cuerpo que: **referencia el issue con `Part of #<N>`** (no `Closes`: una PR es
-  una slice, no la feature entera) -y si la slice vive en otro repo, con la forma cross-repo
-  `Part of <org>/<repo-del-issue>#<N>`, que GitHub enlaza igual-, lista los AC cumplidos, **nombra la
-  `SENAL` que habra que comprobar tras el deploy**, y resume los cambios. **La PR se abre siempre en draft**: la CI corre igual, pero deja explicito que
-  esta pendiente de tu revision y no lista para mergear (refuerza que el merge es humano). Sacarla de
-  draft (`ready for review`) y mergear lo decides tu.
+  `type(name): resumen` y este cuerpo, en este orden:
+
+      ## Intencion
+      <la INTENCION de la slice, encuadrada en una frase de la del issue: que estaba mal
+      hoy y deja de estarlo cuando esto entra>
+
+      ## Criterios de aceptacion cumplidos
+      - <un AC por linea, con donde vive su test>
+
+      ## Senal a comprobar tras el despliegue
+      <la linea SENAL de la slice, o "exenta - <motivo>">
+
+      Part of #<N>
+
+  Reglas del cuerpo:
+
+  - **Nada de enumerar ficheros, clases ni modulos, ni de narrar el diff**: eso ya lo cuenta GitHub
+    mejor que tu, y en su sitio. Lo que un revisor no puede deducir del diff es **por que**, y ese es
+    todo el trabajo de este cuerpo.
+  - **Si la intencion no venia declarada en el issue** (paso 1), el encabezado lo dice:
+    `## Intencion (inferida del issue, no declarada)`. Nunca la presentes como declarada.
+  - **`Part of #<N>`**, no `Closes`: una PR es una slice, no la feature entera. Si la slice vive en otro
+    repo, la forma cross-repo `Part of <org>/<repo-del-issue>#<N>`, que GitHub enlaza igual.
+
+  **La PR se abre siempre en draft**: la CI corre igual, pero deja explicito que esta pendiente de tu
+  revision y no lista para mergear (refuerza que el merge es humano). Sacarla de draft
+  (`ready for review`) y mergear lo decides tu.
 - Actualiza la linea de la slice en el issue con la PR: `set_slice_estado(..., "en-curso", pr=<M>)`
   -> `gh issue edit` (el estado pasara a `esperando-merge` en el paso 9 al haber CI verde).
 - No marcar como ready-to-merge automaticamente mas alla de lo normal; el merge es humano.

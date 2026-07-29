@@ -13,6 +13,7 @@ modulo NO habla con `gh` (eso es I/O, lo valida el smoke real); solo transforma 
 Formato de una linea de slice en el cuerpo:
 
     - [ ] slice-02 (ajustar-stock): Caso de uso AjustarStock [esperando-merge] PR #12
+          INTENCION: hoy el ajuste se hace a mano en la consola y nadie sabe quien lo hizo
           AC: emite evento StockAjustado
           SENAL: prometheus rate(stock_ajustado_total[5m]) > 0 en 10m post-deploy; critical
     - [x] slice-01 (cantidad-vo): Crear VO [mergeada] PR #11
@@ -23,11 +24,14 @@ Formato de una linea de slice en el cuerpo:
 El marcador `[estado]` va al final (antes del opcional `PR #N`). El checkbox `[x]` es la
 verdad de "mergeada": una slice marcada esta mergeada aunque el texto diga otra cosa.
 
-Bajo cada slice, tres tipos de linea indentada:
+Bajo cada slice, cuatro tipos de linea indentada:
 
-    AC:     criterio de aceptacion, verificable pre-merge (test + verificador).
-    SENAL:  como se comprueba viva en produccion; la consume `deploy-watch`.
-    REPO:   repo destino de la slice. Ausente = el repo del issue (el de la app).
+    INTENCION: que esta mal hoy y deja de estarlo con esta slice; alimenta el cuerpo de la PR.
+    AC:        criterio de aceptacion, verificable pre-merge (test + verificador).
+    SENAL:     como se comprueba viva en produccion; la consume `deploy-watch`.
+    REPO:      repo destino de la slice. Ausente = el repo del issue (el de la app).
+
+A nivel de feature, la seccion `## Intencion` cuenta el problema entero (ver `parse_intencion`).
 """
 
 from __future__ import annotations
@@ -64,6 +68,15 @@ _LINE_RE = re.compile(
 # canonico que se documenta y se emite es `SENAL:`.
 _SENAL_LINE_RE = re.compile(r"^SE(?:N|Ñ)AL\s*:\s*(.*)$", re.IGNORECASE)
 _REPO_LINE_RE = re.compile(r"^REPO\s*:\s*(.+?)\s*$", re.IGNORECASE)
+# `INTENCION` se acepta con y sin tilde por el mismo motivo que `SENAL`: la escribe una
+# persona en un issue de GitHub y no debe perderse en silencio.
+_INTENCION_LINE_RE = re.compile(r"^INTENCI(?:O|Ó)N\s*:\s*(.*)$", re.IGNORECASE)
+
+# --- Intencion de la feature (el problema entero, no el de una slice) ---
+# Vive en una seccion `## Intencion` del cuerpo, antes de las fuentes y las slices. Cuenta
+# que esta mal hoy y como se nota, no como se va a arreglar. `slice-spec` la escribe;
+# `slice-runner` la lee para el cuerpo de la PR.
+_INTENCION_HEADING_RE = re.compile(r"^\s*##\s+intenci[oó]n\s*$", re.IGNORECASE)
 
 # --- Fuentes de convencion (punteros a la vara de medir del repo) ---
 # Viven en una seccion `## Fuentes de convencion` del cuerpo del issue. Son punteros
@@ -88,8 +101,9 @@ _FUENTE_LINE_RE = re.compile(r"^\s*-\s*(doc|skill)\s*:\s*(.+?)\s*$", re.IGNORECA
 class Slice:
     """Una slice tal como vive en el cuerpo del issue.
 
-    `ac` son los criterios verificables pre-merge; `senal` es como se comprueba viva en
-    produccion (la consume `deploy-watch`). `repo` es el repo destino: `None` = el repo
+    `intencion` es que esta mal hoy y deja de estarlo con esta slice (alimenta el cuerpo de
+    la PR); `ac` son los criterios verificables pre-merge; `senal` es como se comprueba viva
+    en produccion (la consume `deploy-watch`). `repo` es el repo destino: `None` = el repo
     del issue, y cualquier otro valor = slice cross-repo (p. ej. una alerta que vive en
     el repo de manifiestos, o un panel de Grafana).
     """
@@ -101,6 +115,7 @@ class Slice:
     estado: str
     motivo: str = ""
     pr: int | None = None
+    intencion: list[str] = field(default_factory=list)
     ac: list[str] = field(default_factory=list)
     senal: list[str] = field(default_factory=list)
     repo: str | None = None
@@ -167,7 +182,7 @@ def render_slice_line(sl: Slice) -> str:
 
 
 def parse_body(body: str) -> list[Slice]:
-    """Extrae las slices (estado, AC, SENAL y REPO) del cuerpo, en orden de aparicion."""
+    """Extrae las slices (estado, INTENCION, AC, SENAL y REPO) del cuerpo, en orden de aparicion."""
     slices: list[Slice] = []
     current: Slice | None = None
     for line in body.splitlines():
@@ -179,6 +194,9 @@ def parse_body(body: str) -> list[Slice]:
         if current is None:
             continue
         stripped = line.strip()
+        if intencion := _INTENCION_LINE_RE.match(stripped):
+            current.intencion.append(intencion.group(1).strip())
+            continue
         if stripped.startswith("AC:"):
             current.ac.append(stripped[len("AC:") :].strip())
             continue
@@ -200,7 +218,8 @@ def set_slice_estado(
 ) -> str:
     """Reescribe la linea de `slice_id` con el nuevo estado; preserva el resto del cuerpo.
 
-    Read-modify-write puro: mantiene name/type/titulo/AC intactos. Si `pr` es None, conserva
+    Read-modify-write puro: mantiene name/type/titulo y las lineas hijas (INTENCION, AC,
+    SENAL, REPO) intactos. Si `pr` es None, conserva
     el PR que ya tuviera la linea. Lanza KeyError si la slice no esta en el cuerpo y ValueError
     si el estado no es canonico.
     """
@@ -227,6 +246,30 @@ def set_slice_estado(
 
     result = "\n".join(out)
     return result + "\n" if body.endswith("\n") else result
+
+
+def parse_intencion(body: str) -> str | None:
+    """El texto de la seccion `## Intencion` del cuerpo, o `None` si la seccion no existe.
+
+    Distingue tres casos que el cuerpo de la PR trata distinto: seccion ausente (`None`, la
+    intencion habra que inferirla y decirlo), presente pero vacia (`""`, misma degradacion) y
+    declarada (el texto). Que lo decida un script y no el criterio del agente es lo que evita
+    que una PR afirme "intencion declarada" cuando nadie la escribio.
+    """
+    if not any(_INTENCION_HEADING_RE.match(line) for line in body.splitlines()):
+        return None
+
+    collected: list[str] = []
+    in_section = False
+    for line in body.splitlines():
+        if _INTENCION_HEADING_RE.match(line):
+            in_section = True
+            continue
+        if in_section:
+            if _H2_RE.match(line):  # empieza otra seccion: la de intencion acabo
+                break
+            collected.append(line)
+    return "\n".join(collected).strip()
 
 
 def tiene_seccion_fuentes(body: str) -> bool:

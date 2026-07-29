@@ -81,6 +81,11 @@ version en disco ya no declaraba, y usaba `Bash`, que ya no estaba en su `tools`
 
 - El commit y el titulo de PR son conventional commits con el name como scope:
   `feat(fizzbuzz-core): ...`, y el cuerpo referencia el issue con `Part of #<N>`.
+- **El cuerpo del PR cuenta la intencion, no el codigo.** Abre con `## Intencion` (la linea
+  `INTENCION:` de la slice, que la fixture declara), sigue con los AC cumplidos y la senal, y **no
+  enumera ficheros ni narra el diff**. Si aparece un parrafo del tipo "se anade `fizzbuzz/core.py` con
+  una funcion que...", la regla del paso 8 no esta llegando. Comprueba tambien que no dice "inferida":
+  la fixture **si** declara intencion, asi que ese encabezado seria falso.
 - El PR tiene CI verde (`make linting && make check-types && make test`).
 - El verificador devuelve `PASA` (AC cubiertos + convenciones OK).
 - **El agente `slice-verifier` resuelve** (`subagent_type: slice-verifier`, symlink instalado) y su
