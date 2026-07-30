@@ -1,38 +1,231 @@
 # agentic-skills
 
-Skills personales de Claude Code para automatizar el flujo **idea -> spec -> slice -> PR -> CI verde -> monitorizacion de despliegue** (loop engineering).
+Skills personales de Claude Code que convierten **una idea en codigo en produccion vigilado**, sin
+perder el control humano en los dos puntos donde importa: el merge y el rollback.
 
 No es de la organizacion: de momento, uso personal.
 
-## Estructura
+## Para que existe
+
+El problema no es que un agente no sepa escribir codigo: es que un agente suelto sobre una tarea
+grande **degrada en silencio**. Pierde el hilo de las instrucciones a medida que crece la
+conversacion, se auto-aprueba, se mide con la vara que mas le conviene, y produce trabajo que parece
+terminado y no lo esta. Al final revisar lo que hizo cuesta mas que haberlo hecho.
+
+Este repo es el intento de arreglar eso con **estructura en vez de confianza**:
+
+- **Trabajo troceado en rebanadas verticales** (*slices*) pequenas y entregables. Cada slice arranca
+  con contexto limpio, asi que ninguna sesion vive lo suficiente para degradarse.
+- **El que implementa no verifica.** Dos subagentes distintos, con instrucciones distintas, y el
+  verificador es adversarial y no puede ejecutar nada (no tiene `Bash`): su unico trabajo es juzgar.
+- **Lo mecanico lo deciden scripts, no el juicio de un agente.** Si es una regla exacta (¿esta verde
+  la integracion continua? ¿el diff staged solo tiene los ficheros de la slice? ¿el veredicto del
+  juez cumple su formato?), lo resuelve un script cuyo codigo de salida es autoritativo.
+- **La vara de medir la declara el repo, no el agente.** Convenciones y comandos de control se
+  escriben antes de empezar y se confirman con una persona; en tiempo de ejecucion solo se leen.
+- **El estado vive fuera del contexto**, en un issue de GitHub que cualquiera puede leer.
+- **Nada bloquea una shell.** Las esperas (integracion continua, merge, despliegue) son ticks en
+  background.
+
+Encaja con lo que se llama *loop engineering* (assess -> act -> verify -> stop) y con el escalon
+"supervised autonomy" de los modelos de adopcion; el detalle y las fuentes estan en
+`docs/design-notes.md` y `docs/maturity-map.md`.
+
+## El flujo de un cambio
+
+```mermaid
+flowchart TD
+    idea([idea o feature]) --> spec
+
+    subgraph spec_phase["1 - Disenar"]
+        spec["<b>/slice-spec</b><br/>brainstorming + troceo vertical"]
+    end
+
+    spec -->|crea| issue[("<b>Issue de GitHub</b><br/>1 feature = 1 issue<br/>spec + estado de cada slice<br/><i>unica fuente de verdad</i>")]
+
+    issue -->|"lee la siguiente slice"| runner
+
+    subgraph runner_phase["2 - Ejecutar una slice"]
+        runner["<b>/slice-runner</b><br/>orquestador"]
+        impl["subagente<br/><b>implementador</b><br/>TDD por capa"]
+        ctrl{{"controles deterministas<br/>lint / tipos / tests<br/><i>controles.py</i>"}}
+        verif["subagente<br/><b>slice-verifier</b><br/>adversarial, sin Bash"]
+        pr["Pull Request<br/><i>Part of #N</i>"]
+        ci{{"integracion continua<br/><i>controles.py ci-status</i>"}}
+
+        runner --> impl --> ctrl
+        ctrl -->|rojo| impl
+        ctrl -->|verde| verif
+        verif -->|FALLA| impl
+        verif -->|PASA| pr --> ci
+        ci -->|roja| impl
+    end
+
+    ci -->|verde| gate1
+
+    gate1{{"<b>MERGE: decide la persona</b>"}}
+    gate1 -->|mergeada| watch
+
+    subgraph watch_phase["3 - Vigilar el despliegue"]
+        watch["<b>deploy-watch</b><br/>se encadena solo, read-only"]
+        core{{"veredicto go / no-go<br/><i>deploy_core.py</i>"}}
+        watch --> core
+    end
+
+    core -->|go| ok([despliegue sano])
+    core -->|no-go| rca["agente <b>sre</b><br/>analisis de causa raiz<br/>+ rollback REDACTADO"]
+    rca --> gate2{{"<b>ROLLBACK: lo lanzas tu</b>"}}
+
+    runner -.->|"escribe estado<br/>en cada transicion"| issue
+    core -.->|"comenta el veredicto"| issue
+
+    style issue fill:#fff3cd,stroke:#856404,stroke-width:3px
+    style gate1 fill:#f8d7da,stroke:#721c24,stroke-width:3px
+    style gate2 fill:#f8d7da,stroke:#721c24,stroke-width:3px
+    style verif fill:#d1ecf1,stroke:#0c5460
+    style impl fill:#d1ecf1,stroke:#0c5460
+    style rca fill:#d1ecf1,stroke:#0c5460
+```
+
+Lo que hay que leer del diagrama: **el issue es el bus** por el que se comunican las tres skills (no
+se pasan ficheros ni memoria de sesion), los rombos son **decisiones deterministas de scripts** (no
+opiniones de un agente), las cajas azules son **subagentes de contexto desechable**, y las dos rojas
+son los unicos puntos donde para y decides tu.
+
+## Las piezas
+
+| Pieza | Que es | Para que |
+|---|---|---|
+| `skills/slice-spec/SKILL.md` | Skill de autoria | Convierte una idea en una spec bien formada y **crea el issue**. Envuelve `superpowers:brainstorming` para el diseno; el troceo lo lleva su propio cerebro (`skills/slice-spec/references/slicing.md`). Modo `validate` para auditar una spec existente. No escribe codigo. |
+| `skills/slice-runner/SKILL.md` | Skill orquestadora | Ejecuta **una** slice de punta a punta: alinear, implementar, controlar, verificar, abrir PR, esperar integracion continua verde, y **parar**. No mergea. |
+| `agents/slice-verifier.md` | Definicion de subagente | El juez adversarial. Su rubrica va en el *system prompt* (verbatim en cada invocacion, no parafraseada) y sus herramientas son `Read, Grep, Glob, Skill`: **sin `Bash`**, asi que su incapacidad de ejecutar controles es estructural, no una promesa. |
+| `skills/deploy-watch/SKILL.md` | Skill de post-merge | Vigila el despliegue en produccion, read-only. Orquesta por tick las skills de observabilidad que haya (Prometheus, Elasticsearch, logs de Google Cloud, Sentry...) segun el radio de impacto del cambio. Nunca ejecuta rollback: lo redacta. |
+| `skills/slice-runner/scripts/controles.py` | Script determinista | Cinco subcomandos: `controles` (ejecutar los comandos declarados; el log va a disco), `pr-hygiene` (que el diff staged solo tenga los ficheros de la slice), `diff-bundle` (materializar el diff para el juez, que no puede calcularlo), `ci-status` (estado de la integracion continua en un tiro) y `verify-verdict` (validar la forma del veredicto y contar severidades). |
+| `skills/slice-runner/scripts/issue_body.py` | Script determinista | Nucleo puro de parseo/reescritura del cuerpo del issue + interfaz de linea de comandos (`show`, `set-estado`). Fail-closed: si el issue viene vacio no escribe, porque un `edit` a ciegas borraria la spec entera. |
+| `skills/slice-runner/scripts/discover_controles.py` / `discover_conventions.py` | Helpers de descubrimiento | Los usa `slice-spec` para **proponer** los controles y las fuentes de convencion del repo. Descubren y no deciden: confirma la persona. |
+| `skills/slice-runner/scripts/metrics.py` | Registro durable | Telemetria del loop (veredicto, reintentos de controles / de verificacion / de integracion continua, descartes del juez) en `~/.claude/slice-runner/metrics.jsonl`, fuera del repo. Sirve para decidir cuando subir de nivel de autonomia. |
+| `skills/deploy-watch/scripts/deploy_core.py` | Nucleo puro | La decision go/no-go: umbrales relativos a baseline, confirmacion sostenida, scorecard, veredicto. La toma el codigo, no la impresion del agente. |
+| `skills/deploy-watch/references/monitoring.md`, `skills/slice-spec/references/slicing.md`, `skills/slice-spec/references/observabilidad.md` | Documentos de referencia | Conocimiento cargado bajo demanda: que senales mirar y como leerlas, como trocear, y como decidir la observabilidad de una slice. |
+| `docs/` | Memoria del proyecto | `design-notes.md` (cada decision y su porque, para no re-derivarlo), `research-agent-loops.md` (research citado), `maturity-map.md` (donde encaja el pipeline), `docs/superpowers/specs/` (un design-doc por cambio). |
+| `tests/` | Unit tests offline | Cubren toda la logica pura: cuerpo del issue, controles, metricas, nucleo del deploy, y los **contratos duplicados a proposito** entre skills. |
+| `smoke/` | Smoke test real | Lo que los unit tests no pueden cubrir: la entrada/salida real contra `gh` y la integracion continua de GitHub Actions, con una fixture autocontenida y las recetas para provocar cada camino de fallo. Ver `smoke/README.md`. |
+
+### Como interactuan (el contrato entre piezas)
+
+- **El issue es la unica interfaz entre skills.** `slice-spec` lo escribe; `slice-runner` lo lee, elige
+  una slice y reescribe **solo su linea** en cada transicion; `deploy-watch` comenta el veredicto. No
+  hay estado local, ni ledger, ni panel: nada que se desincronice o que haya que descartar.
+- **El issue tambien declara la vara.** Sus secciones `## Fuentes de convencion` y `## Controles`
+  (descubiertas por los helpers, **confirmadas por una persona**) son lo que fija con que se mide este
+  repo. En tiempo de ejecucion ningun agente abre un `Makefile`: si esas secciones faltan,
+  `slice-runner` para en vez de ejecutar con la vara vacia.
+- **Nadie que juzgue ve output de build.** Los controles deterministas corren **antes** del juez, y su
+  salida va a disco: el orquestador reenvia rutas sin leerlas. Un `ruff` sucio no debe gastar un
+  reintento adversarial, y un traceback de pytest en el contexto del unico agente cuyo valor es el
+  juicio es contaminarlo gratis.
+- **El orden del tramo final no es cosmetico**: `git add` -> `pr-hygiene` -> `diff-bundle` ->
+  verificador -> **commit**. El commit va detras del veredicto, asi que un FALLA no deja rastro que
+  deshacer y la slice sigue siendo un solo commit sin `--amend`.
+- **La intencion viaja y no se resume.** El issue abre con `## Intencion` y cada slice lleva su linea
+  `INTENCION:`; de ahi sale el cuerpo de la pull request, que cuenta **el por que** en vez de narrar el
+  diff -eso ya lo cuenta GitHub mejor-. Vara: si borras la slice, ¿que queda roto o imposible?
+- **La observabilidad es parte de la slice.** Cada slice que cambia comportamiento en produccion
+  declara su linea `SENAL:` (como se comprueba viva), que es lo que `deploy-watch` consume despues; las
+  exentas lo declaran con motivo.
+
+## Ejemplo: una feature de punta a punta
+
+Supongamos que hoy se pueden crear pedidos con cantidad negativa y el stock queda en negativo sin que
+nadie se entere.
+
+**1. Disenar y crear el issue**
 
 ```
-agents/
-  slice-verifier.md           Verificador adversarial de slice-runner (rubrica como system prompt)
-skills/
-  slice-spec/      SKILL.md   Crea/valida la spec de slices (envuelve brainstorming)
-  slice-runner/    SKILL.md   Ejecuta una slice de una spec de principio a fin
-    scripts/                  issue_body.py (estado en el issue), controles.py, metrics.py
-  deploy-watch/    SKILL.md   Monitoriza el despliegue tras aprobar la PR
-    scripts/                  deploy_core.py (decision go/no-go pura)
-    references/               monitoring.md (cerebro: que senales, como leerlas)
-docs/
-  design-notes.md             Decisiones de diseno y el porque (para seguir iterando)
-  research-agent-loops.md     Research citado sobre loops autonomos de agentes
-  maturity-map.md             Donde encaja el pipeline (Steps of AI Adoption, Cherny)
-  superpowers/specs/          Design-docs de brainstorming (uno por cambio)
-tests/                        Unit tests offline de la logica pura (issue_body, gates, metrics)
-smoke/                        Smoke test real contra GitHub (ver smoke/README.md)
+/slice-spec
+
+> Quiero validar la cantidad de las lineas de pedido: hoy se aceptan negativas
+> y el stock se corrompe en silencio.
 ```
 
-## Fuente de verdad y symlinks
+La skill hace brainstorming del diseno, propone el troceo vertical, descubre los controles y las
+convenciones del repo (y **te los pregunta** para confirmarlos), y crea el issue. Sale algo asi
+-mismo formato que la fixture del smoke, `smoke/fixture/spec.md`-:
 
-**Este repo es la fuente de verdad.** Las skills y el agente verificador viven aqui; `~/.claude/skills/`
-y `~/.claude/agents/` apuntan a ellos por symlink, asi que se editan versionados y siguen activos en
-Claude Code. Ambos directorios son **de usuario**, no de proyecto: valen en cualquier repo donde se
-invoque `slice-runner`.
+```markdown
+## Intencion
 
-Recrear los symlinks (p. ej. en otra maquina) tras clonar:
+Hoy se pueden crear lineas de pedido con cantidad negativa: el stock queda en negativo
+y nadie se entera hasta el recuento fisico.
+
+## Fuentes de convencion
+- doc: CONVENTIONS.md
+- skill: backend-best-practices
+
+## Controles
+- lint: make linting
+- types: make check-types
+- tests: make test
+
+## Slices
+
+- [ ] slice-01 (cantidad-value-object): Value object `Cantidad` que rechaza <= 0 [pendiente]
+      INTENCION: sin el, la regla vive repartida y cada llamador la olvida a su manera
+      ACEPTACION: Cantidad(0) y Cantidad(-1) lanzan ValueError; Cantidad(1) es valida.
+      SENAL: exenta - value object interno sin efecto observable en produccion
+- [ ] slice-02 (rechazar-cantidad-negativa): El endpoint devuelve 422 [pendiente]
+      INTENCION: hoy la API acepta la cantidad negativa y corrompe el stock
+      ACEPTACION: POST /pedidos con cantidad -1 devuelve 422 y no crea el pedido.
+      SENAL: contador orders_rejected_total{reason="invalid_quantity"}
+```
+
+**2. Ejecutar la primera slice**
+
+```
+/slice-runner #42
+```
+
+Y hace, sin intervencion: lee el issue -> marca `slice-01` como `[en-curso]` -> **te muestra su
+entendimiento y espera tu go/no-go** -> implementa con TDD -> deja los controles verdes -> lanza el
+verificador adversarial -> commit -> abre la pull request `feat(cantidad-value-object): ...` con
+`Part of #42` -> tickea en background hasta integracion continua verde -> marca la slice
+`[esperando-merge] PR #43` y **para**.
+
+La linea del issue va contando la historia sola:
+
+```
+- [ ] slice-01 (cantidad-value-object): ... [esperando-merge] PR #43
+```
+
+Si algo se rompe, la linea lo dice y el loop para en vez de seguir: `bloqueada: controles`,
+`bloqueada: verify`, `bloqueada: ci-roja`, `bloqueada: ci-indeterminada` o `bloqueada:
+sin-subagentes`.
+
+**3. Mergear (tu)**
+
+Revisas la pull request en GitHub y le das a merge. Eso es tuyo, no del pipeline.
+
+**4. El despliegue se vigila solo**
+
+`slice-runner` detecta el merge, marca la slice `[x] ... [mergeada]` y **encadena `deploy-watch`**,
+que arranca sin preguntar nada que pueda inferir: captura baseline, tickea las senales relevantes al
+radio de impacto del cambio, y comenta su veredicto en el issue #42. Si sale degradado, lanza el
+agente `sre` para el analisis de causa raiz y **te redacta el rollback** para que lo lances tu.
+
+**5. Siguiente slice**
+
+```
+/slice-runner #42
+```
+
+Contexto limpio, `slice-02`, misma vara. Para encadenar sin volver a teclear: envuelve la skill en
+`/loop`.
+
+## Instalacion
+
+**Este repo es la fuente de verdad.** Las skills y el agente viven aqui; `~/.claude/skills/` y
+`~/.claude/agents/` apuntan por symlink, asi que se editan versionados y siguen activos en Claude
+Code. Ambos directorios son **de usuario**, no de proyecto: valen en cualquier repo donde invoques
+`slice-runner`.
 
 ```bash
 ln -s "$PWD/skills/slice-spec" ~/.claude/skills/slice-spec
@@ -44,98 +237,49 @@ ln -s "$PWD/agents/slice-verifier.md" ~/.claude/agents/slice-verifier.md
 El del agente **no es opcional**: sin el, `subagent_type: slice-verifier` no resuelve y el paso de
 verificacion de `slice-runner` rompe.
 
-> **Gotcha verificado (2026-07-27): las skills se releen, los agentes no.** Editar un `SKILL.md` cambia
-> el comportamiento en la sesion en curso; editar `agents/slice-verifier.md` **no**. El registro de
-> agentes se cachea al primer load, asi que la sesion sigue usando la definicion vieja: se comprobo
-> lanzandolo tras reescribirlo y viendo que citaba campos de su system prompt anterior y usaba una tool
-> que la version nueva ya no declara. **Tras tocar el agente hay que abrir sesion nueva antes de
-> probarlo**, o el smoke valida la version equivocada sin avisar.
+> **Gotcha verificado (2026-07-27): las skills se releen, los agentes no.** Editar un `SKILL.md`
+> cambia el comportamiento en la sesion en curso; editar `agents/slice-verifier.md` **no**. El
+> registro de agentes se cachea al primer load, asi que la sesion sigue usando la definicion vieja:
+> se comprobo lanzandolo tras reescribirlo y viendo que citaba campos de su system prompt anterior y
+> usaba una herramienta que la version nueva ya no declara. **Tras tocar el agente hay que abrir
+> sesion nueva antes de probarlo**, o el smoke valida la version equivocada sin avisar.
 
-## El pipeline
-
-```
-idea
-  -> [slice-spec]    brainstorming + crea un issue de GitHub con la spec de slices
-                     (intencion + name + criterios de aceptacion + senal)
-issue de GitHub (1 feature = 1 issue; estado de cada slice en su linea)
-  -> [slice-runner]  implementa (TDD por capa + refactor tras verde)
-                     verifica (convenciones del repo + boundaries + test-desiderata)
-                     abre PR (intencion + criterios + senal, Part of #N), espera CI verde
-                     marca la slice "esperando-merge" en el issue y vigila la PR
-  -> (tu mergeas en GitHub: el merge sigue siendo humano; la slice pasa a [x] mergeada)
-  -> [deploy-watch]  se encadena AUTO al detectar el merge; arranca sola
-                     baseline + 4 senales (rollout k8s, recursos, HTTP, Sentry)
-                     comenta el veredicto en el issue
-                     | degradado -> RCA (agente sre) + rollback redactado
-```
-
-### slice-spec
-
-Convierte una idea en una **spec bien formada** que `slice-runner` sabe ejecutar. Envuelve
-`superpowers:brainstorming` para el diseno y luego emite el formato exacto (checklist de slices) con
-un **nombre kebab-case por slice** y criterios de aceptacion. Modo `validate` para revisar una spec
-existente contra el contrato. No implementa codigo: **crea el issue de GitHub** con la spec (1
-feature = 1 issue).
-
-El issue abre con la **intencion**: que esta mal hoy y como se nota, y una linea por slice con el coste
-de no hacerla. La vara es esa: si borras la slice, ¿que queda roto o imposible? Si no puedes nombrarlo,
-la linea es relleno. Es lo que despues rellena el cuerpo de cada PR.
-
-### slice-runner
-
-Nivel 1 (una slice por invocacion; envolver en `/loop` para Nivel 2). La spec es un **checklist de
-slices**: `## Slices` con una linea `- [ ] slice-NN (name): ...` por slice y sus criterios de
-aceptacion. Una feature de una sola slice es un checklist con una unica linea.
-
-La spec y el estado de cada slice viven en el **issue de GitHub** (unica fuente de verdad). Cada
-slice tiene **nombre**: alimenta la rama (`slice/NN-name`) y el scope de conventional commit
-(`feat(name): ...`). Controles antes de abrir PR, **en este orden**: lint/tipos/tests
-(deterministas, via `controles.py controles`) -> verificador adversarial (convenciones del repo ->
-`backend-best-practices` -> TDD por capa -> `test-desiderata` -> constraints/boundaries) -> CI
-verde. Los deterministas van **primero** a proposito: cuando corre el verificador ya estan verdes,
-asi que no ve output de build y no gasta un reintento adversarial en un `ruff` sucio. **Sus comandos
-los declara el issue** (seccion `## Controles`, por repo, descubierta y confirmada en `slice-spec`):
-ningun agente abre un `Makefile` en tiempo de run, y la salida de un control fallido va a disco -el
-orquestador reenvia la ruta, el implementador lee el log entero-. **La PR solo lleva el codigo de la slice**:
-se stagean unicamente los ficheros que produjo el implementador, nunca planes ni design-docs (la
-spec vive en el issue), y referencia el issue con `Part of #N`. Su cuerpo cuenta **la intencion**
-(que estaba mal y deja de estarlo), los criterios de aceptacion cumplidos y la senal a comprobar
-tras el despliegue; nunca enumera ficheros ni narra el diff, que eso ya lo cuenta GitHub. No hace
-merge. Por defecto trabaja en una **rama normal** (no asume worktree; solo lo usa si se paralelizan
-slices). Tras CI verde marca la slice **esperando-merge** en el issue y vigila la PR; al detectar el
-merge la marca **`[x]` mergeada** y encadena `deploy-watch`. Las esperas (CI, merge) son ticks en
-background, nunca una shell bloqueante. No hay estado local que descartar: el estado vive en el
-issue.
-
-### deploy-watch
-
-Fase post-approve, read-only sobre prod. Se **encadena automaticamente** al detectar el merge (o se invoca a mano) y **arranca sola**: infiere servicio/namespace y solo pregunta si hay duda real. **El agente orquesta por tick** las skills de observabilidad disponibles (prometheus, elasticsearch, gcloud-logs, sentry, keycloak, postgres-readonly; **catalogo abierto**, elige por blast radius) y decide con un core puro (`scripts/deploy_core.py`: umbrales relativos, confirmacion sostenida, scorecard, veredicto go/no-go); el RCA lo hace el agente `sre`. El poll son ticks en background, sin shell bloqueante. **Comenta su veredicto** (go/no-go/inconclusive, con scorecard vs baseline) en el issue de la feature. Nunca ejecuta rollback: lo redacta para que lo lances tu.
-
-## Seguimiento (issue de GitHub)
-
-El estado del run vive en el **cuerpo del issue** de la feature (1 feature = 1 issue), unica fuente
-de verdad. No hay estado local (`.slice-runner/`, ledger, panel): cada slice muestra su estado en su
-linea del checklist, y cualquiera con acceso al repo lo ve en todo momento.
-
-- `- [ ] slice-NN (name): titulo [estado] PR #M` — el marcador `[estado]` va de `pendiente` a
-  `en-curso`, `esperando-merge`, `mergeada` (`[x]`), o `bloqueada`/`abortada`.
-- `slice-runner` reescribe solo la linea de la slice en cada transicion (`gh issue edit`);
-  `deploy-watch` comenta el veredicto del deploy.
-- La logica de parseo/reescritura del cuerpo es pura y testeable (`scripts/issue_body.py`); la I/O
-  contra `gh` la valida el smoke real.
-
-El consumo de tokens/$ sale de la telemetria de Claude Code (OTel -> Grafana), no de las skills. Las
-metricas del loop (tasa de FALLA, reintentos...) viven fuera del repo en
-`~/.claude/slice-runner/metrics.jsonl`.
+Otra consecuencia del symlink: **la rama en la que estas decide que codigo corre**. Si sondeas un
+cambio de los scripts desde una rama creada en `origin/master`, corres los de `origin` y nada avisa.
 
 ## Principios comunes
 
-- Escritor != verificador, pero el verificador **revisa convenciones/arquitectura, no re-testea** (CI + criterios de aceptacion gobiernan la correccion) y **no ejecuta controles ni ve output de build**: corren antes, y su presupuesto entero es para lo semantico.
-- **Los subagentes son la garantia, no un detalle**: invocar una skill cuenta como pedirlos. Si el entorno los veta, decide **un solo criterio**: ¿se puede declarar la degradacion en el artefacto? Si si, degrada y declaralo ahi; si el artefacto entero significa la garantia perdida, para. De ahi salen las dos respuestas -`slice-runner` **para** (su PR con PASA seria falsa de forma invisible) y `deploy-watch` **degrada declarandolo** (su veredicto puede decir como se obtuvo, y lo calcula `deploy_core.py`)-, que por eso no son dos reglas sino una. El criterio se escribe **en cada skill**, no en un fichero compartido: se duplica a cambio de que todo quede versionado en este repo y cada skill sea autocontenida.
+- Escritor != verificador, pero el verificador **revisa convenciones y arquitectura, no re-testea**
+  (la integracion continua y los criterios de aceptacion gobiernan la correccion) y **no ejecuta
+  controles ni ve output de build**: su presupuesto entero es para lo semantico.
+- **Los subagentes son la garantia, no un detalle**: invocar una skill cuenta como pedirlos. Si el
+  entorno los veta, decide **un solo criterio**: ¿se puede declarar la degradacion en el artefacto?
+  Si si, degrada y declaralo ahi; si el artefacto entero significa la garantia perdida, para. De ahi
+  salen las dos respuestas -`slice-runner` **para** (su pull request con PASA seria falsa de forma
+  invisible) y `deploy-watch` **degrada declarandolo** (su veredicto puede decir como se obtuvo, y lo
+  calcula `deploy_core.py`)-, que por eso no son dos reglas sino una. El criterio se escribe **en cada
+  skill**, no en un fichero compartido: se duplica a cambio de que todo quede versionado aqui y cada
+  skill sea autocontenida.
 - Controles de parada objetivos y deterministas.
 - Convenciones del repo como vara de medir principal.
-- Estado del run en el **issue de GitHub**: la spec y el estado de cada slice viven en el issue (unica fuente de verdad); el registro duradero son el issue y las PRs mergeadas.
-- La PR solo lleva el codigo de la slice (conventional commits, `name` como scope, `Part of #N`).
+- Estado del run en el **issue de GitHub**; el registro duradero son el issue y las pull requests
+  mergeadas, no ficheros de estado.
+- La pull request solo lleva el codigo de la slice (conventional commits, `name` como scope,
+  `Part of #N`).
 - Control humano en los puntos de riesgo: merge y rollback.
 
-Ver `docs/design-notes.md` para el detalle y las fuentes.
+## Desarrollo
+
+```bash
+make check   # ruff + mypy strict + pytest; todo verde antes de dar nada por terminado
+```
+
+Cubre tambien los `.md`, no solo el codigo: `tests/test_skill_contracts.py` compara los contratos que
+estan escritos dos veces a proposito (motivos de bloqueo, veredictos, el JSON del verificador, el
+criterio de degradacion) extrayendo el vocabulario de ambos lados, y comprueba que **toda ruta de
+este repo citada en los `.md` existe**. Si editas una skill y eso se pone rojo, has movido una mitad
+del contrato.
+
+El toolchain lo gestiona `uv`, asi que no hay que instalar nada a mano. Las convenciones de este repo
+y el ritual antes de tocar una skill estan en `CLAUDE.md`; el detalle de cada decision, en
+`docs/design-notes.md`.
