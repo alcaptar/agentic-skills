@@ -134,10 +134,17 @@ version en disco ya no declaraba, y usaba `Bash`, que ya no estaba en su `tools`
 El camino feliz se dispara solo: la fixture esta preparada para pasar y basta correr el loop. Los cuatro
 caminos de fallo hay que **provocarlos**, y ninguna de las cuatro provocaciones se parece a las otras,
 asi que quedan escritas aqui para no volver a deducirlas cada vez. Lo que este fichero no repite es el
-contrato: los estados, los reintentos y el registro los declara `skills/slice-runner/SKILL.md` (pasos 6,
-7 y 9), y la lista de motivos validos vive en `skills/slice-runner/scripts/issue_body.py`
-(`MOTIVOS_BLOQUEADA`), que los valida al escribir en el issue. Aqui esta solo **como se provoca cada uno**
-y **que rastro debe quedar**.
+contrato: los estados, los presupuestos de reintentos y el registro los declara
+`skills/slice-runner/SKILL.md` (pasos 6, 7 y 9), y la lista de motivos validos vive en
+`skills/slice-runner/scripts/issue_body.py` (`MOTIVOS_BLOQUEADA`), que los valida al escribir en el
+issue. Aqui esta solo **como se provoca cada uno** y **que rastro debe quedar**.
+
+**Estas cuatro recetas asumen el modo in-tree**: issue y PR en este mismo repo, con la fixture donde
+esta (`smoke/fixture/`), no en el repo copiado que describe "Como ejecutarlo". La diferencia importa:
+en una copia de la fixture el arbol empieza en la propia fixture -los tests estan en `tests/`, no en
+`smoke/fixture/tests/`- y no hay ningun workflow, asi que la CI la monta quien copia y corre en todas
+las PRs. Con eso, la receta de `ci-indeterminada` no funciona tal cual y la de `ci-roja` apunta a
+rutas que ahi no existen.
 
 Dos reglas para los cuatro. **Una provocacion por run**: si siembras dos a la vez no sabras cual de los
 dos frenos actuo, y el segundo no llega a ejercitarse porque el primero para el loop. Y **mira el issue,
@@ -153,13 +160,13 @@ tool `Agent`, y eso no lo puede forzar ni el issue ni el repo.
 Se provoca **desde el issue**: en su seccion `## Controles`, declara un comando que no resuelva (por
 ejemplo `lint: make linting-que-no-existe`). Los controles los declara el issue y `slice-runner` solo los
 lee, asi que el fallo es terminal por diseno: la skill prohibe expresamente al implementador arreglar el
-`Makefile` o cambiar el comando para que pase, y sin esa salida los dos reintentos del paso 6 se agotan
-contra la misma pared. No rompas codigo para conseguirlo, que es la tentacion obvia y la peor: un test
+`Makefile` o cambiar el comando para que pase, y sin esa salida los reintentos que declara el paso 6 se
+agotan contra la misma pared. No rompas codigo para conseguirlo, que es la tentacion obvia y la peor: un test
 roto tambien tumba los controles, pero entonces no distingues si el loop paro porque el control no
 resuelve o porque el implementador no supo arreglar el test.
 
 Debe dejar: la slice `bloqueada: controles` en el issue, la metrica durable con
-`veredicto=bloqueada-controles`, `ci=none` y `--reintentos-controles 2`, y **ninguna PR ni ninguna
+`veredicto=bloqueada-controles`, `ci=none` y `--reintentos-controles` al tope del paso 6, y **ninguna PR ni ninguna
 invocacion del verificador** -un fallo mecanico no se juzga, se arregla-. Comprueba tambien que lo que
 llega al orquestador del control en rojo es la **ruta** del log (`--out` a un directorio fuera del repo)
 y no el output del build.
@@ -171,15 +178,22 @@ Hace falta que el implementador entregue codigo que viole una convencion de
 conflicto deliberado entre el criterio de aceptacion de la slice y las convenciones: escribe en el issue
 una `ACEPTACION:` que exija justo lo que `conventions.md` prohibe -un docstring en `fizzbuzz/core.py`, o
 nombres en castellano-. Asi cada ronda oscila (si obedece la aceptacion el juez lo veta con `alta`; si
-obedece las convenciones incumple la aceptacion) y los dos reintentos del paso 7 se agotan. Pedirlo en el
+obedece las convenciones incumple la aceptacion) y los reintentos que declara el paso 7 se agotan. Pedirlo en el
 prompt de invocacion no sirve: el implementador carga las convenciones y quita la violacion en la primera
 ronda, con lo que sondeas un `FALLA` aislado y no el camino bloqueado.
 
+Aviso sobre la palanca: `conventions.md` no declara severidades, las asigna el juez por su rubrica, y
+su calibracion le manda **degradar la severidad** cuando no puede citar evidencia concreta. Si el
+veredicto vuelve con `media`, no hay `FALLA` y no estas sondeando este camino: hace falta una
+violacion que la rubrica puntue `alta` de forma inequivoca.
+
 Debe dejar: la slice `bloqueada: verify`, la metrica con `veredicto=FALLA`, `ci=none` y
-`--reintentos-verify 2` -y `--descartes-verify` en 0: un descarte es el agente devolviendo un JSON que no
+`--reintentos-verify` al tope del paso 7 -y `--descartes-verify` en 0: un descarte es el agente devolviendo un JSON que no
 parsea, un fallo distinto que no debe acabar contado aqui-. Y **ni PR ni commit**: el commit va despues
-del veredicto, asi que la rama tiene que quedarse sin ningun commit de la slice y los cambios sin stagear
-en el arbol. Si te encuentras un commit, el orden del tramo 7-8 se ha vuelto a invertir.
+del veredicto, asi que la rama tiene que quedarse sin ningun commit de la slice. Los cambios si quedan
+**stageados** -el paso 7 hace `git add` antes de invocar al juez, porque juzga el indice- y nada los
+desstagea al cerrar: esperar el arbol limpio es el falso defecto facil de reportar aqui. Si te
+encuentras un commit, el orden del tramo 7-8 se ha vuelto a invertir.
 
 ### `ci-roja`
 
@@ -204,8 +218,17 @@ si mismo un hallazgo del smoke.
 Se provoca con **una PR que no toque `smoke/fixture/**`**, y no hace falta nada mas. Este repo tiene un
 solo check, `.github/workflows/smoke-fixture.yml`, filtrado por `paths: smoke/fixture/**`, asi que una PR
 fuera de ese arbol -una slice que solo cambia documentacion, por ejemplo- no dispara ningun workflow:
-`controles.py ci-status` no encuentra checks y devuelve `sin-checks` (exit 4). Es la mas facil de provocar
-de las cuatro y, por lo mismo, la mas facil de disparar sin querer.
+`controles.py ci-status` no puede medir y devuelve **exit 4**. Es la mas facil de provocar de las cuatro
+y, por lo mismo, la mas facil de disparar sin querer.
+
+Comprobado en la sonda del 2026-07-30 (issue #9, PR #10): el estado que sale es **`desconocido`, no
+`sin-checks`**. Con una PR sin checks, `gh pr checks --json` no escribe nada en stdout -manda "no
+checks reported" a stderr- y sale con **exit 1**, el mismo codigo que usa cuando la CI esta roja. Es
+decir que `sin-checks` solo es alcanzable por el camino de "todos los checks saltados", y que fiarse
+del exit code de `gh` habria confundido "esta PR no tiene CI" con "la CI ha fallado", mandando al
+implementador a arreglar un fallo inexistente. Los dos estados mapean al mismo exit 4 y a la misma
+rama, asi que la decision del orquestador es la correcta en ambos casos; lo que se pierde es
+precision en el diagnostico.
 
 Debe dejar: la slice `bloqueada: ci-indeterminada` con el estado concreto (`sin-checks` o `desconocido`)
 en el issue, la metrica en `ci=none`, la **PR abierta** y **ningun reintento** al implementador: no hay
@@ -217,9 +240,9 @@ tickeando hasta el timeout, porque colgarse al menos acaba llamando la atencion.
 
 ## Pendiente de smokear (I/O aun no validada)
 
-Lo que los unit tests no pueden cubrir y este smoke **todavia no ejecuta**. Los cuatro caminos de fallo
-ya no viven en esta lista: la seccion anterior dice como provocarlos con lo que ya hay, asi que cada uno
-sale de "pendiente" en cuanto se sonda. Lo que queda aqui necesita infraestructura que hoy no existe:
+Lo que los unit tests no pueden cubrir y este smoke **todavia no ejecuta**. Los caminos de fallo no
+entran aqui porque la seccion anterior dice como provocarlos con lo que ya hay; lo que queda en esta
+lista necesita infraestructura que hoy no existe:
 
 - **Slice cross-repo** (`REPO: <org>/<repo>`): rama, controles, `gh pr create` y CI **en el repo
   destino**, con `Part of <org>/<repo-del-issue>#<N>` como referencia cross-repo, y las fuentes de
