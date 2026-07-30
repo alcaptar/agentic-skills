@@ -14,6 +14,8 @@ step passes; changing one side alone fails. That is the only drift these tests e
 
 from __future__ import annotations
 
+import argparse
+import importlib
 import json
 import re
 import subprocess
@@ -224,6 +226,41 @@ def test_each_skill_names_the_other_when_declaring_its_side_of_the_criterion() -
     assert "slice-runner" in _read(_DEPLOY_WATCH), (
         f"{_rel(_DEPLOY_WATCH)} no longer cites slice-runner; the asymmetry then reads as a bug"
     )
+
+
+# --- CLI surface consistency ------------------------------------------------------------
+
+
+def test_every_subcommand_of_both_scripts_accepts_json() -> None:
+    """One rule across both scripts: human-readable by default, `--json` for structured.
+
+    This is not tidiness. `issue_body.py show` used to emit JSON unconditionally and take
+    `--pretty`, while the five `controles.py` subcommands are human-readable unless given
+    `--json` -- and during the 2026-07-30 probe that difference tripped the person who had
+    written both scripts the day before. Two scripts in one repo with opposite conventions
+    for the same thing is a trap, so the rule is now enforced instead of remembered.
+    """
+    for script in ("controles", "issue_body"):
+        module = importlib.import_module(script)
+        parser = module.build_parser()
+        subcommands = _subcommand_parsers(parser)
+        assert subcommands, f"{script}.py exposes no subcommands"
+        for name, subparser in sorted(subcommands.items()):
+            flags = {opt for action in subparser._actions for opt in action.option_strings}
+            assert "--json" in flags, (
+                f"{script}.py {name} does not accept --json; every subcommand of both "
+                f"scripts must, so the flag never depends on remembering which script it is"
+            )
+            assert "--pretty" not in flags, (
+                f"{script}.py {name} still has --pretty, the flag the inconsistency came from"
+            )
+
+
+def _subcommand_parsers(parser: argparse.ArgumentParser) -> dict[str, argparse.ArgumentParser]:
+    for action in parser._actions:
+        if isinstance(action, argparse._SubParsersAction):
+            return dict(action.choices)
+    return {}
 
 
 # --- paths the prose claims about this repo's own tree -----------------------------------

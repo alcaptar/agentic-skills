@@ -671,7 +671,7 @@ def test_cli_show_emite_slice_fuentes_controles_y_derivados(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     _fake_gh(monkeypatch, _BODY)
-    assert issue_body.main(["show", "--repo", "o/r", "--issue", "3"]) == 0
+    assert issue_body.main(["show", "--repo", "o/r", "--issue", "3", "--json"]) == 0
     data = json.loads(capsys.readouterr().out)
     # La siguiente sin cerrar, no la primera: slice-01 esta mergeada en el fixture.
     assert data["slice"]["slice_id"] == "slice-02"
@@ -684,7 +684,10 @@ def test_cli_show_de_una_slice_concreta(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     _fake_gh(monkeypatch, _BODY)
-    assert issue_body.main(["show", "--repo", "o/r", "--issue", "3", "--slice", "slice-01"]) == 0
+    assert (
+        issue_body.main(["show", "--repo", "o/r", "--issue", "3", "--slice", "slice-01", "--json"])
+        == 0
+    )
     assert json.loads(capsys.readouterr().out)["slice"]["slice_id"] == "slice-01"
 
 
@@ -838,3 +841,50 @@ def test_cli_set_estado_rechaza_motivo_en_un_estado_que_no_lo_lleva(
     )
     assert code == 2
     assert not any("edit" in a for a in llamadas)
+
+
+def test_cli_show_es_humano_por_defecto(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # Mismo contrato que `controles.py`: humano salvo `--json`. La incoherencia anterior
+    # -aqui JSON siempre y `--pretty`, alli humano salvo `--json`- hizo tropezar en la sonda
+    # del 2026-07-30 a quien habia escrito los dos scripts el dia antes.
+    _fake_gh(monkeypatch, _BODY)
+    assert issue_body.main(["show", "--repo", "o/r", "--issue", "3"]) == 0
+    out = capsys.readouterr().out
+    assert out.startswith("[show]")
+    with pytest.raises(json.JSONDecodeError):
+        json.loads(out)
+
+
+def test_cli_set_estado_tiene_modo_json(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _fake_gh(monkeypatch, _BODY)
+    code = issue_body.main(
+        [
+            "set-estado",
+            "--repo",
+            "o/r",
+            "--issue",
+            "3",
+            "--slice",
+            "slice-03",
+            "--estado",
+            "bloqueada",
+            "--motivo",
+            "verify",
+            "--json",
+        ]
+    )
+    assert code == 0
+    data = json.loads(capsys.readouterr().out)
+    assert data == {
+        "control": "set-estado",
+        "issue": "o/r#3",
+        "slice": "slice-03",
+        "estado": "bloqueada",
+        "motivo": "verify",
+        "linea": data["linea"],
+    }
+    assert "bloqueada: verify" in data["linea"]

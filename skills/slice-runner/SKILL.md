@@ -219,7 +219,7 @@ caerian en cubos distintos y la calibracion del loop dejaria de agregar bien.
 - **Lee el issue con un solo comando (`[det]`)**, que ya elige la siguiente slice sin cerrar y
   emite todo lo que necesitan los pasos 1 y 2:
 
-      python3 ~/.claude/skills/slice-runner/scripts/issue_body.py show --repo <org/repo> --issue <N> [--slice slice-NN]
+      python3 ~/.claude/skills/slice-runner/scripts/issue_body.py show --repo <org/repo> --issue <N> --json [--slice slice-NN]
 
   Devuelve JSON con `slice` (id, name, type, estado, pr, repo, intencion, aceptacion, senal, y la
   `rama` y el `scope` ya derivados), `fuentes` y `controles` **ya filtrados por el repo de la

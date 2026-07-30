@@ -637,7 +637,8 @@ def _emit_controles(result: ResultadoControles, as_json: bool) -> int:
     return 0 if result.passed else 1
 
 
-def main(argv: list[str] | None = None) -> int:
+def build_parser() -> argparse.ArgumentParser:
+    """El parser, aparte de `main`, para que un test pueda introspeccionar la superficie CLI."""
     parser = argparse.ArgumentParser(description="Control determinista de slice-runner")
     sub = parser.add_subparsers(dest="subcomando", required=True)
 
@@ -702,7 +703,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     ver.add_argument("--json", action="store_true", help="salida estructurada JSON")
 
-    args = parser.parse_args(argv)
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
 
     if args.subcomando == "pr-hygiene":
         return _emit(comprueba_higiene_pr(args.repo, args.allow, args.spec), args.json)

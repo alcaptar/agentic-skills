@@ -636,6 +636,50 @@ def _slice_info(slice_: Slice) -> dict[str, object]:
     }
 
 
+def _emit_show(out: dict[str, object], as_json: bool) -> int:
+    """Humano por defecto, JSON con `--json`: el mismo contrato que `controles.py`.
+
+    La incoherencia anterior -este subcomando emitia JSON siempre y tenia `--pretty`,
+    mientras los cinco de `controles.py` son humanos salvo `--json`- hizo tropezar en la
+    sonda del 2026-07-30 a quien habia escrito los dos scripts el dia antes. Dos scripts del
+    mismo repo con convenciones opuestas para lo mismo son una trampa, no una preferencia.
+    """
+    if as_json:
+        print(json.dumps(out, ensure_ascii=False))
+        return 0
+
+    slice_ = out.get("slice")
+    if not isinstance(slice_, dict):
+        print(f"[show] {out.get('slices')} slice(s), ninguna sin cerrar")
+        return 0
+    motivo = f": {slice_['motivo']}" if slice_["motivo"] else ""
+    print(f"[show] {out['slices']} slice(s) en el issue")
+    print(f"  slice   {slice_['slice_id']} ({slice_['name']}) [{slice_['estado']}{motivo}]")
+    print(f"  rama    {slice_['rama']}")
+    print(f"  scope   {slice_['scope']}")
+    if slice_["repo"]:
+        print(f"  repo    {slice_['repo']}")
+    if slice_["pr"]:
+        print(f"  pr      #{slice_['pr']}")
+    fuentes = out["fuentes"]
+    controles = out["controles"]
+    assert isinstance(fuentes, list)
+    assert isinstance(controles, list)
+    for f in fuentes:
+        print(f"  fuente  {f['tipo']}: {f['ruta']}")
+    for c in controles:
+        print(f"  control {c['nombre']}: {'eximido' if c['exento'] else c['comando']}")
+    aceptacion = slice_["aceptacion"]
+    assert isinstance(aceptacion, list)
+    print(f"  aceptacion: {len(aceptacion)} criterio(s)")
+    print(f"  senal:      {'si' if slice_['senal'] else 'NO DECLARADA'}")
+    print(
+        f"  intencion:  slice {'si' if slice_['intencion'] else 'NO DECLARADA'}"
+        f", feature {'si' if out['intencion_feature'] else 'NO DECLARADA'}"
+    )
+    return 0
+
+
 def _cmd_show(args: argparse.Namespace) -> int:
     body = _gh_body(args.repo, args.issue)
     slices = parse_body(body)
@@ -653,10 +697,9 @@ def _cmd_show(args: argparse.Namespace) -> int:
         # cuenta como "no terminada" y sale antes que una pendiente posterior.
         elegida = next((s for s in slices if s.estado not in ("mergeada",)), None)
         if elegida is None:
-            print(json.dumps({"slices": len(slices), "slice": None}, ensure_ascii=False))
-            return 0
+            return _emit_show({"slices": len(slices), "slice": None}, args.json)
 
-    out = {
+    out: dict[str, object] = {
         "slices": len(slices),
         "intencion_feature": parse_intencion(body),
         "tiene_seccion_fuentes": tiene_seccion_fuentes(body),
@@ -671,8 +714,7 @@ def _cmd_show(args: argparse.Namespace) -> int:
         ],
         "slice": _slice_info(elegida),
     }
-    print(json.dumps(out, ensure_ascii=False, indent=2 if args.pretty else None))
-    return 0
+    return _emit_show(out, args.json)
 
 
 def _cmd_set_estado(args: argparse.Namespace) -> int:
@@ -704,18 +746,37 @@ def _cmd_set_estado(args: argparse.Namespace) -> int:
         print(f"error: {exc}", file=sys.stderr)
         return 2
     if nuevo == body:
-        print(f"sin cambios: {args.slice} ya estaba asi")
+        if args.json:
+            print(json.dumps({"control": "set-estado", "sin_cambios": True}, ensure_ascii=False))
+        else:
+            print(f"sin cambios: {args.slice} ya estaba asi")
         return 0
     _gh_set_body(args.repo, args.issue, nuevo)
     linea = next(
         (ln for ln in nuevo.splitlines() if args.slice in ln and ln.lstrip().startswith("- [")),
         "",
     )
-    print(f"{args.repo}#{args.issue} {args.slice} -> {args.estado}\n{linea.strip()}")
+    if args.json:
+        print(
+            json.dumps(
+                {
+                    "control": "set-estado",
+                    "issue": f"{args.repo}#{args.issue}",
+                    "slice": args.slice,
+                    "estado": args.estado,
+                    "motivo": args.motivo or "",
+                    "linea": linea.strip(),
+                },
+                ensure_ascii=False,
+            )
+        )
+    else:
+        print(f"{args.repo}#{args.issue} {args.slice} -> {args.estado}\n{linea.strip()}")
     return 0
 
 
-def main(argv: list[str] | None = None) -> int:
+def build_parser() -> argparse.ArgumentParser:
+    """El parser, aparte de `main`, para que un test pueda introspeccionar la superficie CLI."""
     parser = argparse.ArgumentParser(description="Lee y actualiza el estado del run en el issue")
     sub = parser.add_subparsers(dest="subcomando", required=True)
 
@@ -725,7 +786,7 @@ def main(argv: list[str] | None = None) -> int:
     sh.add_argument(
         "--slice", default=None, help="slice concreta (default: la siguiente sin cerrar)"
     )
-    sh.add_argument("--pretty", action="store_true", help="JSON indentado")
+    sh.add_argument("--json", action="store_true", help="salida estructurada JSON")
 
     st = sub.add_parser("set-estado", help="reescribe la linea de una slice en el issue")
     st.add_argument("--repo", required=True, help="org/repo del issue")
@@ -736,8 +797,13 @@ def main(argv: list[str] | None = None) -> int:
         "--motivo", default=None, help=f"para bloqueada: uno de {list(MOTIVOS_BLOQUEADA)}"
     )
     st.add_argument("--pr", type=int, default=None, help="numero de PR (se conserva si no se pasa)")
+    st.add_argument("--json", action="store_true", help="salida estructurada JSON")
 
-    args = parser.parse_args(argv)
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
     try:
         if args.subcomando == "show":
             return _cmd_show(args)
