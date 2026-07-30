@@ -24,6 +24,7 @@ Uso:
         --veredicto PASA --ci green \\
         --hallazgos-alta 0 --hallazgos-media 1 --hallazgos-baja 2 \\
         --reintentos-implement 0 --reintentos-controles 0 --reintentos-ci 0 \\
+        --reintentos-verify 0 --descartes-verify 0 \\
         --duracion-s 540 \\
         [--coste-tokens 12345] [--ts 2026-07-22T10:00:00Z] [--path RUTA]
 
@@ -85,6 +86,11 @@ def record(args: argparse.Namespace) -> int:
         "reintentos_implement": args.reintentos_implement,
         "reintentos_controles": args.reintentos_controles,
         "reintentos_ci": args.reintentos_ci,
+        # Las dos formas de volver a invocar al verificador, separadas a proposito, por el
+        # mismo motivo por el que `FALLA` y `bloqueada-controles` son veredictos distintos:
+        # una es un rechazo semantico del juez y la otra un fallo mecanico del agente.
+        "reintentos_verify": args.reintentos_verify,
+        "descartes_verify": args.descartes_verify,
         "duracion_s": args.duracion_s,
         "coste_tokens": args.coste_tokens,  # None si no se pasa: no se inventa
     }
@@ -149,6 +155,11 @@ def _aggregate(rows: list[dict[str, object]]) -> dict[str, object]:
     reint_impl = [_as_float(r.get("reintentos_implement")) for r in rows]
     reint_controles = [_as_float(_reintentos_controles(r)) for r in rows]
     reint_ci = [_as_float(r.get("reintentos_ci")) for r in rows]
+    reint_verify = [_as_float(r.get("reintentos_verify")) for r in rows]
+    # `descartes_verify` se reporta como tasa, no como media: la pregunta que responde no es
+    # "cuantos de media" sino "en que fraccion de slices el contrato de salida del juez no
+    # aguanto". Es una propiedad del agente, no de la slice.
+    descartes = sum(1 for r in rows if _as_float(r.get("descartes_verify")) > 0)
     duraciones = [_as_float(r["duracion_s"]) for r in rows if r.get("duracion_s") is not None]
     costes = [_as_float(r["coste_tokens"]) for r in rows if r.get("coste_tokens") is not None]
     return {
@@ -160,6 +171,8 @@ def _aggregate(rows: list[dict[str, object]]) -> dict[str, object]:
         "reintentos_implement_media": _mean(reint_impl),
         "reintentos_controles_media": _mean(reint_controles),
         "reintentos_ci_media": _mean(reint_ci),
+        "reintentos_verify_media": _mean(reint_verify),
+        "descartes_verify_pct": _pct(descartes, total),
         "duracion_s_media": _mean(duraciones),
         "coste_tokens_media": _mean(costes) if costes else None,
         "coste_muestras": len(costes),
@@ -187,6 +200,8 @@ def report(args: argparse.Namespace) -> int:
     print(f"  reintentos implement     {agg['reintentos_implement_media']} media")
     print(f"  reintentos controles     {agg['reintentos_controles_media']} media")
     print(f"  reintentos CI            {agg['reintentos_ci_media']} media")
+    print(f"  reintentos verify        {agg['reintentos_verify_media']} media")
+    print(f"  contrato del juez roto   {agg['descartes_verify_pct']}% de slices")
     print(f"  duracion                 {agg['duracion_s_media']}s media")
     if agg["coste_tokens_media"] is not None:
         print(
@@ -214,6 +229,18 @@ def main(argv: list[str] | None = None) -> int:
     rec.add_argument("--reintentos-implement", type=int, default=0)
     rec.add_argument("--reintentos-controles", type=int, default=0)
     rec.add_argument("--reintentos-ci", type=int, default=0)
+    rec.add_argument(
+        "--reintentos-verify",
+        type=int,
+        default=0,
+        help="rondas de verificacion por FALLA del juez (rechazo semantico)",
+    )
+    rec.add_argument(
+        "--descartes-verify",
+        type=int,
+        default=0,
+        help="invocaciones del juez descartadas por devolver algo que no era su JSON",
+    )
     rec.add_argument("--duracion-s", type=int, default=None)
     rec.add_argument("--coste-tokens", type=int, default=None)
     rec.add_argument("--ts", default=None, help="ISO ts; default now(UTC)")

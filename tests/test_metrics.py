@@ -22,6 +22,8 @@ def _row(**kw: Any) -> dict[str, Any]:
         "reintentos_implement": 0,
         "reintentos_controles": 0,
         "reintentos_ci": 0,
+        "reintentos_verify": 0,
+        "descartes_verify": 0,
         "duracion_s": 100,
         "coste_tokens": None,
     }
@@ -119,6 +121,8 @@ def test_record_report_roundtrip(tmp_path: Path, capsys: pytest.CaptureFixture[s
         reintentos_implement=0,
         reintentos_controles=0,
         reintentos_ci=0,
+        reintentos_verify=0,
+        descartes_verify=0,
         duracion_s=10,
         coste_tokens=None,
         ts="2026-01-01T00:00:00Z",
@@ -218,3 +222,83 @@ def test_una_fila_vieja_con_reintentos_no_cuenta_como_primer_intento(tmp_path: P
     )
     agg = metrics._aggregate(metrics._load(log, "r"))
     assert agg["primer_intento_pct"] == 0.0
+
+
+# --- reintentos y descartes del verificador ---------------------------------
+#
+# Se registran en dos campos distintos por el mismo motivo por el que `FALLA` y
+# `bloqueada-controles` son veredictos distintos: un `FALLA` es un rechazo semantico del
+# juez y devolver prosa en vez de su JSON es un fallo mecanico del agente. Conflarlos
+# dejaria inservible justo lo que se quiere medir. El segundo caso aparecio en el smoke 2
+# (2026-07-30): la misma invocacion devolvio prosa una vez y JSON pelado al reintentarla,
+# asi que es estocastico y hay que poder medirlo.
+
+
+def test_descartes_del_verificador_no_cuentan_como_reintento_semantico() -> None:
+    # Una slice cuyo unico incidente fue que el juez devolvio prosa: su media de reintentos
+    # semanticos es 0, pero la tasa de contrato roto es 100%. Si se sumaran en el mismo
+    # campo, un fallo del agente se leeria como que el juez veto codigo.
+    agg = metrics._aggregate([_row(reintentos_verify=0, descartes_verify=1)])
+    assert agg["reintentos_verify_media"] == 0.0
+    assert agg["descartes_verify_pct"] == 100.0
+
+
+def test_un_descarte_no_descalifica_el_primer_intento() -> None:
+    # El juez reescribio su respuesta, no la slice: el codigo salio limpio a la primera.
+    # Contarlo contra "primer intento" mediria la disciplina del agente como si fuera
+    # calidad del codigo.
+    agg = metrics._aggregate([_row(descartes_verify=1)])
+    assert agg["primer_intento_pct"] == 100.0
+
+
+def test_media_de_reintentos_semanticos_del_verificador() -> None:
+    agg = metrics._aggregate([_row(reintentos_verify=2), _row(reintentos_verify=0)])
+    assert agg["reintentos_verify_media"] == 1.0
+
+
+def test_filas_viejas_sin_los_campos_nuevos_se_agregan_igual() -> None:
+    # El log es durable y hay filas escritas antes de que estos campos existieran: leerlas
+    # no puede petar ni inventarse un valor. Mismo trato que `reintentos_puertas`.
+    vieja = _row()
+    del vieja["reintentos_verify"]
+    del vieja["descartes_verify"]
+    agg = metrics._aggregate([vieja])
+    assert agg["reintentos_verify_media"] == 0.0
+    assert agg["descartes_verify_pct"] == 0.0
+
+
+def test_cli_acepta_y_persiste_los_dos_campos(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    path = tmp_path / "m.jsonl"
+    code = metrics.main(
+        [
+            "record",
+            "--repo",
+            "r",
+            "--slice",
+            "slice-01",
+            "--name",
+            "x",
+            "--veredicto",
+            "PASA",
+            "--ci",
+            "green",
+            "--reintentos-verify",
+            "1",
+            "--descartes-verify",
+            "1",
+            "--path",
+            str(path),
+        ]
+    )
+    assert code == 0
+    capsys.readouterr()
+    row = json.loads(path.read_text(encoding="utf-8").splitlines()[0])
+    assert row["reintentos_verify"] == 1
+    assert row["descartes_verify"] == 1
+
+    metrics.main(["report", "--path", str(path)])
+    out = capsys.readouterr().out
+    assert "reintentos verify" in out
+    assert "contrato del juez roto" in out

@@ -456,7 +456,11 @@ completo esta en `agents/slice-verifier.md`; no sustituyas ese agente por `reque
 
 **Veredicto.** Devuelve como mensaje final exactamente este objeto JSON (lo exige su system prompt; la
 tool `Agent` no valida schemas, asi que si vuelve envuelto en prosa, es un fallo del agente y se
-reintenta la invocacion, no se parsea a mano):
+**reinvoca**, no se parsea a mano). Esa reinvocacion se cuenta en `--descartes-verify` (paso 9) y no
+gasta presupuesto de reintentos: no se ha tocado el codigo. **La regla es load-bearing, no una
+formalidad**: en el smoke del 2026-07-30 la misma invocacion devolvio prosa una vez y el JSON pelado
+al reinvocarla sin cambiar nada, o sea que el cumplimiento es **estocastico** y esta regla es lo unico
+que sostiene el contrato.
 
 ```json
 {
@@ -559,10 +563,12 @@ y el commit**, porque seria codigo que entra en la PR sin haber pasado por el ve
 python3 ~/.claude/skills/slice-runner/scripts/metrics.py record --repo <repo> --slice <slice_id> --name <name> \
   --veredicto <PASA|FALLA|bloqueada-controles|abortada-presupuesto> --ci <green|red|none> \
   --hallazgos-alta N --hallazgos-media N --hallazgos-baja N \
-  --reintentos-implement N --reintentos-controles N --reintentos-ci N --duracion-s N
+  --reintentos-implement N --reintentos-controles N --reintentos-ci N \
+  --reintentos-verify N --descartes-verify N --duracion-s N
 ```
 
 - `veredicto` = el del verificador del paso 7 (`PASA`/`FALLA`), `bloqueada-controles` si paro en el backstop del paso 6, o `abortada-presupuesto` si paro el presupuesto. Los conteos de `hallazgos` salen del veredicto estructurado del paso 7 (en `bloqueada-controles` son 0: no hubo juicio semantico). **No uses `FALLA` para un fallo de controles**: es un fallo mecanico, no un veto del juez, y confundirlos deja inservible la calibracion del verificador.
+- **Los dos contadores del verificador tampoco se mezclan, por el mismo motivo.** `--reintentos-verify` son las rondas de verificacion por **`FALLA`** (rechazo semantico: el juez veto codigo y volvio al paso 5). `--descartes-verify` son las invocaciones **descartadas por no devolver su JSON** (fallo mecanico del agente: se reinvoca y no se toca el codigo). Sumarlos haria que la indisciplina del agente se leyera como que el juez encuentra defectos, que es exactamente lo que este log existe para distinguir. Un descarte **no** descalifica la slice como "primer intento": el codigo salio limpio, lo que se rehizo fue la respuesta del juez.
 - Este log vive **fuera del repo** (`~/.claude/slice-runner/metrics.jsonl`) y **nunca entra en una PR**. Coste en tokens: opcional (`--coste-tokens`); si no lo tienes de OTel, no lo inventes (se omite).
 
 ### 10. Esperar el merge y encadenar el deploy
