@@ -154,6 +154,28 @@ def test_verifier_verdict_schema_is_identical_in_the_agent_and_in_the_runner() -
     )
 
 
+def test_severity_levels_in_the_verdict_schema_are_the_ones_the_validator_accepts() -> None:
+    """The rubric's severities and the validator's must be the same set.
+
+    `verify-verdict` rejects a severity it does not know, so a level documented in the skill
+    but absent from the script turns a legitimate verdict into a discarded invocation -- and
+    the reverse silently widens what counts as a valid finding.
+    """
+    schema = _sole_json_block(_RUNNER)
+    assert isinstance(schema, dict)
+    hallazgos = schema["hallazgos"]
+    assert isinstance(hallazgos, list) and hallazgos
+    primero = hallazgos[0]
+    assert isinstance(primero, dict)
+    documented = {s.strip() for s in str(primero["severidad"]).split("|")}
+
+    assert documented == set(controles.SEVERIDADES), (
+        f"the verdict schema in {_rel(_RUNNER)} and controles.SEVERIDADES disagree: "
+        f"only in the skill {sorted(documented - set(controles.SEVERIDADES))}, "
+        f"only in the validator {sorted(set(controles.SEVERIDADES) - documented)}"
+    )
+
+
 # --- deliberately duplicated policy: what to do when subagents are vetoed ----------------
 
 # Short, stable phrase used only to locate the criterion; the sentence it belongs to is

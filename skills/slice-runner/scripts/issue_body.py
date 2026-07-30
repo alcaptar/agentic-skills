@@ -42,7 +42,13 @@ deterministas del repo, ver `parse_controles`).
 
 from __future__ import annotations
 
+import argparse
+import json
+import os
 import re
+import subprocess
+import sys
+import tempfile
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
 
@@ -549,3 +555,197 @@ def set_controles(body: str, controles: Iterable[Control]) -> str:
     `render_controles_section`.
     """
     return _upsert_seccion(body, _CONTROLES_HEADING_RE, render_controles_section(controles))
+
+
+# --- CLI ---------------------------------------------------------------------
+#
+# Todo lo de arriba es puro y se testea sin `gh`. Esto de abajo es la capa de I/O, y existe
+# porque sin ella el agente escribia el read-modify-write a mano en cada transicion: un
+# `python3 -c` con `sys.path.insert`, `gh issue view --json body`, la llamada, y `gh issue
+# edit --body-file`. En una sola sesion se escribio **seis veces**, y cada copia es una
+# ocasion de equivocarse en silencio (el `--json body -q .body` mal puesto devuelve cadena
+# vacia y el edit deja el issue en blanco). Leer un issue, reescribir una linea y
+# guardarlo es regla exacta, no juicio: `offload-deterministic`.
+#
+# El nucleo sigue siendo puro: estas funciones solo orquestan `gh` alrededor de las de
+# arriba. Los tests apuntan al nucleo, como en `controles.py` con `clasifica_ci`.
+
+_GH_TIMEOUT = 60
+
+
+def _gh_body(repo: str, issue: int) -> str:
+    """Cuerpo actual del issue. Falla ruidosamente: un cuerpo vacio nunca es aceptable."""
+    proc = subprocess.run(
+        ["gh", "issue", "view", str(issue), "--repo", repo, "--json", "body", "-q", ".body"],
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=_GH_TIMEOUT,
+    )
+    if proc.returncode != 0:
+        raise RuntimeError(f"gh issue view fallo: {proc.stderr.strip() or proc.returncode}")
+    if not proc.stdout.strip():
+        raise RuntimeError(f"el cuerpo de {repo}#{issue} vino vacio: no se reescribe nada")
+    return proc.stdout
+
+
+def _gh_set_body(repo: str, issue: int, body: str) -> None:
+    with tempfile.NamedTemporaryFile("w", suffix=".md", delete=False, encoding="utf-8") as fh:
+        fh.write(body)
+        tmp = fh.name
+    try:
+        proc = subprocess.run(
+            ["gh", "issue", "edit", str(issue), "--repo", repo, "--body-file", tmp],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=_GH_TIMEOUT,
+        )
+        if proc.returncode != 0:
+            raise RuntimeError(f"gh issue edit fallo: {proc.stderr.strip() or proc.returncode}")
+    finally:
+        os.unlink(tmp)
+
+
+def rama_de(slice_: Slice) -> str:
+    """`slice-01` + `cantidad-vo` -> `slice/01-cantidad-vo`. Determinista, no un slug a ojo."""
+    numero = slice_.slice_id.removeprefix("slice-")
+    return f"slice/{numero}-{slice_.name}" if slice_.name else f"slice/{numero}"
+
+
+def scope_de(slice_: Slice) -> str:
+    """El scope del conventional commit: `feat(cantidad-vo)`."""
+    return f"{slice_.type}({slice_.name})" if slice_.name else slice_.type
+
+
+def _slice_info(slice_: Slice) -> dict[str, object]:
+    return {
+        "slice_id": slice_.slice_id,
+        "name": slice_.name,
+        "type": slice_.type,
+        "titulo": slice_.title,
+        "estado": slice_.estado,
+        "motivo": slice_.motivo,
+        "pr": slice_.pr,
+        "repo": slice_.repo,
+        "intencion": slice_.intencion,
+        "aceptacion": slice_.aceptacion,
+        "senal": slice_.senal,
+        "rama": rama_de(slice_),
+        "scope": scope_de(slice_),
+    }
+
+
+def _cmd_show(args: argparse.Namespace) -> int:
+    body = _gh_body(args.repo, args.issue)
+    slices = parse_body(body)
+    if not slices:
+        print("error: el cuerpo no tiene ninguna linea de slice valida", file=sys.stderr)
+        return 2
+
+    if args.slice:
+        elegida = next((s for s in slices if s.slice_id == args.slice), None)
+        if elegida is None:
+            print(f"error: {args.slice} no esta en el issue", file=sys.stderr)
+            return 2
+    else:
+        # La siguiente pendiente. Una en `esperando-merge` se retoma ahi, asi que tambien
+        # cuenta como "no terminada" y sale antes que una pendiente posterior.
+        elegida = next((s for s in slices if s.estado not in ("mergeada",)), None)
+        if elegida is None:
+            print(json.dumps({"slices": len(slices), "slice": None}, ensure_ascii=False))
+            return 0
+
+    out = {
+        "slices": len(slices),
+        "intencion_feature": parse_intencion(body),
+        "tiene_seccion_fuentes": tiene_seccion_fuentes(body),
+        "tiene_seccion_controles": tiene_seccion_controles(body),
+        "fuentes": [
+            {"tipo": f.tipo, "ruta": f.ruta}
+            for f in fuentes_para(parse_fuentes(body), elegida.repo)
+        ],
+        "controles": [
+            {"nombre": c.nombre, "comando": c.comando, "exento": c.exento, "motivo": c.motivo}
+            for c in controles_para(parse_controles(body), elegida.repo)
+        ],
+        "slice": _slice_info(elegida),
+    }
+    print(json.dumps(out, ensure_ascii=False, indent=2 if args.pretty else None))
+    return 0
+
+
+def _cmd_set_estado(args: argparse.Namespace) -> int:
+    # `set_slice_estado` es puro y no valida el motivo: acepta cualquier cadena. Eso deja
+    # que un motivo inventado acabe escrito en el registro duradero, donde ya no se puede
+    # renombrar (paso lo mismo con `puertas`). La validacion vive aqui, en la frontera de
+    # escritura, que es el unico sitio donde hay un exit code que la haga cumplir.
+    if args.estado == "bloqueada":
+        if args.motivo not in MOTIVOS_BLOQUEADA:
+            print(
+                f"error: bloqueada exige un motivo canonico, uno de {list(MOTIVOS_BLOQUEADA)}"
+                f" (recibido: {args.motivo!r})",
+                file=sys.stderr,
+            )
+            return 2
+    elif args.motivo and args.estado != "abortada":
+        # `abortada` se deja libre a proposito: su vocabulario aun no esta canonicalizado
+        # (la skill solo documenta `presupuesto`), y fijarlo aqui seria decidirlo de
+        # tapadillo. Para el resto de estados un motivo es ruido que nadie lee.
+        print(f"error: el estado {args.estado} no lleva motivo", file=sys.stderr)
+        return 2
+
+    body = _gh_body(args.repo, args.issue)
+    try:
+        nuevo = set_slice_estado(
+            body, args.slice, args.estado, pr=args.pr, motivo=args.motivo or ""
+        )
+    except (KeyError, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    if nuevo == body:
+        print(f"sin cambios: {args.slice} ya estaba asi")
+        return 0
+    _gh_set_body(args.repo, args.issue, nuevo)
+    linea = next(
+        (ln for ln in nuevo.splitlines() if args.slice in ln and ln.lstrip().startswith("- [")),
+        "",
+    )
+    print(f"{args.repo}#{args.issue} {args.slice} -> {args.estado}\n{linea.strip()}")
+    return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="Lee y actualiza el estado del run en el issue")
+    sub = parser.add_subparsers(dest="subcomando", required=True)
+
+    sh = sub.add_parser("show", help="parsea el issue y emite lo que necesita el paso 1")
+    sh.add_argument("--repo", required=True, help="org/repo del issue")
+    sh.add_argument("--issue", required=True, type=int)
+    sh.add_argument(
+        "--slice", default=None, help="slice concreta (default: la siguiente sin cerrar)"
+    )
+    sh.add_argument("--pretty", action="store_true", help="JSON indentado")
+
+    st = sub.add_parser("set-estado", help="reescribe la linea de una slice en el issue")
+    st.add_argument("--repo", required=True, help="org/repo del issue")
+    st.add_argument("--issue", required=True, type=int)
+    st.add_argument("--slice", required=True, help="p. ej. slice-01")
+    st.add_argument("--estado", required=True, choices=ESTADOS)
+    st.add_argument(
+        "--motivo", default=None, help=f"para bloqueada: uno de {list(MOTIVOS_BLOQUEADA)}"
+    )
+    st.add_argument("--pr", type=int, default=None, help="numero de PR (se conserva si no se pasa)")
+
+    args = parser.parse_args(argv)
+    try:
+        if args.subcomando == "show":
+            return _cmd_show(args)
+        return _cmd_set_estado(args)
+    except (RuntimeError, subprocess.TimeoutExpired) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

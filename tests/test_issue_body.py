@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import json
+import subprocess
+
 import pytest
 
 import issue_body
@@ -638,3 +641,200 @@ def test_parse_body_normaliza_bloqueada_puertas_de_un_issue_viejo() -> None:
     body = "## Slices\n- [ ] slice-01 (vo): Crear VO [bloqueada: puertas]\n"
     sl = parse_body(body)[0]
     assert (sl.estado, sl.motivo) == ("bloqueada", "controles")
+
+
+# --- CLI (capa de I/O) -------------------------------------------------------
+#
+# Existe porque sin ella el agente escribia el read-modify-write a mano en cada
+# transicion: en una sola sesion se escribio seis veces. Cada copia es una ocasion de
+# equivocarse en silencio, y el modo de fallo peor es real: si `gh issue view` devuelve
+# vacio, un `gh issue edit` con ese cuerpo **borra la spec entera del issue**.
+#
+# `gh` se inyecta: estos tests no tocan la red.
+
+
+def _fake_gh(monkeypatch: pytest.MonkeyPatch, view_out: str, view_rc: int = 0) -> list[list[str]]:
+    """Sustituye `subprocess.run` y devuelve la lista de argv invocados."""
+    llamadas: list[list[str]] = []
+
+    def run(argv: list[str], **kw: object) -> subprocess.CompletedProcess[str]:
+        llamadas.append(argv)
+        if "view" in argv:
+            return subprocess.CompletedProcess(argv, view_rc, view_out, "boom" if view_rc else "")
+        return subprocess.CompletedProcess(argv, 0, "", "")
+
+    monkeypatch.setattr("issue_body.subprocess.run", run)
+    return llamadas
+
+
+def test_cli_show_emite_slice_fuentes_controles_y_derivados(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _fake_gh(monkeypatch, _BODY)
+    assert issue_body.main(["show", "--repo", "o/r", "--issue", "3"]) == 0
+    data = json.loads(capsys.readouterr().out)
+    # La siguiente sin cerrar, no la primera: slice-01 esta mergeada en el fixture.
+    assert data["slice"]["slice_id"] == "slice-02"
+    assert data["slice"]["rama"] == "slice/02-ajustar-stock"
+    assert data["slice"]["scope"] == "feat(ajustar-stock)"
+    assert data["slice"]["aceptacion"]
+
+
+def test_cli_show_de_una_slice_concreta(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _fake_gh(monkeypatch, _BODY)
+    assert issue_body.main(["show", "--repo", "o/r", "--issue", "3", "--slice", "slice-01"]) == 0
+    assert json.loads(capsys.readouterr().out)["slice"]["slice_id"] == "slice-01"
+
+
+def test_cli_show_exit_2_si_la_slice_no_esta(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _fake_gh(monkeypatch, _BODY)
+    assert issue_body.main(["show", "--repo", "o/r", "--issue", "3", "--slice", "slice-99"]) == 2
+
+
+def test_cli_no_reescribe_nada_si_el_cuerpo_viene_vacio(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # El fallo que justifica la CLI: un `gh issue view` que devuelve vacio y un `edit`
+    # detras dejan el issue en blanco, o sea la spec y el estado del run perdidos. Falla
+    # ruidosamente y NO llama a edit.
+    llamadas = _fake_gh(monkeypatch, "")
+    code = issue_body.main(
+        [
+            "set-estado",
+            "--repo",
+            "o/r",
+            "--issue",
+            "3",
+            "--slice",
+            "slice-02",
+            "--estado",
+            "en-curso",
+        ]
+    )
+    assert code == 1
+    assert "vino vacio" in capsys.readouterr().err
+    assert not any("edit" in a for a in llamadas)
+
+
+def test_cli_set_estado_escribe_el_cuerpo_reescrito(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    llamadas = _fake_gh(monkeypatch, _BODY)
+    code = issue_body.main(
+        [
+            "set-estado",
+            "--repo",
+            "o/r",
+            "--issue",
+            "3",
+            "--slice",
+            "slice-03",
+            "--estado",
+            "bloqueada",
+            "--motivo",
+            "ci-indeterminada",
+        ]
+    )
+    assert code == 0
+    assert "ci-indeterminada" in capsys.readouterr().out
+    assert any("edit" in a for a in llamadas)
+
+
+def test_cli_set_estado_rechaza_un_motivo_que_no_es_canonico(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    llamadas = _fake_gh(monkeypatch, _BODY)
+    code = issue_body.main(
+        [
+            "set-estado",
+            "--repo",
+            "o/r",
+            "--issue",
+            "3",
+            "--slice",
+            "slice-03",
+            "--estado",
+            "bloqueada",
+            "--motivo",
+            "inventado",
+        ]
+    )
+    assert code == 2
+    assert not any("edit" in a for a in llamadas)
+
+
+def test_cli_set_estado_no_llama_a_edit_si_no_cambia_nada(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    llamadas = _fake_gh(monkeypatch, _BODY)
+    code = issue_body.main(
+        [
+            "set-estado",
+            "--repo",
+            "o/r",
+            "--issue",
+            "3",
+            "--slice",
+            "slice-02",
+            "--estado",
+            "esperando-merge",
+        ]
+    )
+    assert code == 0
+    assert "sin cambios" in capsys.readouterr().out
+    assert not any("edit" in a for a in llamadas)
+
+
+def test_rama_y_scope_son_deterministas() -> None:
+    # Alimentan la rama y el scope del commit sin derivar slugs de texto libre.
+    s = issue_body.parse_body(_BODY)[1]
+    assert issue_body.rama_de(s) == "slice/02-ajustar-stock"
+    assert issue_body.scope_de(s) == "feat(ajustar-stock)"
+
+
+def test_cli_set_estado_exige_motivo_en_bloqueada(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    llamadas = _fake_gh(monkeypatch, _BODY)
+    code = issue_body.main(
+        [
+            "set-estado",
+            "--repo",
+            "o/r",
+            "--issue",
+            "3",
+            "--slice",
+            "slice-03",
+            "--estado",
+            "bloqueada",
+        ]
+    )
+    assert code == 2
+    assert not any("edit" in a for a in llamadas)
+
+
+def test_cli_set_estado_rechaza_motivo_en_un_estado_que_no_lo_lleva(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    llamadas = _fake_gh(monkeypatch, _BODY)
+    code = issue_body.main(
+        [
+            "set-estado",
+            "--repo",
+            "o/r",
+            "--issue",
+            "3",
+            "--slice",
+            "slice-03",
+            "--estado",
+            "en-curso",
+            "--motivo",
+            "controles",
+        ]
+    )
+    assert code == 2
+    assert not any("edit" in a for a in llamadas)

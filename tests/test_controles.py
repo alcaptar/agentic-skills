@@ -555,3 +555,113 @@ def test_ci_status_no_ofrece_watch() -> None:
     # lo hace el harness. Si alguien anade `--watch`, esto cae.
     with pytest.raises(SystemExit):
         controles.main(["ci-status", "--repo", ".", "--pr", "4", "--watch"])
+
+
+# --- control `verify-verdict` -----------------------------------------------
+#
+# La regla "si el juez devuelve prosa se reinvoca" ya existia, pero solo cubre el caso
+# obvio. Esto cubre el que no: un JSON estructuralmente plausible pero equivocado, que el
+# orquestador aceptaria porque "parece" bien. Se anadio despues del smoke 2 (2026-07-30),
+# que demostro que la disciplina de salida de ese agente es estocastica.
+
+
+def _veredicto(**kw: object) -> str:
+    hallazgo = {
+        "regla": "boundaries",
+        "path": "src/x.py",
+        "linea": 4,
+        "severidad": "alta",
+        "evidencia": "e",
+        "detalle": "d",
+    }
+    base: dict[str, object] = {"veredicto": "FALLA", "hallazgos": [hallazgo]}
+    base.update(kw)
+    return json.dumps(base)
+
+
+def test_veredicto_bien_formado_pasa_y_cuenta_severidades() -> None:
+    res = controles.valida_veredicto(_veredicto())
+    assert res.passed
+    assert res.veredicto == "FALLA"
+    assert res.conteo == {"alta": 1, "media": 0, "baja": 0}
+
+
+def test_veredicto_pasa_sin_hallazgos() -> None:
+    res = controles.valida_veredicto('{"veredicto": "PASA", "hallazgos": []}')
+    assert res.passed
+    assert res.conteo == {"alta": 0, "media": 0, "baja": 0}
+
+
+def test_veredicto_envuelto_en_prosa_falla() -> None:
+    # El caso que la regla de reinvocar ya cubria; ahora lo decide un exit code.
+    res = controles.valida_veredicto(
+        'Resumen de mi pasada:\n1. Convenciones OK\n{"veredicto": "PASA"}'
+    )
+    assert not res.passed
+    assert any("no es JSON" in h for h in res.hallazgos)
+
+
+@pytest.mark.parametrize("valor", ["PASS", "pasa", "OK", "", None])
+def test_veredicto_con_valor_invalido_falla(valor: object) -> None:
+    # El caso nuevo: estructuralmente plausible, semanticamente equivocado. Antes el
+    # orquestador lo leia como bueno porque el JSON parseaba.
+    res = controles.valida_veredicto(json.dumps({"veredicto": valor, "hallazgos": []}))
+    assert not res.passed
+    assert any("veredicto invalido" in h for h in res.hallazgos)
+
+
+def test_severidad_inventada_falla() -> None:
+    res = controles.valida_veredicto(
+        _veredicto(
+            hallazgos=[{**json.loads(_veredicto())["hallazgos"][0], "severidad": "critical"}]
+        )
+    )
+    assert not res.passed
+    assert any("severidad invalida" in h for h in res.hallazgos)
+
+
+def test_hallazgo_sin_evidencia_falla() -> None:
+    # La rubrica exige evidencia citable para bloquear: un hallazgo sin ella no es juzgable.
+    incompleto = {
+        k: v for k, v in json.loads(_veredicto())["hallazgos"][0].items() if k != "evidencia"
+    }
+    res = controles.valida_veredicto(_veredicto(hallazgos=[incompleto]))
+    assert not res.passed
+    assert any("evidencia" in h for h in res.hallazgos)
+
+
+def test_pasa_con_hallazgo_alta_es_contradiccion() -> None:
+    res = controles.valida_veredicto(_veredicto(veredicto="PASA"))
+    assert not res.passed
+    assert any("PASA con 1 hallazgo" in h for h in res.hallazgos)
+
+
+def test_falla_sin_hallazgo_alta_es_valido() -> None:
+    # Al reves NO es contradiccion: el juez puede escalar por acumulacion de media/baja.
+    h = {**json.loads(_veredicto())["hallazgos"][0], "severidad": "media"}
+    res = controles.valida_veredicto(_veredicto(veredicto="FALLA", hallazgos=[h]))
+    assert res.passed
+    assert res.conteo == {"alta": 0, "media": 1, "baja": 0}
+
+
+def test_hallazgos_que_no_es_lista_falla() -> None:
+    res = controles.valida_veredicto('{"veredicto": "PASA", "hallazgos": {}}')
+    assert not res.passed
+
+
+def test_main_verify_verdict_exit_2_si_no_puede_leer_el_fichero(tmp_path: Path) -> None:
+    # Error de uso, no FALLA: el fichero lo escribe el orquestador, y confundirlo con un
+    # veredicto invalido le haria reinvocar al juez por su propio despiste.
+    assert controles.main(["verify-verdict", "--file", str(tmp_path / "no-existe.json")]) == 2
+
+
+def test_main_verify_verdict_json_trae_el_conteo(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    f = tmp_path / "v.json"
+    f.write_text(_veredicto(), encoding="utf-8")
+    assert controles.main(["verify-verdict", "--file", str(f), "--json"]) == 0
+    data = json.loads(capsys.readouterr().out)
+    assert data["control"] == "verify-verdict"
+    assert data["veredicto_juez"] == "FALLA"
+    assert data["conteo"]["alta"] == 1

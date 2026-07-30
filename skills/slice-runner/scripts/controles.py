@@ -3,7 +3,7 @@
 
 Se offloada a script la regla mecanica con coste de error alto que el modelo no
 garantiza por si mismo. Redactar un conventional commit lo hace bien el agente, asi
-que no hay control para eso. Hay cuatro subcomandos:
+que no hay control para eso. Hay cinco subcomandos:
 
     pr-hygiene   el diff staged solo puede contener los ficheros de codigo/test
                  que declaro el implementador; nunca planes ni design-docs (la spec
@@ -34,6 +34,13 @@ que no hay control para eso. Hay cuatro subcomandos:
                  `conclusion` -pero `gh run list --json` si-, y pedirlo hace que `gh`
                  responda un error que se lee igual que "todavia no hay checks".
 
+    verify-verdict  valida que el mensaje final del juez es su contrato JSON, y devuelve
+                 los conteos por severidad. La regla de "si vuelve envuelto en prosa se
+                 reinvoca" ya cubria el caso obvio; esto cubre el que no: un JSON
+                 estructuralmente plausible pero equivocado (`"veredicto": "PASS"`, una
+                 `severidad` inventada, un hallazgo sin `evidencia`), que el orquestador
+                 leeria como bueno. Comprobar un esquema es regla exacta, no juicio.
+
 El script no sabe nada de toolchains: solo ejecuta los `nombre=comando` que se le pasan,
 que salen de la seccion `## Controles` del issue (los descubre `slice-spec` una vez y los
 confirma una persona). Por eso no hay autodeteccion aqui dentro.
@@ -52,6 +59,7 @@ Uso:
         [--out /tmp/slice-02/logs] [--tail 30] [--timeout 600] [--json]
     controles.py diff-bundle --repo . --base master --out /tmp/slice-02 [--json]
     controles.py ci-status --repo . --pr 42 [--json]
+    controles.py verify-verdict --file /tmp/slice-02/veredicto.json [--json]
 """
 
 from __future__ import annotations
@@ -505,6 +513,105 @@ def _emit_ci(result: ResultadoCI, as_json: bool) -> int:
     return _CI_EXIT[result.estado]
 
 
+SEVERIDADES = ("alta", "media", "baja")
+_VEREDICTOS_JUEZ = ("PASA", "FALLA")
+_HALLAZGO_CLAVES = ("regla", "path", "severidad", "evidencia", "detalle")
+
+
+@dataclass
+class ResultadoVeredicto:
+    """Validacion de la forma del veredicto del juez, con los conteos ya hechos."""
+
+    passed: bool
+    veredicto: str = ""
+    conteo: dict[str, int] = field(default_factory=dict)
+    hallazgos: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "control": "verify-verdict",
+            "veredicto": "PASA" if self.passed else "FALLA",
+            "veredicto_juez": self.veredicto,
+            "conteo": self.conteo,
+            "hallazgos": self.hallazgos,
+        }
+
+
+def valida_veredicto(texto: str) -> ResultadoVeredicto:
+    """Comprueba que el mensaje final del juez es su contrato JSON, y cuenta severidades.
+
+    Funcion pura: se testea sin agentes.
+
+    La regla de reinvocar cuando vuelve envuelto en prosa ya existia, pero solo cubria el
+    caso obvio. Este control cubre el que no: un JSON **estructuralmente plausible pero
+    equivocado** -`"veredicto": "PASS"`, `"severidad": "critical"`, un hallazgo sin
+    `evidencia`- que el orquestador leeria como bueno porque "parece" correcto. Leer un
+    JSON y decidir si cumple un esquema es regla exacta, no juicio, y el smoke del
+    2026-07-30 demostro que la disciplina de salida de ese agente es **estocastica**.
+
+    De paso devuelve `conteo` por severidad, que es lo que alimenta las metricas del paso
+    9: antes lo contaba el orquestador a ojo sobre el JSON.
+    """
+    try:
+        data = json.loads(texto)
+    except json.JSONDecodeError:
+        detalle = " ".join(texto.split())[:200] or "(vacio)"
+        return ResultadoVeredicto(False, hallazgos=[f"no es JSON (prosa alrededor?): {detalle}"])
+
+    if not isinstance(data, dict):
+        return ResultadoVeredicto(
+            False, hallazgos=[f"se esperaba un objeto, no {type(data).__name__}"]
+        )
+
+    fallos: list[str] = []
+    veredicto = data.get("veredicto")
+    if veredicto not in _VEREDICTOS_JUEZ:
+        fallos.append(
+            f"veredicto invalido: {veredicto!r} (esperado uno de {list(_VEREDICTOS_JUEZ)})"
+        )
+
+    hallazgos = data.get("hallazgos")
+    conteo = dict.fromkeys(SEVERIDADES, 0)
+    if not isinstance(hallazgos, list):
+        fallos.append(f"hallazgos deberia ser una lista, es {type(hallazgos).__name__}")
+    else:
+        for i, h in enumerate(hallazgos):
+            if not isinstance(h, dict):
+                fallos.append(f"hallazgos[{i}] no es un objeto")
+                continue
+            if faltan := [k for k in _HALLAZGO_CLAVES if k not in h]:
+                fallos.append(f"hallazgos[{i}] sin {faltan}")
+            sev = h.get("severidad")
+            if sev in conteo:
+                conteo[sev] += 1
+            else:
+                fallos.append(f"hallazgos[{i}] con severidad invalida: {sev!r}")
+
+    # Contradiccion interna: el contrato dice que un hallazgo `alta` implica FALLA. Al
+    # reves NO es contradiccion: el juez puede escalar a FALLA por acumulacion de
+    # `media`/`baja` explicando por que, y eso esta permitido.
+    if veredicto == "PASA" and conteo["alta"]:
+        fallos.append(f"PASA con {conteo['alta']} hallazgo(s) de severidad alta")
+
+    if fallos:
+        return ResultadoVeredicto(False, str(veredicto), conteo, fallos)
+    return ResultadoVeredicto(True, str(veredicto), conteo)
+
+
+def _emit_veredicto(result: ResultadoVeredicto, as_json: bool) -> int:
+    if as_json:
+        print(json.dumps(result.to_dict(), ensure_ascii=False))
+    else:
+        print(f"[verify-verdict] {'PASA' if result.passed else 'FALLA'}")
+        if result.passed:
+            c = result.conteo
+            print(f"  veredicto del juez: {result.veredicto}")
+            print(f"  hallazgos: alta={c['alta']} media={c['media']} baja={c['baja']}")
+        for h in result.hallazgos:
+            print(f"  - {h}")
+    return 0 if result.passed else 1
+
+
 def _emit(result: Resultado, as_json: bool) -> int:
     if as_json:
         print(json.dumps(result.to_dict(), ensure_ascii=False))
@@ -587,6 +694,14 @@ def main(argv: list[str] | None = None) -> int:
     ci.add_argument("--pr", required=True, type=int, help="numero de la PR")
     ci.add_argument("--json", action="store_true", help="salida estructurada JSON")
 
+    ver = sub.add_parser("verify-verdict", help="valida la forma del veredicto del juez")
+    ver.add_argument(
+        "--file",
+        required=True,
+        help="fichero con el mensaje final del juez, tal cual (FUERA del repo)",
+    )
+    ver.add_argument("--json", action="store_true", help="salida estructurada JSON")
+
     args = parser.parse_args(argv)
 
     if args.subcomando == "pr-hygiene":
@@ -597,6 +712,16 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.subcomando == "ci-status":
         return _emit_ci(consulta_ci(args.repo, args.pr), args.json)
+
+    if args.subcomando == "verify-verdict":
+        try:
+            texto = Path(args.file).read_text(encoding="utf-8")
+        except OSError as exc:
+            # Error de uso, no FALLA: el fichero lo escribe el orquestador, y confundirlo
+            # con un veredicto invalido le haria reinvocar al juez por su propio despiste.
+            print(f"error: no se pudo leer {args.file}: {exc}", file=sys.stderr)
+            return 2
+        return _emit_veredicto(valida_veredicto(texto), args.json)
 
     # Error de uso (exit 2), no FALLA de control: confundirlos haria que el orquestador
     # reintentara el paso 5 por un fallo que esta en su propia invocacion.
