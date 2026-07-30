@@ -403,7 +403,9 @@ CI_ESTADOS = ("verde", "rojo", "pendiente", "sin-checks", "desconocido")
 
 # Exit code por estado, uno por rama del paso 9 para que un tick pueda decidir sin
 # parsear JSON. El 2 esta reservado para error de uso, como en el resto del script.
-_CI_EXIT = {"verde": 0, "rojo": 1, "pendiente": 3, "sin-checks": 4, "desconocido": 4}
+# Publico, y no `_CI_EXIT`, porque estos numeros los documenta el paso 9 de `SKILL.md`:
+# son contrato con quien invoca, no un detalle interno del clasificador.
+CI_EXIT = {"verde": 0, "rojo": 1, "pendiente": 3, "sin-checks": 4, "desconocido": 4}
 
 # Los `bucket` que documenta `gh pr checks --help`. Uno fuera de esta lista es una
 # version de `gh` que sabe algo que este script no, y eso es `desconocido`, no verde.
@@ -510,7 +512,7 @@ def _emit_ci(result: ResultadoCI, as_json: bool) -> int:
             print(f"  {c['bucket']:9} {c['name']}")
         for h in result.hallazgos:
             print(f"  - {h}")
-    return _CI_EXIT[result.estado]
+    return CI_EXIT[result.estado]
 
 
 SEVERIDADES = ("alta", "media", "baja")

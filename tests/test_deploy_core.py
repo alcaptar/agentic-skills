@@ -7,6 +7,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 import deploy_core as dc
 from deploy_core import (
     Baseline,
@@ -189,6 +191,68 @@ def test_verdict_breach_real_manda_sobre_senal_sin_medir() -> None:
     assert v["blocking"] == ["err"]
 
 
+# --- la config, que es por donde entra de verdad -----------------------------------
+#
+# Todo lo de arriba construye `MonitorConfig`/`SignalConfig` a mano, y en produccion nadie lo
+# hace: el agente compone un payload JSON a partir de la prosa de la skill. Ese tramo -del
+# diccionario al dataclass- no tenia ni un test, y es donde una clave mal escrita se convierte
+# en un `go` que nadie ha medido.
+
+
+def test_config_completa_se_lee_del_diccionario() -> None:
+    cfg = MonitorConfig.from_dict(
+        {
+            "signals": {"err": {"critical": True, "mode": "absolute", "crit_abs": 5}},
+            "failure_limit": 3,
+            "warmup_secs": 30,
+        }
+    )
+    assert cfg.failure_limit == 3
+    assert cfg.warmup_secs == 30
+    assert cfg.min_observe_secs == 300  # lo que no viene se queda en su default
+    assert cfg.signals["err"].mode == "absolute"
+    assert cfg.signals["err"].crit_abs == 5
+
+
+def test_una_clave_de_senal_mal_escrita_no_pasa_en_silencio() -> None:
+    # El caso caro: `declarado` en vez de `declarada` degradaba la senal declarada por la slice
+    # a inferida sin decir nada, y con ella volvia el `go` generico que ese campo impide.
+    with pytest.raises(ValueError, match="declarado"):
+        SignalConfig.from_dict({"critical": True, "declarado": True})
+
+
+def test_una_clave_de_config_mal_escrita_no_pasa_en_silencio() -> None:
+    with pytest.raises(ValueError, match="warmup_seconds"):
+        MonitorConfig.from_dict({"warmup_seconds": 30})
+
+
+def test_signals_con_otra_forma_no_deja_el_monitor_ciego() -> None:
+    # Sin senales no hay breach posible, asi que esto seria `go` sobre un deploy sin mirar.
+    with pytest.raises(TypeError, match="signals"):
+        MonitorConfig.from_dict({"signals": ["err", "lat"]})
+
+
+def test_config_vacia_es_valida_y_da_los_defaults() -> None:
+    # No todo lo raro es un error: un payload sin `config` es el caso legitimo de "usa los
+    # defaults", y petar ahi dejaria sin veredicto un deploy que se puede juzgar igual.
+    cfg = MonitorConfig.from_dict({})
+    assert cfg.signals == {}
+    assert (cfg.failure_limit, cfg.warmup_secs, cfg.min_observe_secs) == (2, 60, 300)
+
+
+# --- CLI ---------------------------------------------------------------------------
+
+
+def _cli(payload: object) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [sys.executable, str(_CORE), "verdict"],
+        input=json.dumps(payload),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+
 def test_cli_verdict_json() -> None:
     payload = {
         "config": {
@@ -203,14 +267,35 @@ def test_cli_verdict_json() -> None:
         "tick_history": [{"err": 9.0}, {"err": 9.0}],
         "elapsed_secs": 120,
     }
-    out = subprocess.run(
-        [sys.executable, str(_CORE), "verdict"],
-        input=json.dumps(payload),
-        capture_output=True,
-        text=True,
-        check=True,
-    )
+    out = _cli(payload)
+    assert out.returncode == 0
     data = json.loads(out.stdout)
     assert data["verdict"] == dc.NO_GO
     assert data["blocking"] == ["err"]
     assert data["scorecard"]["err"]["confirmed"] is True
+    assert data["baseline_warnings"] == []  # baseline plano: nada que avisar
+
+
+def test_cli_emite_el_aviso_de_baseline_ruidoso() -> None:
+    # El aviso es la mitad de la salida que decide si fiarse del delta, y hasta ahora ningun
+    # test comprobaba que llegue a la salida del CLI (solo que la funcion lo calcula).
+    payload = {
+        "config": {"signals": {"lat": {}}, "min_observe_secs": 0, "warmup_secs": 0},
+        "baseline_samples": [{"lat": 1.0}, {"lat": 9.0}],
+        "tick_history": [{"lat": 5.0}],
+        "elapsed_secs": 120,
+    }
+    out = _cli(payload)
+    assert out.returncode == 0
+    avisos = json.loads(out.stdout)["baseline_warnings"]
+    assert len(avisos) == 1
+    assert "ruidoso" in avisos[0] and "lat" in avisos[0]
+
+
+def test_cli_exit_2_y_ningun_veredicto_si_la_config_es_invalida() -> None:
+    # Exit 2 = error de uso, como en `controles.py`. Un `inconclusive` aqui haria pasar el
+    # despiste de quien invoca por un dato del deploy, que es lo unico peor que no responder.
+    out = _cli({"config": {"signals": {"err": {"declarado": True}}}})
+    assert out.returncode == 2
+    assert out.stdout == ""
+    assert "declarado" in out.stderr

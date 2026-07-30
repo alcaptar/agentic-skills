@@ -92,6 +92,12 @@ Se ejecuta con **ticks acotados en background + notificacion** (o `Monitor`), no
   la slice que no se ha podido medir** -> reporte con datos y **para**. Una senal declarada que nadie
   pudo leer no es un `go`: es un fallo de la senal, y se dice.
 
+**Exit 2 no es un veredicto: es tu payload mal escrito.** El script rechaza una clave que no
+conoce (`declarado` por `declarada`, `warmup_seconds` por `warmup_secs`) y un `signals` que no sea
+un objeto, en vez de ignorarlos. Ignorarlos era peor que petar: una senal declarada degradada a
+inferida en silencio, o cero senales configuradas, devuelven el `go` generico que esta skill existe
+para no dar. Si sale 2, **corrige el payload y reinvoca**; no lo leas como `inconclusive`.
+
 ### 5. Rama de anomalia
 
 1. **El hilo principal** lanza el agente `sre` para un **RCA read-only** (no lo lanza el colector: seria anidar), cruzando las fuentes de observabilidad, con el impacto de negocio, y le pasa como pista las **senales en breach + sus queries reproducibles** que el colector ya devolvio -mejor punto de partida del triaje-. (`incident-postmortem` opcional si se quiere un postmortem formal.)

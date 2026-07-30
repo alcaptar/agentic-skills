@@ -31,6 +31,11 @@ def _row(**kw: Any) -> dict[str, Any]:
     return base
 
 
+def _escribe_log(path: Path, rows: list[dict[str, object]]) -> None:
+    """Un log JSON por lineas ya escrito, para partir de historico en vez de de `record`."""
+    path.write_text("\n".join(json.dumps(r) for r in rows) + "\n", encoding="utf-8")
+
+
 def test_aggregate_primer_intento_excluye_abort() -> None:
     rows = [
         _row(),  # limpio a la primera
@@ -138,6 +143,29 @@ def test_record_report_roundtrip(tmp_path: Path, capsys: pytest.CaptureFixture[s
     assert data["primer_intento_pct"] == 100.0
 
 
+def test_el_agregado_llega_al_json_de_la_cli_de_report(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # El resto de los tests de agregacion entran por `_aggregate`/`_load`, que son privadas:
+    # son puras y probarlas asi es lo que las mantiene legibles. El precio es que ninguna
+    # comprueba el cableado, y `report` es lo que de verdad invoca `SKILL.md`. Esto lo ancla:
+    # si el argv documentado deja de llevar los numeros a stdout, cae aqui y no en produccion.
+    log = tmp_path / "m.jsonl"
+    _escribe_log(
+        log,
+        [
+            {"repo": "r", "veredicto": "PASA", "ci": "green"},
+            {"repo": "otro", "veredicto": "FALLA", "ci": "none"},
+        ],
+    )
+
+    assert metrics.main(["report", "--repo", "r", "--path", str(log), "--json"]) == 0
+
+    data = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
+    assert data["slices"] == 1  # `--repo` filtro la fila del otro repo
+    assert data["verificador_falla_pct"] == 0.0
+
+
 def test_cli_acepta_bloqueada_controles_y_reintentos_de_controles(tmp_path: Path) -> None:
     # El camino de cierre nuevo tiene que poder registrarse desde la CLI que documenta
     # SKILL.md; si no, el log miente sobre por que paro la slice.
@@ -173,13 +201,9 @@ def test_cli_acepta_bloqueada_controles_y_reintentos_de_controles(tmp_path: Path
 # `bloqueada-puertas` y el campo `reintentos_puertas`. Renombrar no puede borrar historico.
 
 
-def _write(path: Path, rows: list[dict[str, object]]) -> None:
-    path.write_text("\n".join(json.dumps(r) for r in rows) + "\n", encoding="utf-8")
-
-
 def test_report_cuenta_el_veredicto_viejo_como_bloqueada_controles(tmp_path: Path) -> None:
     log = tmp_path / "m.jsonl"
-    _write(
+    _escribe_log(
         log,
         [
             {"repo": "r", "veredicto": "bloqueada-puertas", "ci": "none"},
@@ -192,7 +216,7 @@ def test_report_cuenta_el_veredicto_viejo_como_bloqueada_controles(tmp_path: Pat
 
 def test_report_promedia_los_reintentos_con_el_campo_viejo(tmp_path: Path) -> None:
     log = tmp_path / "m.jsonl"
-    _write(
+    _escribe_log(
         log,
         [
             {"repo": "r", "veredicto": "PASA", "ci": "green", "reintentos_puertas": 2},
@@ -207,7 +231,7 @@ def test_una_fila_vieja_con_reintentos_no_cuenta_como_primer_intento(tmp_path: P
     # Sin leer el campo viejo, esta fila pasaria por "limpia a la primera" y falsearia
     # justo la cifra que sirve para decidir si subir de nivel.
     log = tmp_path / "m.jsonl"
-    _write(
+    _escribe_log(
         log,
         [
             {

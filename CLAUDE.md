@@ -80,6 +80,12 @@ vs `issue_body.py`, veredictos de `metrics.py`, el JSON del verificador en `agen
 compara, asi que reescribir las dos copias a la vez pasa y tocar solo una falla. Si editas una
 skill y `make check` se pone rojo ahi, es que has movido una mitad del contrato: mueve la otra.
 
+Lo compartido por la suite vive en `tests/conftest.py`: la fixture `repo` y los helpers de
+escribir/stagear. No vuelvas a definirlos en un fichero de tests -hubo tres `_write` con firmas
+distintas a la vez, y leer cualquier test obligaba a subir a la cabecera-. Ahi tambien esta
+`RAMA_BASE`: los repos de prueba fijan su rama con `git init -b`, porque `init.defaultBranch` es
+config de la maquina y el bloque de `diff-bundle` se cae en una que use `main`.
+
 El mismo fichero comprueba que **toda ruta de este repo citada en los `.md` existe**. Aqui no se
 enlaza con markdown: se citan rutas en backticks, asi que lo que se valida es el token, no el
 enlace. Solo entran los que empiezan por un directorio de primer nivel del repo -eso deja fuera

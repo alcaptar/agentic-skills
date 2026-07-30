@@ -242,24 +242,34 @@ def test_every_subcommand_of_both_scripts_accepts_json() -> None:
     """
     for script in ("controles", "issue_body"):
         module = importlib.import_module(script)
-        parser = module.build_parser()
-        subcommands = _subcommand_parsers(parser)
+        subcommands = _subcommand_parsers(module.build_parser())
         assert subcommands, f"{script}.py exposes no subcommands"
         for name, subparser in sorted(subcommands.items()):
-            flags = {opt for action in subparser._actions for opt in action.option_strings}
-            assert "--json" in flags, (
+            usage = subparser.format_usage()
+            assert "--json" in usage, (
                 f"{script}.py {name} does not accept --json; every subcommand of both "
                 f"scripts must, so the flag never depends on remembering which script it is"
             )
-            assert "--pretty" not in flags, (
+            assert "--pretty" not in usage, (
                 f"{script}.py {name} still has --pretty, the flag the inconsistency came from"
             )
 
 
 def _subcommand_parsers(parser: argparse.ArgumentParser) -> dict[str, argparse.ArgumentParser]:
+    """Subparsers by name, coupling to as little of `argparse` as the task allows.
+
+    `argparse` publishes no API for walking back into its subparsers, so `_actions` is
+    unavoidable. What it does avoid is naming `argparse._SubParsersAction`: the action is
+    identified by its documented `choices` attribute instead of by a private class, and the flags
+    of each subcommand are then read from the public `format_usage()`. One private instead of
+    three, in a test whose subject is our own convention and not CPython's internals.
+    """
     for action in parser._actions:
-        if isinstance(action, argparse._SubParsersAction):
-            return dict(action.choices)
+        choices = action.choices
+        if isinstance(choices, dict) and all(
+            isinstance(sub, argparse.ArgumentParser) for sub in choices.values()
+        ):
+            return dict(choices)
     return {}
 
 
@@ -331,6 +341,11 @@ def test_every_repo_path_cited_in_the_docs_still_exists() -> None:
     still_cited: set[str] = set()
     for source in _tracked("*.md"):
         if any(source == skip or source.startswith(f"{skip}/") for skip in _UNSCANNED):
+            continue
+        # `git ls-files` reads the index, so a doc deleted in the worktree without staging the
+        # deletion is still listed. Reading it would raise here and bury the real assert under a
+        # traceback about the local mess, which is not what this test is about.
+        if not (_ROOT / source).exists():
             continue
         for claimed in _claimed_repo_paths(_read(_ROOT / source), top_level):
             if claimed in _EXEMPT:

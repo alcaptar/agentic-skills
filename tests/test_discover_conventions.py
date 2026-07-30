@@ -4,29 +4,26 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from conftest import escribe
+
 from discover_conventions import discover_candidates
 from issue_body import Fuente
 
 
-def _touch(path: Path) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text("x", encoding="utf-8")
-
-
 def _build_repo(root: Path) -> None:
     """Un arbol parecido al de un repo real (estilo mo.picking.api)."""
-    _touch(root / ".claude" / "CLAUDE.md")
-    _touch(root / ".claude" / "rules" / "conventions" / "testing.md")
-    _touch(root / ".claude" / "rules" / "conventions" / "delivery.md")
-    _touch(root / ".claude" / "skills" / "duplicate-action" / "SKILL.md")
-    _touch(root / ".claude" / "skills" / "deprecate-hermes-handler" / "SKILL.md")
-    _touch(root / "CONTRIBUTING.md")
-    _touch(root / "src" / "app" / "CLAUDE.md")
+    escribe(root, ".claude/CLAUDE.md")
+    escribe(root, ".claude/rules/conventions/testing.md")
+    escribe(root, ".claude/rules/conventions/delivery.md")
+    escribe(root, ".claude/skills/duplicate-action/SKILL.md")
+    escribe(root, ".claude/skills/deprecate-hermes-handler/SKILL.md")
+    escribe(root, "CONTRIBUTING.md")
+    escribe(root, "src/app/CLAUDE.md")
     # ruido que NO debe salir
-    _touch(root / ".git" / "config")
-    _touch(root / "__pycache__" / "x.pyc")
-    _touch(root / "node_modules" / "dep" / "CLAUDE.md")
-    _touch(root / "src" / "app" / "service.py")
+    escribe(root, ".git/config")
+    escribe(root, "__pycache__/x.pyc")
+    escribe(root, "node_modules/dep/CLAUDE.md")
+    escribe(root, "src/app/service.py")
 
 
 def test_descubre_docs_y_skills(tmp_path: Path) -> None:
@@ -75,18 +72,18 @@ def test_orden_determinista_docs_luego_skills(tmp_path: Path) -> None:
 
 def test_ignora_dirs_ocultos_dentro_de_skills(tmp_path: Path) -> None:
     # `.claude/skills/.nwave/` es estado de herramienta, no una skill de proyecto.
-    _touch(tmp_path / ".claude" / "skills" / "duplicate-action" / "SKILL.md")
-    _touch(tmp_path / ".claude" / "skills" / ".nwave" / "config.json")
+    escribe(tmp_path, ".claude/skills/duplicate-action/SKILL.md")
+    escribe(tmp_path, ".claude/skills/.nwave/config.json")
     skills = {f.ruta for f in discover_candidates(tmp_path) if f.tipo == "skill"}
     assert skills == {".claude/skills/duplicate-action/"}
 
 
 def test_repo_sin_candidatos_lista_vacia(tmp_path: Path) -> None:
-    _touch(tmp_path / "src" / "main.py")
+    escribe(tmp_path, "src/main.py")
     assert discover_candidates(tmp_path) == []
 
 
 def test_devuelve_fuentes(tmp_path: Path) -> None:
-    _touch(tmp_path / "CLAUDE.md")
+    escribe(tmp_path, "CLAUDE.md")
     fuentes = discover_candidates(tmp_path)
     assert fuentes == [Fuente("doc", "CLAUDE.md")]

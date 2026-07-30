@@ -18,39 +18,21 @@ import subprocess
 from pathlib import Path
 
 import pytest
+from conftest import RAMA_BASE, git, stagea
 
 import controles
 
 
-def _git(repo: Path, *args: str) -> None:
-    subprocess.run(["git", "-C", str(repo), *args], check=True, capture_output=True)
-
-
-@pytest.fixture
-def repo(tmp_path: Path) -> Path:
-    _git(tmp_path, "init")
-    _git(tmp_path, "config", "user.email", "t@example.com")
-    _git(tmp_path, "config", "user.name", "test")
-    return tmp_path
-
-
-def _stage(repo: Path, rel: str, content: str = "x") -> None:
-    p = repo / rel
-    p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(content, encoding="utf-8")
-    _git(repo, "add", "-f", rel)
-
-
 def test_subconjunto_declarado_pasa(repo: Path) -> None:
-    _stage(repo, "src/a.py")
-    _stage(repo, "tests/test_a.py")
+    stagea(repo, "src/a.py")
+    stagea(repo, "tests/test_a.py")
     res = controles.comprueba_higiene_pr(str(repo), ["src/a.py", "tests/test_a.py"], None)
     assert res.passed
     assert res.hallazgos == []
 
 
 def test_fail_closed_sin_allow(repo: Path) -> None:
-    _stage(repo, "src/a.py")
+    stagea(repo, "src/a.py")
     res = controles.comprueba_higiene_pr(str(repo), [], None)
     assert not res.passed
     assert any("no se declaro ninguna ruta" in h for h in res.hallazgos)
@@ -64,8 +46,8 @@ def test_nada_staged(repo: Path) -> None:
 
 def test_artefacto_prohibido_aunque_este_en_allow(repo: Path) -> None:
     # Un design-doc bajo docs/superpowers/specs/ es FORBIDDEN: falla aunque se declare en --allow.
-    _stage(repo, "src/a.py")
-    _stage(repo, "docs/superpowers/specs/x-design.md")
+    stagea(repo, "src/a.py")
+    stagea(repo, "docs/superpowers/specs/x-design.md")
     res = controles.comprueba_higiene_pr(
         str(repo), ["src/a.py", "docs/superpowers/specs/x-design.md"], None
     )
@@ -74,16 +56,16 @@ def test_artefacto_prohibido_aunque_este_en_allow(repo: Path) -> None:
 
 
 def test_spec_prohibida_explicitamente(repo: Path) -> None:
-    _stage(repo, "src/a.py")
-    _stage(repo, "spec.md")
+    stagea(repo, "src/a.py")
+    stagea(repo, "spec.md")
     res = controles.comprueba_higiene_pr(str(repo), ["src/a.py", "spec.md"], "spec.md")
     assert not res.passed
     assert any("spec no puede entrar" in h for h in res.hallazgos)
 
 
 def test_staged_fuera_de_lo_declarado(repo: Path) -> None:
-    _stage(repo, "src/a.py")
-    _stage(repo, "src/extra.py")
+    stagea(repo, "src/a.py")
+    stagea(repo, "src/extra.py")
     res = controles.comprueba_higiene_pr(str(repo), ["src/a.py"], None)
     assert not res.passed
     assert any("src/extra.py" in h for h in res.hallazgos)
@@ -93,22 +75,16 @@ def test_main_json_funciona_tras_el_subcomando(
     repo: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     # Regresion #1: --json debe aceptarse DESPUES del subcomando (como documenta el uso).
-    _stage(repo, "src/a.py")
+    stagea(repo, "src/a.py")
     code = controles.main(["pr-hygiene", "--repo", str(repo), "--allow", "src/a.py", "--json"])
     assert code == 0
     assert '"veredicto": "PASA"' in capsys.readouterr().out
 
 
 def test_main_exit_1_si_falla(repo: Path) -> None:
-    _stage(repo, "src/a.py")
+    stagea(repo, "src/a.py")
     code = controles.main(["pr-hygiene", "--repo", str(repo)])  # sin --allow -> fail-closed
     assert code == 1
-
-
-def test_no_existe_control_commit_msg() -> None:
-    # El control commit-msg y la lista de types se eliminaron.
-    assert not hasattr(controles, "check_commit_msg")
-    assert not hasattr(controles, "COMMIT_TYPES")
 
 
 # --- control `controles` -------------------------------------------------------
@@ -288,20 +264,20 @@ def test_main_controles_exit_2_sin_ningun_control(repo: Path) -> None:
 
 
 def _baseline(repo: Path) -> None:
-    _stage(repo, "src/a.py", "def f() -> int:\n    return 1\n")
-    _stage(repo, "tests/test_a.py", "def test_f() -> None:\n    assert f() == 1\n")
-    _git(repo, "commit", "-m", "baseline")
+    stagea(repo, "src/a.py", "def f() -> int:\n    return 1\n")
+    stagea(repo, "tests/test_a.py", "def test_f() -> None:\n    assert f() == 1\n")
+    git(repo, "commit", "-m", "baseline")
 
 
 def _stage_slice(repo: Path) -> None:
-    _stage(repo, "src/a.py", "def f() -> int:\n    return 2\n")
-    _stage(repo, "tests/test_a.py", "def test_f() -> None:\n    assert f() is not None\n")
+    stagea(repo, "src/a.py", "def f() -> int:\n    return 2\n")
+    stagea(repo, "tests/test_a.py", "def test_f() -> None:\n    assert f() is not None\n")
 
 
 @pytest.fixture
 def repo_con_rama(repo: Path) -> Path:
     _baseline(repo)
-    _git(repo, "switch", "-c", "slice/01-x")
+    git(repo, "switch", "-c", "slice/01-x")
     _stage_slice(repo)
     return repo
 
@@ -311,21 +287,21 @@ def repo_con_base_avanzada(repo: Path) -> Path:
     """La base avanza DESPUES del branch-point, y la slice se stagea al final.
 
     El orden es deliberado: avanzar la base con los ficheros de la slice ya staged
-    haria que el `git add` de master se los llevara, y el test mediria otra cosa.
+    haria que el `git add` de la base se los llevara, y el test mediria otra cosa.
     """
     _baseline(repo)
-    _git(repo, "switch", "-c", "slice/01-x")
-    _git(repo, "switch", "master")
-    _stage(repo, "src/otro.py", "x = 1\n")
-    _git(repo, "commit", "-m", "avanza la base")
-    _git(repo, "switch", "slice/01-x")
+    git(repo, "switch", "-c", "slice/01-x")
+    git(repo, "switch", RAMA_BASE)
+    stagea(repo, "src/otro.py", "x = 1\n")
+    git(repo, "commit", "-m", "avanza la base")
+    git(repo, "switch", "slice/01-x")
     _stage_slice(repo)
     return repo
 
 
 def test_diff_bundle_escribe_diff_y_lista(repo_con_rama: Path, tmp_path: Path) -> None:
     out = tmp_path / "bundle"
-    res = controles.escribe_diff_bundle(str(repo_con_rama), "master", str(out))
+    res = controles.escribe_diff_bundle(str(repo_con_rama), RAMA_BASE, str(out))
     assert res.passed
     assert sorted((out / "files.txt").read_text(encoding="utf-8").split()) == [
         "src/a.py",
@@ -344,7 +320,7 @@ def test_diff_bundle_no_arrastra_el_avance_de_la_base(
     # Un commit en la base posterior al branch-point NO debe aparecer en el bundle: sin
     # `--merge-base` saldria como borrado y el verificador cazaria un fantasma.
     out = tmp_path / "bundle"
-    res = controles.escribe_diff_bundle(str(repo_con_base_avanzada), "master", str(out))
+    res = controles.escribe_diff_bundle(str(repo_con_base_avanzada), RAMA_BASE, str(out))
     assert res.passed
     assert "src/otro.py" not in (out / "files.txt").read_text(encoding="utf-8")
 
@@ -355,7 +331,7 @@ def test_diff_bundle_ignora_lo_que_no_esta_staged(repo_con_rama: Path, tmp_path:
     # esta ceguera es justo por lo que `pr-hygiene` corre ANTES en el paso 8.
     (repo_con_rama / "src" / "sin_stagear.py").write_text("y = 2\n", encoding="utf-8")
     out = tmp_path / "bundle"
-    controles.escribe_diff_bundle(str(repo_con_rama), "master", str(out))
+    controles.escribe_diff_bundle(str(repo_con_rama), RAMA_BASE, str(out))
     assert "sin_stagear" not in (out / "files.txt").read_text(encoding="utf-8")
 
 
@@ -369,7 +345,7 @@ def test_diff_bundle_falla_si_no_hay_nada_staged(repo: Path, tmp_path: Path) -> 
     # Fail-closed, como `pr-hygiene` con nada staged. Es tambien el sintoma de haberse
     # olvidado el `git add`, que con el orden nuevo es el error facil de cometer.
     _baseline(repo)
-    res = controles.escribe_diff_bundle(str(repo), "master", str(tmp_path / "b"))
+    res = controles.escribe_diff_bundle(str(repo), RAMA_BASE, str(tmp_path / "b"))
     assert not res.passed
     assert any("nada staged" in h for h in res.hallazgos)
 
@@ -385,9 +361,11 @@ def test_diff_bundle_da_lo_mismo_antes_y_despues_del_commit(
     (solo despues del commit) o que un diff del arbol de trabajo (que ademas no ve los
     untracked). Ese margen es lo que hace que reordenar el paso 8 no sea fragil.
     """
-    antes = controles.escribe_diff_bundle(str(repo_con_rama), "master", str(tmp_path / "antes"))
-    _git(repo_con_rama, "commit", "-m", "slice")
-    despues = controles.escribe_diff_bundle(str(repo_con_rama), "master", str(tmp_path / "despues"))
+    antes = controles.escribe_diff_bundle(str(repo_con_rama), RAMA_BASE, str(tmp_path / "antes"))
+    git(repo_con_rama, "commit", "-m", "slice")
+    despues = controles.escribe_diff_bundle(
+        str(repo_con_rama), RAMA_BASE, str(tmp_path / "despues")
+    )
 
     assert antes.passed and despues.passed
     assert (tmp_path / "antes" / "slice.diff").read_text(encoding="utf-8") == (
@@ -405,7 +383,7 @@ def test_main_diff_bundle_json_imprime_las_rutas(
             "--repo",
             str(repo_con_rama),
             "--base",
-            "master",
+            RAMA_BASE,
             "--out",
             str(out),
             "--json",
@@ -506,7 +484,7 @@ def test_ci_desconocido_ante_un_bucket_que_no_conoce() -> None:
 def test_ci_estados_declarados_son_los_que_emite_el_clasificador() -> None:
     # `CI_ESTADOS` no es decorativo: es lo que documenta la skill y lo que mapea el exit
     # code, asi que cada estado tiene que tener su entrada.
-    assert set(controles.CI_ESTADOS) == set(controles._CI_EXIT)
+    assert set(controles.CI_ESTADOS) == set(controles.CI_EXIT)
 
 
 @pytest.mark.parametrize(
@@ -553,8 +531,14 @@ def test_ci_status_adjunta_el_stderr_de_gh_si_no_entiende_la_respuesta(
 def test_ci_status_no_ofrece_watch() -> None:
     # Un script que poll-ea es la shell bloqueante que slice-runner prohibe: el ticking
     # lo hace el harness. Si alguien anade `--watch`, esto cae.
+    parser = controles.build_parser()
+
+    # La invocacion valida se afirma primero a proposito: `argparse` sale con `SystemExit`
+    # ante CUALQUIER argumento que no conoce, asi que sin esta linea el test tambien pasaria
+    # con el subcomando `ci-status` borrado entero -verde por la desaparicion de lo que vigila-.
+    assert parser.parse_args(["ci-status", "--repo", ".", "--pr", "4"]).subcomando == "ci-status"
     with pytest.raises(SystemExit):
-        controles.main(["ci-status", "--repo", ".", "--pr", "4", "--watch"])
+        parser.parse_args(["ci-status", "--repo", ".", "--pr", "4", "--watch"])
 
 
 # --- control `verify-verdict` -----------------------------------------------

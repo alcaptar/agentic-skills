@@ -26,6 +26,12 @@ Uso como CLI (JSON in/out, para que el agente lo invoque sin parsear prosa):
     deploy_core.py verdict < payload.json
 donde payload.json = {"config": {...}, "baseline_samples": [...], "tick_history": [...],
                       "elapsed_secs": N}
+
+Exit codes: 0 = veredicto emitido en stdout (el veredicto va DENTRO del JSON, no en el codigo),
+2 = error de uso -subcomando desconocido o `config` con claves que este modulo no conoce-. La
+config no se valida por pulcritud: la escribe el agente a partir de la prosa de la skill, y una
+clave mal escrita que se ignorase en silencio degradaria una senal declarada a inferida (o dejaria
+el monitor sin senales), o sea el `go` generico que este modulo existe para no dar.
 """
 
 from __future__ import annotations
@@ -63,10 +69,21 @@ class SignalConfig:
 
     @staticmethod
     def from_dict(d: dict[str, object]) -> SignalConfig:
+        """Config de una senal desde el payload. Una clave que no existe es un error.
+
+        Antes se ignoraba en silencio, y esa es la unica ruta por la que la config entra de
+        verdad: la escribe el agente a partir de la prosa de la skill, no un fichero versionado.
+        Un `declarado: true` mal escrito volvia a `declarada=False` sin decir nada, o sea la
+        senal que la slice prometio degradada a inferida, y con ella el `go` generico que ese
+        campo existe para impedir -justo el fallo silencioso que la skill describe-. Fail-closed
+        como el resto del repo: sin config que se pueda avalar no se emite veredicto.
+        """
         f = SignalConfig()
+        desconocidas = sorted(k for k in d if not hasattr(f, k))
+        if desconocidas:
+            raise ValueError(f"claves de senal desconocidas: {', '.join(desconocidas)}")
         for k, v in d.items():
-            if hasattr(f, k):
-                setattr(f, k, v)
+            setattr(f, k, v)
         return f
 
 
@@ -80,11 +97,23 @@ class MonitorConfig:
 
     @staticmethod
     def from_dict(d: dict[str, object]) -> MonitorConfig:
+        """Config del monitor desde el payload, con el mismo fail-closed que las senales.
+
+        `signals` con otra forma tambien pasaba en silencio, y su consecuencia es la peor de
+        todas: cero senales configuradas, ninguna en breach, `go` sobre un deploy que nadie
+        miro.
+        """
         cfg = MonitorConfig()
+        ventanas = ("failure_limit", "warmup_secs", "min_observe_secs", "noisy_cv")
+        desconocidas = sorted(set(d) - {"signals", *ventanas})
+        if desconocidas:
+            raise ValueError(f"claves de config desconocidas: {', '.join(desconocidas)}")
+
         signals = d.get("signals", {})
-        if isinstance(signals, dict):
-            cfg.signals = {k: SignalConfig.from_dict(v) for k, v in signals.items()}
-        for k in ("failure_limit", "warmup_secs", "min_observe_secs", "noisy_cv"):
+        if not isinstance(signals, dict):
+            raise TypeError(f"`signals` tiene que ser un objeto, no {type(signals).__name__}")
+        cfg.signals = {k: SignalConfig.from_dict(v) for k, v in signals.items()}
+        for k in ventanas:
             if k in d:
                 setattr(cfg, k, d[k])
         return cfg
@@ -251,7 +280,14 @@ def main(argv: list[str] | None = None) -> int:
         print("uso: deploy_core.py verdict < payload.json", file=sys.stderr)
         return 2
     payload: dict[str, Any] = json.load(sys.stdin)
-    print(json.dumps(_cli_verdict(payload), ensure_ascii=False))
+    try:
+        resultado = _cli_verdict(payload)
+    except (TypeError, ValueError) as exc:
+        # Error de uso (2), nunca un veredicto: el payload lo compone quien invoca, y emitir
+        # `inconclusive` aqui haria pasar su propio despiste por un dato del deploy.
+        print(f"error: config invalida: {exc}", file=sys.stderr)
+        return 2
+    print(json.dumps(resultado, ensure_ascii=False))
     return 0
 
 
