@@ -152,7 +152,14 @@ en una copia de la fixture el arbol empieza en la propia fixture -los tests esta
 las PRs. Con eso, la receta de `ci-indeterminada` no funciona tal cual y la de `ci-roja` apunta a
 rutas que ahi no existen.
 
-Dos reglas para los cuatro. **Una provocacion por run**: si siembras dos a la vez no sabras cual de los
+**No describas la sonda en el cuerpo del issue.** El implementador lo lee entero, no solo la linea de
+su slice: en la sonda de `ci-roja` (issue #13) el cuerpo explicaba el sub-experimento -si tocaria un
+fichero ajeno y si `pr-hygiene` lo cazaria- y el implementador **cito esa frase literalmente** al
+justificar su decision. Su razonamiento se sostenia igual por otras vias, pero el experimento quedo
+invalidado: el sujeto sabia que se le probaba. Deja en el issue lo que la slice necesita para
+ejecutarse -intencion, criterios, controles, fuentes- y guarda el proposito de la sonda fuera de el.
+
+Dos reglas mas para los cuatro. **Una provocacion por run**: si siembras dos a la vez no sabras cual de los
 dos frenos actuo, y el segundo no llega a ejercitarse porque el primero para el loop. Y **mira el issue,
 no la conversacion**: el rastro que cuenta es el que sobrevive al cierre de la sesion -el motivo escrito
 en la linea de la slice y el registro de `metrics.py`-, asi que si el orquestador lo narro en prosa pero
@@ -223,6 +230,17 @@ antes de correr el loop. `.github/workflows/smoke-fixture.yml` corre `make linti
 `make test`, asi que el paso 6 la deja pasar con solo el lint verde y la CI la tumba. No es un montaje
 artificial: es el riesgo real de que los controles los declare una persona y queden mas estrechos que la
 CI, y este camino existe justo para eso.
+
+**La base del `diff-bundle` no es la rama por defecto**, y esto es facil de fallar: si la semilla va en
+un commit propio sobre la rama, hay que pasarle a `diff-bundle` **el commit de la semilla**, no
+`master`. Con `--base master` el bundle incluye la semilla y el verificador acaba juzgando un error que
+la slice no causo, o sea un falso hallazgo garantizado. Medido en la sonda: tres ficheros con `master`,
+dos con el commit de la semilla.
+
+**Los logs de la CI, a disco.** El paso 9 dice traer los logs del check fallido con `gh run view
+--log-failed`, sin mas. Mandalos a un fichero fuera del repo y pasa la **ruta** al implementador, igual
+que hace `--out` con los controles locales: si no, el output del build acaba en el contexto del
+orquestador, que es justo lo que el resto del pipeline evita. La skill no lo pide asi todavia.
 
 Debe dejar: un reintento por el paso 5 con los logs del check fallido y, si sigue roja, la slice
 `bloqueada: ci-roja` con la metrica en `ci=red` y `--reintentos-ci` reflejando ese reintento. **La PR se
