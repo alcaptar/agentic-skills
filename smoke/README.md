@@ -139,6 +139,12 @@ contrato: los estados, los presupuestos de reintentos y el registro los declara
 `skills/slice-runner/scripts/issue_body.py` (`MOTIVOS_BLOQUEADA`), que los valida al escribir en el
 issue. Aqui esta solo **como se provoca cada uno** y **que rastro debe quedar**.
 
+**Ojo con la version de los scripts que estas sondeando.** `~/.claude/skills/slice-runner/` es un
+symlink al arbol de trabajo de este repo, asi que la rama en la que estas **decide que codigo corre**. Si
+creas la rama de la sonda desde `origin/master`, corres los scripts tal como estan en `origin`, no los de
+tu trabajo sin subir, y nada avisa. Paso tres veces el mismo dia. Antes de sondear un cambio: o lo subes,
+o ramificas desde local y aceptas que la PR arrastre tus commits.
+
 **Estas cuatro recetas asumen el modo in-tree**: issue y PR en este mismo repo, con la fixture donde
 esta (`smoke/fixture/`), no en el repo copiado que describe "Como ejecutarlo". La diferencia importa:
 en una copia de la fixture el arbol empieza en la propia fixture -los tests estan en `tests/`, no en
@@ -165,6 +171,10 @@ agotan contra la misma pared. No rompas codigo para conseguirlo, que es la tenta
 roto tambien tumba los controles, pero entonces no distingues si el loop paro porque el control no
 resuelve o porque el implementador no supo arreglar el test.
 
+Al comprobar el "sin PR", filtra por estado: el nombre de rama se reutiliza entre sondas, asi que
+`gh pr list --head slice/01-fizzbuzz-core --state all` devuelve las PRs cerradas de runs anteriores. Lo
+que cuenta es `--state open`.
+
 Debe dejar: la slice `bloqueada: controles` en el issue, la metrica durable con
 `veredicto=bloqueada-controles`, `ci=none` y `--reintentos-controles` al tope del paso 6, y **ninguna PR ni ninguna
 invocacion del verificador** -un fallo mecanico no se juzga, se arregla-. Comprueba tambien que lo que
@@ -173,22 +183,30 @@ y no el output del build.
 
 ### `bloqueada: verify`
 
-Hace falta que el implementador entregue codigo que viole una convencion de
-`smoke/fixture/conventions.md` con severidad `alta` y que **no pueda arreglarlo**. La palanca es un
-conflicto deliberado entre el criterio de aceptacion de la slice y las convenciones: escribe en el issue
-una `ACEPTACION:` que exija justo lo que `conventions.md` prohibe -un docstring en `fizzbuzz/core.py`, o
-nombres en castellano-. Asi cada ronda oscila (si obedece la aceptacion el juez lo veta con `alta`; si
-obedece las convenciones incumple la aceptacion) y los reintentos que declara el paso 7 se agotan. Pedirlo en el
-prompt de invocacion no sirve: el implementador carga las convenciones y quita la violacion en la primera
-ronda, con lo que sondeas un `FALLA` aislado y no el camino bloqueado.
+La palanca es un **conflicto deliberado** entre el criterio de aceptacion de la slice y las
+convenciones: escribe en el issue una `ACEPTACION:` que exija justo lo que `conventions.md` prohibe -un
+docstring en `fizzbuzz/core.py`, o el parametro en castellano-. Pedirlo en el prompt de invocacion no
+sirve: el implementador carga las convenciones y quita la violacion en la primera ronda.
 
-Aviso sobre la palanca: `conventions.md` no declara severidades, las asigna el juez por su rubrica, y
-su calibracion le manda **degradar la severidad** cuando no puede citar evidencia concreta. Si el
-veredicto vuelve con `media`, no hay `FALLA` y no estas sondeando este camino: hace falta una
-violacion que la rubrica puntue `alta` de forma inequivoca.
+**Pero el veto no llega por donde parece, y esto se comprobo en la sonda del 2026-07-30 (issue #12).**
+La intuicion es que el implementador obedece la aceptacion y el juez veta la violacion de convenciones.
+No pasa: el implementador aplica la precedencia que fija la skill -en conflicto ganan las convenciones-,
+**rechaza las clausulas y reporta el conflicto**, nombrando los dos lados y escalando la decision. El
+codigo entregado cumple `conventions.md` punto por punto. El veto llega igual, pero por la regla
+**`conformidad-ac`**: dos criterios de aceptacion que ningun test pinea, con `alta` y evidencia citable.
 
-Debe dejar: la slice `bloqueada: verify`, la metrica con `veredicto=FALLA`, `ci=none` y
-`--reintentos-verify` al tope del paso 7 -y `--descartes-verify` en 0: un descarte es el agente devolviendo un JSON que no
+Tres consecuencias al montar la sonda:
+
+- **No esperes un hallazgo de `convenciones`.** Si aparece, es que el implementador puso la aceptacion
+  por encima de la vara, y eso es un defecto distinto y mas grave que el que sondeas.
+- La palanca **no depende** de que el juez califique de `alta` una violacion de estilo, que era el
+  riesgo que esta receta advertia antes: un criterio de aceptacion sin cumplir es `alta` por rubrica.
+- El reintento es **inutil por diseno**, igual que en `bloqueada: controles`: el implementador se
+  encontraria el mismo conflicto imposible. Si acotas reintentos, declaralo.
+
+Debe dejar: la slice `bloqueada: verify`, la metrica con `veredicto=FALLA`, `ci=none`,
+`--hallazgos-alta` al menos en 1, y `--reintentos-verify` con lo que se haya gastado de verdad -y
+`--descartes-verify` en 0: un descarte es el agente devolviendo un JSON que no
 parsea, un fallo distinto que no debe acabar contado aqui-. Y **ni PR ni commit**: el commit va despues
 del veredicto, asi que la rama tiene que quedarse sin ningun commit de la slice. Los cambios si quedan
 **stageados** -el paso 7 hace `git add` antes de invocar al juez, porque juzga el indice- y nada los
