@@ -3,7 +3,7 @@
 
 Se offloada a script la regla mecanica con coste de error alto que el modelo no
 garantiza por si mismo. Redactar un conventional commit lo hace bien el agente, asi
-que no hay control para eso. Hay tres subcomandos:
+que no hay control para eso. Hay cuatro subcomandos:
 
     pr-hygiene   el diff staged solo puede contener los ficheros de codigo/test
                  que declaro el implementador; nunca planes ni design-docs (la spec
@@ -19,19 +19,31 @@ que no hay control para eso. Hay tres subcomandos:
                  comandos los declara cada repo y un regex que no matchea oculta el
                  error real.
 
-    diff-bundle  materializa `slice.diff` y `files.txt` (rango `<base>...HEAD`) en un
-                 directorio fuera del repo. Existe para que el verificador adversarial
-                 no necesite `Bash`: recibe el diff en disco en vez de calcularlo, lo
-                 que hace **estructural** su incapacidad de ejecutar controles (un
-                 `allowed-tools` en el frontmatter del agente NO bloquea lo no listado;
-                 se comprobo en smoke). De paso el rango lo fija el script -tres
-                 puntos, desde el branch-point- y no el juicio de un modelo.
+    diff-bundle  materializa `slice.diff` y `files.txt` (el diff del INDICE contra el
+                 branch-point) en un directorio fuera del repo. Existe para que el
+                 verificador adversarial no necesite `Bash`: recibe el diff en disco en
+                 vez de calcularlo, lo que hace **estructural** su incapacidad de
+                 ejecutar controles (un `allowed-tools` en el frontmatter del agente NO
+                 bloquea lo no listado; se comprobo en smoke). De paso el rango lo fija
+                 el script y no el juicio de un modelo.
+
+    ci-status    estado de la CI de una PR, en un tiro y sin polling. Encapsula la
+                 invocacion de `gh`, sus nombres de campo y su mapeo de exit codes,
+                 porque el primer smoke real demostro que dejarselos a la memoria del
+                 agente cuelga el loop en silencio: `gh pr checks --json` NO tiene campo
+                 `conclusion` -pero `gh run list --json` si-, y pedirlo hace que `gh`
+                 responda un error que se lee igual que "todavia no hay checks".
 
 El script no sabe nada de toolchains: solo ejecuta los `nombre=comando` que se le pasan,
 que salen de la seccion `## Controles` del issue (los descubre `slice-spec` una vez y los
 confirma una persona). Por eso no hay autodeteccion aqui dentro.
 
-Exit code 0 = PASA, 1 = FALLA, 2 = error de uso. Con --json imprime el resultado
+Exit codes. En `pr-hygiene`, `controles` y `diff-bundle`: 0 = PASA, 1 = FALLA, 2 = error de
+uso. `ci-status` no es binario y usa uno por rama del paso 9, para que un tick de shell
+pueda decidir sin parsear: 0 = verde, 1 = rojo, 2 = error de uso, 3 = pendiente (sigue
+tickeando), 4 = indeterminado (`sin-checks` o `desconocido`: para y no finjas un veredicto).
+A diferencia de `gh pr checks`, aqui el 1 significa **solo** CI roja: una invocacion mal
+formada es 2 y una respuesta ilegible es 4, nunca 1. Con --json imprime el resultado
 estructurado en stdout para que el orquestador lo consuma sin parsear prosa.
 
 Uso:
@@ -39,6 +51,7 @@ Uso:
     controles.py controles --repo . --control lint="make linting" --control tests="make test" \\
         [--out /tmp/slice-02/logs] [--tail 30] [--timeout 600] [--json]
     controles.py diff-bundle --repo . --base master --out /tmp/slice-02 [--json]
+    controles.py ci-status --repo . --pr 42 [--json]
 """
 
 from __future__ import annotations
@@ -298,22 +311,39 @@ def escribe_diff_bundle(repo: str, base: str, out: str) -> ResultadoBundle:
     """Escribe `slice.diff` y `files.txt` en `out` para que el verificador los lea.
 
     El verificador no tiene `Bash`: recibe el diff en disco en vez de calcularlo. De
-    paso el rango lo fija el script y no el juicio de un modelo: siempre
-    `base...HEAD` (tres puntos, desde el branch-point), porque con `..` los commits
-    que la base haya avanzado desde entonces apareceran como borrados y el
-    verificador cazaria violaciones fantasma.
+    paso el rango lo fija el script y no el juicio de un modelo.
+
+    Se diffea el **indice** (`--cached`) contra el **branch-point** (`--merge-base`),
+    no `HEAD`, por dos razones que el primer smoke real dejo claras:
+
+    - En el orden del paso 8 el commit va DESPUES de la verificacion, asi que contra
+      `HEAD` no habria nada que ver. Verificar antes de commitear es lo que permite
+      que un veto del verificador no deje rastro y que la slice siga siendo un solo
+      commit sin `--amend`.
+    - El indice es exactamente lo que sera el commit, asi que el verificador juzga lo
+      que ira en la PR y no una aproximacion.
+
+    `--merge-base` conserva la razon de ser del rango de tres puntos que habia antes
+    -si la base ha avanzado, sus commits no deben aparecer como borrados y hacer que
+    el verificador cace violaciones fantasma- y ademas es la unica forma de
+    expresarlo: `git diff --cached base...HEAD` no es sintaxis valida.
+
+    Ojo con lo que esto NO ve: un fichero **untracked** es invisible a `git diff
+    --cached`. Por eso `pr-hygiene` corre justo antes en el paso 8; es lo que afirma
+    que el conjunto staged es igual a la lista que declaro el implementador, y con eso
+    le da integridad a este bundle.
     """
-    rango = f"{base}...HEAD"
+    rango = ["--merge-base", base]
     result = ResultadoBundle(passed=True)
     try:
         diff = subprocess.run(
-            ["git", "-C", repo, "diff", rango],
+            ["git", "-C", repo, "diff", "--cached", *rango],
             capture_output=True,
             text=True,
             check=True,
         ).stdout
         names = subprocess.run(
-            ["git", "-C", repo, "diff", "--name-only", rango],
+            ["git", "-C", repo, "diff", "--cached", "--name-only", *rango],
             capture_output=True,
             text=True,
             check=True,
@@ -326,11 +356,12 @@ def escribe_diff_bundle(repo: str, base: str, out: str) -> ResultadoBundle:
 
     ficheros = [line for line in names.splitlines() if line.strip()]
     if not ficheros:
-        # Fail-closed, igual que `pr-hygiene` con nada staged: sin cambios no hay
-        # nada que verificar, y un bundle vacio haria que el verificador diera PASA
-        # sobre la nada.
+        # Fail-closed, igual que `pr-hygiene` con nada staged: sin nada en el indice no
+        # hay nada que verificar, y un bundle vacio haria que el verificador diera PASA
+        # sobre la nada. Es tambien el sintoma de haberse olvidado el `git add`.
         return ResultadoBundle(
-            passed=False, hallazgos=[f"sin cambios respecto a {base}: nada que verificar"]
+            passed=False,
+            hallazgos=[f"nada staged respecto a {base}: nada que verificar (falta el git add?)"],
         )
 
     out_dir = Path(out)
@@ -357,6 +388,121 @@ def _emit_bundle(result: ResultadoBundle, as_json: bool) -> int:
         for h in result.hallazgos:
             print(f"  - {h}")
     return 0 if result.passed else 1
+
+
+# Estados de la CI. `verde` hay que demostrarlo; el resto son grados de "no consta".
+CI_ESTADOS = ("verde", "rojo", "pendiente", "sin-checks", "desconocido")
+
+# Exit code por estado, uno por rama del paso 9 para que un tick pueda decidir sin
+# parsear JSON. El 2 esta reservado para error de uso, como en el resto del script.
+_CI_EXIT = {"verde": 0, "rojo": 1, "pendiente": 3, "sin-checks": 4, "desconocido": 4}
+
+# Los `bucket` que documenta `gh pr checks --help`. Uno fuera de esta lista es una
+# version de `gh` que sabe algo que este script no, y eso es `desconocido`, no verde.
+_CI_BUCKETS_ROJO = frozenset({"fail", "cancel"})
+_CI_BUCKETS_OK = frozenset({"pass", "skipping"})
+_CI_BUCKETS = _CI_BUCKETS_ROJO | _CI_BUCKETS_OK | {"pending"}
+
+
+@dataclass
+class ResultadoCI:
+    """Estado de la CI de una PR, con los checks que lo sostienen."""
+
+    estado: str
+    checks: list[dict[str, str]] = field(default_factory=list)
+    hallazgos: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "control": "ci-status",
+            "estado": self.estado,
+            "checks": self.checks,
+            "hallazgos": self.hallazgos,
+        }
+
+
+def clasifica_ci(stdout: str) -> ResultadoCI:
+    """Mapea la respuesta de `gh pr checks --json` a uno de los `CI_ESTADOS`.
+
+    Funcion pura a proposito: es lo que se testea, sin red y sin `gh` instalado.
+
+    La regla es fail-closed y es la decision central de este subcomando: **solo es
+    `verde` un todo-pass explicito con al menos un check que haya pasado de verdad**.
+    Todo lo demas cae en `rojo`, `pendiente`, `sin-checks` o `desconocido`. Asi no hay
+    que adivinar que hace `gh` ante una PR sin CI configurada, y lo que no se puede
+    demostrar verde no lo es.
+
+    En particular, una respuesta que no es JSON valido es `desconocido` y no "todavia
+    no hay checks": ese es exactamente el fallo que colgo el primer smoke durante
+    cuatro minutos con la CI ya verde.
+    """
+    try:
+        data = json.loads(stdout)
+    except json.JSONDecodeError:
+        detalle = " ".join(stdout.split())[:200] or "(respuesta vacia)"
+        return ResultadoCI("desconocido", hallazgos=[f"respuesta de gh no parseable: {detalle}"])
+
+    if not isinstance(data, list):
+        return ResultadoCI(
+            "desconocido", hallazgos=[f"gh devolvio {type(data).__name__}, se esperaba una lista"]
+        )
+    if not data:
+        return ResultadoCI("sin-checks", hallazgos=["la PR no tiene ningun check"])
+
+    checks = [
+        {"name": str(c.get("name", "")), "bucket": str(c.get("bucket", ""))}
+        for c in data
+        if isinstance(c, dict)
+    ]
+    if len(checks) != len(data):
+        return ResultadoCI("desconocido", hallazgos=["algun check no es un objeto"])
+
+    buckets = {c["bucket"] for c in checks}
+    if desconocidos := buckets - _CI_BUCKETS:
+        return ResultadoCI(
+            "desconocido", checks, [f"bucket que este script no conoce: {sorted(desconocidos)}"]
+        )
+    if buckets & _CI_BUCKETS_ROJO:
+        rotos = sorted(c["name"] for c in checks if c["bucket"] in _CI_BUCKETS_ROJO)
+        return ResultadoCI("rojo", checks, [f"checks en fallo o cancelados: {rotos}"])
+    if "pending" in buckets:
+        return ResultadoCI("pendiente", checks)
+    if "pass" not in buckets:
+        # Todos `skipping`: nada ha corrido, asi que no hay verde que afirmar.
+        return ResultadoCI("sin-checks", checks, ["todos los checks se saltaron: nada corrio"])
+    return ResultadoCI("verde", checks)
+
+
+def consulta_ci(repo: str, pr: int) -> ResultadoCI:
+    """Pregunta a `gh` por los checks de la PR y clasifica su respuesta.
+
+    Un tiro y sale: **sin `--watch` y sin polling**. El ticking lo hace el harness
+    (background mas notificacion), porque un script que poll-ea es justo la shell
+    bloqueante que `slice-runner` prohibe.
+    """
+    proc = subprocess.run(
+        ["gh", "pr", "checks", str(pr), "--json", "name,state,bucket"],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    result = clasifica_ci(proc.stdout)
+    if result.estado == "desconocido" and proc.stderr.strip():
+        result.hallazgos.append(f"stderr de gh: {' '.join(proc.stderr.split())[:200]}")
+    return result
+
+
+def _emit_ci(result: ResultadoCI, as_json: bool) -> int:
+    if as_json:
+        print(json.dumps(result.to_dict(), ensure_ascii=False))
+    else:
+        print(f"[ci-status] {result.estado}")
+        for c in result.checks:
+            print(f"  {c['bucket']:9} {c['name']}")
+        for h in result.hallazgos:
+            print(f"  - {h}")
+    return _CI_EXIT[result.estado]
 
 
 def _emit(result: Resultado, as_json: bool) -> int:
@@ -428,9 +574,18 @@ def main(argv: list[str] | None = None) -> int:
 
     bun = sub.add_parser("diff-bundle", help="materializa el diff de la slice para el verificador")
     bun.add_argument("--repo", default=".", help="ruta del repo (default: cwd)")
-    bun.add_argument("--base", required=True, help="rama base (el rango es <base>...HEAD)")
+    bun.add_argument(
+        "--base",
+        required=True,
+        help="rama base (se diffea el INDICE contra el branch-point con esa base)",
+    )
     bun.add_argument("--out", required=True, help="directorio destino, FUERA del repo")
     bun.add_argument("--json", action="store_true", help="salida estructurada JSON")
+
+    ci = sub.add_parser("ci-status", help="estado de la CI de una PR (un tiro, sin polling)")
+    ci.add_argument("--repo", default=".", help="ruta del repo (default: cwd)")
+    ci.add_argument("--pr", required=True, type=int, help="numero de la PR")
+    ci.add_argument("--json", action="store_true", help="salida estructurada JSON")
 
     args = parser.parse_args(argv)
 
@@ -439,6 +594,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.subcomando == "diff-bundle":
         return _emit_bundle(escribe_diff_bundle(args.repo, args.base, args.out), args.json)
+
+    if args.subcomando == "ci-status":
+        return _emit_ci(consulta_ci(args.repo, args.pr), args.json)
 
     # Error de uso (exit 2), no FALLA de control: confundirlos haria que el orquestador
     # reintentara el paso 5 por un fallo que esta en su propia invocacion.

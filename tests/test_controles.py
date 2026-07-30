@@ -280,18 +280,46 @@ def test_main_controles_exit_2_sin_ningun_control(repo: Path) -> None:
 #
 # Existe para que el verificador no necesite `Bash`: el orquestador le deja el diff
 # y la lista de ficheros en disco, y el agente solo los lee. Ademas quita de encima
-# el footgun de `..` vs `...` al derivar el rango.
+# el footgun de derivar el rango a ojo.
+#
+# Se diffea el INDICE contra el branch-point, no `HEAD`, porque en el paso 8 el commit
+# va despues de la verificacion. Por eso las fixtures de aqui **stagean sin
+# commitear**: es el estado real en el que corre el control.
+
+
+def _baseline(repo: Path) -> None:
+    _stage(repo, "src/a.py", "def f() -> int:\n    return 1\n")
+    _stage(repo, "tests/test_a.py", "def test_f() -> None:\n    assert f() == 1\n")
+    _git(repo, "commit", "-m", "baseline")
+
+
+def _stage_slice(repo: Path) -> None:
+    _stage(repo, "src/a.py", "def f() -> int:\n    return 2\n")
+    _stage(repo, "tests/test_a.py", "def test_f() -> None:\n    assert f() is not None\n")
 
 
 @pytest.fixture
 def repo_con_rama(repo: Path) -> Path:
-    _stage(repo, "src/a.py", "def f() -> int:\n    return 1\n")
-    _stage(repo, "tests/test_a.py", "def test_f() -> None:\n    assert f() == 1\n")
-    _git(repo, "commit", "-m", "baseline")
+    _baseline(repo)
     _git(repo, "switch", "-c", "slice/01-x")
-    _stage(repo, "src/a.py", "def f() -> int:\n    return 2\n")
-    _stage(repo, "tests/test_a.py", "def test_f() -> None:\n    assert f() is not None\n")
-    _git(repo, "commit", "-m", "slice")
+    _stage_slice(repo)
+    return repo
+
+
+@pytest.fixture
+def repo_con_base_avanzada(repo: Path) -> Path:
+    """La base avanza DESPUES del branch-point, y la slice se stagea al final.
+
+    El orden es deliberado: avanzar la base con los ficheros de la slice ya staged
+    haria que el `git add` de master se los llevara, y el test mediria otra cosa.
+    """
+    _baseline(repo)
+    _git(repo, "switch", "-c", "slice/01-x")
+    _git(repo, "switch", "master")
+    _stage(repo, "src/otro.py", "x = 1\n")
+    _git(repo, "commit", "-m", "avanza la base")
+    _git(repo, "switch", "slice/01-x")
+    _stage_slice(repo)
     return repo
 
 
@@ -310,17 +338,25 @@ def test_diff_bundle_escribe_diff_y_lista(repo_con_rama: Path, tmp_path: Path) -
     assert "+    assert f() is not None" in diff
 
 
-def test_diff_bundle_usa_el_rango_de_tres_puntos(repo_con_rama: Path, tmp_path: Path) -> None:
-    # Un commit en la base posterior al branch-point NO debe aparecer en el bundle:
-    # con `..` saldria como borrado y el verificador cazaria un fantasma.
-    _git(repo_con_rama, "switch", "master")
-    _stage(repo_con_rama, "src/otro.py", "x = 1\n")
-    _git(repo_con_rama, "commit", "-m", "avanza la base")
-    _git(repo_con_rama, "switch", "slice/01-x")
+def test_diff_bundle_no_arrastra_el_avance_de_la_base(
+    repo_con_base_avanzada: Path, tmp_path: Path
+) -> None:
+    # Un commit en la base posterior al branch-point NO debe aparecer en el bundle: sin
+    # `--merge-base` saldria como borrado y el verificador cazaria un fantasma.
+    out = tmp_path / "bundle"
+    res = controles.escribe_diff_bundle(str(repo_con_base_avanzada), "master", str(out))
+    assert res.passed
+    assert "src/otro.py" not in (out / "files.txt").read_text(encoding="utf-8")
 
+
+def test_diff_bundle_ignora_lo_que_no_esta_staged(repo_con_rama: Path, tmp_path: Path) -> None:
+    # El control juzga el indice: lo que no se ha stageado no va a entrar en el commit,
+    # asi que tampoco debe entrar en el bundle. Es la contrapartida del test de abajo:
+    # esta ceguera es justo por lo que `pr-hygiene` corre ANTES en el paso 8.
+    (repo_con_rama / "src" / "sin_stagear.py").write_text("y = 2\n", encoding="utf-8")
     out = tmp_path / "bundle"
     controles.escribe_diff_bundle(str(repo_con_rama), "master", str(out))
-    assert "src/otro.py" not in (out / "files.txt").read_text(encoding="utf-8")
+    assert "sin_stagear" not in (out / "files.txt").read_text(encoding="utf-8")
 
 
 def test_diff_bundle_falla_si_la_base_no_existe(repo_con_rama: Path, tmp_path: Path) -> None:
@@ -329,14 +365,34 @@ def test_diff_bundle_falla_si_la_base_no_existe(repo_con_rama: Path, tmp_path: P
     assert any("no-existe" in h for h in res.hallazgos)
 
 
-def test_diff_bundle_falla_si_el_diff_esta_vacio(repo: Path, tmp_path: Path) -> None:
-    # Sin cambios respecto a la base no hay nada que verificar: fail-closed, como
-    # `pr-hygiene` con nada staged.
-    _stage(repo, "src/a.py")
-    _git(repo, "commit", "-m", "baseline")
+def test_diff_bundle_falla_si_no_hay_nada_staged(repo: Path, tmp_path: Path) -> None:
+    # Fail-closed, como `pr-hygiene` con nada staged. Es tambien el sintoma de haberse
+    # olvidado el `git add`, que con el orden nuevo es el error facil de cometer.
+    _baseline(repo)
     res = controles.escribe_diff_bundle(str(repo), "master", str(tmp_path / "b"))
     assert not res.passed
-    assert any("sin cambios" in h for h in res.hallazgos)
+    assert any("nada staged" in h for h in res.hallazgos)
+
+
+def test_diff_bundle_da_lo_mismo_antes_y_despues_del_commit(
+    repo_con_rama: Path, tmp_path: Path
+) -> None:
+    """El control no depende de si el commit ya ocurrio, y eso es deliberado.
+
+    `git diff --cached <commit>` compara el INDICE contra ese commit, y tras commitear el
+    indice sigue conteniendo lo commiteado: el diff no se queda vacio. Asi que
+    `--cached --merge-base` funciona en los dos ordenes, al contrario que `<base>...HEAD`
+    (solo despues del commit) o que un diff del arbol de trabajo (que ademas no ve los
+    untracked). Ese margen es lo que hace que reordenar el paso 8 no sea fragil.
+    """
+    antes = controles.escribe_diff_bundle(str(repo_con_rama), "master", str(tmp_path / "antes"))
+    _git(repo_con_rama, "commit", "-m", "slice")
+    despues = controles.escribe_diff_bundle(str(repo_con_rama), "master", str(tmp_path / "despues"))
+
+    assert antes.passed and despues.passed
+    assert (tmp_path / "antes" / "slice.diff").read_text(encoding="utf-8") == (
+        tmp_path / "despues" / "slice.diff"
+    ).read_text(encoding="utf-8")
 
 
 def test_main_diff_bundle_json_imprime_las_rutas(
@@ -377,3 +433,125 @@ def test_main_diff_bundle_exit_1_si_falla(repo_con_rama: Path, tmp_path: Path) -
         ]
     )
     assert code == 1
+
+
+# --- control `ci-status` ----------------------------------------------------
+#
+# Encapsula `gh pr checks` porque el primer smoke real demostro que dejar sus nombres
+# de campo a la memoria del agente cuelga el loop en silencio: se pidio un campo
+# `conclusion` que ese subcomando no tiene -pero `gh run list --json` si- y la respuesta
+# de error se leyo como "todavia no hay checks" durante cuatro minutos, con la CI verde.
+#
+# La regla es fail-closed: solo es `verde` un todo-pass explicito con al menos un check
+# que haya pasado de verdad. Todo lo demas es un grado de "no consta".
+
+
+def _gh(*checks: tuple[str, str]) -> str:
+    return json.dumps([{"name": n, "bucket": b, "state": "X"} for n, b in checks])
+
+
+def test_ci_verde_solo_con_todo_pass() -> None:
+    assert controles.clasifica_ci(_gh(("gates", "pass"), ("lint", "pass"))).estado == "verde"
+
+
+def test_ci_verde_admite_checks_saltados_si_alguno_paso() -> None:
+    assert controles.clasifica_ci(_gh(("gates", "pass"), ("e2e", "skipping"))).estado == "verde"
+
+
+def test_ci_sin_checks_si_todos_se_saltaron() -> None:
+    # Nada corrio, asi que no hay verde que afirmar aunque no haya fallado nada.
+    res = controles.clasifica_ci(_gh(("e2e", "skipping")))
+    assert res.estado == "sin-checks"
+
+
+def test_ci_sin_checks_con_lista_vacia() -> None:
+    assert controles.clasifica_ci("[]").estado == "sin-checks"
+
+
+@pytest.mark.parametrize("bucket", ["fail", "cancel"])
+def test_ci_rojo_con_fallo_o_cancelacion(bucket: str) -> None:
+    res = controles.clasifica_ci(_gh(("gates", "pass"), ("tests", bucket)))
+    assert res.estado == "rojo"
+    assert any("tests" in h for h in res.hallazgos)
+
+
+def test_ci_pendiente_gana_a_pass_pero_no_a_rojo() -> None:
+    assert controles.clasifica_ci(_gh(("a", "pass"), ("b", "pending"))).estado == "pendiente"
+    assert controles.clasifica_ci(_gh(("a", "fail"), ("b", "pending"))).estado == "rojo"
+
+
+def test_ci_desconocido_si_la_respuesta_no_es_json() -> None:
+    # El fallo exacto del smoke: `gh` responde con un error de campo invalido y eso NO
+    # es "aun no hay checks". Si esto vuelve a leerse como pendiente, el loop se cuelga.
+    res = controles.clasifica_ci('Unknown JSON field: "conclusion"\nAvailable fields:\n  bucket\n')
+    assert res.estado == "desconocido"
+    assert any("conclusion" in h for h in res.hallazgos)
+
+
+def test_ci_desconocido_con_respuesta_vacia() -> None:
+    assert controles.clasifica_ci("").estado == "desconocido"
+
+
+def test_ci_desconocido_si_no_es_una_lista() -> None:
+    assert controles.clasifica_ci('{"bucket": "pass"}').estado == "desconocido"
+
+
+def test_ci_desconocido_ante_un_bucket_que_no_conoce() -> None:
+    # Una version de `gh` que sabe algo que este script no. Fail-closed: no es verde.
+    res = controles.clasifica_ci(_gh(("gates", "flaky-retry")))
+    assert res.estado == "desconocido"
+    assert any("flaky-retry" in h for h in res.hallazgos)
+
+
+def test_ci_estados_declarados_son_los_que_emite_el_clasificador() -> None:
+    # `CI_ESTADOS` no es decorativo: es lo que documenta la skill y lo que mapea el exit
+    # code, asi que cada estado tiene que tener su entrada.
+    assert set(controles.CI_ESTADOS) == set(controles._CI_EXIT)
+
+
+@pytest.mark.parametrize(
+    ("stdout", "esperado"),
+    [
+        (_gh(("a", "pass")), 0),
+        (_gh(("a", "fail")), 1),
+        (_gh(("a", "pending")), 3),
+        ("[]", 4),
+        ("no-json", 4),
+    ],
+)
+def test_main_ci_status_exit_code_por_rama(
+    stdout: str,
+    esperado: int,
+    repo: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # Un exit code por rama del paso 9, para que un tick pueda decidir sin parsear. Y a
+    # diferencia de `gh pr checks`, el 1 significa SOLO CI roja: una respuesta ilegible
+    # es 4, nunca 1.
+    monkeypatch.setattr(
+        "controles.subprocess.run",
+        lambda *a, **k: subprocess.CompletedProcess(a[0], 0, stdout, ""),
+    )
+    code = controles.main(["ci-status", "--repo", str(repo), "--pr", "4", "--json"])
+    assert code == esperado
+    assert json.loads(capsys.readouterr().out)["control"] == "ci-status"
+
+
+def test_ci_status_adjunta_el_stderr_de_gh_si_no_entiende_la_respuesta(
+    repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        "controles.subprocess.run",
+        lambda *a, **k: subprocess.CompletedProcess(a[0], 1, "", "gh: no pull requests found"),
+    )
+    res = controles.consulta_ci(str(repo), 4)
+    assert res.estado == "desconocido"
+    assert any("no pull requests found" in h for h in res.hallazgos)
+
+
+def test_ci_status_no_ofrece_watch() -> None:
+    # Un script que poll-ea es la shell bloqueante que slice-runner prohibe: el ticking
+    # lo hace el harness. Si alguien anade `--watch`, esto cae.
+    with pytest.raises(SystemExit):
+        controles.main(["ci-status", "--repo", ".", "--pr", "4", "--watch"])

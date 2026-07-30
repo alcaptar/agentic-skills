@@ -39,7 +39,7 @@ Nivel de autonomia 1: un ciclo por invocacion. Para encadenar slices, envolver e
 - **Controles de parada objetivos.** No hay PR mergeable sin lint limpio, tipos limpios, tests verdes y **CI verde**, ejecutados con los comandos que **el repo declara en el issue** (paso 2), no con binarios asumidos ni deducidos al vuelo.
 - **Los controles los declara el issue, no los deduce nadie en tiempo de run.** La seccion `## Controles` (que escribe `slice-spec` tras descubrirlos y **confirmarlos contigo**) es la unica fuente: ningun agente abre un `Makefile` durante la slice. Deducirlos en cada slice metia el `Makefile` en el contexto del agente de vida mas larga del loop y no dejaba rastro que nadie pudiera revisar. Y dejarselo al implementador seria peor: el **juzgado estaria definiendo la vara con la que se le juzga**, y basta `compliance-bias` para que acabe midiendose con `make test-unit`.
 - **Nadie que juzgue ve output de build.** Los controles deterministas (lint, tipos, tests) corren **antes** del verificador: el implementador los corre en su ciclo para tener feedback incremental, y el orquestador los re-corre como backstop (paso 6) porque el auto-reporte del implementador no es fuente de verdad. El verificador (paso 7) no recibe nada de ellos -ya estan verdes por construccion- y el orquestador tampoco los lee: con `--out` la salida va a disco y el orquestador solo reenvia rutas. Meter un traceback de pytest en el contexto del unico agente cuyo valor es el juicio es `limited-focus` autoinfligido, y un `ruff` sucio no debe consumir un reintento adversarial.
-- **Determinista lo que es regla exacta (`offload-deterministic`).** Lo mecanico NO se delega al juicio de un agente: lo resuelve el script `scripts/controles.py`, cuyo exit code es autoritativo. Tres subcomandos: `pr-hygiene` (higiene del diff staged, paso 8), `controles` (ejecutar los comandos declarados y devolver exit code + la ruta del log, pasos 5 y 6) y `diff-bundle` (materializar el diff de la slice para el verificador, paso 7). No se pide dos veces a la IA lo que un script decide una vez, y ningun agente ve output crudo de build.
+- **Determinista lo que es regla exacta (`offload-deterministic`).** Lo mecanico NO se delega al juicio de un agente: lo resuelve el script `scripts/controles.py`, cuyo exit code es autoritativo. Cuatro subcomandos, todos en el paso 7 salvo donde se diga: `pr-hygiene` (higiene del diff staged), `controles` (ejecutar los comandos declarados y devolver exit code + la ruta del log, pasos 5 y 6), `diff-bundle` (materializar el diff del indice para el verificador) y `ci-status` (estado de la CI de la PR en un tiro, paso 9). No se pide dos veces a la IA lo que un script decide una vez, ningun agente ve output crudo de build, y ninguna invocacion externa depende de que el agente recuerde el nombre de un campo.
 - **Los tests son ciudadanos de primera categoria.** Valen tanto o mas que el codigo de produccion: ahi va el mayor esfuerzo de calidad, y sobre todo la exigencia de que **testeen de verdad lo que la slice pretende construir**, no una version debilitada ni un proxy que pasa por casualidad. Un test que pasa sin fijar su criterio de aceptacion es un fallo tan grave como codigo roto. Con dientes, no como declaracion: el implementador aplica `writing-good-tests.md` de `superpowers:test-driven-development` (nombrar el cambio de produccion que haria fallar el test **antes** de escribirlo; asertar comportamiento real, nunca mocks; codigo de test fuera de produccion), y el verificador lo bloquea con severidad **alta** en el paso 7 (mapeo criterio↔test, fixture/wiring theater, manipulacion de tests, test-desiderata).
 - **TDD consciente de capa.** El ciclo TDD lo define `superpowers:test-driven-development` (lo invoca el implementador, paso 5); aqui vive solo el delta: si las convenciones del repo eximen una capa (p. ej. modelos ORM y migraciones que no se testean por separado), el control de esa slice es "suite intacta + verificacion de datos/efecto" en vez del test-first por criterio. Decide la convencion del repo, no este documento ni superpowers.
 - **Alinear antes de implementar.** Antes de escribir codigo, mostrar el entendimiento de la slice (alcance, criterios de aceptacion, capa afectada, comando de validacion) y esperar go/no-go. Nunca transcribir a ciegas el codigo pre-horneado de una spec: validalo contra las convenciones primero.
@@ -150,8 +150,9 @@ El estado se codifica en la linea con `[estado]` (y `PR #N` cuando aplica):
 - `esperando-merge` — PR abierta, CI verde, esperando la decision humana de merge.
 - `mergeada` — PR mergeada. **Es el unico estado que marca el checkbox `[x]`.**
 - `bloqueada: <motivo>` — `sin-subagentes` (el entorno veta el Agent tool: para en el paso 3 sin escribir
-  codigo), `controles` (lint/tipos/tests sin arreglar tras los reintentos), `verify` (veto del verificador)
-  o `ci-roja`. En `ci-roja` deja el PR abierto; en los otros tres no hay PR.
+  codigo), `controles` (lint/tipos/tests sin arreglar tras los reintentos), `verify` (veto del verificador),
+  `ci-roja`, o `ci-indeterminada` (la CI no se pudo medir: sin checks, o respuesta de `gh` ilegible; no es
+  ni verde ni rojo). En `ci-roja` y `ci-indeterminada` deja el PR abierto; en los otros tres no hay PR.
 - `abortada: presupuesto` — supero el presupuesto de la slice.
 
 `[x]` solo al merge mantiene la barra de progreso nativa de GitHub fiel a lo que esta en main. El
@@ -405,17 +406,32 @@ Lanza un Agent con `subagent_type: slice-verifier`. Es un **agente definido**
   cumplimiento es no darle la tool. `model: inherit` conserva el modelo fuerte de la sesion, que el
   juicio mas sutil -el patron de rollout- requiere.
 
-**Antes de invocarlo, materializa el diff (`[det]`).** Como no tiene `Bash`, no puede calcularlo:
+**Antes de invocarlo, deja el indice listo, en este orden (`[det]`).** El verificador juzga el
+**indice**, no `HEAD`, porque el commit va **despues** (paso 8): asi un veto no deja rastro que
+deshacer y la slice sigue siendo un solo commit sin `--amend`. Y como el indice es exactamente lo que
+sera el commit, juzga lo que ira en la PR y no una aproximacion.
 
-    python3 ~/.claude/skills/slice-runner/scripts/controles.py diff-bundle --repo <repo-de-la-slice> \
-      --base <base> --out <dir-fuera-del-repo> --json
+1. **Stagea SOLO los ficheros de codigo/test que devolvio el implementador**, con la lista explicita:
+   `git add <ruta1> <ruta2> ...`. **Prohibido `git add -A`, `git add .` o `git commit -a`**. Planes y
+   design-docs jamas entran en la PR (la spec vive en el issue, no como fichero).
+2. **Higiene del diff staged**:
+   `python3 ~/.claude/skills/slice-runner/scripts/controles.py pr-hygiene --repo <repo-de-la-slice> --allow <ruta1> --allow <ruta2> ...`
+   con la lista exacta que devolvio el implementador. Exit 0 = PASA. Si FALLA (algo staged fuera de lo
+   declarado, o un artefacto), **corrige el staging** (`git restore --staged`) y reintenta; no lo
+   re-interpretes a ojo. **No sigas al 3 hasta PASA**: un fichero **untracked es invisible** al diff
+   del indice, asi que este control es lo que garantiza que lo que el verificador va a juzgar es
+   igual a lo que el implementador declaro. Aqui protege al paso 7, no solo a la PR.
+3. **Materializa el diff**, que el verificador no puede calcular (no tiene `Bash`):
 
-Escribe `slice.diff` (rango `<base>...HEAD`) y `files.txt`, y devuelve sus rutas. El `--out` va **fuera
-del repo** (p. ej. bajo `/tmp`): un fichero de trabajo dentro nunca debe poder acabar en la PR. El rango
-lo fija el script -tres puntos, desde el branch-point- y no tu criterio: con `..`, los commits que la
-base haya avanzado desde entonces saldrian como borrados y el verificador cazaria violaciones fantasma.
-Si devuelve FALLA (base inexistente, o cero cambios), arreglalo antes de invocar: sin diff no hay nada
-que verificar.
+       python3 ~/.claude/skills/slice-runner/scripts/controles.py diff-bundle --repo <repo-de-la-slice> \
+         --base <base> --out <dir-fuera-del-repo> --json
+
+Escribe `slice.diff` y `files.txt`, y devuelve sus rutas. El `--out` va **fuera del repo** (p. ej. bajo
+`/tmp`): un fichero de trabajo dentro nunca debe poder acabar en la PR. El rango lo fija el script -el
+indice contra el branch-point- y no tu criterio: sin anclar en el branch-point, los commits que la base
+haya avanzado desde entonces saldrian como borrados y el verificador cazaria violaciones fantasma. Si
+devuelve FALLA (base inexistente, o nada staged), arreglalo antes de invocar: sin diff no hay nada que
+verificar, y "nada staged" suele ser el `git add` olvidado del punto 1.
 
 **No le pases nada de los controles**: cuando llega aqui estan verdes por construccion (paso 6), asi que
 un resumen seria cero informacion y solo gastaria contexto. Tampoco le pases el "resumen del enfoque"
@@ -462,17 +478,12 @@ reintenta la invocacion, no se parsea a mano):
   del verificador no se abre PR. Sin esto, el rechazo del verificador -justo lo que queremos medir- no
   dejaria rastro.
 
-### 8. Abrir PR
+### 8. Commitear y abrir PR
 
-- **Stagea SOLO los ficheros de codigo/test que devolvio el implementador.** Usa
-  `git add <ruta1> <ruta2> ...` con la lista explicita; **prohibido `git add -A`, `git add .`
-  o `git commit -a`**. Planes y design-docs NO entran en la PR (la spec vive en el issue, no como
-  fichero).
-- **Control determinista de higiene (`[det]`).** Tras stagear, corre
-  `python3 ~/.claude/skills/slice-runner/scripts/controles.py pr-hygiene --repo <repo-de-la-slice> --allow <ruta1> --allow <ruta2> ...`
-  con la lista exacta que devolvio el implementador. Exit 0 = PASA. Si FALLA (algo staged fuera de
-  lo declarado, o un artefacto: plan, design-doc), **corrige el staging** (`git restore --staged`) y
-  reintenta; no lo re-interpretes a ojo. No commitees hasta PASA.
+El indice ya esta staged y con `pr-hygiene` en PASA desde el paso 7, y el verificador ya dio PASA
+sobre **ese** indice. Aqui solo se commitea lo que ya se juzgo: **no stagees nada mas entre el paso 7
+y el commit**, porque seria codigo que entra en la PR sin haber pasado por el verificador.
+
 - **Conventional commit.** Mensaje y titulo de PR = `type(name): resumen`, con el `type` (por
   defecto `feat`) y el `name` de la slice como scope: p. ej. `feat(cantidad-vo): add Cantidad value
   object`. Redactar un conventional commit lo haces bien sin control; lo unico determinista aqui es
@@ -512,10 +523,34 @@ reintenta la invocacion, no se parsea a mano):
 
 ### 9. Esperar CI verde (control final)
 
-- Espera hasta verde o rojo con **ticks acotados en background + notificacion** (o la herramienta `Monitor`), **nunca** `gh pr checks --watch` ni un `sleep` largo que bloquee la shell/sesion (principio de esperas no bloqueantes; es trabajo deterministico que hace el harness, no la IA poll-eando). Cada tick consulta `gh pr checks --json` y devuelve el control. Respeta un timeout de espera razonable.
-- **Verde**: **registra la metrica durable** (ver abajo, `ci=green`), marca la slice `esperando-merge` en el issue (aun **no** `[x]`: el merge es humano; ver paso 10) y **pasa al paso 10** (no paras aqui).
-- **Rojo**: trae los logs del check fallido (`gh run view --log-failed`), un reintento via paso 5 con esos logs.
+- Espera con **ticks acotados en background + notificacion** (o la herramienta `Monitor`), **nunca**
+  `gh pr checks --watch` ni un `sleep` largo que bloquee la shell/sesion (principio de esperas no
+  bloqueantes; es trabajo deterministico que hace el harness, no la IA poll-eando). Respeta un timeout
+  de espera razonable.
+- **Cada tick es una llamada a `ci-status` (`[det]`)**, nunca un `gh pr checks` a mano:
+
+      python3 ~/.claude/skills/slice-runner/scripts/controles.py ci-status --repo <repo-de-la-slice> \
+        --pr <M> --json
+
+  Devuelve un `estado` de cinco valores y un exit code por rama (0 verde, 1 rojo, 3 pendiente, 4
+  indeterminado, 2 error de uso). **No inventes la invocacion de `gh`.** `gh pr checks --json` **no
+  tiene campo `conclusion`** -aunque `gh run list --json` si-, y pedirselo devuelve un error que se
+  lee igual que "aun no hay checks": en el primer smoke real eso reporto "sin checks" doce ticks
+  seguidos con la CI verde desde el segundo 14. El script existe para que ese nombre no vuelva a
+  depender de tu memoria.
+- **`verde`**: **registra la metrica durable** (ver abajo, `ci=green`), marca la slice
+  `esperando-merge` en el issue (aun **no** `[x]`: el merge es humano; ver paso 10) y **pasa al paso
+  10** (no paras aqui). Solo es verde un todo-pass explicito con al menos un check que haya corrido;
+  lo decide el script, no tu lectura.
+- **`pendiente`**: sigue tickeando.
+- **`rojo`**: trae los logs del check fallido (`gh run view --log-failed`), un reintento via paso 5 con esos logs.
   - Si tras el reintento sigue roja: marca la slice `bloqueada: ci-roja` en el issue, **registra la metrica durable** (`ci=red`), **deja el PR abierto**, resume el fallo con logs y **para** (circuit breaker). No cierres el PR ni descartes la rama/worktree.
+- **`sin-checks` o `desconocido`**: la CI **no se puede medir** (la PR no tiene checks, o la respuesta
+  de `gh` no era legible). No es un fallo de la slice, asi que no reintentes; y no es verde, asi que no
+  sigas al paso 10. Marca la slice `bloqueada: ci-indeterminada` en el issue con el estado concreto y
+  los `hallazgos`, **registra la metrica durable** (`ci=none`), **deja el PR abierto** y **para**.
+  Tratarlo como verde reportaria una PR sin CI como validada; tratarlo como rojo mandaria al
+  implementador a arreglar un fallo que no existe.
 - Si en cualquier momento se supera el presupuesto de tokens/$ de la slice: marca la slice `abortada: presupuesto` en el issue, **registra la metrica durable** (`veredicto=abortada-presupuesto`) y para.
 
 **Registro de la metrica durable (`[det]`).** Al cerrar la slice, en **cualquiera** de los caminos de cierre (controles agotados del paso 6, verify terminal FALLA del paso 7, CI verde, CI roja terminal, o presupuesto), anexa un registro con:

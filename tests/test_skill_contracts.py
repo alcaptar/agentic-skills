@@ -19,6 +19,7 @@ import re
 import subprocess
 from pathlib import Path
 
+import controles
 import issue_body
 import metrics
 
@@ -65,6 +66,30 @@ def test_blocked_reasons_written_by_the_runner_are_the_ones_the_parser_knows() -
         f"{_rel(_RUNNER)} and issue_body.MOTIVOS_BLOQUEADA disagree on the blocked reasons: "
         f"only in the skill {sorted(written - set(issue_body.MOTIVOS_BLOQUEADA))}, "
         f"only in the parser {sorted(set(issue_body.MOTIVOS_BLOQUEADA) - written)}"
+    )
+
+
+# --- CI state vocabulary ----------------------------------------------------------------
+
+
+def test_ci_states_branched_on_by_step_9_are_the_ones_the_script_emits() -> None:
+    """Step 9 branches once per `ci-status` state; the script is what produces them.
+
+    A state the skill never branches on is a run that falls through with no rule; a state
+    the skill invents is a branch that never fires. Both were live risks the moment
+    `ci-status` gained a fifth state that is neither green nor red.
+    """
+    step_9 = re.search(r"^### 9\..*?(?=^### )", _read(_RUNNER), re.MULTILINE | re.DOTALL)
+    assert step_9, f"cannot find step 9 in {_rel(_RUNNER)}"
+
+    branched: set[str] = set()
+    for bullet in re.findall(r"^- \*\*(.+?)\*\*:", step_9.group(0), re.MULTILINE):
+        branched |= set(re.findall(r"`([a-z-]+)`", bullet))
+
+    assert branched == set(controles.CI_ESTADOS), (
+        f"{_rel(_RUNNER)} step 9 and controles.CI_ESTADOS disagree on the CI states: "
+        f"only in the skill {sorted(branched - set(controles.CI_ESTADOS))}, "
+        f"only in the script {sorted(set(controles.CI_ESTADOS) - branched)}"
     )
 
 

@@ -98,6 +98,18 @@ version en disco ya no declaraba, y usaba `Bash`, que ya no estaba en su `tools`
   valida a no tener `Bash`-.
 - **El verificador recibe el diff en disco** (`controles.py diff-bundle`), no lo calcula. Comprueba que
   `--out` apunta **fuera del repo**: un fichero de trabajo dentro no debe poder acabar en la PR.
+- **El orden del tramo 7-8 se respeta**: `git add` -> `pr-hygiene` -> `diff-bundle` -> verificador ->
+  **commit**. El commit va DESPUES del veredicto, asi que un FALLA no deja rastro y la slice sigue
+  siendo un solo commit sin `--amend`. Es donde el smoke del 2026-07-29 se encontro el defecto
+  bloqueante: `diff-bundle` mirava `<base>...HEAD` y el commit estaba despues, asi que el paso 7
+  recibia "sin cambios" con la slice entera implementada. Si vuelve a aparecer, alguien ha devuelto
+  el commit a su sitio anterior.
+- **La CI se consulta con `controles.py ci-status`**, nunca con un `gh pr checks` a mano. Comprueba
+  que un tick devuelve `verde`/`pendiente` y no "sin checks" con la CI ya terminada: `gh pr checks
+  --json` **no tiene campo `conclusion`** (pero `gh run list --json` si), y pedirlo devuelve un error
+  que se lee igual que "aun no hay checks" -en el smoke del 2026-07-29 eso reporto doce ticks
+  seguidos sin checks con la CI verde desde el segundo 14, y el modo de fallo es que **se cuelga
+  hasta el timeout**, no que avise-.
 - **Sin hallazgos de ruido.** Dos que el smoke ya cazo y no deben reaparecer: un hallazgo sobre "no
   puedo constatar que el test precediera a la implementacion" (inverificable con un solo commit, prohibido
   reportarlo) y el mismo assert debilitado contado dos veces como `alta` (`manipulacion-tests` +

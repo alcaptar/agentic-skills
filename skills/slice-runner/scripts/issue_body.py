@@ -60,7 +60,16 @@ ESTADOS = (
 # renombrado, y hay issues abiertos con ese marcador escrito en el cuerpo: se normaliza al
 # parsear para que nadie aguas abajo tenga que conocer las dos formas. Mismo trato que
 # `AC:` -> `ACEPTACION:`.
-MOTIVOS_BLOQUEADA = ("sin-subagentes", "controles", "verify", "ci-roja")
+MOTIVOS_BLOQUEADA = (
+    "sin-subagentes",
+    "controles",
+    "verify",
+    "ci-roja",
+    # La CI no se pudo medir: no hay checks, o la respuesta de `gh` no era legible. No es
+    # `ci-roja` -mentiria en el registro duradero- ni `esperando-merge` -afirmaria un verde
+    # que no hubo-. Lo emite el paso 9 desde `controles.py ci-status`.
+    "ci-indeterminada",
+)
 _MOTIVOS_VIEJOS = {"puertas": "controles"}
 
 # Una linea de slice: checkbox, id `slice-NN`, `(name)` o `(type: name)` opcional, titulo,
