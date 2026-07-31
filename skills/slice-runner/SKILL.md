@@ -200,9 +200,11 @@ agrupa el run de la feature, que es la unidad que se calibra.
       python3 ~/.claude/skills/slice-runner/scripts/issue_body.py show --repo <org/repo> --issue <N> --json [--slice slice-NN]
 
   Devuelve JSON con `slice` (id, name, type, estado, pr, repo, intencion, aceptacion, senal, y la
-  `rama` y el `scope` ya derivados), `fuentes` y `controles` **ya filtrados por el repo de la slice**,
-  `intencion_feature`, y los dos flags de seccion presente. Exit 2 = no hay ninguna linea de slice
-  valida: para y pide una spec valida (o sugiere `/slice-spec`).
+  `rama` y el `scope` ya derivados), `checklist` (**todas** las slices del issue con su titulo, estado
+  y motivo: el alcance declarado de la feature, que viaja al verificador en el paso 7), `fuentes` y
+  `controles` **ya filtrados por el repo de la slice**, `intencion_feature`, y los dos flags de seccion
+  presente. Exit 2 = no hay ninguna linea de slice valida: para y pide una spec valida (o sugiere
+  `/slice-spec`).
 - **Selecciona la slice**: la que indique el usuario, o la primera `pendiente`. No repitas las
   `mergeada`. Una slice en `esperando-merge` se retoma en el paso 10, no se reimplementa.
 - **Determina el repo de trabajo**: `slice.repo` si lo trae, o el del issue. Si es otro, resuelve su
@@ -372,10 +374,16 @@ staged), arreglalo antes de invocar: "nada staged" suele ser el `git add` olvida
 **No le pases nada de los controles** (estan verdes por construccion: un resumen seria cero informacion
 y solo gastaria contexto) **ni el "resumen del enfoque"** del implementador: juzga el diff, no la
 narrativa. **Inputs** (lo del run; lo estable ya esta en el agente): numero de issue, `slice_id` y
-`name`; los criterios de aceptacion tal cual; la `SENAL` tal cual (o exenta con motivo, o que no se
-declara); las fuentes de convencion del repo de la slice, y el repo destino si no es el del issue; las
-rutas de `slice.diff` y `files.txt`; la ruta del repo, para que lea el codigo alrededor del diff; y la
-lista etiquetada produccion/test del paso 5.
+`name`; **el `checklist` que emitio `show` en el paso 1** (todas las slices del issue con su titulo,
+estado y motivo); los criterios de aceptacion tal cual; la `SENAL` tal cual (o exenta con motivo, o que
+no se declara); las fuentes de convencion del repo de la slice, y el repo destino si no es el del issue;
+las rutas de `slice.diff` y `files.txt`; la ruta del repo, para que lea el codigo alrededor del diff; y
+la lista etiquetada produccion/test del paso 5.
+
+**El checklist no contradice lo de arriba**: no lo cuenta el implementador, lo declara el issue. Va **tal
+cual lo emitio `show`**, sin glosarlo ni reordenarlo -y sin reconstruirlo con un `gh issue view` a mano,
+que es la improvisacion que borro una spec entera-. Para que sirve, y que no puede hacer con el, lo fija
+su system prompt: ahi vive entero, y no se repite aqui.
 
 **Veredicto.** Devuelve como mensaje final exactamente este objeto JSON (lo exige su system prompt; la
 tool `Agent` no valida schemas, asi que si vuelve envuelto en prosa es un fallo del agente y se

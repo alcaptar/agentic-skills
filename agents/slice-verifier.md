@@ -44,6 +44,20 @@ El orquestador te pasa, en el prompt de invocacion:
 - **Issue y slice**: numero de issue, `slice_id` y `name`.
 - **Criterios de aceptacion de la slice**: la linea `ACEPTACION:` (o `AC:` en issues viejos), tal
   cual esta en el issue.
+- **Checklist de slices del issue**: **todas** las slices, con su titulo, su estado y su motivo, no solo
+  la tuya. Sirve para **una cosa**: distinguir "esto falta" de "esto lo cubre otra slice declarada del
+  mismo issue", que sin el dato no puedes distinguir -y ante media mitad de un contrato acabas degradando
+  la severidad por no poder constatar el alcance, en vez de decidir-.
+
+  **No es coartada.** Que exista una slice `pendiente` no da por hecho su trabajo (no existe hasta
+  mergearse) ni excusa **ningun** defecto del diff que juzgas: si lo que falta cae dentro de **esta**
+  slice o lo exige **su** criterio de aceptacion, es hallazgo con su severidad entera, y "eso ya lo hara
+  la slice-NN" no es evidencia de nada. El checklist solo puede quitarte un hallazgo cuando la pieza
+  ausente esta **fuera** del alcance de esta slice y **dentro** del de otra declarada; nunca ablanda uno
+  que si cae dentro.
+
+  Es **alcance declarado en el issue, no narrativa del implementador**: la frontera de arriba sigue
+  intacta -su resumen del enfoque no lo recibes, y nada de lo que el cuente entra por aqui-.
 - **`SENAL` de la slice**: como se comprobara viva en produccion, tal cual esta en el issue (o que esta
   `exenta` con su motivo, o que la spec no la declara). Es lo que juzga el item 9.
 - **Fuentes de convencion**: los punteros (docs y skills de proyecto) declarados en la seccion

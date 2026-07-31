@@ -730,9 +730,15 @@ class Show:
     de lo que un campo declara por construccion. `slice` a `None` significa que no queda ninguna
     slice sin cerrar; el resto de claves se emiten igual, para que quien consuma el JSON no tenga
     que ramificar sobre que claves existen.
+
+    `checklist` son **todas** las slices del issue, no solo la elegida: es el alcance declarado de la
+    feature, que el paso 7 le pasa al verificador para que distinga "esto falta" de "esto lo cubre otra
+    slice declarada" en vez de degradar la severidad por no poder constatarlo. Sale de aqui y no de un
+    `gh issue view` improvisado por la misma razon que el resto del subcomando: leer el issue es regla
+    exacta, no juicio. `slices` es su cuenta, derivada y no un campo, para que no puedan discrepar.
     """
 
-    slices: int
+    checklist: list[Slice]
     slice: SliceInfo | None = None
     intencion_feature: str | None = None
     tiene_seccion_fuentes: bool = False
@@ -740,9 +746,17 @@ class Show:
     fuentes: list[Fuente] = field(default_factory=list)
     controles: list[Control] = field(default_factory=list)
 
+    @property
+    def slices(self) -> int:
+        return len(self.checklist)
+
     def to_dict(self) -> dict[str, object]:
         return {
             "slices": self.slices,
+            "checklist": [
+                {"slice_id": sl.slice_id, "titulo": sl.title, "estado": sl.estado, "motivo": sl.motivo}
+                for sl in self.checklist
+            ],
             "intencion_feature": self.intencion_feature,
             "tiene_seccion_fuentes": self.tiene_seccion_fuentes,
             "tiene_seccion_controles": self.tiene_seccion_controles,
@@ -814,11 +828,11 @@ def _cmd_show(args: argparse.Namespace) -> int:
         if args.slice:
             print(f"error: {args.slice} no esta en el issue", file=sys.stderr)
             return 2
-        return _emit_show(Show(slices=len(slices)), args.json)
+        return _emit_show(Show(checklist=slices), args.json)
 
     return _emit_show(
         Show(
-            slices=len(slices),
+            checklist=slices,
             slice=SliceInfo(slice_=elegida),
             intencion_feature=parse_intencion(body),
             tiene_seccion_fuentes=tiene_seccion_fuentes(body),

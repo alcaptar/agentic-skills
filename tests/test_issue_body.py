@@ -667,6 +667,39 @@ def test_cli_show_de_una_slice_concreta(monkeypatch: pytest.MonkeyPatch, capsys:
     assert json.loads(capsys.readouterr().out)["slice"]["slice_id"] == "slice-01"
 
 
+def test_cli_show_emite_el_checklist_entero_con_el_estado_de_cada_slice(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """El alcance del issue es un dato del run, no memoria del orquestador.
+
+    El paso 7 se lo pasa al verificador para que distinga "esto falta" de "esto lo cubre otra slice
+    declarada". Sin esta clave el orquestador tendria que improvisar un `gh issue view` a mano, que es
+    justo lo que la skill prohibe.
+    """
+    _fake_gh(monkeypatch, _BODY)
+    assert issue_body.main(["show", "--repo", "o/r", "--issue", "3", "--json"]) == 0
+    data = json.loads(capsys.readouterr().out)
+    assert data["checklist"] == [
+        {"slice_id": "slice-01", "titulo": "Crear VO", "estado": "mergeada", "motivo": ""},
+        {"slice_id": "slice-02", "titulo": "Caso de uso AjustarStock", "estado": "esperando-merge", "motivo": ""},
+        {"slice_id": "slice-03", "titulo": "Extraer repo", "estado": "en-curso", "motivo": ""},
+        {"slice_id": "slice-04", "titulo": "Backfill", "estado": "bloqueada", "motivo": "ci-roja"},
+        {"slice_id": "slice-05", "titulo": "Retirar flag", "estado": "pendiente", "motivo": ""},
+    ]
+    assert data["slices"] == 5
+
+
+def test_cli_show_emite_el_checklist_aunque_no_quede_ninguna_slice_sin_cerrar(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Las claves se emiten siempre: quien consume el JSON no ramifica sobre cuales existen."""
+    _fake_gh(monkeypatch, "- [x] slice-01 (cantidad-vo): Crear VO [mergeada] PR #11\n")
+    assert issue_body.main(["show", "--repo", "o/r", "--issue", "3", "--json"]) == 0
+    data = json.loads(capsys.readouterr().out)
+    assert data["slice"] is None
+    assert data["checklist"] == [{"slice_id": "slice-01", "titulo": "Crear VO", "estado": "mergeada", "motivo": ""}]
+
+
 def test_cli_show_exit_2_si_la_slice_no_esta(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
