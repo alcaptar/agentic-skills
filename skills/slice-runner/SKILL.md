@@ -486,7 +486,14 @@ campo `conclusion`** -aunque `gh run list --json` si- y pedirselo devuelve un er
 - **`rojo`**: trae los logs del check fallido (`gh run view --log-failed`) y un reintento via paso 5 con
   esos logs. Si sigue roja: marca `bloqueada: ci-roja`, **registra la metrica durable** (`ci=red`),
   **deja el PR abierto**, resume el fallo con logs y **para**. No cierres el PR ni descartes la rama.
-- **`sin-checks` o `desconocido`**: la CI **no se puede medir**. No es un fallo de la slice, asi que no
+- **`sin-checks` o `desconocido`**: la CI **no consta**, y en el primer tick eso todavia no es un
+  diagnostico: los dos estados aparecen tambien de forma **transitoria** en la ventana entre abrir la PR
+  y que GitHub registre los checks. **Ventana de gracia: hacen falta 3 ticks indeterminados
+  consecutivos, con 30 s o mas entre tick y tick, antes de cerrar** -el numero esta escrito aqui
+  precisamente para que no lo decidas tu-. Hasta agotarla sigue tickeando sin tocar el estado de la
+  slice, y **sin** reclasificar a `pendiente`: ese estado significa "hay checks corriendo" y tickearia
+  hasta el timeout, colgando justo la PR que de verdad no tiene CI. Agotada la ventana la CI **no se
+  puede medir** y la regla es la misma de siempre, fail-closed: no es un fallo de la slice, asi que no
   reintentes; y no es verde, asi que no sigas al paso 10. Marca `bloqueada: ci-indeterminada` con el
   estado concreto, **registra la metrica durable** (`ci=none`), **deja el PR abierto** y **para**.
   Tratarlo como verde reportaria una PR sin CI como validada; tratarlo como rojo mandaria al
