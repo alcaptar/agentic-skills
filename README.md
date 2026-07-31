@@ -127,9 +127,10 @@ son los unicos puntos donde para y decides tu.
   salida va a disco: el orquestador reenvia rutas sin leerlas. Un `ruff` sucio no debe gastar un
   reintento adversarial, y un traceback de pytest en el contexto del unico agente cuyo valor es el
   juicio es contaminarlo gratis.
-- **El orden del tramo final no es cosmetico**: `git add` -> `pr-hygiene` -> `diff-bundle` ->
-  verificador -> **commit**. El commit va detras del veredicto, asi que un FALLA no deja rastro que
-  deshacer y la slice sigue siendo un solo commit sin `--amend`.
+- **El orden del tramo final no es cosmetico**: `git add` -> `pr-hygiene` -> controles ->
+  `diff-bundle` -> verificador -> **commit**. Se stagea antes de medir -un control que lee el indice
+  no ve un fichero nuevo sin stagear- y el commit va detras del veredicto, asi que un FALLA no deja
+  rastro que deshacer y la slice sigue siendo un solo commit sin `--amend`.
 - **La intencion viaja y no se resume.** El issue abre con `## Intencion` y cada slice lleva su linea
   `INTENCION:`; de ahi sale el cuerpo de la pull request, que cuenta **el por que** en vez de narrar el
   diff -eso ya lo cuenta GitHub mejor-. Vara: si borras la slice, ¿que queda roto o imposible?
