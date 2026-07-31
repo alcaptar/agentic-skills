@@ -7,8 +7,13 @@
 
 .PHONY: test check-types check-style check-format linting fix-linting check
 
+# `PYTEST_ARGS` deja pasar parametros sin tocar el target, que es lo que pide
+# `backend-best-practices` para las sesiones con agente:
+#   make test PYTEST_ARGS="--nf -x --tb=short --disable-warnings --color=no --no-header"
+PYTEST_ARGS ?=
+
 test:
-	uv run pytest -q
+	uv run pytest -q $(PYTEST_ARGS)
 
 check-types:
 	uv run mypy skills tests

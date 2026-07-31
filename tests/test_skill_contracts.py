@@ -50,11 +50,8 @@ def _tracked(*patterns: str) -> list[str]:
     return sorted(p for p in out.split("\0") if p)
 
 
-# --- slice state vocabulary -------------------------------------------------------------
-
-
 def test_blocked_reasons_written_by_the_runner_are_the_ones_the_parser_knows() -> None:
-    """`bloqueada: X` markers in the runner must be exactly `issue_body.MOTIVOS_BLOQUEADA`.
+    """`bloqueada: X` markers in the runner must be exactly `issue_body.MotivoBloqueada`.
 
     The runner writes these markers into the issue body; `issue_body` is what reads them back.
     A reason documented but unknown to the parser makes the slice line unreadable downstream;
@@ -64,14 +61,11 @@ def test_blocked_reasons_written_by_the_runner_are_the_ones_the_parser_knows() -
     """
     written = set(re.findall(r"`bloqueada: ([a-z0-9-]+)`", _read(_RUNNER)))
 
-    assert written == set(issue_body.MOTIVOS_BLOQUEADA), (
-        f"{_rel(_RUNNER)} and issue_body.MOTIVOS_BLOQUEADA disagree on the blocked reasons: "
-        f"only in the skill {sorted(written - set(issue_body.MOTIVOS_BLOQUEADA))}, "
-        f"only in the parser {sorted(set(issue_body.MOTIVOS_BLOQUEADA) - written)}"
+    assert written == set(issue_body.MotivoBloqueada), (
+        f"{_rel(_RUNNER)} and issue_body.MotivoBloqueada disagree on the blocked reasons: "
+        f"only in the skill {sorted(written - set(issue_body.MotivoBloqueada))}, "
+        f"only in the parser {sorted(set(issue_body.MotivoBloqueada) - written)}"
     )
-
-
-# --- CI state vocabulary ----------------------------------------------------------------
 
 
 def test_ci_states_branched_on_by_step_9_are_the_ones_the_script_emits() -> None:
@@ -88,18 +82,15 @@ def test_ci_states_branched_on_by_step_9_are_the_ones_the_script_emits() -> None
     for bullet in re.findall(r"^- \*\*(.+?)\*\*:", step_9.group(0), re.MULTILINE):
         branched |= set(re.findall(r"`([a-z-]+)`", bullet))
 
-    assert branched == set(controles.CI_ESTADOS), (
-        f"{_rel(_RUNNER)} step 9 and controles.CI_ESTADOS disagree on the CI states: "
-        f"only in the skill {sorted(branched - set(controles.CI_ESTADOS))}, "
-        f"only in the script {sorted(set(controles.CI_ESTADOS) - branched)}"
+    assert branched == set(controles.EstadoCI), (
+        f"{_rel(_RUNNER)} step 9 and controles.EstadoCI disagree on the CI states: "
+        f"only in the skill {sorted(branched - set(controles.EstadoCI))}, "
+        f"only in the script {sorted(set(controles.EstadoCI) - branched)}"
     )
 
 
-# --- durable metrics vocabulary ---------------------------------------------------------
-
-
 def test_verdicts_the_runner_records_are_the_ones_the_metrics_cli_accepts() -> None:
-    """The `--veredicto <...>` literal in the runner must match `metrics.VEREDICTOS`.
+    """The `--veredicto <...>` literal in the runner must match `metrics.Veredicto`.
 
     The runner spells the accepted values inline in the command it tells the agent to run.
     If they drift, the closing step of a slice fails on an argparse error at the exact moment
@@ -111,14 +102,11 @@ def test_verdicts_the_runner_records_are_the_ones_the_metrics_cli_accepts() -> N
     )
     documented = set(spelled[0].split("|"))
 
-    assert documented == set(metrics.VEREDICTOS), (
-        f"{_rel(_RUNNER)} and metrics.VEREDICTOS disagree on the recordable verdicts: "
-        f"only in the skill {sorted(documented - set(metrics.VEREDICTOS))}, "
-        f"only in the CLI {sorted(set(metrics.VEREDICTOS) - documented)}"
+    assert documented == set(metrics.Veredicto), (
+        f"{_rel(_RUNNER)} and metrics.Veredicto disagree on the recordable verdicts: "
+        f"only in the skill {sorted(documented - set(metrics.Veredicto))}, "
+        f"only in the CLI {sorted(set(metrics.Veredicto) - documented)}"
     )
-
-
-# --- verifier verdict contract ----------------------------------------------------------
 
 
 def _json_shape(value: object) -> object:
@@ -137,9 +125,7 @@ def _json_shape(value: object) -> object:
 
 def _sole_json_block(path: Path) -> object:
     blocks = re.findall(r"```json\n(.*?)```", _read(path), re.DOTALL)
-    assert len(blocks) == 1, (
-        f"expected exactly one ```json block in {_rel(path)}, found {len(blocks)}"
-    )
+    assert len(blocks) == 1, f"expected exactly one ```json block in {_rel(path)}, found {len(blocks)}"
     return json.loads(blocks[0])
 
 
@@ -166,32 +152,31 @@ def test_severity_levels_in_the_verdict_schema_are_the_ones_the_validator_accept
     schema = _sole_json_block(_RUNNER)
     assert isinstance(schema, dict)
     hallazgos = schema["hallazgos"]
-    assert isinstance(hallazgos, list) and hallazgos
+    assert isinstance(hallazgos, list)
+    assert hallazgos
     primero = hallazgos[0]
     assert isinstance(primero, dict)
     documented = {s.strip() for s in str(primero["severidad"]).split("|")}
 
-    assert documented == set(controles.SEVERIDADES), (
-        f"the verdict schema in {_rel(_RUNNER)} and controles.SEVERIDADES disagree: "
-        f"only in the skill {sorted(documented - set(controles.SEVERIDADES))}, "
-        f"only in the validator {sorted(set(controles.SEVERIDADES) - documented)}"
+    assert documented == set(controles.Severidad), (
+        f"the verdict schema in {_rel(_RUNNER)} and controles.Severidad disagree: "
+        f"only in the skill {sorted(documented - set(controles.Severidad))}, "
+        f"only in the validator {sorted(set(controles.Severidad) - documented)}"
     )
 
 
-# --- deliberately duplicated policy: what to do when subagents are vetoed ----------------
-
-# Short, stable phrase used only to locate the criterion; the sentence it belongs to is
-# extracted from the files rather than hardcoded here, so rewording both copies in step
-# still passes.
 _CRITERION_ANCHOR = "declarar la degradacion en el artefacto"
+"""Short, stable phrase used only to locate the criterion.
+
+The sentence it belongs to is extracted from the files rather than hardcoded here, so rewording
+both copies in step still passes.
+"""
 
 
 def _degradation_criterion(path: Path) -> str:
     """The bold question that both skills use to decide between degrading and stopping."""
     questions: list[str] = [
-        question
-        for question in re.findall(r"\*\*(¿[^*]+?\?)\*\*", _read(path))
-        if _CRITERION_ANCHOR in question
+        question for question in re.findall(r"\*\*(¿[^*]+?\?)\*\*", _read(path)) if _CRITERION_ANCHOR in question
     ]
     assert len(questions) == 1, (
         f"expected exactly one degradation criterion in {_rel(path)}, found {len(questions)}; "
@@ -226,9 +211,6 @@ def test_each_skill_names_the_other_when_declaring_its_side_of_the_criterion() -
     assert "slice-runner" in _read(_DEPLOY_WATCH), (
         f"{_rel(_DEPLOY_WATCH)} no longer cites slice-runner; the asymmetry then reads as a bug"
     )
-
-
-# --- CLI surface consistency ------------------------------------------------------------
 
 
 def test_every_subcommand_of_both_scripts_accepts_json() -> None:
@@ -266,41 +248,44 @@ def _subcommand_parsers(parser: argparse.ArgumentParser) -> dict[str, argparse.A
     """
     for action in parser._actions:
         choices = action.choices
-        if isinstance(choices, dict) and all(
-            isinstance(sub, argparse.ArgumentParser) for sub in choices.values()
-        ):
+        if isinstance(choices, dict) and all(isinstance(sub, argparse.ArgumentParser) for sub in choices.values()):
             return dict(choices)
     return {}
 
 
-# --- paths the prose claims about this repo's own tree -----------------------------------
-
-# The docs here do not use markdown links for local files; they cite paths in backticks. So
-# the thing to validate is not `[x](y)` -- there are none -- but every backticked token that
-# claims something about this tree. A token qualifies only when its first component is a
-# tracked top-level entry: that keeps bare filenames (`controles.py`), paths in other repos
-# (`monitoring/metrics.py`), and branch patterns (`slice/NN-name`) out by construction,
-# instead of by an allowlist that would have to grow forever.
-
-# Two files are not scanned at all, each for a reason about what the file IS:
 _UNSCANNED = {
-    # Dated design records. They describe the tree as it was on their date and are
-    # deliberately never updated, so a path they cite going away is correct, not a defect.
     "docs/superpowers/specs": "registro fechado, no se actualiza",
-    # A reference doc about OTHER repos: every path in it belongs to a Mercadona tree
-    # (mo.pypi.monitoring, mercadona.online.gke), not to this one.
     "skills/slice-spec/references/observabilidad.md": "documenta rutas de otros repos",
 }
+"""Two files are not scanned at all, each for a reason about what the file IS.
 
-# One token is exempt rather than its whole file: `smoke/README.md` is worth scanning (it
-# cites agents/ and tests/ paths of ours) but it also speaks in the smoke fixture's own
-# coordinates, and the fixture happens to have a `tests/` directory just like the repo root.
+`docs/superpowers/specs` holds dated design records: they describe the tree as it was on their
+date and are deliberately never updated, so a path they cite going away is correct, not a defect.
+`observabilidad.md` is a reference doc about OTHER repos -- every path in it belongs to a
+Mercadona tree (mo.pypi.monitoring, mercadona.online.gke), not to this one.
+"""
+
 _EXEMPT = {
     "tests/test_core.py": "ruta de la fixture de smoke, que la slice crea al correr",
 }
+"""One token is exempt rather than its whole file.
+
+`smoke/README.md` is worth scanning (it cites agents/ and tests/ paths of ours) but it also
+speaks in the smoke fixture's own coordinates, and the fixture happens to have a `tests/`
+directory just like the repo root.
+"""
 
 _BACKTICKED = re.compile(r"`([^`\n]+)`")
 _PATHLIKE = re.compile(r"^[\w.][\w./-]*$")
+"""What counts as a claim about this repo's tree.
+
+The docs here do not use markdown links for local files; they cite paths in backticks. So the
+thing to validate is not `[x](y)` -- there are none -- but every backticked token that claims
+something about this tree. A token qualifies only when its first component is a tracked top-level
+entry: that keeps bare filenames (`controles.py`), paths in other repos (`monitoring/metrics.py`),
+and branch patterns (`slice/NN-name`) out by construction, instead of by an allowlist that would
+have to grow forever.
+"""
 
 
 def _parent_dirs(path: str) -> list[str]:
@@ -326,6 +311,11 @@ def test_every_repo_path_cited_in_the_docs_still_exists() -> None:
     Not hypothetical: `removed old specs` (fa804ba) deleted nine design docs and left five
     pointers to them in `docs/design-notes.md`, the record we read precisely to avoid
     re-deriving past decisions. Nothing failed, and they stayed dead until this check existed.
+
+
+    `git ls-files` reads the index, so a doc deleted in the worktree without staging the deletion is still
+    listed. Reading it would raise here and bury the real assert under a traceback about the local mess,
+    which is not what this test is about.
     """
     tracked = _tracked("*")
     top_level = frozenset(path.split("/", 1)[0] for path in tracked)
@@ -342,9 +332,6 @@ def test_every_repo_path_cited_in_the_docs_still_exists() -> None:
     for source in _tracked("*.md"):
         if any(source == skip or source.startswith(f"{skip}/") for skip in _UNSCANNED):
             continue
-        # `git ls-files` reads the index, so a doc deleted in the worktree without staging the
-        # deletion is still listed. Reading it would raise here and bury the real assert under a
-        # traceback about the local mess, which is not what this test is about.
         if not (_ROOT / source).exists():
             continue
         for claimed in _claimed_repo_paths(_read(_ROOT / source), top_level):
@@ -354,10 +341,8 @@ def test_every_repo_path_cited_in_the_docs_still_exists() -> None:
                 broken.setdefault(claimed, []).append(source)
 
     assert still_cited == set(_EXEMPT), (
-        f"these exemptions are no longer cited anywhere and must be removed: "
-        f"{sorted(set(_EXEMPT) - still_cited)}"
+        f"these exemptions are no longer cited anywhere and must be removed: {sorted(set(_EXEMPT) - still_cited)}"
     )
     assert not broken, "the docs cite paths that are not in the tree:\n" + "\n".join(
-        f"  {path}  <- cited in {', '.join(sorted(sources))}"
-        for path, sources in sorted(broken.items())
+        f"  {path}  <- cited in {', '.join(sorted(sources))}" for path, sources in sorted(broken.items())
     )

@@ -10,15 +10,20 @@ solo tiene sentido en un fichero se queda alli, con un nombre que dice de que va
 from __future__ import annotations
 
 import subprocess
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 
-# Rama base de los repos de prueba. Se fija explicitamente porque `git init` la toma de
-# `init.defaultBranch`, que es config de la maquina: sin esto, en un entorno con `main`
-# configurado el bloque de `diff-bundle` se cae -y su test de "la base no existe" pasaria
-# por el motivo equivocado, porque alli ninguna base existe-.
+if TYPE_CHECKING:
+    from pathlib import Path
+
 RAMA_BASE = "master"
+"""Rama base de los repos de prueba, fijada explicitamente.
+
+`git init` la toma de `init.defaultBranch`, que es config de la maquina: sin esto, en un entorno
+con `main` configurado el bloque de `diff-bundle` se cae -y su test de "la base no existe"
+pasaria por el motivo equivocado, porque alli ninguna base existe-.
+"""
 
 
 def git(repo: Path, *args: str) -> None:

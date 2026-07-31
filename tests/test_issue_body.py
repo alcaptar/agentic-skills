@@ -1,4 +1,13 @@
-"""Tests de la logica pura del cuerpo del issue (issue_body.py)."""
+"""Tests de la logica pura del cuerpo del issue (issue_body.py).
+
+Cubren tres superficies. El parseo y la reescritura del cuerpo, que son puras. Las secciones por
+repo (`## Fuentes de convencion` y `## Controles`), que antes deducia `slice-runner` leyendo el
+Makefile en cada slice y ahora declara `slice-spec` una vez, confirma una persona y viven en el
+issue. Y la capa de CLI, que existe porque sin ella el agente escribia el read-modify-write a mano
+en cada transicion -en una sola sesion se escribio seis veces-, y cada copia es una ocasion de
+equivocarse en silencio: si `gh issue view` devuelve vacio, un `gh issue edit` con ese cuerpo
+**borra la spec entera del issue**. `gh` se inyecta, asi que estos tests no tocan la red.
+"""
 
 from __future__ import annotations
 
@@ -29,8 +38,6 @@ from issue_body import (
     tiene_seccion_fuentes,
 )
 
-# Este cuerpo usa la etiqueta vieja `AC:` a proposito: es la cobertura de los issues
-# abiertos antes del rename a `ACEPTACION:`.
 _BODY = """\
 # Feature X
 
@@ -46,6 +53,9 @@ Intro de la feature.
 - [ ] slice-04 (backfill): Backfill [bloqueada: ci-roja] PR #13
 - [ ] slice-05 (cleanup): Retirar flag [pendiente]
 - [ ] no es una slice, ignorar
+"""
+"""Cuerpo de referencia. Usa la etiqueta vieja `AC:` a proposito: es la cobertura de los issues
+abiertos antes del rename a `ACEPTACION:`.
 """
 
 
@@ -82,9 +92,7 @@ def test_parse_body_estados_intermedios() -> None:
 
 def test_parse_body_recoge_los_criterios_de_aceptacion() -> None:
     by_id = {s.slice_id: s for s in parse_body(_BODY)}
-    assert by_id["slice-01"].aceptacion == [
-        "rechaza negativos; tests en test/domain/test_cantidad.py"
-    ]
+    assert by_id["slice-01"].aceptacion == ["rechaza negativos; tests en test/domain/test_cantidad.py"]
     assert by_id["slice-02"].aceptacion == [
         "emite evento StockAjustado",
         "no toca infra directamente",
@@ -93,8 +101,9 @@ def test_parse_body_recoge_los_criterios_de_aceptacion() -> None:
 
 
 def test_parse_body_acepta_la_etiqueta_vieja_ac() -> None:
-    # `AC:` se renombro a `ACEPTACION:`, pero hay issues abiertos escritos con la vieja:
-    # dejar de parsearla los dejaria sin criterios y sin control de verificacion.
+    """`AC:` se renombro a `ACEPTACION:`, pero hay issues abiertos escritos con la vieja: dejar de parsearla
+    los dejaria sin criterios y sin control de verificacion.
+    """
     body = "## Slices\n- [ ] slice-01 (x): T [pendiente]\n      AC: rechaza negativos\n"
     assert parse_body(body)[0].aceptacion == ["rechaza negativos"]
 
@@ -105,7 +114,7 @@ def test_parse_body_acepta_aceptacion_con_tilde() -> None:
 
 
 def test_parse_body_ignora_lineas_no_slice() -> None:
-    # "- [ ] no es una slice" no debe aparecer como slice.
+    """ "- [ ] no es una slice" no debe aparecer como slice."""
     assert all(s.slice_id.startswith("slice-") for s in parse_body(_BODY))
 
 
@@ -114,17 +123,13 @@ def test_set_estado_marca_mergeada_como_checkbox() -> None:
     by_id = {s.slice_id: s for s in parse_body(nuevo)}
     assert by_id["slice-02"].estado == "mergeada"
     assert "- [x] slice-02 (ajustar-stock): Caso de uso AjustarStock [mergeada] PR #12" in nuevo
-    # conserva el PR aunque no se pase
     assert by_id["slice-02"].pr == 12
 
 
 def test_set_estado_preserva_el_resto_del_cuerpo() -> None:
     nuevo = set_slice_estado(_BODY, "slice-03", "esperando-merge", pr=99)
-    # otras slices intactas
     assert "- [x] slice-01 (cantidad-vo): Crear VO [mergeada] PR #11" in nuevo
-    # los criterios de slice-02 intactos
     assert "      AC: no toca infra directamente" in nuevo
-    # intro intacta
     assert "Intro de la feature." in nuevo
     by_id = {s.slice_id: s for s in parse_body(nuevo)}
     assert by_id["slice-03"].estado == "esperando-merge"
@@ -150,7 +155,7 @@ def test_set_estado_slice_inexistente() -> None:
 
 
 def test_set_estado_estado_invalido() -> None:
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="estado no valido"):
         set_slice_estado(_BODY, "slice-01", "inventado")
 
 
@@ -174,11 +179,9 @@ def test_roundtrip_render_parse() -> None:
 
 
 def test_estados_expuestos() -> None:
-    assert "esperando-merge" in issue_body.ESTADOS
-    assert "mergeada" in issue_body.ESTADOS
+    assert "esperando-merge" in tuple(issue_body.Estado)
+    assert "mergeada" in tuple(issue_body.Estado)
 
-
-# --- Fuentes de convencion ---
 
 _BODY_CON_FUENTES = """\
 # Feature X
@@ -206,9 +209,9 @@ _BODY_SIN_FUENTES = """\
 def test_parse_fuentes_extrae_docs_y_skills_en_orden() -> None:
     fuentes = parse_fuentes(_BODY_CON_FUENTES)
     assert fuentes == [
-        Fuente("doc", ".claude/CLAUDE.md"),
-        Fuente("doc", ".claude/rules/conventions/"),
-        Fuente("skill", ".claude/skills/duplicate-action"),
+        Fuente(tipo="doc", ruta=".claude/CLAUDE.md"),
+        Fuente(tipo="doc", ruta=".claude/rules/conventions/"),
+        Fuente(tipo="skill", ruta=".claude/skills/duplicate-action"),
     ]
 
 
@@ -217,7 +220,7 @@ def test_parse_fuentes_seccion_ausente_lista_vacia() -> None:
 
 
 def test_parse_fuentes_se_detiene_en_la_siguiente_seccion() -> None:
-    # No debe tragarse la linea de slice de '## Slices' como fuente.
+    """No debe tragarse la linea de slice de '## Slices' como fuente."""
     fuentes = parse_fuentes(_BODY_CON_FUENTES)
     assert all(f.tipo in ("doc", "skill") for f in fuentes)
     assert len(fuentes) == 3
@@ -225,62 +228,59 @@ def test_parse_fuentes_se_detiene_en_la_siguiente_seccion() -> None:
 
 def test_parse_fuentes_tolera_tilde_y_mayusculas_en_heading() -> None:
     body = "## Fuentes de Convención\n- skill: .claude/skills/tdd\n"
-    assert parse_fuentes(body) == [Fuente("skill", ".claude/skills/tdd")]
+    assert parse_fuentes(body) == [Fuente(tipo="skill", ruta=".claude/skills/tdd")]
 
 
 def test_tiene_seccion_fuentes_distingue_ausente_de_presente() -> None:
     assert tiene_seccion_fuentes(_BODY_CON_FUENTES) is True
     assert tiene_seccion_fuentes(_BODY_SIN_FUENTES) is False
-    # presente pero vacia sigue contando como presente
     assert tiene_seccion_fuentes("## Fuentes de convencion\n") is True
 
 
 def test_render_fuentes_section_formato_canonico() -> None:
     section = render_fuentes_section(
-        [Fuente("doc", ".claude/CLAUDE.md"), Fuente("skill", ".claude/skills/pr")]
+        [Fuente(tipo="doc", ruta=".claude/CLAUDE.md"), Fuente(tipo="skill", ruta=".claude/skills/pr")]
     )
-    assert section == (
-        "## Fuentes de convencion\n- doc: .claude/CLAUDE.md\n- skill: .claude/skills/pr"
-    )
+    assert section == ("## Fuentes de convencion\n- doc: .claude/CLAUDE.md\n- skill: .claude/skills/pr")
 
 
 def test_render_fuentes_tipo_invalido() -> None:
-    with pytest.raises(ValueError):
-        render_fuentes_section([Fuente("regla", ".claude/CLAUDE.md")])
+    with pytest.raises(ValueError, match="tipo de fuente no valido"):
+        render_fuentes_section([Fuente(tipo="regla", ruta=".claude/CLAUDE.md")])
 
 
 def test_set_fuentes_anade_seccion_cuando_no_existe() -> None:
-    nuevo = set_fuentes(_BODY_SIN_FUENTES, [Fuente("doc", ".claude/CLAUDE.md")])
+    nuevo = set_fuentes(_BODY_SIN_FUENTES, [Fuente(tipo="doc", ruta=".claude/CLAUDE.md")])
     assert tiene_seccion_fuentes(nuevo)
-    assert parse_fuentes(nuevo) == [Fuente("doc", ".claude/CLAUDE.md")]
-    # preserva las slices existentes
+    assert parse_fuentes(nuevo) == [Fuente(tipo="doc", ruta=".claude/CLAUDE.md")]
     assert [s.slice_id for s in parse_body(nuevo)] == ["slice-01"]
 
 
 def test_set_fuentes_reemplaza_seccion_existente_preservando_el_resto() -> None:
-    nuevo = set_fuentes(_BODY_CON_FUENTES, [Fuente("skill", ".claude/skills/tdd")])
-    assert parse_fuentes(nuevo) == [Fuente("skill", ".claude/skills/tdd")]
-    # la vieja lista de docs desaparece
+    """El upsert reemplaza la seccion entera y no toca nada de alrededor.
+
+    Ni la intro de antes, ni las slices y sus criterios de despues: es lo que permite reescribir
+    las fuentes de un issue vivo sin perder el estado del run.
+    """
+    nuevo = set_fuentes(_BODY_CON_FUENTES, [Fuente(tipo="skill", ruta=".claude/skills/tdd")])
+    assert parse_fuentes(nuevo) == [Fuente(tipo="skill", ruta=".claude/skills/tdd")]
     assert "duplicate-action" not in nuevo
-    # lo de despues de la seccion sigue intacto
     assert "Intro de la feature." in nuevo
     by_id = {s.slice_id: s for s in parse_body(nuevo)}
     assert by_id["slice-01"].aceptacion == ["rechaza negativos"]
 
 
 def test_set_fuentes_preserva_trailing_newline() -> None:
-    assert set_fuentes(_BODY_SIN_FUENTES, [Fuente("doc", "x")]).endswith("\n")
+    assert set_fuentes(_BODY_SIN_FUENTES, [Fuente(tipo="doc", ruta="x")]).endswith("\n")
     sin_nl = _BODY_SIN_FUENTES.rstrip("\n")
-    assert not set_fuentes(sin_nl, [Fuente("doc", "x")]).endswith("\n")
+    assert not set_fuentes(sin_nl, [Fuente(tipo="doc", ruta="x")]).endswith("\n")
 
 
 def test_roundtrip_render_parse_fuentes() -> None:
-    fuentes = [Fuente("doc", "docs/conventions/"), Fuente("skill", ".claude/skills/x")]
+    fuentes = [Fuente(tipo="doc", ruta="docs/conventions/"), Fuente(tipo="skill", ruta=".claude/skills/x")]
     parsed = parse_fuentes(render_fuentes_section(fuentes) + "\n")
     assert parsed == fuentes
 
-
-# --- SENAL y REPO: observabilidad y slices cross-repo ---
 
 _GKE = "mercadona/mercadona.online.gke"
 
@@ -310,14 +310,12 @@ _BODY_CON_SENAL = """\
 
 def test_parse_body_recoge_senal() -> None:
     by_id = {s.slice_id: s for s in parse_body(_BODY_CON_SENAL)}
-    assert by_id["slice-01"].senal == [
-        "prometheus rate(stock_ajustado_total[5m]) > 0 en 10m post-deploy; critical"
-    ]
+    assert by_id["slice-01"].senal == ["prometheus rate(stock_ajustado_total[5m]) > 0 en 10m post-deploy; critical"]
     assert by_id["slice-03"].senal == ["exenta - refactor puro"]
 
 
 def test_parse_body_senal_ausente_es_lista_vacia() -> None:
-    # Una spec legacy sin SENAL no revienta: slice-runner avisa, no bloquea.
+    """Una spec legacy sin SENAL no revienta: slice-runner avisa, no bloquea."""
     assert parse_body(_BODY)[0].senal == []
 
 
@@ -334,7 +332,6 @@ def test_parse_body_senal_no_se_confunde_con_ac() -> None:
 def test_parse_body_recoge_repo_destino() -> None:
     by_id = {s.slice_id: s for s in parse_body(_BODY_CON_SENAL)}
     assert by_id["slice-02"].repo == _GKE
-    # ausente = el repo del issue
     assert by_id["slice-01"].repo is None
 
 
@@ -344,22 +341,20 @@ def test_set_estado_preserva_senal_y_repo() -> None:
     assert s02.estado == "en-curso"
     assert s02.pr == 7
     assert s02.repo == _GKE
-    assert s02.senal == [
-        'prometheus ALERTS{alertname="ShopAjusteFallido"} presente y == 0 en 24h; advisory'
-    ]
+    assert s02.senal == ['prometheus ALERTS{alertname="ShopAjusteFallido"} presente y == 0 en 24h; advisory']
 
 
 def test_parse_fuentes_atribuye_subseccion_al_repo_destino() -> None:
     assert parse_fuentes(_BODY_CON_SENAL) == [
-        Fuente("doc", "CLAUDE.md"),
-        Fuente("doc", "templates/CLAUDE.md", _GKE),
-        Fuente("doc", "tests/prometheus/README.md", _GKE),
+        Fuente(tipo="doc", ruta="CLAUDE.md"),
+        Fuente(tipo="doc", ruta="templates/CLAUDE.md", repo=_GKE),
+        Fuente(tipo="doc", ruta="tests/prometheus/README.md", repo=_GKE),
     ]
 
 
 def test_fuentes_para_filtra_por_repo() -> None:
     fuentes = parse_fuentes(_BODY_CON_SENAL)
-    assert fuentes_para(fuentes) == [Fuente("doc", "CLAUDE.md")]
+    assert fuentes_para(fuentes) == [Fuente(tipo="doc", ruta="CLAUDE.md")]
     assert [f.ruta for f in fuentes_para(fuentes, _GKE)] == [
         "templates/CLAUDE.md",
         "tests/prometheus/README.md",
@@ -367,17 +362,18 @@ def test_fuentes_para_filtra_por_repo() -> None:
 
 
 def test_fuentes_para_repo_sin_vara_declarada() -> None:
-    # No inventa una vara heredada: si el repo destino no declara fuentes, esta vacio
-    # y slice-runner para en el paso 1 en vez de medir con la del repo de la app.
+    """No inventa una vara heredada: si el repo destino no declara fuentes, esta vacio y slice-runner para en
+    el paso 1 en vez de medir con la del repo de la app.
+    """
     assert fuentes_para(parse_fuentes(_BODY_CON_SENAL), "mercadona/otro") == []
 
 
 def test_render_fuentes_agrupa_por_repo_en_subsecciones() -> None:
     section = render_fuentes_section(
         [
-            Fuente("doc", "CLAUDE.md"),
-            Fuente("doc", "templates/CLAUDE.md", _GKE),
-            Fuente("skill", ".claude/skills/x"),
+            Fuente(tipo="doc", ruta="CLAUDE.md"),
+            Fuente(tipo="doc", ruta="templates/CLAUDE.md", repo=_GKE),
+            Fuente(tipo="skill", ruta=".claude/skills/x"),
         ]
     )
     assert section == (
@@ -392,23 +388,20 @@ def test_render_fuentes_agrupa_por_repo_en_subsecciones() -> None:
 
 def test_roundtrip_render_parse_fuentes_por_repo() -> None:
     fuentes = [
-        Fuente("doc", "CLAUDE.md"),
-        Fuente("doc", "templates/CLAUDE.md", _GKE),
-        Fuente("skill", "settings/README.md", "mercadona/mo.sre.grafana-configs"),
+        Fuente(tipo="doc", ruta="CLAUDE.md"),
+        Fuente(tipo="doc", ruta="templates/CLAUDE.md", repo=_GKE),
+        Fuente(tipo="skill", ruta="settings/README.md", repo="mercadona/mo.sre.grafana-configs"),
     ]
     assert parse_fuentes(render_fuentes_section(fuentes) + "\n") == fuentes
 
 
 def test_set_fuentes_reemplaza_tambien_las_subsecciones_de_repo() -> None:
-    nuevo = set_fuentes(_BODY_CON_SENAL, [Fuente("doc", "CLAUDE.md")])
-    assert parse_fuentes(nuevo) == [Fuente("doc", "CLAUDE.md")]
+    nuevo = set_fuentes(_BODY_CON_SENAL, [Fuente(tipo="doc", ruta="CLAUDE.md")])
+    assert parse_fuentes(nuevo) == [Fuente(tipo="doc", ruta="CLAUDE.md")]
     assert "tests/prometheus/README.md" not in nuevo
-    # las slices y sus SENAL siguen intactas
     by_id = {s.slice_id: s for s in parse_body(nuevo)}
     assert by_id["slice-03"].senal == ["exenta - refactor puro"]
 
-
-# --- INTENCION: el por que, en la feature y en cada slice ---
 
 _BODY_CON_INTENCION = """\
 # Feature W
@@ -433,16 +426,14 @@ Cuando el recuento no cuadra no hay forma de reconstruir que paso.
 
 def test_parse_body_recoge_intencion_de_la_slice() -> None:
     by_id = {s.slice_id: s for s in parse_body(_BODY_CON_INTENCION)}
-    assert by_id["slice-01"].intencion == [
-        "hoy el ajuste se hace a mano y no queda rastro de quien lo hizo"
-    ]
+    assert by_id["slice-01"].intencion == ["hoy el ajuste se hace a mano y no queda rastro de quien lo hizo"]
     assert by_id["slice-02"].intencion == [
         "hoy el caso de uso habla con la base de datos y no se puede testear sin ella"
     ]
 
 
 def test_parse_body_intencion_ausente_es_lista_vacia() -> None:
-    # Un issue anterior a este mecanismo no revienta: la PR declara que la infirio.
+    """Un issue anterior a este mecanismo no revienta: la PR declara que la infirio."""
     assert parse_body(_BODY)[0].intencion == []
 
 
@@ -454,9 +445,7 @@ def test_parse_body_acepta_intencion_con_tilde() -> None:
 def test_parse_body_intencion_no_se_confunde_con_ac_ni_senal() -> None:
     s01 = {s.slice_id: s for s in parse_body(_BODY_CON_INTENCION)}["slice-01"]
     assert s01.aceptacion == ["emite evento StockAjustado"]
-    assert s01.senal == [
-        "prometheus rate(stock_ajustado_total[5m]) > 0 en 10m post-deploy; critical"
-    ]
+    assert s01.senal == ["prometheus rate(stock_ajustado_total[5m]) > 0 en 10m post-deploy; critical"]
 
 
 def test_parse_intencion_devuelve_el_texto_de_la_seccion() -> None:
@@ -467,8 +456,9 @@ def test_parse_intencion_devuelve_el_texto_de_la_seccion() -> None:
 
 
 def test_parse_intencion_seccion_ausente_es_none() -> None:
-    # None y "" son casos distintos a proposito: ambos degradan la PR, pero solo el
-    # script decide cual es, no el criterio del agente.
+    """None y "" son casos distintos a proposito: ambos degradan la PR, pero solo el script decide cual es,
+    no el criterio del agente.
+    """
     assert parse_intencion(_BODY) is None
 
 
@@ -492,15 +482,9 @@ def test_set_estado_preserva_la_intencion_de_la_slice() -> None:
 
 
 def test_set_fuentes_preserva_la_seccion_de_intencion() -> None:
-    nuevo = set_fuentes(_BODY_CON_INTENCION, [Fuente("doc", "otro.md")])
+    nuevo = set_fuentes(_BODY_CON_INTENCION, [Fuente(tipo="doc", ruta="otro.md")])
     assert parse_intencion(nuevo) == parse_intencion(_BODY_CON_INTENCION)
 
-
-# --- controles declarados en el issue -------------------------------------
-#
-# Antes los deducia `slice-runner` leyendo el Makefile en cada slice. Ahora los declara
-# `slice-spec` una vez, los confirma una persona y viven en el issue: misma forma por repo
-# que las fuentes de convencion, y por la misma razon.
 
 _BODY_CON_CONTROLES = """\
 # Feature X
@@ -533,10 +517,10 @@ _BODY_CON_EXENCION = """\
 
 def test_parse_controles_extrae_pares_en_orden() -> None:
     assert parse_controles(_BODY_CON_CONTROLES) == [
-        Control("lint", "make linting"),
-        Control("types", "make check-types"),
-        Control("tests", "make test ARGS=-x"),
-        Control("schema", "make test_prometheus_rules", "mercadona/mercadona.online.gke"),
+        Control(nombre="lint", comando="make linting"),
+        Control(nombre="types", comando="make check-types"),
+        Control(nombre="tests", comando="make test ARGS=-x"),
+        Control(nombre="schema", comando="make test_prometheus_rules", repo="mercadona/mercadona.online.gke"),
     ]
 
 
@@ -545,29 +529,29 @@ def test_parse_controles_seccion_ausente_lista_vacia() -> None:
 
 
 def test_tiene_seccion_controles_distingue_ausente_de_vacia() -> None:
-    # Ausente = el issue nunca los declaro -> slice-runner para. Vacia = declarada pero sin
-    # lineas, que es un issue mal formado y NO lo mismo que no tener controles.
+    """Ausente = el issue nunca los declaro -> slice-runner para. Vacia = declarada pero sin lineas, que es
+    un issue mal formado y NO lo mismo que no tener controles.
+    """
     assert tiene_seccion_controles(_BODY_CON_CONTROLES) is True
     assert tiene_seccion_controles(_BODY) is False
     assert tiene_seccion_controles("## Controles\n") is True
 
 
 def test_parse_controles_se_detiene_en_la_siguiente_seccion() -> None:
-    # La linea de slice `- [ ] slice-01 (vo): ...` esta bajo `## Slices`: no es un control.
+    """La linea de slice `- [ ] slice-01 (vo): ...` esta bajo `## Slices`: no es un control."""
     assert all(c.nombre != "slice-01" for c in parse_controles(_BODY_CON_CONTROLES))
 
 
 def test_controles_para_filtra_por_repo_destino() -> None:
     controles = parse_controles(_BODY_CON_CONTROLES)
     assert [c.nombre for c in controles_para(controles)] == ["lint", "types", "tests"]
-    assert [c.nombre for c in controles_para(controles, "mercadona/mercadona.online.gke")] == [
-        "schema"
-    ]
+    assert [c.nombre for c in controles_para(controles, "mercadona/mercadona.online.gke")] == ["schema"]
 
 
 def test_controles_para_repo_sin_subseccion_no_hereda_los_del_issue() -> None:
-    # Heredar los del repo de la app mediria una alerta con `make test` de otro repo: es la
-    # misma desviacion silenciosa que heredar su vara de medir.
+    """Heredar los del repo de la app mediria una alerta con `make test` de otro repo: es la misma desviacion
+    silenciosa que heredar su vara de medir.
+    """
     assert controles_para(parse_controles(_BODY_CON_CONTROLES), "mercadona/otro") == []
 
 
@@ -585,50 +569,57 @@ def test_un_control_de_verdad_no_es_exento() -> None:
 
 def test_render_controles_section_formato_canonico() -> None:
     section = render_controles_section(
-        [Control("tests", "make test"), Control("schema", "make validate", "org/manifiestos")]
+        [
+            Control(nombre="tests", comando="make test"),
+            Control(nombre="schema", comando="make validate", repo="org/manifiestos"),
+        ]
     )
-    assert section == (
-        "## Controles\n- tests: make test\n\n### org/manifiestos\n- schema: make validate"
-    )
+    assert section == ("## Controles\n- tests: make test\n\n### org/manifiestos\n- schema: make validate")
 
 
 def test_render_controles_rechaza_mezclar_exencion_con_controles() -> None:
-    # "no hay controles" y "hay estos" no pueden ser ciertas a la vez: dejarlo pasar haria
-    # que la ejecucion dependiera de cual se leyera primero.
-    with pytest.raises(ValueError):
-        render_controles_section([Control("ninguno", "no hay CI"), Control("tests", "make test")])
+    """ "no hay controles" y "hay estos" no pueden ser ciertas a la vez: dejarlo pasar haria que la ejecucion
+    dependiera de cual se leyera primero.
+    """
+    with pytest.raises(ValueError, match="no admite otros controles"):
+        render_controles_section(
+            [Control(nombre="ninguno", comando="no hay CI"), Control(nombre="tests", comando="make test")]
+        )
 
 
 def test_render_controles_permite_exencion_en_un_repo_y_controles_en_otro() -> None:
     section = render_controles_section(
-        [Control("tests", "make test"), Control("ninguno", "no valida en PR", "org/grafana")]
+        [
+            Control(nombre="tests", comando="make test"),
+            Control(nombre="ninguno", comando="no valida en PR", repo="org/grafana"),
+        ]
     )
     assert "- ninguno: no valida en PR" in section
 
 
 def test_set_controles_anade_seccion_cuando_no_existe() -> None:
-    nuevo = set_controles(_BODY, [Control("tests", "make test")])
+    nuevo = set_controles(_BODY, [Control(nombre="tests", comando="make test")])
     assert tiene_seccion_controles(nuevo)
-    assert parse_controles(nuevo) == [Control("tests", "make test")]
+    assert parse_controles(nuevo) == [Control(nombre="tests", comando="make test")]
 
 
 def test_set_controles_reemplaza_preservando_el_resto_del_cuerpo() -> None:
-    nuevo = set_controles(_BODY_CON_CONTROLES, [Control("tests", "make test-unit")])
-    assert parse_controles(nuevo) == [Control("tests", "make test-unit")]
+    nuevo = set_controles(_BODY_CON_CONTROLES, [Control(nombre="tests", comando="make test-unit")])
+    assert parse_controles(nuevo) == [Control(nombre="tests", comando="make test-unit")]
     assert [s.slice_id for s in parse_body(nuevo)] == ["slice-01"]
 
 
 def test_set_controles_no_toca_las_fuentes_de_convencion() -> None:
-    nuevo = set_controles(_BODY_CON_FUENTES, [Control("tests", "make test")])
+    nuevo = set_controles(_BODY_CON_FUENTES, [Control(nombre="tests", comando="make test")])
     assert parse_fuentes(nuevo) == parse_fuentes(_BODY_CON_FUENTES)
 
 
 def test_roundtrip_render_parse_controles() -> None:
-    controles = [Control("lint", "make linting"), Control("schema", "make v", "org/repo")]
+    controles = [
+        Control(nombre="lint", comando="make linting"),
+        Control(nombre="schema", comando="make v", repo="org/repo"),
+    ]
     assert parse_controles(render_controles_section(controles) + "\n") == controles
-
-
-# --- compatibilidad del motivo viejo `puertas` ----------------------------
 
 
 def test_normaliza_motivo_traduce_la_forma_vieja() -> None:
@@ -637,20 +628,10 @@ def test_normaliza_motivo_traduce_la_forma_vieja() -> None:
 
 
 def test_parse_body_normaliza_bloqueada_puertas_de_un_issue_viejo() -> None:
-    # Hay issues abiertos con este marcador escrito: renombrar no puede dejarlos ilegibles.
+    """Hay issues abiertos con este marcador escrito: renombrar no puede dejarlos ilegibles."""
     body = "## Slices\n- [ ] slice-01 (vo): Crear VO [bloqueada: puertas]\n"
     sl = parse_body(body)[0]
     assert (sl.estado, sl.motivo) == ("bloqueada", "controles")
-
-
-# --- CLI (capa de I/O) -------------------------------------------------------
-#
-# Existe porque sin ella el agente escribia el read-modify-write a mano en cada
-# transicion: en una sola sesion se escribio seis veces. Cada copia es una ocasion de
-# equivocarse en silencio, y el modo de fallo peor es real: si `gh issue view` devuelve
-# vacio, un `gh issue edit` con ese cuerpo **borra la spec entera del issue**.
-#
-# `gh` se inyecta: estos tests no tocan la red.
 
 
 def _fake_gh(monkeypatch: pytest.MonkeyPatch, view_out: str, view_rc: int = 0) -> list[list[str]]:
@@ -670,24 +651,19 @@ def _fake_gh(monkeypatch: pytest.MonkeyPatch, view_out: str, view_rc: int = 0) -
 def test_cli_show_emite_slice_fuentes_controles_y_derivados(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
+    """La siguiente sin cerrar, no la primera: slice-01 esta mergeada en el fixture."""
     _fake_gh(monkeypatch, _BODY)
     assert issue_body.main(["show", "--repo", "o/r", "--issue", "3", "--json"]) == 0
     data = json.loads(capsys.readouterr().out)
-    # La siguiente sin cerrar, no la primera: slice-01 esta mergeada en el fixture.
     assert data["slice"]["slice_id"] == "slice-02"
     assert data["slice"]["rama"] == "slice/02-ajustar-stock"
     assert data["slice"]["scope"] == "feat(ajustar-stock)"
     assert data["slice"]["aceptacion"]
 
 
-def test_cli_show_de_una_slice_concreta(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
+def test_cli_show_de_una_slice_concreta(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
     _fake_gh(monkeypatch, _BODY)
-    assert (
-        issue_body.main(["show", "--repo", "o/r", "--issue", "3", "--slice", "slice-01", "--json"])
-        == 0
-    )
+    assert issue_body.main(["show", "--repo", "o/r", "--issue", "3", "--slice", "slice-01", "--json"]) == 0
     assert json.loads(capsys.readouterr().out)["slice"]["slice_id"] == "slice-01"
 
 
@@ -701,9 +677,9 @@ def test_cli_show_exit_2_si_la_slice_no_esta(
 def test_cli_no_reescribe_nada_si_el_cuerpo_viene_vacio(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    # El fallo que justifica la CLI: un `gh issue view` que devuelve vacio y un `edit`
-    # detras dejan el issue en blanco, o sea la spec y el estado del run perdidos. Falla
-    # ruidosamente y NO llama a edit.
+    """El fallo que justifica la CLI: un `gh issue view` que devuelve vacio y un `edit` detras dejan el issue
+    en blanco, o sea la spec y el estado del run perdidos. Falla ruidosamente y NO llama a edit.
+    """
     llamadas = _fake_gh(monkeypatch, "")
     code = issue_body.main(
         [
@@ -793,7 +769,7 @@ def test_cli_set_estado_no_llama_a_edit_si_no_cambia_nada(
 
 
 def test_rama_y_scope_son_deterministas() -> None:
-    # Alimentan la rama y el scope del commit sin derivar slugs de texto libre.
+    """Alimentan la rama y el scope del commit sin derivar slugs de texto libre."""
     s = issue_body.parse_body(_BODY)[1]
     assert issue_body.rama_de(s) == "slice/02-ajustar-stock"
     assert issue_body.scope_de(s) == "feat(ajustar-stock)"
@@ -843,12 +819,11 @@ def test_cli_set_estado_rechaza_motivo_en_un_estado_que_no_lo_lleva(
     assert not any("edit" in a for a in llamadas)
 
 
-def test_cli_show_es_humano_por_defecto(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
-    # Mismo contrato que `controles.py`: humano salvo `--json`. La incoherencia anterior
-    # -aqui JSON siempre y `--pretty`, alli humano salvo `--json`- hizo tropezar en la sonda
-    # del 2026-07-30 a quien habia escrito los dos scripts el dia antes.
+def test_cli_show_es_humano_por_defecto(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+    """Mismo contrato que `controles.py`: humano salvo `--json`. La incoherencia anterior -aqui JSON siempre
+    y `--pretty`, alli humano salvo `--json`- hizo tropezar en la sonda del 2026-07-30 a quien habia
+    escrito los dos scripts el dia antes.
+    """
     _fake_gh(monkeypatch, _BODY)
     assert issue_body.main(["show", "--repo", "o/r", "--issue", "3"]) == 0
     out = capsys.readouterr().out
@@ -857,9 +832,7 @@ def test_cli_show_es_humano_por_defecto(
         json.loads(out)
 
 
-def test_cli_set_estado_tiene_modo_json(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
+def test_cli_set_estado_tiene_modo_json(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
     _fake_gh(monkeypatch, _BODY)
     code = issue_body.main(
         [

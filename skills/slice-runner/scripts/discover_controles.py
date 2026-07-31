@@ -25,25 +25,30 @@ import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
-# Un target de Makefile: empieza en columna 0 con alfanumerico, y el `:` no es de `:=`
-# (asignacion de variable). Se excluyen los targets ocultos (`.PHONY`) y las reglas
-# patron (`%.o: %.c`), que no son cosas que se puedan invocar como control.
 _TARGET_RE = re.compile(r"^([A-Za-z0-9][\w.-]*)\s*:(?!=)")
+"""Un target de Makefile: empieza en columna 0 con alfanumerico y su `:` no es de `:=`.
 
-# Comentario justo encima de un target: la pista de para que sirve.
+Descartar el `:=` deja fuera las asignaciones de variable. Los targets ocultos (`.PHONY`) y las
+reglas patron (`%.o: %.c`) tampoco matchean, porque no son cosas que se puedan invocar como
+control.
+"""
+
 _COMMENT_RE = re.compile(r"^#+\s*(.*?)\s*$")
+"""Comentario justo encima de un target: la pista de para que sirve."""
 
-# Senales en `pyproject.toml` y el comando que sugiere cada una. No se afina el comando
-# (rutas, flags, `uv run`): eso lo ajusta quien confirma, que es quien sabe.
 _PYPROJECT_SENALES = (
     ("ruff", ("tool", "ruff"), "ruff check ."),
     ("format", ("tool", "ruff", "format"), "ruff format --check ."),
     ("mypy", ("tool", "mypy"), "mypy ."),
     ("pytest", ("tool", "pytest", "ini_options"), "pytest"),
 )
+"""Senales en `pyproject.toml` y el comando que sugiere cada una.
+
+El comando no se afina (rutas, flags, `uv run`): eso lo ajusta quien confirma, que es quien sabe.
+"""
 
 
-@dataclass
+@dataclass(frozen=True, kw_only=True, slots=True)
 class Candidato:
     """Un comando que el repo parece ofrecer como control.
 
@@ -60,12 +65,15 @@ class Candidato:
 
 
 def _makefile_candidatos(makefile: Path) -> list[Candidato]:
-    """Targets del Makefile, en orden de aparicion, con el comentario de encima como pista."""
+    """Targets del Makefile, en orden de aparicion, con el comentario de encima como pista.
+
+    Una linea de receta (la que empieza por tabulador) no reinicia la pista ni declara nada.
+    """
     candidatos: list[Candidato] = []
     vistos: set[str] = set()
     pista = ""
     for raw in makefile.read_text(encoding="utf-8", errors="replace").splitlines():
-        if raw.startswith("\t"):  # linea de receta: no reinicia la pista ni declara nada
+        if raw.startswith("\t"):
             continue
         if comentario := _COMMENT_RE.match(raw):
             pista = comentario.group(1)
@@ -74,7 +82,7 @@ def _makefile_candidatos(makefile: Path) -> list[Candidato]:
             nombre = m.group(1)
             if nombre not in vistos:
                 vistos.add(nombre)
-                candidatos.append(Candidato(nombre, f"make {nombre}", "makefile", pista))
+                candidatos.append(Candidato(nombre=nombre, comando=f"make {nombre}", fuente="makefile", pista=pista))
             pista = ""
             continue
         if not raw.strip():
@@ -83,12 +91,14 @@ def _makefile_candidatos(makefile: Path) -> list[Candidato]:
 
 
 def _pyproject_candidatos(pyproject: Path) -> list[Candidato]:
-    """Senales de `pyproject.toml`: que herramientas de calidad tiene configuradas el repo."""
+    """Senales de `pyproject.toml`: que herramientas de calidad tiene configuradas el repo.
+
+    Un pyproject ilegible no es un error del descubrimiento: simplemente no aporta senales.
+    Fallar aqui esconderia los candidatos del Makefile, que si valen.
+    """
     try:
         data = tomllib.loads(pyproject.read_text(encoding="utf-8"))
     except (tomllib.TOMLDecodeError, OSError):
-        # Un pyproject ilegible no es un error del descubrimiento: simplemente no aporta
-        # senales. Fallar aqui esconderia los candidatos del Makefile, que si valen.
         return []
 
     candidatos: list[Candidato] = []
@@ -101,7 +111,12 @@ def _pyproject_candidatos(pyproject: Path) -> list[Candidato]:
             nodo = nodo[clave]
         if nodo is not None:
             candidatos.append(
-                Candidato(nombre, comando, "pyproject", f"configurado en [{'.'.join(ruta)}]")
+                Candidato(
+                    nombre=nombre,
+                    comando=comando,
+                    fuente="pyproject",
+                    pista=f"configurado en [{'.'.join(ruta)}]",
+                )
             )
     return candidatos
 
@@ -116,9 +131,7 @@ def discover_candidates(repo_root: str | Path) -> list[Candidato]:
     root = Path(repo_root)
     candidatos: list[Candidato] = []
 
-    makefile = next(
-        (root / n for n in ("Makefile", "makefile", "GNUmakefile") if (root / n).is_file()), None
-    )
+    makefile = next((root / n for n in ("Makefile", "makefile", "GNUmakefile") if (root / n).is_file()), None)
     if makefile is not None:
         candidatos += _makefile_candidatos(makefile)
 
@@ -127,12 +140,17 @@ def discover_candidates(repo_root: str | Path) -> list[Candidato]:
         candidatos += _pyproject_candidatos(pyproject)
 
     if (root / "tox.ini").is_file():
-        candidatos.append(Candidato("tox", "tox", "tox", "hay tox.ini"))
+        candidatos.append(Candidato(nombre="tox", comando="tox", fuente="tox", pista="hay tox.ini"))
 
     return candidatos
 
 
 def _format(candidatos: list[Candidato]) -> str:
+    """Un candidato por linea, en la forma `nombre: comando` que espera la seccion del issue.
+
+    La pista y la fuente van detras como comentario de Makefile, para que quien confirma decida
+    con lo que justifica cada candidato delante.
+    """
     lines = []
     for c in candidatos:
         sufijo = f"  # {c.pista} ({c.fuente})" if c.pista else f"  # ({c.fuente})"
@@ -143,9 +161,7 @@ def _format(candidatos: list[Candidato]) -> str:
 if __name__ == "__main__":
     import argparse
 
-    parser = argparse.ArgumentParser(
-        description="Lista candidatos a control de un repo (no decide cuales lo son)."
-    )
+    parser = argparse.ArgumentParser(description="Lista candidatos a control de un repo (no decide cuales lo son).")
     parser.add_argument("repo", nargs="?", default=".", help="raiz del repo (por defecto .)")
     args = parser.parse_args()
     print(_format(discover_candidates(args.repo)))

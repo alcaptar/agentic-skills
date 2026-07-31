@@ -136,7 +136,7 @@ caminos de fallo hay que **provocarlos**, y ninguna de las cuatro provocaciones 
 asi que quedan escritas aqui para no volver a deducirlas cada vez. Lo que este fichero no repite es el
 contrato: los estados, los presupuestos de reintentos y el registro los declara
 `skills/slice-runner/SKILL.md` (pasos 6, 7 y 9), y la lista de motivos validos vive en
-`skills/slice-runner/scripts/issue_body.py` (`MOTIVOS_BLOQUEADA`), que los valida al escribir en el
+`skills/slice-runner/scripts/issue_body.py` (`MotivoBloqueada`), que los valida al escribir en el
 issue. Aqui esta solo **como se provoca cada uno** y **que rastro debe quedar**.
 
 **Ojo con la version de los scripts que estas sondeando.** `~/.claude/skills/slice-runner/` es un

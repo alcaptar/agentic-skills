@@ -22,16 +22,22 @@ adaptadas a un monitor ligero):
 - Veredicto go / no-go / inconclusive, respetando warm-up (grace tras el cambio) y
   min-observe (no declarar `go` hasta cubrir la ventana de rollout+drain).
 
+`Estado`, `Veredicto` y `Modo` son `StrEnum` y no constantes sueltas: son conjuntos
+cerrados que viajan en el JSON de entrada y de salida, asi que el miembro se serializa
+como su cadena -el contrato con quien invoca no cambia- pero la firma dice cual de los
+valores es, y un estado inventado no compila en vez de colarse como `str`.
+
 Uso como CLI (JSON in/out, para que el agente lo invoque sin parsear prosa):
     deploy_core.py verdict < payload.json
 donde payload.json = {"config": {...}, "baseline_samples": [...], "tick_history": [...],
                       "elapsed_secs": N}
 
 Exit codes: 0 = veredicto emitido en stdout (el veredicto va DENTRO del JSON, no en el codigo),
-2 = error de uso -subcomando desconocido o `config` con claves que este modulo no conoce-. La
-config no se valida por pulcritud: la escribe el agente a partir de la prosa de la skill, y una
-clave mal escrita que se ignorase en silencio degradaria una senal declarada a inferida (o dejaria
-el monitor sin senales), o sea el `go` generico que este modulo existe para no dar.
+2 = error de uso -subcomando desconocido o `config` con claves o valores que este modulo no
+conoce-. La config no se valida por pulcritud: la escribe el agente a partir de la prosa de la
+skill, y una clave mal escrita que se ignorase en silencio degradaria una senal declarada a
+inferida (o dejaria el monitor sin senales), o sea el `go` generico que este modulo existe para
+no dar.
 """
 
 from __future__ import annotations
@@ -39,37 +45,62 @@ from __future__ import annotations
 import json
 import math
 import sys
-from dataclasses import dataclass, field
-from typing import Any, cast
-
-OK = "ok"
-WARN = "warn"
-BREACH = "breach"
-
-GO = "go"
-NO_GO = "no-go"
-INCONCLUSIVE = "inconclusive"
+from dataclasses import dataclass, field, fields
+from enum import StrEnum
 
 
-@dataclass
+class Estado(StrEnum):
+    """Estado de una muestra puntual frente a los umbrales de su senal."""
+
+    OK = "ok"
+    WARN = "warn"
+    BREACH = "breach"
+
+
+class Veredicto(StrEnum):
+    """Veredicto del monitor sobre el deploy."""
+
+    GO = "go"
+    NO_GO = "no-go"
+    INCONCLUSIVE = "inconclusive"
+
+
+class Modo(StrEnum):
+    """Como se calculan los umbrales de una senal.
+
+    `RELATIVO` los deriva del baseline (`mean + N*sigma`); `ABSOLUTO` usa los fijos que declare
+    la config. Era un `str` libre, y un `mode: "relatve"` caia en la rama absoluta con
+    `warn_abs=crit_abs=0.0`, o sea toda muestra en breach: el falso no-go simetrico del `go`
+    generico que el resto del modulo evita.
+    """
+
+    RELATIVO = "relative"
+    ABSOLUTO = "absolute"
+
+
+@dataclass(frozen=True, kw_only=True, slots=True)
 class SignalConfig:
-    """Config de una senal. `critical` -> su breach confirmado fuerza no-go."""
+    """Config de una senal.
+
+    `critical`: su breach confirmado fuerza no-go. `inverted`: True si los valores BAJOS son
+    los malos (p. ej. `ready`). `declarada`: True si la senal viene declarada en la spec (la
+    linea `SENAL:` del issue) en vez de inferida por blast radius; una declarada que no se
+    puede medir NO puede dar `go`, porque seria devolver el veredicto generico por la puerta
+    de atras.
+    """
 
     critical: bool = True
-    mode: str = "relative"  # "relative" (mean+N*sigma) | "absolute" (warn/crit fijos)
+    mode: Modo = Modo.RELATIVO
     warn_sigma: float = 2.0
     crit_sigma: float = 3.0
     warn_abs: float = 0.0
     crit_abs: float = 0.0
-    inverted: bool = False  # True si valores BAJOS son malos (p. ej. ready)
-    # True si la senal viene declarada en la spec (linea `SENAL:` del issue) en vez de
-    # inferida por blast radius. Una declarada que no se puede medir NO puede dar `go`:
-    # seria devolver el veredicto generico por la puerta de atras.
+    inverted: bool = False
     declarada: bool = False
 
     @staticmethod
     def from_dict(d: dict[str, object]) -> SignalConfig:
-        """Config de una senal desde el payload. Una clave que no existe es un error.
+        """Config de una senal desde el payload. Una clave o un valor que no cuadran son error.
 
         Antes se ignoraba en silencio, y esa es la unica ruta por la que la config entra de
         verdad: la escribe el agente a partir de la prosa de la skill, no un fichero versionado.
@@ -77,23 +108,44 @@ class SignalConfig:
         senal que la slice prometio degradada a inferida, y con ella el `go` generico que ese
         campo existe para impedir -justo el fallo silencioso que la skill describe-. Fail-closed
         como el resto del repo: sin config que se pueda avalar no se emite veredicto.
+
+        El tipo del valor se comprueba por el mismo motivo que el nombre de la clave. Antes se
+        asignaba crudo, asi que un `"critical": "no"` quedaba en un `str` que toda condicion lee
+        como verdadero, y un `"crit_abs": "5"` no reventaba aqui sino ticks despues, al comparar
+        una muestra contra una cadena.
         """
-        f = SignalConfig()
-        desconocidas = sorted(k for k in d if not hasattr(f, k))
+        desconocidas = sorted(set(d) - _CLAVES_SENAL)
         if desconocidas:
             raise ValueError(f"claves de senal desconocidas: {', '.join(desconocidas)}")
-        for k, v in d.items():
-            setattr(f, k, v)
-        return f
+
+        base = SignalConfig()
+        return SignalConfig(
+            critical=_bool(d, "critical", base.critical),
+            mode=_modo(d, "mode", base.mode),
+            warn_sigma=_numero(d, "warn_sigma", base.warn_sigma),
+            crit_sigma=_numero(d, "crit_sigma", base.crit_sigma),
+            warn_abs=_numero(d, "warn_abs", base.warn_abs),
+            crit_abs=_numero(d, "crit_abs", base.crit_abs),
+            inverted=_bool(d, "inverted", base.inverted),
+            declarada=_bool(d, "declarada", base.declarada),
+        )
 
 
-@dataclass
+@dataclass(frozen=True, kw_only=True, slots=True)
 class MonitorConfig:
+    """Ventanas y senales del monitor.
+
+    `failure_limit`: ticks seguidos en breach para confirmarlo. `warmup_secs`: grace tras el
+    cambio, donde los breaches se ven pero no cuentan. `min_observe_secs`: no se declara `go`
+    antes de cubrir esta ventana. `noisy_cv`: coeficiente de variacion del baseline por encima
+    del cual se avisa de que el delta no es de fiar.
+    """
+
     signals: dict[str, SignalConfig] = field(default_factory=dict)
-    failure_limit: int = 2  # ticks seguidos en breach para confirmarlo
-    warmup_secs: int = 60  # grace tras el cambio: breaches se ven pero no cuentan
-    min_observe_secs: int = 300  # no declarar `go` antes de cubrir esta ventana
-    noisy_cv: float = 0.5  # coef. de variacion del baseline por encima del cual se avisa
+    failure_limit: int = 2
+    warmup_secs: int = 60
+    min_observe_secs: int = 300
+    noisy_cv: float = 0.5
 
     @staticmethod
     def from_dict(d: dict[str, object]) -> MonitorConfig:
@@ -103,23 +155,72 @@ class MonitorConfig:
         todas: cero senales configuradas, ninguna en breach, `go` sobre un deploy que nadie
         miro.
         """
-        cfg = MonitorConfig()
-        ventanas = ("failure_limit", "warmup_secs", "min_observe_secs", "noisy_cv")
-        desconocidas = sorted(set(d) - {"signals", *ventanas})
+        desconocidas = sorted(set(d) - _CLAVES_MONITOR)
         if desconocidas:
             raise ValueError(f"claves de config desconocidas: {', '.join(desconocidas)}")
 
         signals = d.get("signals", {})
         if not isinstance(signals, dict):
             raise TypeError(f"`signals` tiene que ser un objeto, no {type(signals).__name__}")
-        cfg.signals = {k: SignalConfig.from_dict(v) for k, v in signals.items()}
-        for k in ventanas:
-            if k in d:
-                setattr(cfg, k, d[k])
-        return cfg
+
+        base = MonitorConfig()
+        return MonitorConfig(
+            signals={str(k): SignalConfig.from_dict(_objeto(v, f"signals.{k}")) for k, v in signals.items()},
+            failure_limit=_entero(d, "failure_limit", base.failure_limit),
+            warmup_secs=_entero(d, "warmup_secs", base.warmup_secs),
+            min_observe_secs=_entero(d, "min_observe_secs", base.min_observe_secs),
+            noisy_cv=_numero(d, "noisy_cv", base.noisy_cv),
+        )
 
 
-@dataclass
+_CLAVES_SENAL = frozenset(f.name for f in fields(SignalConfig))
+_CLAVES_MONITOR = frozenset(f.name for f in fields(MonitorConfig))
+"""Claves aceptadas por cada `from_dict`, derivadas de los propios dataclasses.
+
+Una lista escrita a mano en paralelo es la forma de que un campo nuevo quede rechazado como
+"desconocido" por haberse olvidado de anadirlo en dos sitios.
+"""
+
+
+def _bool(d: dict[str, object], clave: str, default: bool) -> bool:
+    valor = d.get(clave, default)
+    if not isinstance(valor, bool):
+        raise TypeError(f"`{clave}` tiene que ser true o false, no {type(valor).__name__}")
+    return valor
+
+
+def _numero(d: dict[str, object], clave: str, default: float) -> float:
+    """El valor como float. `bool` se rechaza aparte: sin eso, un `warn_abs: true` pasaria como 1.0."""
+    valor = d.get(clave, default)
+    if isinstance(valor, bool) or not isinstance(valor, (int, float)):
+        raise TypeError(f"`{clave}` tiene que ser un numero, no {type(valor).__name__}")
+    return float(valor)
+
+
+def _entero(d: dict[str, object], clave: str, default: int) -> int:
+    valor = _numero(d, clave, default)
+    if valor != int(valor):
+        raise ValueError(f"`{clave}` tiene que ser un entero de segundos o ticks, no {valor}")
+    return int(valor)
+
+
+def _modo(d: dict[str, object], clave: str, default: Modo) -> Modo:
+    valor = d.get(clave, default)
+    if isinstance(valor, str):
+        try:
+            return Modo(valor)
+        except ValueError as exc:
+            raise ValueError(f"`{clave}` invalido: {valor!r} (validos: {', '.join(Modo)})") from exc
+    raise TypeError(f"`{clave}` tiene que ser una cadena, no {type(valor).__name__}")
+
+
+def _objeto(valor: object, donde: str) -> dict[str, object]:
+    if not isinstance(valor, dict):
+        raise TypeError(f"`{donde}` tiene que ser un objeto, no {type(valor).__name__}")
+    return {str(k): v for k, v in valor.items()}
+
+
+@dataclass(frozen=True, kw_only=True, slots=True)
 class Baseline:
     mean: float
     std: float
@@ -144,147 +245,213 @@ def aggregate_baseline(samples: list[dict[str, float]]) -> dict[str, Baseline]:
 def baseline_quality(samples: list[dict[str, float]], noisy_cv: float) -> list[str]:
     """Avisos de baseline ruidoso: coef. de variacion (std/mean) por encima del umbral."""
     base = aggregate_baseline(samples)
-    warnings: list[str] = []
-    for sig, b in base.items():
-        if b.mean > 0 and (b.std / b.mean) > noisy_cv:
-            warnings.append(
-                f"baseline ruidoso en '{sig}' (cv={b.std / b.mean:.2f} > {noisy_cv}): "
-                f"sube baseline_secs o no te fies del delta de esta senal"
-            )
-    return warnings
+    return [
+        f"baseline ruidoso en '{sig}' (cv={b.std / b.mean:.2f} > {noisy_cv}): "
+        f"sube baseline_secs o no te fies del delta de esta senal"
+        for sig, b in base.items()
+        if b.mean > 0 and (b.std / b.mean) > noisy_cv
+    ]
 
 
 def _thresholds(base: Baseline | None, cfg: SignalConfig) -> tuple[float, float]:
-    """Devuelve (warn_v, crit_v) efectivos para una senal."""
-    # Relativo solo si hay baseline con dispersion util; si el baseline es ~0
-    # (tipico de errores), no hay sigma que valga -> absolutos.
-    if cfg.mode == "relative" and base is not None and (base.mean > 0 or base.std > 0):
+    """Los (warn, crit) efectivos de una senal.
+
+    Relativo solo si hay baseline con dispersion util; si el baseline es ~0 (tipico de
+    errores) no hay sigma que valga, asi que se cae a los absolutos.
+    """
+    if cfg.mode is Modo.RELATIVO and base is not None and (base.mean > 0 or base.std > 0):
         return (base.mean + cfg.warn_sigma * base.std, base.mean + cfg.crit_sigma * base.std)
     return (cfg.warn_abs, cfg.crit_abs)
 
 
-def classify(value: float, base: Baseline | None, cfg: SignalConfig) -> str:
-    """Estado de una muestra puntual: ok | warn | breach."""
+def classify(value: float, base: Baseline | None, cfg: SignalConfig) -> Estado:
+    """Estado de una muestra puntual: ok | warn | breach.
+
+    Con `inverted`, los valores bajos son los malos (p. ej. `ready`): warn y crit son minimos
+    aceptables y el breach es caer POR DEBAJO del critico, asi que el propio umbral aun es OK.
+    """
     warn_v, crit_v = _thresholds(base, cfg)
     if cfg.inverted:
-        # Valores bajos son malos (p. ej. ready): warn/crit son minimos aceptables,
-        # breach si cae POR DEBAJO del critico (el propio umbral aun es OK).
         if value < crit_v:
-            return BREACH
+            return Estado.BREACH
         if value < warn_v:
-            return WARN
-        return OK
+            return Estado.WARN
+        return Estado.OK
     if value >= crit_v:
-        return BREACH
+        return Estado.BREACH
     if value >= warn_v:
-        return WARN
-    return OK
+        return Estado.WARN
+    return Estado.OK
 
 
-def _sustained(states: list[str], failure_limit: int) -> bool:
+def _sustained(states: list[Estado], failure_limit: int) -> bool:
     """True si los ultimos `failure_limit` estados son BREACH (breach confirmado)."""
     if failure_limit <= 0 or len(states) < failure_limit:
         return False
-    return all(s == BREACH for s in states[-failure_limit:])
+    return all(s is Estado.BREACH for s in states[-failure_limit:])
+
+
+@dataclass(frozen=True, kw_only=True, slots=True)
+class SignalScore:
+    """Lo que se sabe de una senal tras la ventana de observacion.
+
+    `measured` es False cuando no llego ninguna muestra: sin muestras no hay `worst` real, y
+    `ok` ahi significa "no medido". Distinguirlo es lo que impide que una senal ilegible pase
+    por sana.
+
+    Era un `dict[str, object]` y sus consumidores lo leian con `.get("critical")`, asi que una
+    clave mal escrita en el productor y una ausente en el consumidor daban lo mismo: `None`, que
+    en `verdict` se lee como "ni critica ni confirmada" y no bloquea nada. Con campos, la senal
+    sin medir tiene un default declarado y el typo no compila.
+    """
+
+    worst: Estado
+    breaches: int
+    confirmed: bool
+    critical: bool
+    measured: bool
+    declarada: bool
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "worst": str(self.worst),
+            "breaches": self.breaches,
+            "confirmed": self.confirmed,
+            "critical": self.critical,
+            "measured": self.measured,
+            "declarada": self.declarada,
+        }
 
 
 def build_scorecard(
     tick_history: list[dict[str, float]],
     baseline: dict[str, Baseline],
     config: MonitorConfig,
-) -> dict[str, dict[str, object]]:
+) -> dict[str, SignalScore]:
     """Por senal: peor estado, nº de breaches y si el breach esta confirmado (sostenido)."""
-    card: dict[str, dict[str, object]] = {}
-    order = {OK: 0, WARN: 1, BREACH: 2}
-    signals = config.signals or {
-        k: SignalConfig() for k in (tick_history[0] if tick_history else {})
-    }
+    card: dict[str, SignalScore] = {}
+    orden = {Estado.OK: 0, Estado.WARN: 1, Estado.BREACH: 2}
+    signals = config.signals or {k: SignalConfig() for k in (tick_history[0] if tick_history else {})}
     for sig, cfg in signals.items():
         states = [classify(float(t[sig]), baseline.get(sig), cfg) for t in tick_history if sig in t]
-        worst = max(states, key=lambda s: order[s]) if states else OK
-        card[sig] = {
-            "worst": worst,
-            "breaches": sum(1 for s in states if s == BREACH),
-            "confirmed": _sustained(states, config.failure_limit),
-            "critical": cfg.critical,
-            # Sin ninguna muestra no hay `worst` real: `ok` ahi significa "no medido", y
-            # distinguirlo es lo que impide que una senal ilegible pase por sana.
-            "measured": bool(states),
-            "declarada": cfg.declarada,
-        }
+        card[sig] = SignalScore(
+            worst=max(states, key=lambda s: orden[s]) if states else Estado.OK,
+            breaches=sum(1 for s in states if s is Estado.BREACH),
+            confirmed=_sustained(states, config.failure_limit),
+            critical=cfg.critical,
+            measured=bool(states),
+            declarada=cfg.declarada,
+        )
     return card
 
 
-def verdict(
-    scorecard: dict[str, dict[str, object]],
-    config: MonitorConfig,
-    elapsed_secs: float,
-) -> dict[str, object]:
-    """go / no-go / inconclusive a partir del scorecard y las ventanas de tiempo."""
-    # Dentro del warm-up los breaches se ven pero no deciden todavia.
+@dataclass(frozen=True, kw_only=True, slots=True)
+class Dictamen:
+    """El veredicto del monitor y las senales que lo sostienen.
+
+    Las claves que emite `to_dict` son las que consume la prosa de la skill y no cambian con
+    el nombre de los campos: son contrato, no nombres internos.
+    """
+
+    veredicto: Veredicto
+    razon: str
+    bloqueantes: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, object]:
+        return {"verdict": str(self.veredicto), "reason": self.razon, "blocking": self.bloqueantes}
+
+
+def verdict(scorecard: dict[str, SignalScore], config: MonitorConfig, elapsed_secs: float) -> Dictamen:
+    """go / no-go / inconclusive a partir del scorecard y las ventanas de tiempo.
+
+    El orden de las ramas es la decision: dentro del warm-up los breaches se ven pero no
+    deciden todavia. Despues manda el breach critico sostenido. Solo entonces se mira si
+    alguna senal declarada en la spec no se pudo medir (serie inexistente, query vacia,
+    fuente caida), que no es un `go` sino un fallo de la senal, y hay que decirlo: va detras
+    del no-go porque un breach real es informacion mas fuerte que "no se pudo medir".
+    """
     if elapsed_secs < config.warmup_secs:
-        return {"verdict": INCONCLUSIVE, "reason": "en warm-up", "blocking": []}
+        return Dictamen(veredicto=Veredicto.INCONCLUSIVE, razon="en warm-up")
 
-    blocking = [sig for sig, s in scorecard.items() if s.get("critical") and s.get("confirmed")]
-    if blocking:
-        return {
-            "verdict": NO_GO,
-            "reason": "senal critica en breach sostenido",
-            "blocking": blocking,
-        }
+    bloqueantes = [sig for sig, s in scorecard.items() if s.critical and s.confirmed]
+    if bloqueantes:
+        return Dictamen(
+            veredicto=Veredicto.NO_GO,
+            razon="senal critica en breach sostenido",
+            bloqueantes=bloqueantes,
+        )
 
-    # Una senal declarada en la spec que no se pudo medir (serie inexistente, query vacia,
-    # fuente caida) no es un `go`: es un fallo de la senal, y hay que decirlo. Va despues del
-    # no-go porque un breach real es informacion mas fuerte que "no se pudo medir".
-    sin_medir = [
-        sig for sig, s in scorecard.items() if s.get("declarada") and not s.get("measured")
-    ]
+    sin_medir = [sig for sig, s in scorecard.items() if s.declarada and not s.measured]
     if sin_medir:
-        return {
-            "verdict": INCONCLUSIVE,
-            "reason": "senal declarada en la spec sin medir",
-            "blocking": sin_medir,
-        }
+        return Dictamen(
+            veredicto=Veredicto.INCONCLUSIVE,
+            razon="senal declarada en la spec sin medir",
+            bloqueantes=sin_medir,
+        )
 
     if elapsed_secs < config.min_observe_secs:
-        return {
-            "verdict": INCONCLUSIVE,
-            "reason": "sin breach, pero aun sin cubrir min_observe_secs",
-            "blocking": [],
-        }
+        return Dictamen(
+            veredicto=Veredicto.INCONCLUSIVE,
+            razon="sin breach, pero aun sin cubrir min_observe_secs",
+        )
 
-    return {"verdict": GO, "reason": "todas las senales criticas estables", "blocking": []}
+    return Dictamen(veredicto=Veredicto.GO, razon="todas las senales criticas estables")
 
 
-def _cli_verdict(payload: dict[str, Any]) -> dict[str, object]:
-    config = MonitorConfig.from_dict(payload.get("config") or {})
-    baseline_samples = cast("list[dict[str, float]]", payload.get("baseline_samples") or [])
-    tick_history = cast("list[dict[str, float]]", payload.get("tick_history") or [])
-    elapsed = float(payload.get("elapsed_secs") or 0)
+def _muestras(payload: dict[str, object], clave: str) -> list[dict[str, float]]:
+    """Una lista de muestras `{senal: valor}` del payload, validada.
+
+    Antes esto era un `cast` a `list[dict[str, float]]`, que no comprueba nada: un
+    `tick_history` con una cadena dentro llegaba intacto hasta `float(t[sig])` y reventaba con
+    un traceback en vez de con el exit 2 que el CLI promete para un payload mal formado.
+
+    La posicion va en el mensaje porque quien compone el payload es un agente, y "una muestra
+    trae texto" sin decir cual no es accionable en una lista de treinta ticks.
+    """
+    valor = payload.get(clave) or []
+    if not isinstance(valor, list):
+        raise TypeError(f"`{clave}` tiene que ser una lista, no {type(valor).__name__}")
+
+    muestras: list[dict[str, float]] = []
+    for i, item in enumerate(valor):
+        donde = f"{clave}[{i}]"
+        muestra = _objeto(item, donde)
+        try:
+            muestras.append({k: _numero(muestra, k, 0.0) for k in muestra})
+        except TypeError as exc:
+            raise TypeError(f"en {donde}: {exc}") from exc
+    return muestras
+
+
+def _cli_verdict(payload: dict[str, object]) -> dict[str, object]:
+    config = MonitorConfig.from_dict(_objeto(payload.get("config") or {}, "config"))
+    baseline_samples = _muestras(payload, "baseline_samples")
+    tick_history = _muestras(payload, "tick_history")
+    elapsed = _numero(payload, "elapsed_secs", 0.0)
 
     baseline = aggregate_baseline(baseline_samples)
     card = build_scorecard(tick_history, baseline, config)
-    v = verdict(card, config, elapsed)
     return {
-        "verdict": v["verdict"],
-        "reason": v["reason"],
-        "blocking": v["blocking"],
-        "scorecard": card,
+        **verdict(card, config, elapsed).to_dict(),
+        "scorecard": {sig: score.to_dict() for sig, score in card.items()},
         "baseline_warnings": baseline_quality(baseline_samples, config.noisy_cv),
     }
 
 
 def main(argv: list[str] | None = None) -> int:
+    """CLI del veredicto.
+
+    Una config invalida sale con 2 y sin veredicto: el payload lo compone quien invoca, y
+    emitir `inconclusive` aqui haria pasar su propio despiste por un dato del deploy.
+    """
     argv = sys.argv[1:] if argv is None else argv
     if not argv or argv[0] != "verdict":
         print("uso: deploy_core.py verdict < payload.json", file=sys.stderr)
         return 2
-    payload: dict[str, Any] = json.load(sys.stdin)
+    payload: object = json.load(sys.stdin)
     try:
-        resultado = _cli_verdict(payload)
+        resultado = _cli_verdict(_objeto(payload, "payload"))
     except (TypeError, ValueError) as exc:
-        # Error de uso (2), nunca un veredicto: el payload lo compone quien invoca, y emitir
-        # `inconclusive` aqui haria pasar su propio despiste por un dato del deploy.
         print(f"error: config invalida: {exc}", file=sys.stderr)
         return 2
     print(json.dumps(resultado, ensure_ascii=False))

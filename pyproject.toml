@@ -18,11 +18,43 @@ package = false
 dev = ["ruff>=0.6", "mypy>=1.10", "pytest>=8"]
 
 [tool.ruff]
-line-length = 100
+line-length = 120
 # Ruff formatea tambien los bloques de codigo Python dentro de los `.md`, y aqui los `.md`
 # SON el producto (las skills y sus reference-docs): sus ejemplos se escriben para leerse,
 # no para pasar un formateador. El codigo real vive en `skills/*/scripts` y `tests`.
 extend-exclude = ["*.md"]
+
+[tool.ruff.lint]
+# El ruleset que `backend-best-practices` prescribe para todo codigo nuevo. Antes no habia
+# `select` y ruff corria con su default (`E4`, `E7`, `E9`, `F`), asi que la mitad de esta lista
+# no medias nada -incluido `I`, que es lo que hace cumplir el bloque `isort` de mas abajo-.
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # Pyflakes
+    "I",    # isort
+    "N",    # pep8-naming
+    "B",    # flake8-bugbear
+    "C4",   # flake8-comprehensions
+    "C90",  # mccabe (complejidad ciclomatica)
+    "UP",   # pyupgrade
+    "RUF",  # reglas propias de ruff
+    "PERF", # perflint
+    "TC",   # flake8-type-checking
+    "PL",   # Pylint (PLC, PLE, PLR, PLW)
+    "PGH",  # pygrep-hooks
+    "FURB", # refurb
+    "PT",   # flake8-pytest-style
+]
+fixable = ["ALL"]
+future-annotations = true
+extend-safe-fixes = ["TC001", "TC002", "TC003", "TC004", "UP037"]
+
+[tool.ruff.lint.per-file-ignores]
+# Los mismos que el boilerplate exime en tests, y por el mismo motivo: un `== 50.0` en un
+# assert no es una constante magica sin nombrar, es el valor esperado, y ponerle nombre lo
+# unico que hace es esconder de que va el test.
+"tests/*" = ["PLR0913", "PLR2004"]
 
 [tool.ruff.lint.isort]
 # Los scripts se importan por nombre (via `pythonpath` de pytest), asi que isort no puede
@@ -38,10 +70,15 @@ known-first-party = [
     "metrics",
 ]
 
-# `S` (flake8-bandit) NO se activa a proposito. Sus 7 hallazgos en el repo estan todos en
-# `controles.py` y son inherentes a su cometido -ejecutar los comandos que el repo declara
-# en el issue-: obligaria a sembrar el fichero de `noqa` sin cambiar ni una decision. Y sobre
-# los tests dispara `S101` (usar `assert`) cientos de veces, que en pytest es absurdo.
+# `S` (flake8-bandit) NO se activa a proposito, y es la unica desviacion del ruleset que
+# prescribe `backend-best-practices`. Sus 7 hallazgos en el repo estan todos en `controles.py`
+# y son inherentes a su cometido -ejecutar los comandos que el repo declara en el issue-:
+# obligaria a sembrar el fichero de `noqa` sin cambiar ni una decision. Y sobre los tests
+# dispara `S101` (usar `assert`) cientos de veces, que en pytest es absurdo.
+
+[tool.ruff.format]
+quote-style = "double"
+skip-magic-trailing-comma = false
 
 [tool.mypy]
 strict = true

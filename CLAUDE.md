@@ -97,11 +97,43 @@ rama (`slice/NN-name`)-. Dos ficheros no se escanean, cada uno por lo que **es**
 Targets sueltos: `make test`, `make check-types`, `make check-style`, `make check-format`,
 `make fix-linting`. El toolchain lo gestiona `uv` (grupo `dev` de `pyproject.toml`), asi que no
 hay que instalar nada a mano: `uv run` lo resuelve la primera vez. `python3 -m pytest` tambien
-funciona si tienes pytest global, pero `make check` es la vara completa.
+funciona si tienes pytest global, pero `make check` es la vara completa. Para acortar el feedback
+loop en una sesion con agente, `make test PYTEST_ARGS="--nf -x --tb=short --disable-warnings
+--color=no --no-header"`.
+
+## Convenciones del codigo Python
+
+Las prescribe `backend-engineering:backend-best-practices`, y este repo las cumple entero salvo una
+desviacion declarada (`S`, ver abajo). Lo que hay que saber antes de escribir una linea:
+
+- **Cero comentarios en los `.py`.** El *por que* va en docstrings -de modulo, de funcion, o de
+  atributo justo debajo de la constante que explica-, no en `#`. La unica excepcion es el shebang.
+  Que el rationale viva en el docstring es lo que hace que se lea desde fuera (`help()`, el editor)
+  en vez de solo al abrir el fichero por la linea correcta.
+- **Los dataclasses son `frozen=True, kw_only=True, slots=True`.** Sin excepciones: si algo se
+  construia por partes y luego se mutaba, se construye una vez al final o se usa
+  `dataclasses.replace`. Es lo que hizo falta en `parse_body` y en `comprueba_higiene_pr`.
+- **Nada de `dict` crudo como valor de retorno de logica.** Los `dict[str, object]` que quedan son
+  todos frontera de serializacion, y viven en un `to_dict()`. Un `dict` que cruza dos funciones
+  propias se lee con `.get()` en el consumidor, y ahi una clave mal escrita y una ausente dan lo
+  mismo -era el fallo de `build_scorecard` y de `_slice_info`, que ademas obligaba a tres
+  `assert isinstance(...)` en produccion solo para mypy-.
+- **El vocabulario cerrado es `StrEnum`**, no tuplas de `str` (`Estado`, `MotivoBloqueada`,
+  `EstadoCI`, `Severidad`, `Veredicto`, `Modo`...). Los miembros se serializan como su cadena, asi
+  que ni el formato del issue ni el JSON de salida cambian, pero las comparaciones y los `choices`
+  de cada CLI salen de un solo sitio. En `argparse`, `choices=[str(x) for x in Enum]`: con
+  `list(Enum)` el mensaje de error muestra el `repr` del miembro.
+- **Lo que llega de fuera se valida al entrar.** El payload de `deploy_core` y las filas del log de
+  `metrics` se convierten a dataclass en un `from_dict`/`from_row` que rechaza clave desconocida y
+  tipo equivocado. Nada de `cast`: un `cast` no comprueba, solo calla a mypy.
 
 Dos decisiones de config que no hay que re-litigar (razonadas en `pyproject.toml`): `ruff` **no**
 formatea los `.md` -aqui los `.md` son el producto- y las reglas `S` (bandit) estan **desactivadas**
 porque sus hallazgos viven todos en `controles.py`, donde lanzar procesos es el cometido del fichero.
+
+El `select` de `ruff` es el que prescriben las best-practices, y `smoke/fixture/pyproject.toml`
+**lleva el mismo**: la fixture es el sujeto que trocea el runner en el smoke, asi que relajarla ahi
+le daria al runner un aprobado que no vale. Si tocas uno, toca el otro.
 
 El estado del run vive en el issue de GitHub: no hay panel ni estado local que verificar. La I/O
 contra `gh` la valida el smoke real (ver `smoke/README.md`).

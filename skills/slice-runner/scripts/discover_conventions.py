@@ -20,9 +20,8 @@ import os
 import re
 from pathlib import Path
 
-from issue_body import Fuente
+from issue_body import Fuente, TipoFuente
 
-# Directorios que nunca contienen convenciones del repo: no se descienden.
 _NOISE_DIRS = frozenset(
     {
         ".git",
@@ -40,16 +39,17 @@ _NOISE_DIRS = frozenset(
         ".eggs",
     }
 )
+"""Directorios que nunca contienen convenciones del repo: no se descienden."""
 
-# Ficheros doc reconocibles por nombre (contexto/convencion a cualquier nivel).
 _DOC_FILENAMES = frozenset({"CLAUDE.md", "AGENTS.md", "GEMINI.md"})
 _CONTRIBUTING_RE = re.compile(r"^contributing(\.md|\.rst|\.txt)?$", re.IGNORECASE)
+"""Ficheros doc reconocibles por nombre (contexto/convencion a cualquier nivel)."""
 
-# Directorios cuyo nombre sugiere convencion declarativa.
 _CONV_DIR_RE = re.compile(r"(convention|rules)", re.IGNORECASE)
+"""Directorios cuyo nombre sugiere convencion declarativa."""
 
-# Nombre del contenedor de skills de proyecto.
 _SKILLS_DIR = ".claude/skills"
+"""Nombre del contenedor de skills de proyecto."""
 
 
 def _outermost(dirs: list[str]) -> list[str]:
@@ -63,6 +63,11 @@ def discover_candidates(repo_root: str | Path) -> list[Fuente]:
 
     Rutas relativas a `repo_root`, en POSIX. Los directorios llevan `/` final. No decide:
     devolver un candidato no implica que sea convencion; eso lo confirma el humano.
+
+    Las skills de proyecto son los hijos inmediatos de un `.claude/skills`, y los directorios
+    ocultos de ahi dentro (p. ej. `.nwave`) se dejan fuera: son estado de herramienta, no
+    skills. La poda de `dirnames` es in-place para que `os.walk` no descienda al ruido, y
+    ordenada para que el recorrido sea estable.
     """
     root = Path(repo_root)
     docs: set[str] = set()
@@ -70,32 +75,27 @@ def discover_candidates(repo_root: str | Path) -> list[Fuente]:
     conv_dirs: list[str] = []
 
     for dirpath, dirnames, filenames in os.walk(root):
-        # Poda in-place: os.walk no desciende a los directorios ruido. Orden estable.
         dirnames[:] = sorted(d for d in dirnames if d not in _NOISE_DIRS)
 
         here = Path(dirpath)
         rel_here = here.relative_to(root).as_posix()
 
-        # Skills de proyecto: hijos inmediatos de un `.claude/skills`. Los directorios
-        # ocultos (p. ej. `.nwave`) son estado de herramienta, no skills.
         if rel_here == _SKILLS_DIR or rel_here.endswith("/" + _SKILLS_DIR):
             for name in dirnames:
                 if not name.startswith("."):
                     skills.add((here / name).relative_to(root).as_posix() + "/")
 
-        # Directorio de convencion por nombre (p. ej. rules/, conventions/).
         if rel_here not in (".", "") and _CONV_DIR_RE.search(here.name):
             conv_dirs.append(rel_here + "/")
 
-        # Ficheros doc reconocibles por nombre.
         for filename in filenames:
             if filename in _DOC_FILENAMES or _CONTRIBUTING_RE.match(filename):
                 docs.add((here / filename).relative_to(root).as_posix())
 
     docs.update(_outermost(conv_dirs))
 
-    doc_fuentes = [Fuente("doc", ruta) for ruta in sorted(docs)]
-    skill_fuentes = [Fuente("skill", ruta) for ruta in sorted(skills)]
+    doc_fuentes = [Fuente(tipo=TipoFuente.DOC, ruta=ruta) for ruta in sorted(docs)]
+    skill_fuentes = [Fuente(tipo=TipoFuente.SKILL, ruta=ruta) for ruta in sorted(skills)]
     return doc_fuentes + skill_fuentes
 
 
@@ -106,9 +106,7 @@ def _format(fuentes: list[Fuente]) -> str:
 if __name__ == "__main__":
     import argparse
 
-    parser = argparse.ArgumentParser(
-        description="Lista candidatos a fuente de convencion de un repo (no decide)."
-    )
+    parser = argparse.ArgumentParser(description="Lista candidatos a fuente de convencion de un repo (no decide).")
     parser.add_argument("repo", nargs="?", default=".", help="raiz del repo (por defecto .)")
     args = parser.parse_args()
     print(_format(discover_candidates(args.repo)))

@@ -92,11 +92,14 @@ Se ejecuta con **ticks acotados en background + notificacion** (o `Monitor`), no
   la slice que no se ha podido medir** -> reporte con datos y **para**. Una senal declarada que nadie
   pudo leer no es un `go`: es un fallo de la senal, y se dice.
 
-**Exit 2 no es un veredicto: es tu payload mal escrito.** El script rechaza una clave que no
-conoce (`declarado` por `declarada`, `warmup_seconds` por `warmup_secs`) y un `signals` que no sea
-un objeto, en vez de ignorarlos. Ignorarlos era peor que petar: una senal declarada degradada a
-inferida en silencio, o cero senales configuradas, devuelven el `go` generico que esta skill existe
-para no dar. Si sale 2, **corrige el payload y reinvoca**; no lo leas como `inconclusive`.
+**Exit 2 no es un veredicto: es tu payload mal escrito.** El script rechaza, en vez de ignorarlos:
+una clave que no conoce (`declarado` por `declarada`, `warmup_seconds` por `warmup_secs`), un
+`signals` que no sea un objeto, un valor del tipo equivocado (`"critical": "no"`, `"crit_abs": "5"`),
+un `mode` que no sea `relative` ni `absolute`, y una muestra de `tick_history`/`baseline_samples` que
+no sea un numero. Ignorarlos era peor que petar: una senal declarada degradada a inferida en
+silencio, cero senales configuradas, o unos umbrales a `0.0` que ponen toda muestra en breach,
+devuelven el `go` generico -o su falso no-go simetrico- que esta skill existe para no dar. Si sale 2,
+**corrige el payload y reinvoca**; no lo leas como `inconclusive`.
 
 ### 5. Rama de anomalia
 

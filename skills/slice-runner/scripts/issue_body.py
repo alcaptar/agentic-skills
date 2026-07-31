@@ -2,7 +2,8 @@
 """Logica pura del cuerpo del issue de GitHub (fuente de verdad del estado).
 
 El estado del run vive en el cuerpo de un issue de GitHub: no hay estado local. Este
-modulo NO habla con `gh` (eso es I/O, lo valida el smoke real); solo transforma texto:
+modulo NO habla con `gh` en su nucleo (eso es I/O, lo valida el smoke real); solo
+transforma texto:
 
     parse_body(body)                     cuerpo del issue -> lista de Slice con estado
     set_slice_estado(body, id, estado)   reescribe la linea de una slice, preserva el resto
@@ -38,6 +39,13 @@ motivo de bloqueo `puertas` se normaliza a `controles` al parsear (ver `normaliz
 A nivel de feature, el cuerpo trae dos secciones que `slice-spec` escribe y `slice-runner` solo
 lee: `## Intencion` (el problema entero, ver `parse_intencion`) y `## Controles` (los comandos
 deterministas del repo, ver `parse_controles`).
+
+El vocabulario cerrado (`Estado`, `MotivoBloqueada`, `TipoFuente`) son `StrEnum`: sus miembros se
+serializan como su cadena, asi que el formato del issue no cambia, pero las comparaciones y los
+`choices` de la CLI salen de un solo sitio. `Slice.estado` sigue siendo `str` a proposito: el
+cuerpo lo escribe una persona y el parser tiene que poder leer un marcador que no sea canonico
+sin reventar, para que quien decida sobre el lo vea. Validar es el trabajo de la frontera de
+escritura, no del parser.
 """
 
 from __future__ import annotations
@@ -49,38 +57,47 @@ import re
 import subprocess
 import sys
 import tempfile
-from collections.abc import Iterable, Iterator
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
+from enum import StrEnum
+from typing import TYPE_CHECKING
 
-# Estados canonicos de una slice.
-ESTADOS = (
-    "pendiente",
-    "en-curso",
-    "esperando-merge",
-    "mergeada",
-    "bloqueada",
-    "abortada",
-)
+if TYPE_CHECKING:
+    from collections.abc import Iterable
 
-# Motivos canonicos de `bloqueada`. `puertas` es como se llamaba `controles` antes del
-# renombrado, y hay issues abiertos con ese marcador escrito en el cuerpo: se normaliza al
-# parsear para que nadie aguas abajo tenga que conocer las dos formas. Mismo trato que
-# `AC:` -> `ACEPTACION:`.
-MOTIVOS_BLOQUEADA = (
-    "sin-subagentes",
-    "controles",
-    "verify",
-    "ci-roja",
-    # La CI no se pudo medir: no hay checks, o la respuesta de `gh` no era legible. No es
-    # `ci-roja` -mentiria en el registro duradero- ni `esperando-merge` -afirmaria un verde
-    # que no hubo-. Lo emite el paso 9 desde `controles.py ci-status`.
-    "ci-indeterminada",
-)
-_MOTIVOS_VIEJOS = {"puertas": "controles"}
 
-# Una linea de slice: checkbox, id `slice-NN`, `(name)` o `(type: name)` opcional, titulo,
-# marcador `[estado]` opcional y `PR #N` opcional. Cualquier `- [ ]` que no sea `slice-NN`
-# se ignora (no es una slice): endurecido igual que el parser del antiguo panel.
+class Estado(StrEnum):
+    """Estados canonicos de una slice."""
+
+    PENDIENTE = "pendiente"
+    EN_CURSO = "en-curso"
+    ESPERANDO_MERGE = "esperando-merge"
+    MERGEADA = "mergeada"
+    BLOQUEADA = "bloqueada"
+    ABORTADA = "abortada"
+
+
+class MotivoBloqueada(StrEnum):
+    """Motivos canonicos de `bloqueada`.
+
+    `CI_INDETERMINADA` es que la CI no se pudo medir: no hay checks, o la respuesta de `gh` no
+    era legible. No es `ci-roja` -mentiria en el registro duradero- ni `esperando-merge`
+    -afirmaria un verde que no hubo-. Lo emite el paso 9 desde `controles.py ci-status`.
+    """
+
+    SIN_SUBAGENTES = "sin-subagentes"
+    CONTROLES = "controles"
+    VERIFY = "verify"
+    CI_ROJA = "ci-roja"
+    CI_INDETERMINADA = "ci-indeterminada"
+
+
+_MOTIVOS_VIEJOS = {"puertas": MotivoBloqueada.CONTROLES}
+"""`puertas` es como se llamaba `controles` antes del renombrado.
+
+Hay issues abiertos con ese marcador escrito en el cuerpo, asi que se normaliza al parsear y
+nadie aguas abajo tiene que conocer las dos formas. Mismo trato que `AC:` -> `ACEPTACION:`.
+"""
+
 _LINE_RE = re.compile(
     r"^\s*-\s*\[([ xX])\]\s*"
     r"(slice[-\w]+)\s*"
@@ -90,65 +107,79 @@ _LINE_RE = re.compile(
     r"\s*(?:\[([^\]]+)\])?"
     r"\s*(?:PR\s*#(\d+))?\s*$"
 )
+"""Una linea de slice: checkbox, id `slice-NN`, `(name)` o `(type: name)` opcional, titulo,
+marcador `[estado]` opcional y `PR #N` opcional.
 
-# Lineas indentadas bajo una slice. `SENAL` se acepta con y sin tilde (lo escribe una
-# persona en un issue de GitHub, y "SEÑAL:" no debe perderse en silencio); el formato
-# canonico que se documenta y se emite es `SENAL:`.
+Cualquier `- [ ]` que no sea `slice-NN` se ignora, porque no es una slice: endurecido igual que
+el parser del antiguo panel.
+"""
+
 _SENAL_LINE_RE = re.compile(r"^SE(?:N|Ñ)AL\s*:\s*(.*)$", re.IGNORECASE)
 _REPO_LINE_RE = re.compile(r"^REPO\s*:\s*(.+?)\s*$", re.IGNORECASE)
-# `INTENCION` se acepta con y sin tilde por el mismo motivo que `SENAL`: la escribe una
-# persona en un issue de GitHub y no debe perderse en silencio.
 _INTENCION_LINE_RE = re.compile(r"^INTENCI(?:O|Ó)N\s*:\s*(.*)$", re.IGNORECASE)
-# `ACEPTACION` es el nombre canonico; `AC` es la forma vieja, que se sigue aceptando porque
-# hay issues abiertos escritos con ella (misma tolerancia que con `SEÑAL`).
 _ACEPTACION_LINE_RE = re.compile(r"^(?:ACEPTACI(?:O|Ó)N|AC)\s*:\s*(.*)$", re.IGNORECASE)
+"""Lineas indentadas bajo una slice.
 
-# --- Intencion de la feature (el problema entero, no el de una slice) ---
-# Vive en una seccion `## Intencion` del cuerpo, antes de las fuentes y las slices. Cuenta
-# que esta mal hoy y como se nota, no como se va a arreglar. `slice-spec` la escribe;
-# `slice-runner` la lee para el cuerpo de la PR.
+`SENAL` e `INTENCION` se aceptan con y sin tilde: las escribe una persona en un issue de GitHub
+y un "SEÑAL:" no debe perderse en silencio. `AC` es la forma vieja de `ACEPTACION`, que se sigue
+aceptando porque hay issues abiertos escritos con ella. El formato canonico que se documenta y se
+emite es siempre el completo y sin tilde.
+"""
+
 _INTENCION_HEADING_RE = re.compile(r"^\s*##\s+intenci[oó]n\s*$", re.IGNORECASE)
+"""La intencion de la feature entera (no la de una slice) vive en su propia seccion.
 
-# --- Fuentes de convencion (punteros a la vara de medir del repo) ---
-# Viven en una seccion `## Fuentes de convencion` del cuerpo del issue. Son punteros
-# (no contenido): `doc:` para convenciones declarativas y `skill:` para skills de
-# proyecto (patrones procedimentales). `slice-spec` las escribe tras descubrirlas y
-# confirmarlas; `slice-runner` solo las lee como vara de medir. Guardar el "donde" (no
-# el contenido) evita duplicar la fuente de verdad, que sigue viviendo en el repo.
-#
-# Son **por repo**: una slice con `REPO:` se mide con la vara de SU repo destino, no con
-# la del repo de la app. Las lineas antes de cualquier `### <org>/<repo>` son las del
-# repo del issue; cada subseccion `###` declara las de un repo destino.
-FUENTE_TIPOS = ("doc", "skill")
+Va antes de las fuentes y las slices, y cuenta que esta mal hoy y como se nota, no como se va a
+arreglar. `slice-spec` la escribe; `slice-runner` la lee para el cuerpo de la PR.
+"""
+
+
+class TipoFuente(StrEnum):
+    """`doc` es convencion declarativa (CLAUDE.md, docs de reglas); `skill`, skill de proyecto."""
+
+    DOC = "doc"
+    SKILL = "skill"
+
 
 _FUENTES_HEADING = "## Fuentes de convencion"
 _FUENTES_HEADING_RE = re.compile(r"^\s*##\s+fuentes\s+de\s+convenci[oó]n\s*$", re.IGNORECASE)
 _H2_RE = re.compile(r"^\s*##\s+")
 _SUBHEADING_RE = re.compile(r"^\s*###\s+(.+?)\s*$")
 _FUENTE_LINE_RE = re.compile(r"^\s*-\s*(doc|skill)\s*:\s*(.+?)\s*$", re.IGNORECASE)
+"""Las fuentes de convencion: punteros a la vara de medir del repo, no su contenido.
 
-# --- Controles deterministas (los comandos con los que se mide el repo) ---
-# Viven en una seccion `## Controles` del cuerpo del issue, con la misma forma por repo
-# que las fuentes. Antes los deducia `slice-runner` leyendo el `Makefile` al principio de
-# cada slice: eso metia el Makefile en el contexto del agente de vida mas larga del loop,
-# lo repetia en cada slice y no lo confirmaba nadie. Ahora `slice-spec` los descubre una
-# vez, la persona los confirma y quedan escritos aqui; `slice-runner` solo los lee.
-#
-# Declararlos en el issue tiene un segundo efecto: la vara es texto publico. Si los
-# eligiera el implementador, el juzgado estaria definiendo la vara con la que se le juzga
-# y bastaria `compliance-bias` para que acabara midiendose con `make test-unit`.
-#
-# El nombre reservado `ninguno` declara que el repo no tiene controles reales (el de
-# paneles de Grafana: la CI solo publica en master, no valida en PR). Vacio y eximido no
-# son lo mismo, igual que en `SENAL: exenta`.
+Guardar el "donde" evita duplicar la fuente de verdad, que sigue viviendo en el repo.
+`slice-spec` las escribe tras descubrirlas y confirmarlas; `slice-runner` solo las lee.
+
+Son **por repo**: una slice con `REPO:` se mide con la vara de SU repo destino, no con la del
+repo de la app. Las lineas antes de cualquier `### <org>/<repo>` son las del repo del issue;
+cada subseccion `###` declara las de un repo destino.
+"""
+
 CONTROL_EXENTO = "ninguno"
+"""Nombre reservado que declara que el repo no tiene controles reales.
+
+El caso es el de los paneles de Grafana: su CI solo publica en master, no valida en PR. Vacio y
+eximido no son lo mismo, igual que en `SENAL: exenta`.
+"""
 
 _CONTROLES_HEADING = "## Controles"
 _CONTROLES_HEADING_RE = re.compile(r"^\s*##\s+controles\s*$", re.IGNORECASE)
 _CONTROL_LINE_RE = re.compile(r"^\s*-\s*([\w-]+)\s*:\s*(.+?)\s*$")
+"""Los controles deterministas del repo, con la misma forma por repo que las fuentes.
+
+Antes los deducia `slice-runner` leyendo el `Makefile` al principio de cada slice: eso metia el
+Makefile en el contexto del agente de vida mas larga del loop, lo repetia en cada slice y no lo
+confirmaba nadie. Ahora `slice-spec` los descubre una vez, la persona los confirma y quedan
+escritos aqui; `slice-runner` solo los lee.
+
+Declararlos en el issue tiene un segundo efecto: la vara es texto publico. Si los eligiera el
+implementador, el juzgado estaria definiendo la vara con la que se le juzga y bastaria
+`compliance-bias` para que acabara midiendose con `make test-unit`.
+"""
 
 
-@dataclass
+@dataclass(frozen=True, kw_only=True, slots=True)
 class Slice:
     """Una slice tal como vive en el cuerpo del issue.
 
@@ -157,6 +188,9 @@ class Slice:
     viva en produccion (la consume `deploy-watch`). `repo` es el repo destino: `None` = el repo
     del issue, y cualquier otro valor = slice cross-repo (p. ej. una alerta que vive en
     el repo de manifiestos, o un panel de Grafana).
+
+    `estado` es `str` y no `Estado` porque el cuerpo lo escribe una persona: un marcador no
+    canonico se lee tal cual en vez de reventar el parseo del issue entero.
     """
 
     slice_id: str
@@ -172,21 +206,23 @@ class Slice:
     repo: str | None = None
 
 
-@dataclass
+@dataclass(frozen=True, kw_only=True, slots=True)
 class Fuente:
     """Un puntero a una fuente de convencion de un repo.
 
-    `tipo` es `doc` (convencion declarativa: CLAUDE.md, docs de reglas...) o `skill`
-    (skill de proyecto que codifica un patron). `ruta` es la ruta relativa al repo.
-    `repo` es el repo al que aplica: `None` = el repo del issue (el de la app).
+    `ruta` es la ruta relativa al repo. `repo` es el repo al que aplica: `None` = el repo del
+    issue (el de la app).
     """
 
     tipo: str
     ruta: str
     repo: str | None = None
 
+    def to_dict(self) -> dict[str, object]:
+        return {"tipo": self.tipo, "ruta": self.ruta}
 
-@dataclass
+
+@dataclass(frozen=True, kw_only=True, slots=True)
 class Control:
     """Un control determinista declarado para un repo: `nombre: comando`.
 
@@ -212,6 +248,14 @@ class Control:
         """El motivo de la exencion; cadena vacia si esto es un control de verdad."""
         return self.comando if self.exento else ""
 
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "nombre": self.nombre,
+            "comando": self.comando,
+            "exento": self.exento,
+            "motivo": self.motivo,
+        }
+
 
 def normaliza_motivo(motivo: str) -> str:
     """Motivo de bloqueo en su forma canonica (`puertas` -> `controles`).
@@ -234,31 +278,71 @@ def _split_type_name(paren: str | None) -> tuple[str, str]:
     return ("feat", paren)
 
 
-def _slice_from_match(m: re.Match[str]) -> Slice:
-    box = m.group(1).lower()
-    type_, name = _split_type_name(m.group(3))
-    title = (m.group(4) or "").strip()
-    marcador = (m.group(5) or "").strip()
-    pr = int(m.group(6)) if m.group(6) else None
+@dataclass(frozen=True, kw_only=True, slots=True)
+class _LineasHijas:
+    """Las lineas indentadas bajo una slice, ya clasificadas."""
 
+    intencion: list[str] = field(default_factory=list)
+    aceptacion: list[str] = field(default_factory=list)
+    senal: list[str] = field(default_factory=list)
+    repo: str | None = None
+
+
+def _lineas_hijas(lineas: Iterable[str]) -> _LineasHijas:
+    """Clasifica las lineas indentadas de una slice por su prefijo."""
+    intencion: list[str] = []
+    aceptacion: list[str] = []
+    senal: list[str] = []
+    repo: str | None = None
+    for linea in lineas:
+        if m := _INTENCION_LINE_RE.match(linea):
+            intencion.append(m.group(1).strip())
+        elif m := _ACEPTACION_LINE_RE.match(linea):
+            aceptacion.append(m.group(1).strip())
+        elif m := _SENAL_LINE_RE.match(linea):
+            senal.append(m.group(1).strip())
+        elif m := _REPO_LINE_RE.match(linea):
+            repo = m.group(1)
+    return _LineasHijas(intencion=intencion, aceptacion=aceptacion, senal=senal, repo=repo)
+
+
+def _estado_de_marcador(box: str, marcador: str) -> tuple[str, str]:
+    """El (estado, motivo) de una slice a partir del checkbox y el marcador `[...]`.
+
+    El checkbox manda: marcada es `mergeada` diga lo que diga el texto.
+    """
     if box == "x":
-        # El checkbox manda: marcada = mergeada.
-        estado, motivo = "mergeada", ""
-    elif marcador:
-        if ":" in marcador:
-            estado, raw_motivo = (p.strip() for p in marcador.split(":", 1))
-            motivo = normaliza_motivo(raw_motivo)
-        else:
-            estado, motivo = marcador, ""
-    else:
-        estado, motivo = "pendiente", ""
+        return (Estado.MERGEADA, "")
+    if not marcador:
+        return (Estado.PENDIENTE, "")
+    if ":" in marcador:
+        estado, raw_motivo = (p.strip() for p in marcador.split(":", 1))
+        return (estado, normaliza_motivo(raw_motivo))
+    return (marcador, "")
 
-    return Slice(m.group(2), name, type_, title, estado, motivo, pr)
+
+def _slice_from_match(m: re.Match[str], hijas: Iterable[str] = ()) -> Slice:
+    type_, name = _split_type_name(m.group(3))
+    estado, motivo = _estado_de_marcador(m.group(1).lower(), (m.group(5) or "").strip())
+    clasificadas = _lineas_hijas(hijas)
+    return Slice(
+        slice_id=m.group(2),
+        name=name,
+        type=type_,
+        title=(m.group(4) or "").strip(),
+        estado=estado,
+        motivo=motivo,
+        pr=int(m.group(6)) if m.group(6) else None,
+        intencion=clasificadas.intencion,
+        aceptacion=clasificadas.aceptacion,
+        senal=clasificadas.senal,
+        repo=clasificadas.repo,
+    )
 
 
 def render_slice_line(sl: Slice) -> str:
     """Renderiza la linea de una slice en el formato canonico del cuerpo."""
-    box = "x" if sl.estado == "mergeada" else " "
+    box = "x" if sl.estado == Estado.MERGEADA else " "
     if sl.name:
         paren = f" ({sl.name})" if sl.type == "feat" else f" ({sl.type}: {sl.name})"
     else:
@@ -271,30 +355,18 @@ def render_slice_line(sl: Slice) -> str:
 
 
 def parse_body(body: str) -> list[Slice]:
-    """Extrae las slices (estado, INTENCION, ACEPTACION, SENAL y REPO), en orden de aparicion."""
-    slices: list[Slice] = []
-    current: Slice | None = None
+    """Extrae las slices (estado, INTENCION, ACEPTACION, SENAL y REPO), en orden de aparicion.
+
+    Se recogen las lineas hijas de cada slice y la `Slice` se construye entera al final, en vez
+    de crearla y luego irle anadiendo campos: es lo que permite que sea inmutable.
+    """
+    bloques: list[tuple[re.Match[str], list[str]]] = []
     for line in body.splitlines():
-        m = _LINE_RE.match(line)
-        if m:
-            current = _slice_from_match(m)
-            slices.append(current)
-            continue
-        if current is None:
-            continue
-        stripped = line.strip()
-        if intencion := _INTENCION_LINE_RE.match(stripped):
-            current.intencion.append(intencion.group(1).strip())
-            continue
-        if aceptacion := _ACEPTACION_LINE_RE.match(stripped):
-            current.aceptacion.append(aceptacion.group(1).strip())
-            continue
-        if senal := _SENAL_LINE_RE.match(stripped):
-            current.senal.append(senal.group(1).strip())
-            continue
-        if repo := _REPO_LINE_RE.match(stripped):
-            current.repo = repo.group(1)
-    return slices
+        if m := _LINE_RE.match(line):
+            bloques.append((m, []))
+        elif bloques:
+            bloques[-1][1].append(line.strip())
+    return [_slice_from_match(m, hijas) for m, hijas in bloques]
 
 
 def set_slice_estado(
@@ -312,8 +384,9 @@ def set_slice_estado(
     el PR que ya tuviera la linea. Lanza KeyError si la slice no esta en el cuerpo y ValueError
     si el estado no es canonico.
     """
-    if estado not in ESTADOS:
-        raise ValueError(f"estado no valido: {estado!r} (validos: {', '.join(ESTADOS)})")
+    if estado not in tuple(Estado):
+        validos = ", ".join(Estado)
+        raise ValueError(f"estado no valido: {estado!r} (validos: {validos})")
 
     out: list[str] = []
     changed = False
@@ -321,11 +394,8 @@ def set_slice_estado(
         m = _LINE_RE.match(line)
         if m and m.group(2) == slice_id:
             sl = _slice_from_match(m)
-            sl.estado = estado
-            sl.motivo = motivo
-            if pr is not None:
-                sl.pr = pr
-            out.append(render_slice_line(sl))
+            actualizada = replace(sl, estado=estado, motivo=motivo, pr=pr if pr is not None else sl.pr)
+            out.append(render_slice_line(actualizada))
             changed = True
         else:
             out.append(line)
@@ -345,7 +415,7 @@ def parse_intencion(body: str) -> str | None:
     declarada (el texto). Que lo decida un script y no el criterio del agente es lo que evita
     que una PR afirme "intencion declarada" cuando nadie la escribio.
     """
-    if not any(_INTENCION_HEADING_RE.match(line) for line in body.splitlines()):
+    if not _tiene_seccion(body, _INTENCION_HEADING_RE):
         return None
 
     collected: list[str] = []
@@ -355,7 +425,7 @@ def parse_intencion(body: str) -> str | None:
             in_section = True
             continue
         if in_section:
-            if _H2_RE.match(line):  # empieza otra seccion: la de intencion acabo
+            if _H2_RE.match(line):
                 break
             collected.append(line)
     return "\n".join(collected).strip()
@@ -366,14 +436,15 @@ def _tiene_seccion(body: str, heading_re: re.Pattern[str]) -> bool:
     return any(heading_re.match(line) for line in body.splitlines())
 
 
-def _iter_seccion(body: str, heading_re: re.Pattern[str]) -> Iterator[tuple[str | None, str]]:
-    """Recorre las lineas de una seccion por repo, como `(repo, linea)`.
+def _iter_seccion(body: str, heading_re: re.Pattern[str]) -> list[tuple[str | None, str]]:
+    """Las lineas de una seccion por repo, como `(repo, linea)`.
 
     Se detiene en el siguiente `## `. Una subseccion `### <org>/<repo>` atribuye las lineas
     que le siguen a ese repo destino; las de antes van con `repo=None` (el repo del issue).
     Lo comparten las secciones `## Fuentes de convencion` y `## Controles`, que tienen la
     misma forma por repo y existen por la misma razon.
     """
+    out: list[tuple[str | None, str]] = []
     in_section = False
     repo: str | None = None
     for line in body.splitlines():
@@ -382,12 +453,13 @@ def _iter_seccion(body: str, heading_re: re.Pattern[str]) -> Iterator[tuple[str 
             continue
         if not in_section:
             continue
-        if _H2_RE.match(line):  # empieza otra seccion: esta acabo
-            return
+        if _H2_RE.match(line):
+            break
         if sub := _SUBHEADING_RE.match(line):
             repo = sub.group(1)
             continue
-        yield repo, line
+        out.append((repo, line))
+    return out
 
 
 def _repos_en_orden(items: Iterable[Fuente | Control]) -> list[str]:
@@ -410,9 +482,9 @@ def _upsert_seccion(body: str, heading_re: re.Pattern[str], section: str) -> str
         if heading_re.match(lines[i]):
             out.extend(section_lines)
             i += 1
-            while i < n and not _H2_RE.match(lines[i]):  # descarta la seccion vieja
+            while i < n and not _H2_RE.match(lines[i]):
                 i += 1
-            if i < n:  # separa de la siguiente seccion con una linea en blanco
+            if i < n:
                 out.append("")
             replaced = True
             continue
@@ -446,7 +518,7 @@ def parse_fuentes(body: str) -> list[Fuente]:
     fuentes: list[Fuente] = []
     for repo, line in _iter_seccion(body, _FUENTES_HEADING_RE):
         if m := _FUENTE_LINE_RE.match(line):
-            fuentes.append(Fuente(m.group(1).lower(), m.group(2).strip(), repo))
+            fuentes.append(Fuente(tipo=m.group(1).lower(), ruta=m.group(2).strip(), repo=repo))
     return fuentes
 
 
@@ -468,10 +540,9 @@ def render_fuentes_section(fuentes: Iterable[Fuente]) -> str:
     """
     fuentes = list(fuentes)
     for f in fuentes:
-        if f.tipo not in FUENTE_TIPOS:
-            raise ValueError(
-                f"tipo de fuente no valido: {f.tipo!r} (validos: {', '.join(FUENTE_TIPOS)})"
-            )
+        if f.tipo not in tuple(TipoFuente):
+            validos = ", ".join(TipoFuente)
+            raise ValueError(f"tipo de fuente no valido: {f.tipo!r} (validos: {validos})")
 
     lines = [_FUENTES_HEADING]
     lines += [f"- {f.tipo}: {f.ruta}" for f in fuentes if f.repo is None]
@@ -510,7 +581,7 @@ def parse_controles(body: str) -> list[Control]:
     controles: list[Control] = []
     for repo, line in _iter_seccion(body, _CONTROLES_HEADING_RE):
         if m := _CONTROL_LINE_RE.match(line):
-            controles.append(Control(m.group(1).strip(), m.group(2).strip(), repo))
+            controles.append(Control(nombre=m.group(1).strip(), comando=m.group(2).strip(), repo=repo))
     return controles
 
 
@@ -557,24 +628,20 @@ def set_controles(body: str, controles: Iterable[Control]) -> str:
     return _upsert_seccion(body, _CONTROLES_HEADING_RE, render_controles_section(controles))
 
 
-# --- CLI ---------------------------------------------------------------------
-#
-# Todo lo de arriba es puro y se testea sin `gh`. Esto de abajo es la capa de I/O, y existe
-# porque sin ella el agente escribia el read-modify-write a mano en cada transicion: un
-# `python3 -c` con `sys.path.insert`, `gh issue view --json body`, la llamada, y `gh issue
-# edit --body-file`. En una sola sesion se escribio **seis veces**, y cada copia es una
-# ocasion de equivocarse en silencio (el `--json body -q .body` mal puesto devuelve cadena
-# vacia y el edit deja el issue en blanco). Leer un issue, reescribir una linea y
-# guardarlo es regla exacta, no juicio: `offload-deterministic`.
-#
-# El nucleo sigue siendo puro: estas funciones solo orquestan `gh` alrededor de las de
-# arriba. Los tests apuntan al nucleo, como en `controles.py` con `clasifica_ci`.
-
 _GH_TIMEOUT = 60
 
 
 def _gh_body(repo: str, issue: int) -> str:
-    """Cuerpo actual del issue. Falla ruidosamente: un cuerpo vacio nunca es aceptable."""
+    """Cuerpo actual del issue. Falla ruidosamente: un cuerpo vacio nunca es aceptable.
+
+    Todo lo de arriba es puro y se testea sin `gh`. Esta capa de I/O existe porque sin ella el
+    agente escribia el read-modify-write a mano en cada transicion: un `python3 -c` con
+    `sys.path.insert`, `gh issue view --json body`, la llamada, y `gh issue edit --body-file`.
+    En una sola sesion se escribio seis veces, y cada copia es una ocasion de equivocarse en
+    silencio -el `--json body -q .body` mal puesto devuelve cadena vacia y el edit deja el issue
+    en blanco-. Leer un issue, reescribir una linea y guardarlo es regla exacta, no juicio:
+    `offload-deterministic`.
+    """
     proc = subprocess.run(
         ["gh", "issue", "view", str(issue), "--repo", repo, "--json", "body", "-q", ".body"],
         capture_output=True,
@@ -618,25 +685,74 @@ def scope_de(slice_: Slice) -> str:
     return f"{slice_.type}({slice_.name})" if slice_.name else slice_.type
 
 
-def _slice_info(slice_: Slice) -> dict[str, object]:
-    return {
-        "slice_id": slice_.slice_id,
-        "name": slice_.name,
-        "type": slice_.type,
-        "titulo": slice_.title,
-        "estado": slice_.estado,
-        "motivo": slice_.motivo,
-        "pr": slice_.pr,
-        "repo": slice_.repo,
-        "intencion": slice_.intencion,
-        "aceptacion": slice_.aceptacion,
-        "senal": slice_.senal,
-        "rama": rama_de(slice_),
-        "scope": scope_de(slice_),
-    }
+@dataclass(frozen=True, kw_only=True, slots=True)
+class SliceInfo:
+    """Una slice con la rama y el scope ya derivados, lista para el paso 1.
+
+    Las claves que emite `to_dict` son el contrato que documenta `SKILL.md`.
+    """
+
+    slice_: Slice
+
+    @property
+    def rama(self) -> str:
+        return rama_de(self.slice_)
+
+    @property
+    def scope(self) -> str:
+        return scope_de(self.slice_)
+
+    def to_dict(self) -> dict[str, object]:
+        sl = self.slice_
+        return {
+            "slice_id": sl.slice_id,
+            "name": sl.name,
+            "type": sl.type,
+            "titulo": sl.title,
+            "estado": sl.estado,
+            "motivo": sl.motivo,
+            "pr": sl.pr,
+            "repo": sl.repo,
+            "intencion": sl.intencion,
+            "aceptacion": sl.aceptacion,
+            "senal": sl.senal,
+            "rama": self.rama,
+            "scope": self.scope,
+        }
 
 
-def _emit_show(out: dict[str, object], as_json: bool) -> int:
+@dataclass(frozen=True, kw_only=True, slots=True)
+class Show:
+    """Todo lo que el paso 1 necesita del issue, ya filtrado por el repo de la slice.
+
+    Era un `dict[str, object]` armado en `_cmd_show` y leido en `_emit_show` a base de indexar
+    claves, lo que obligaba a tres `assert isinstance(...)` en produccion para convencer a mypy
+    de lo que un campo declara por construccion. `slice` a `None` significa que no queda ninguna
+    slice sin cerrar; el resto de claves se emiten igual, para que quien consuma el JSON no tenga
+    que ramificar sobre que claves existen.
+    """
+
+    slices: int
+    slice: SliceInfo | None = None
+    intencion_feature: str | None = None
+    tiene_seccion_fuentes: bool = False
+    tiene_seccion_controles: bool = False
+    fuentes: list[Fuente] = field(default_factory=list)
+    controles: list[Control] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "slices": self.slices,
+            "intencion_feature": self.intencion_feature,
+            "tiene_seccion_fuentes": self.tiene_seccion_fuentes,
+            "tiene_seccion_controles": self.tiene_seccion_controles,
+            "fuentes": [f.to_dict() for f in self.fuentes],
+            "controles": [c.to_dict() for c in self.controles],
+            "slice": self.slice.to_dict() if self.slice else None,
+        }
+
+
+def _emit_show(show: Show, as_json: bool) -> int:
     """Humano por defecto, JSON con `--json`: el mismo contrato que `controles.py`.
 
     La incoherencia anterior -este subcomando emitia JSON siempre y tenia `--pretty`,
@@ -645,39 +761,45 @@ def _emit_show(out: dict[str, object], as_json: bool) -> int:
     mismo repo con convenciones opuestas para lo mismo son una trampa, no una preferencia.
     """
     if as_json:
-        print(json.dumps(out, ensure_ascii=False))
+        print(json.dumps(show.to_dict(), ensure_ascii=False))
         return 0
 
-    slice_ = out.get("slice")
-    if not isinstance(slice_, dict):
-        print(f"[show] {out.get('slices')} slice(s), ninguna sin cerrar")
+    if show.slice is None:
+        print(f"[show] {show.slices} slice(s), ninguna sin cerrar")
         return 0
-    motivo = f": {slice_['motivo']}" if slice_["motivo"] else ""
-    print(f"[show] {out['slices']} slice(s) en el issue")
-    print(f"  slice   {slice_['slice_id']} ({slice_['name']}) [{slice_['estado']}{motivo}]")
-    print(f"  rama    {slice_['rama']}")
-    print(f"  scope   {slice_['scope']}")
-    if slice_["repo"]:
-        print(f"  repo    {slice_['repo']}")
-    if slice_["pr"]:
-        print(f"  pr      #{slice_['pr']}")
-    fuentes = out["fuentes"]
-    controles = out["controles"]
-    assert isinstance(fuentes, list)
-    assert isinstance(controles, list)
-    for f in fuentes:
-        print(f"  fuente  {f['tipo']}: {f['ruta']}")
-    for c in controles:
-        print(f"  control {c['nombre']}: {'eximido' if c['exento'] else c['comando']}")
-    aceptacion = slice_["aceptacion"]
-    assert isinstance(aceptacion, list)
-    print(f"  aceptacion: {len(aceptacion)} criterio(s)")
-    print(f"  senal:      {'si' if slice_['senal'] else 'NO DECLARADA'}")
+
+    sl = show.slice.slice_
+    motivo = f": {sl.motivo}" if sl.motivo else ""
+    print(f"[show] {show.slices} slice(s) en el issue")
+    print(f"  slice   {sl.slice_id} ({sl.name}) [{sl.estado}{motivo}]")
+    print(f"  rama    {show.slice.rama}")
+    print(f"  scope   {show.slice.scope}")
+    if sl.repo:
+        print(f"  repo    {sl.repo}")
+    if sl.pr:
+        print(f"  pr      #{sl.pr}")
+    for f in show.fuentes:
+        print(f"  fuente  {f.tipo}: {f.ruta}")
+    for c in show.controles:
+        print(f"  control {c.nombre}: {'eximido' if c.exento else c.comando}")
+    print(f"  aceptacion: {len(sl.aceptacion)} criterio(s)")
+    print(f"  senal:      {'si' if sl.senal else 'NO DECLARADA'}")
     print(
-        f"  intencion:  slice {'si' if slice_['intencion'] else 'NO DECLARADA'}"
-        f", feature {'si' if out['intencion_feature'] else 'NO DECLARADA'}"
+        f"  intencion:  slice {'si' if sl.intencion else 'NO DECLARADA'}"
+        f", feature {'si' if show.intencion_feature else 'NO DECLARADA'}"
     )
     return 0
+
+
+def _elige_slice(slices: list[Slice], pedida: str | None) -> Slice | None:
+    """La slice pedida, o la siguiente sin cerrar.
+
+    Una en `esperando-merge` se retoma ahi, asi que tambien cuenta como "no terminada" y sale
+    antes que una pendiente posterior.
+    """
+    if pedida:
+        return next((s for s in slices if s.slice_id == pedida), None)
+    return next((s for s in slices if s.estado != Estado.MERGEADA), None)
 
 
 def _cmd_show(args: argparse.Namespace) -> int:
@@ -687,61 +809,57 @@ def _cmd_show(args: argparse.Namespace) -> int:
         print("error: el cuerpo no tiene ninguna linea de slice valida", file=sys.stderr)
         return 2
 
-    if args.slice:
-        elegida = next((s for s in slices if s.slice_id == args.slice), None)
-        if elegida is None:
+    elegida = _elige_slice(slices, args.slice)
+    if elegida is None:
+        if args.slice:
             print(f"error: {args.slice} no esta en el issue", file=sys.stderr)
             return 2
-    else:
-        # La siguiente pendiente. Una en `esperando-merge` se retoma ahi, asi que tambien
-        # cuenta como "no terminada" y sale antes que una pendiente posterior.
-        elegida = next((s for s in slices if s.estado not in ("mergeada",)), None)
-        if elegida is None:
-            return _emit_show({"slices": len(slices), "slice": None}, args.json)
+        return _emit_show(Show(slices=len(slices)), args.json)
 
-    out: dict[str, object] = {
-        "slices": len(slices),
-        "intencion_feature": parse_intencion(body),
-        "tiene_seccion_fuentes": tiene_seccion_fuentes(body),
-        "tiene_seccion_controles": tiene_seccion_controles(body),
-        "fuentes": [
-            {"tipo": f.tipo, "ruta": f.ruta}
-            for f in fuentes_para(parse_fuentes(body), elegida.repo)
-        ],
-        "controles": [
-            {"nombre": c.nombre, "comando": c.comando, "exento": c.exento, "motivo": c.motivo}
-            for c in controles_para(parse_controles(body), elegida.repo)
-        ],
-        "slice": _slice_info(elegida),
-    }
-    return _emit_show(out, args.json)
+    return _emit_show(
+        Show(
+            slices=len(slices),
+            slice=SliceInfo(slice_=elegida),
+            intencion_feature=parse_intencion(body),
+            tiene_seccion_fuentes=tiene_seccion_fuentes(body),
+            tiene_seccion_controles=tiene_seccion_controles(body),
+            fuentes=fuentes_para(parse_fuentes(body), elegida.repo),
+            controles=controles_para(parse_controles(body), elegida.repo),
+        ),
+        args.json,
+    )
+
+
+def _valida_motivo(estado: str, motivo: str | None) -> str | None:
+    """El error de uso que corresponda, o `None` si el par (estado, motivo) es valido.
+
+    `set_slice_estado` es puro y no valida el motivo: acepta cualquier cadena. Eso deja que un
+    motivo inventado acabe escrito en el registro duradero, donde ya no se puede renombrar
+    (paso lo mismo con `puertas`). La validacion vive aqui, en la frontera de escritura, que es
+    el unico sitio donde hay un exit code que la haga cumplir.
+
+    `abortada` se deja libre a proposito: su vocabulario aun no esta canonicalizado -la skill
+    solo documenta `presupuesto`- y fijarlo aqui seria decidirlo de tapadillo. Para el resto de
+    estados un motivo es ruido que nadie lee.
+    """
+    if estado == Estado.BLOQUEADA:
+        if motivo not in tuple(MotivoBloqueada):
+            validos = [str(m) for m in MotivoBloqueada]
+            return f"bloqueada exige un motivo canonico, uno de {validos} (recibido: {motivo!r})"
+        return None
+    if motivo and estado != Estado.ABORTADA:
+        return f"el estado {estado} no lleva motivo"
+    return None
 
 
 def _cmd_set_estado(args: argparse.Namespace) -> int:
-    # `set_slice_estado` es puro y no valida el motivo: acepta cualquier cadena. Eso deja
-    # que un motivo inventado acabe escrito en el registro duradero, donde ya no se puede
-    # renombrar (paso lo mismo con `puertas`). La validacion vive aqui, en la frontera de
-    # escritura, que es el unico sitio donde hay un exit code que la haga cumplir.
-    if args.estado == "bloqueada":
-        if args.motivo not in MOTIVOS_BLOQUEADA:
-            print(
-                f"error: bloqueada exige un motivo canonico, uno de {list(MOTIVOS_BLOQUEADA)}"
-                f" (recibido: {args.motivo!r})",
-                file=sys.stderr,
-            )
-            return 2
-    elif args.motivo and args.estado != "abortada":
-        # `abortada` se deja libre a proposito: su vocabulario aun no esta canonicalizado
-        # (la skill solo documenta `presupuesto`), y fijarlo aqui seria decidirlo de
-        # tapadillo. Para el resto de estados un motivo es ruido que nadie lee.
-        print(f"error: el estado {args.estado} no lleva motivo", file=sys.stderr)
+    if error := _valida_motivo(args.estado, args.motivo):
+        print(f"error: {error}", file=sys.stderr)
         return 2
 
     body = _gh_body(args.repo, args.issue)
     try:
-        nuevo = set_slice_estado(
-            body, args.slice, args.estado, pr=args.pr, motivo=args.motivo or ""
-        )
+        nuevo = set_slice_estado(body, args.slice, args.estado, pr=args.pr, motivo=args.motivo or "")
     except (KeyError, ValueError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
@@ -783,18 +901,18 @@ def build_parser() -> argparse.ArgumentParser:
     sh = sub.add_parser("show", help="parsea el issue y emite lo que necesita el paso 1")
     sh.add_argument("--repo", required=True, help="org/repo del issue")
     sh.add_argument("--issue", required=True, type=int)
-    sh.add_argument(
-        "--slice", default=None, help="slice concreta (default: la siguiente sin cerrar)"
-    )
+    sh.add_argument("--slice", default=None, help="slice concreta (default: la siguiente sin cerrar)")
     sh.add_argument("--json", action="store_true", help="salida estructurada JSON")
 
     st = sub.add_parser("set-estado", help="reescribe la linea de una slice en el issue")
     st.add_argument("--repo", required=True, help="org/repo del issue")
     st.add_argument("--issue", required=True, type=int)
     st.add_argument("--slice", required=True, help="p. ej. slice-01")
-    st.add_argument("--estado", required=True, choices=ESTADOS)
+    st.add_argument("--estado", required=True, choices=[str(e) for e in Estado])
     st.add_argument(
-        "--motivo", default=None, help=f"para bloqueada: uno de {list(MOTIVOS_BLOQUEADA)}"
+        "--motivo",
+        default=None,
+        help=f"para bloqueada: uno de {[str(m) for m in MotivoBloqueada]}",
     )
     st.add_argument("--pr", type=int, default=None, help="numero de PR (se conserva si no se pasa)")
     st.add_argument("--json", action="store_true", help="salida estructurada JSON")

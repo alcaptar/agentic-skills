@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 from conftest import escribe
 
 from discover_conventions import discover_candidates
 from issue_body import Fuente
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 def _build_repo(root: Path) -> None:
@@ -19,7 +22,6 @@ def _build_repo(root: Path) -> None:
     escribe(root, ".claude/skills/deprecate-hermes-handler/SKILL.md")
     escribe(root, "CONTRIBUTING.md")
     escribe(root, "src/app/CLAUDE.md")
-    # ruido que NO debe salir
     escribe(root, ".git/config")
     escribe(root, "__pycache__/x.pyc")
     escribe(root, "node_modules/dep/CLAUDE.md")
@@ -41,9 +43,13 @@ def test_descubre_docs_y_skills(tmp_path: Path) -> None:
 
 
 def test_directorio_de_convencion_como_puntero_al_outermost(tmp_path: Path) -> None:
+    """El puntero apunta al directorio de reglas mas externo.
+
+    Ni a cada `.md` de dentro ni al `conventions/` anidado: uno solo cubre el arbol entero, y los
+    de dentro serian ruido en la vara de medir.
+    """
     _build_repo(tmp_path)
     docs = {f.ruta for f in discover_candidates(tmp_path) if f.tipo == "doc"}
-    # apunta al directorio de reglas outermost, no a cada .md ni al conventions/ anidado
     assert ".claude/rules/" in docs
     assert ".claude/rules/conventions/" not in docs
     assert ".claude/rules/conventions/testing.md" not in docs
@@ -61,9 +67,7 @@ def test_orden_determinista_docs_luego_skills(tmp_path: Path) -> None:
     _build_repo(tmp_path)
     fuentes = discover_candidates(tmp_path)
     tipos = [f.tipo for f in fuentes]
-    # todos los doc preceden a los skill
     assert tipos == sorted(tipos, key=lambda t: 0 if t == "doc" else 1)
-    # dentro de cada tipo, ordenado por ruta
     docs = [f.ruta for f in fuentes if f.tipo == "doc"]
     skills = [f.ruta for f in fuentes if f.tipo == "skill"]
     assert docs == sorted(docs)
@@ -71,7 +75,7 @@ def test_orden_determinista_docs_luego_skills(tmp_path: Path) -> None:
 
 
 def test_ignora_dirs_ocultos_dentro_de_skills(tmp_path: Path) -> None:
-    # `.claude/skills/.nwave/` es estado de herramienta, no una skill de proyecto.
+    """`.claude/skills/.nwave/` es estado de herramienta, no una skill de proyecto."""
     escribe(tmp_path, ".claude/skills/duplicate-action/SKILL.md")
     escribe(tmp_path, ".claude/skills/.nwave/config.json")
     skills = {f.ruta for f in discover_candidates(tmp_path) if f.tipo == "skill"}
@@ -86,4 +90,4 @@ def test_repo_sin_candidatos_lista_vacia(tmp_path: Path) -> None:
 def test_devuelve_fuentes(tmp_path: Path) -> None:
     escribe(tmp_path, "CLAUDE.md")
     fuentes = discover_candidates(tmp_path)
-    assert fuentes == [Fuente("doc", "CLAUDE.md")]
+    assert fuentes == [Fuente(tipo="doc", ruta="CLAUDE.md")]

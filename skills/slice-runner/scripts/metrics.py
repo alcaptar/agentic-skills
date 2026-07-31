@@ -16,8 +16,10 @@ opcional best-effort y, si no viene, no se inventa.
 El log es durable y append-only, asi que los registros viejos no tienen los campos
 nuevos: el agregado los trata como cero, nunca como dato ausente que invalide la fila. Por
 lo mismo, los que se escribieron cuando los controles se llamaban "puertas" siguen contando:
-el agregado lee las dos formas y las suma como una sola categoria (ver `_veredicto` y
-`_reintentos_controles`). Renombrar no puede borrar historico.
+el agregado lee las dos formas y las suma como una sola categoria. Renombrar no puede borrar
+historico, y toda esa tolerancia vive en un solo sitio (`Fila.from_row`) para que el resto
+del modulo pueda hacer aritmetica sobre campos tipados sin volver a preguntarse que forma
+tenia el log el mes pasado.
 
 Uso:
     metrics.py record --repo <repo> --slice slice-01 --name cantidad-vo \\
@@ -36,90 +38,252 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from dataclasses import dataclass
 from datetime import UTC, datetime
+from enum import StrEnum
 from pathlib import Path
 
 DEFAULT_PATH = Path.home() / ".claude" / "slice-runner" / "metrics.jsonl"
 
-# `FALLA` es el veto del juez adversarial. `bloqueada-controles` es agotar los reintentos
-# de lint/tipos/tests: un fallo mecanico, que se registra aparte porque confundirlo con un
-# veto del juez dejaria inservible el unico instrumento para calibrarlo.
-VEREDICTOS = ("PASA", "FALLA", "bloqueada-controles", "abortada-presupuesto")
-CI_RESULTS = ("green", "red", "none")
 
-# Formas viejas que hay escritas en el log durable, de cuando los controles se llamaban
-# "puertas". Solo se leen: lo que se emite es siempre la forma canonica.
+class Veredicto(StrEnum):
+    """Como acabo una slice, en el vocabulario del log durable.
+
+    `FALLA` es el veto del juez adversarial. `BLOQUEADA_CONTROLES` es agotar los reintentos de
+    lint/tipos/tests: un fallo mecanico, que se registra aparte porque confundirlo con un veto
+    del juez dejaria inservible el unico instrumento para calibrarlo.
+    """
+
+    PASA = "PASA"
+    FALLA = "FALLA"
+    BLOQUEADA_CONTROLES = "bloqueada-controles"
+    ABORTADA_PRESUPUESTO = "abortada-presupuesto"
+
+
+class Ci(StrEnum):
+    """Como acabo la CI de la PR de la slice."""
+
+    VERDE = "green"
+    ROJA = "red"
+    NINGUNA = "none"
+
+
 _VEREDICTO_VIEJO = "bloqueada-puertas"
 _REINTENTOS_CONTROLES_VIEJO = "reintentos_puertas"
+"""Formas viejas escritas en el log durable, de cuando los controles se llamaban "puertas".
+
+Solo se leen (las consume `Fila.from_row`): lo que se emite es siempre la forma canonica.
+"""
 
 
 def _path(arg: str | None) -> Path:
     return Path(arg).expanduser() if arg else DEFAULT_PATH
 
 
-def _veredicto(row: dict[str, object]) -> object:
-    """El veredicto de una fila, con la forma vieja normalizada a la canonica."""
-    v = row.get("veredicto")
-    return "bloqueada-controles" if v == _VEREDICTO_VIEJO else v
+@dataclass(frozen=True, kw_only=True, slots=True)
+class Hallazgos:
+    """Los hallazgos del verificador de una slice, por severidad."""
+
+    alta: int = 0
+    media: int = 0
+    baja: int = 0
+
+    def to_dict(self) -> dict[str, object]:
+        return {"alta": self.alta, "media": self.media, "baja": self.baja}
 
 
-def _reintentos_controles(row: dict[str, object]) -> object:
-    """Los reintentos de controles de una fila, mirando tambien el campo con el nombre viejo."""
-    valor = row.get("reintentos_controles")
-    return row.get(_REINTENTOS_CONTROLES_VIEJO) if valor is None else valor
+@dataclass(frozen=True, kw_only=True, slots=True)
+class Registro:
+    """Una linea del log: lo que se sabe de una slice ya cerrada.
+
+    Era un `dict` literal armado dentro de `record` a partir de un `argparse.Namespace`, o sea
+    dos bolsas sin tipar seguidas. Las claves que escribe `to_dict` son el formato del log
+    durable y no cambian: hay historico escrito con ellas.
+
+    `reintentos_verify` y `descartes_verify` son las dos formas de volver a invocar al
+    verificador, separadas a proposito por el mismo motivo por el que `FALLA` y
+    `bloqueada-controles` son veredictos distintos: una es un rechazo semantico del juez y la
+    otra un fallo mecanico del agente. `coste_tokens` se queda en `None` si no se pasa: no se
+    inventa.
+    """
+
+    ts: str
+    repo: str
+    slice_id: str
+    name: str
+    veredicto: Veredicto
+    ci: Ci
+    hallazgos: Hallazgos
+    reintentos_implement: int = 0
+    reintentos_controles: int = 0
+    reintentos_ci: int = 0
+    reintentos_verify: int = 0
+    descartes_verify: int = 0
+    duracion_s: int | None = None
+    coste_tokens: int | None = None
+
+    @staticmethod
+    def from_args(args: argparse.Namespace) -> Registro:
+        return Registro(
+            ts=args.ts or datetime.now(UTC).isoformat(),
+            repo=args.repo,
+            slice_id=args.slice,
+            name=args.name,
+            veredicto=Veredicto(args.veredicto),
+            ci=Ci(args.ci),
+            hallazgos=Hallazgos(
+                alta=args.hallazgos_alta,
+                media=args.hallazgos_media,
+                baja=args.hallazgos_baja,
+            ),
+            reintentos_implement=args.reintentos_implement,
+            reintentos_controles=args.reintentos_controles,
+            reintentos_ci=args.reintentos_ci,
+            reintentos_verify=args.reintentos_verify,
+            descartes_verify=args.descartes_verify,
+            duracion_s=args.duracion_s,
+            coste_tokens=args.coste_tokens,
+        )
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "ts": self.ts,
+            "repo": self.repo,
+            "slice_id": self.slice_id,
+            "name": self.name,
+            "veredicto": str(self.veredicto),
+            "ci": str(self.ci),
+            "hallazgos": self.hallazgos.to_dict(),
+            "reintentos_implement": self.reintentos_implement,
+            "reintentos_controles": self.reintentos_controles,
+            "reintentos_ci": self.reintentos_ci,
+            "reintentos_verify": self.reintentos_verify,
+            "descartes_verify": self.descartes_verify,
+            "duracion_s": self.duracion_s,
+            "coste_tokens": self.coste_tokens,
+        }
+
+
+def _texto(row: dict[str, object], clave: str) -> str:
+    valor = row.get(clave)
+    return valor if isinstance(valor, str) else ""
+
+
+def _numero(row: dict[str, object], *claves: str) -> float:
+    """El primer valor numerico presente entre `claves`, o 0.0.
+
+    Varias claves porque el log durable tiene el campo viejo y el nuevo escritos en filas
+    distintas, y una fila anterior al campo no tiene ninguno: cero, nunca dato ausente que
+    invalide la fila.
+    """
+    for clave in claves:
+        valor = row.get(clave)
+        if isinstance(valor, (int, float)) and not isinstance(valor, bool):
+            return float(valor)
+    return 0.0
+
+
+def _opcional(row: dict[str, object], clave: str) -> float | None:
+    valor = row.get(clave)
+    if isinstance(valor, (int, float)) and not isinstance(valor, bool):
+        return float(valor)
+    return None
+
+
+@dataclass(frozen=True, kw_only=True, slots=True)
+class Fila:
+    """Una fila del log ya normalizada: es donde vive TODA la compatibilidad historica.
+
+    Antes cada cifra del agregado se leia del `dict` crudo con su propio `.get()`, y las dos
+    lecturas tolerantes (`bloqueada-puertas`, `reintentos_puertas`) eran funciones que devolvian
+    `object`. Con esto, `_aggregate` es aritmetica sobre campos tipados y quien anada un campo
+    nuevo tiene un solo sitio donde decidir como se leen las filas que no lo traen.
+    """
+
+    repo: str
+    slice_id: str
+    veredicto: str
+    ci: str
+    reintentos_implement: float
+    reintentos_controles: float
+    reintentos_ci: float
+    reintentos_verify: float
+    descartes_verify: float
+    duracion_s: float | None
+    coste_tokens: float | None
+
+    @staticmethod
+    def from_row(row: dict[str, object]) -> Fila:
+        veredicto = _texto(row, "veredicto")
+        return Fila(
+            repo=_texto(row, "repo"),
+            slice_id=_texto(row, "slice_id"),
+            veredicto=Veredicto.BLOQUEADA_CONTROLES if veredicto == _VEREDICTO_VIEJO else veredicto,
+            ci=_texto(row, "ci"),
+            reintentos_implement=_numero(row, "reintentos_implement"),
+            reintentos_controles=_numero(row, "reintentos_controles", _REINTENTOS_CONTROLES_VIEJO),
+            reintentos_ci=_numero(row, "reintentos_ci"),
+            reintentos_verify=_numero(row, "reintentos_verify"),
+            descartes_verify=_numero(row, "descartes_verify"),
+            duracion_s=_opcional(row, "duracion_s"),
+            coste_tokens=_opcional(row, "coste_tokens"),
+        )
+
+    @property
+    def primer_intento(self) -> bool:
+        """Resuelta limpia a la primera: PASA del juez, CI verde y cero reintentos de cualquier clase.
+
+        Tambien los de controles: una vuelta por lint sucio no es limpia. Un abort-por-presupuesto
+        con 0 reintentos NO es exito, y por eso el veredicto tiene que ser `PASA` explicito.
+        """
+        return (
+            self.veredicto == Veredicto.PASA
+            and self.ci == Ci.VERDE
+            and not self.reintentos_implement
+            and not self.reintentos_controles
+            and not self.reintentos_ci
+        )
+
+
+def escribe(registro: Registro, path: Path) -> None:
+    """Anexa el registro al log durable, creando el directorio si hace falta."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps(registro.to_dict(), ensure_ascii=False) + "\n")
 
 
 def record(args: argparse.Namespace) -> int:
-    ts = args.ts or datetime.now(UTC).isoformat()
-    entry: dict[str, object] = {
-        "ts": ts,
-        "repo": args.repo,
-        "slice_id": args.slice,
-        "name": args.name,
-        "veredicto": args.veredicto,
-        "ci": args.ci,
-        "hallazgos": {
-            "alta": args.hallazgos_alta,
-            "media": args.hallazgos_media,
-            "baja": args.hallazgos_baja,
-        },
-        "reintentos_implement": args.reintentos_implement,
-        "reintentos_controles": args.reintentos_controles,
-        "reintentos_ci": args.reintentos_ci,
-        # Las dos formas de volver a invocar al verificador, separadas a proposito, por el
-        # mismo motivo por el que `FALLA` y `bloqueada-controles` son veredictos distintos:
-        # una es un rechazo semantico del juez y la otra un fallo mecanico del agente.
-        "reintentos_verify": args.reintentos_verify,
-        "descartes_verify": args.descartes_verify,
-        "duracion_s": args.duracion_s,
-        "coste_tokens": args.coste_tokens,  # None si no se pasa: no se inventa
-    }
+    registro = Registro.from_args(args)
     path = _path(args.path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with open(path, "a", encoding="utf-8") as fh:
-        fh.write(json.dumps(entry, ensure_ascii=False) + "\n")
-    print(f"registrado: {entry['slice_id']} ({entry['name']}) -> {path}")
+    escribe(registro, path)
+    print(f"registrado: {registro.slice_id} ({registro.name}) -> {path}")
     return 0
 
 
-def _load(path: Path, repo: str | None) -> list[dict[str, object]]:
+def _load(path: Path, repo: str | None) -> list[Fila]:
+    """Las filas del log, opcionalmente filtradas por repo.
+
+    Una linea corrupta se salta en vez de reventar: el log es append-only y durable, asi que
+    una escritura a medias no puede dejar sin report todo el historico que si es legible.
+    """
     if not path.exists():
         return []
-    rows: list[dict[str, object]] = []
-    with open(path, encoding="utf-8") as fh:
-        for line in fh:
-            line = line.strip()
-            if not line:
+    filas: list[Fila] = []
+    with path.open(encoding="utf-8") as fh:
+        for raw in fh:
+            linea = raw.strip()
+            if not linea:
                 continue
             try:
-                row = json.loads(line)
+                row = json.loads(linea)
             except json.JSONDecodeError:
-                # Log durable append-only: una linea corrupta (p. ej. escritura a
-                # medias) no debe reventar el report. Se salta, como hace el panel.
                 continue
-            if repo is None or row.get("repo") == repo:
-                rows.append(row)
-    return rows
+            if not isinstance(row, dict):
+                continue
+            fila = Fila.from_row({str(k): v for k, v in row.items()})
+            if repo is None or fila.repo == repo:
+                filas.append(fila)
+    return filas
 
 
 def _pct(part: int, whole: int) -> float:
@@ -130,90 +294,106 @@ def _mean(values: list[float]) -> float:
     return round(sum(values) / len(values), 2) if values else 0.0
 
 
-def _as_float(v: object) -> float:
-    """Coacciona a float un valor leido de JSON (tipado como object)."""
-    return float(v) if isinstance(v, (int, float)) else 0.0
+@dataclass(frozen=True, kw_only=True, slots=True)
+class Metricas:
+    """Las cifras del reporte. Las claves de `to_dict` son las que consume `SKILL.md`."""
+
+    slices: int
+    verificador_falla_pct: float
+    bloqueada_controles_pct: float
+    ci_roja_pct: float
+    primer_intento_pct: float
+    reintentos_implement_media: float
+    reintentos_controles_media: float
+    reintentos_ci_media: float
+    reintentos_verify_media: float
+    descartes_verify_pct: float
+    duracion_s_media: float
+    coste_tokens_media: float | None
+    coste_muestras: int
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "slices": self.slices,
+            "verificador_falla_pct": self.verificador_falla_pct,
+            "bloqueada_controles_pct": self.bloqueada_controles_pct,
+            "ci_roja_pct": self.ci_roja_pct,
+            "primer_intento_pct": self.primer_intento_pct,
+            "reintentos_implement_media": self.reintentos_implement_media,
+            "reintentos_controles_media": self.reintentos_controles_media,
+            "reintentos_ci_media": self.reintentos_ci_media,
+            "reintentos_verify_media": self.reintentos_verify_media,
+            "descartes_verify_pct": self.descartes_verify_pct,
+            "duracion_s_media": self.duracion_s_media,
+            "coste_tokens_media": self.coste_tokens_media,
+            "coste_muestras": self.coste_muestras,
+        }
 
 
-def _aggregate(rows: list[dict[str, object]]) -> dict[str, object]:
-    total = len(rows)
-    verificador_falla = sum(1 for r in rows if _veredicto(r) == "FALLA")
-    bloqueada_controles = sum(1 for r in rows if _veredicto(r) == "bloqueada-controles")
-    ci_red = sum(1 for r in rows if r.get("ci") == "red")
-    # "Primer intento" = resuelta limpia a la primera: PASA del verificador, CI verde
-    # y cero reintentos de cualquier clase (tambien de controles: una vuelta por lint
-    # sucio no es limpia). Un abort-por-presupuesto con 0 reintentos NO es exito.
-    primer_intento = sum(
-        1
-        for r in rows
-        if _veredicto(r) == "PASA"
-        and r.get("ci") == "green"
-        and r.get("reintentos_implement") == 0
-        and not _reintentos_controles(r)
-        and r.get("reintentos_ci") == 0
+def _aggregate(filas: list[Fila]) -> Metricas:
+    """Las cifras de nivel a partir de las filas del log.
+
+    `descartes_verify` se reporta como tasa y no como media: la pregunta que responde no es
+    "cuantos de media" sino "en que fraccion de slices el contrato de salida del juez no
+    aguanto". Es una propiedad del agente, no de la slice.
+    """
+    total = len(filas)
+    costes = [f.coste_tokens for f in filas if f.coste_tokens is not None]
+    return Metricas(
+        slices=total,
+        verificador_falla_pct=_pct(sum(1 for f in filas if f.veredicto == Veredicto.FALLA), total),
+        bloqueada_controles_pct=_pct(sum(1 for f in filas if f.veredicto == Veredicto.BLOQUEADA_CONTROLES), total),
+        ci_roja_pct=_pct(sum(1 for f in filas if f.ci == Ci.ROJA), total),
+        primer_intento_pct=_pct(sum(1 for f in filas if f.primer_intento), total),
+        reintentos_implement_media=_mean([f.reintentos_implement for f in filas]),
+        reintentos_controles_media=_mean([f.reintentos_controles for f in filas]),
+        reintentos_ci_media=_mean([f.reintentos_ci for f in filas]),
+        reintentos_verify_media=_mean([f.reintentos_verify for f in filas]),
+        descartes_verify_pct=_pct(sum(1 for f in filas if f.descartes_verify > 0), total),
+        duracion_s_media=_mean([f.duracion_s for f in filas if f.duracion_s is not None]),
+        coste_tokens_media=_mean(costes) if costes else None,
+        coste_muestras=len(costes),
     )
-    reint_impl = [_as_float(r.get("reintentos_implement")) for r in rows]
-    reint_controles = [_as_float(_reintentos_controles(r)) for r in rows]
-    reint_ci = [_as_float(r.get("reintentos_ci")) for r in rows]
-    reint_verify = [_as_float(r.get("reintentos_verify")) for r in rows]
-    # `descartes_verify` se reporta como tasa, no como media: la pregunta que responde no es
-    # "cuantos de media" sino "en que fraccion de slices el contrato de salida del juez no
-    # aguanto". Es una propiedad del agente, no de la slice.
-    descartes = sum(1 for r in rows if _as_float(r.get("descartes_verify")) > 0)
-    duraciones = [_as_float(r["duracion_s"]) for r in rows if r.get("duracion_s") is not None]
-    costes = [_as_float(r["coste_tokens"]) for r in rows if r.get("coste_tokens") is not None]
-    return {
-        "slices": total,
-        "verificador_falla_pct": _pct(verificador_falla, total),
-        "bloqueada_controles_pct": _pct(bloqueada_controles, total),
-        "ci_roja_pct": _pct(ci_red, total),
-        "primer_intento_pct": _pct(primer_intento, total),
-        "reintentos_implement_media": _mean(reint_impl),
-        "reintentos_controles_media": _mean(reint_controles),
-        "reintentos_ci_media": _mean(reint_ci),
-        "reintentos_verify_media": _mean(reint_verify),
-        "descartes_verify_pct": _pct(descartes, total),
-        "duracion_s_media": _mean(duraciones),
-        "coste_tokens_media": _mean(costes) if costes else None,
-        "coste_muestras": len(costes),
-    }
 
 
 def report(args: argparse.Namespace) -> int:
     path = _path(args.path)
-    rows = _load(path, args.repo)
-    agg = _aggregate(rows)
+    filas = _load(path, args.repo)
+    agg = _aggregate(filas)
 
     if args.json:
-        print(json.dumps(agg, ensure_ascii=False))
+        print(json.dumps(agg.to_dict(), ensure_ascii=False))
         return 0
 
     scope = args.repo or "todos los repos"
-    if not rows:
+    if not filas:
         print(f"sin metricas para {scope} en {path}")
         return 0
-    print(f"metricas slice-runner ({scope}) - {agg['slices']} slices - {path}")
-    print(f"  verificador FALLA        {agg['verificador_falla_pct']}%")
-    print(f"  bloqueada por controles  {agg['bloqueada_controles_pct']}%")
-    print(f"  CI roja                  {agg['ci_roja_pct']}%")
-    print(f"  slices al 1er intento    {agg['primer_intento_pct']}%")
-    print(f"  reintentos implement     {agg['reintentos_implement_media']} media")
-    print(f"  reintentos controles     {agg['reintentos_controles_media']} media")
-    print(f"  reintentos CI            {agg['reintentos_ci_media']} media")
-    print(f"  reintentos verify        {agg['reintentos_verify_media']} media")
-    print(f"  contrato del juez roto   {agg['descartes_verify_pct']}% de slices")
-    print(f"  duracion                 {agg['duracion_s_media']}s media")
-    if agg["coste_tokens_media"] is not None:
-        print(
-            f"  coste tokens             {agg['coste_tokens_media']} media"
-            f" ({agg['coste_muestras']} muestras)"
-        )
-    else:
+    print(f"metricas slice-runner ({scope}) - {agg.slices} slices - {path}")
+    print(f"  verificador FALLA        {agg.verificador_falla_pct}%")
+    print(f"  bloqueada por controles  {agg.bloqueada_controles_pct}%")
+    print(f"  CI roja                  {agg.ci_roja_pct}%")
+    print(f"  slices al 1er intento    {agg.primer_intento_pct}%")
+    print(f"  reintentos implement     {agg.reintentos_implement_media} media")
+    print(f"  reintentos controles     {agg.reintentos_controles_media} media")
+    print(f"  reintentos CI            {agg.reintentos_ci_media} media")
+    print(f"  reintentos verify        {agg.reintentos_verify_media} media")
+    print(f"  contrato del juez roto   {agg.descartes_verify_pct}% de slices")
+    print(f"  duracion                 {agg.duracion_s_media}s media")
+    if agg.coste_tokens_media is None:
         print("  coste tokens             sin datos (ver OTel de Claude Code)")
+    else:
+        print(f"  coste tokens             {agg.coste_tokens_media} media ({agg.coste_muestras} muestras)")
     return 0
 
 
 def main(argv: list[str] | None = None) -> int:
+    """CLI de `record` y `report`.
+
+    Los `choices` se escriben como `[str(v) for v in ...]` y no como `list(...)` porque
+    argparse formatea los suyos con `repr` en el mensaje de error, y un
+    `<Veredicto.PASA: 'PASA'>` en un error de uso se lee peor que la cadena.
+    """
     parser = argparse.ArgumentParser(description="Metricas durables de slice-runner")
     sub = parser.add_subparsers(dest="cmd", required=True)
 
@@ -221,8 +401,8 @@ def main(argv: list[str] | None = None) -> int:
     rec.add_argument("--repo", required=True)
     rec.add_argument("--slice", required=True, help="slice_id, p. ej. slice-01")
     rec.add_argument("--name", required=True)
-    rec.add_argument("--veredicto", required=True, choices=VEREDICTOS)
-    rec.add_argument("--ci", default="none", choices=CI_RESULTS)
+    rec.add_argument("--veredicto", required=True, choices=[str(v) for v in Veredicto])
+    rec.add_argument("--ci", default=str(Ci.NINGUNA), choices=[str(c) for c in Ci])
     rec.add_argument("--hallazgos-alta", type=int, default=0)
     rec.add_argument("--hallazgos-media", type=int, default=0)
     rec.add_argument("--hallazgos-baja", type=int, default=0)
@@ -258,7 +438,8 @@ def main(argv: list[str] | None = None) -> int:
     rep.set_defaults(func=report)
 
     args = parser.parse_args(argv)
-    return int(args.func(args))
+    resultado: int = args.func(args)
+    return resultado
 
 
 if __name__ == "__main__":

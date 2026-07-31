@@ -69,27 +69,44 @@ import json
 import re
 import subprocess
 import sys
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
+from enum import StrEnum
 from pathlib import Path, PurePosixPath
+from typing import TYPE_CHECKING
 
-# Truncado de la salida de un control que falla (solo sin `--out`), y tope de duracion.
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
 DEFAULT_TAIL = 30
 DEFAULT_TIMEOUT = 600
+"""Truncado de la salida de un control que falla (solo sin `--out`), y tope de duracion."""
 
-# Prefijos/patrones de artefactos que jamas pueden entrar en la PR (documentos de
-# diseno y planes de brainstorming/writing-plans). Backstop ademas del allow-list.
-# El estado del run ya no vive en el repo (vive en el issue de GitHub), asi que no
-# hay `.slice-runner/` que prohibir.
 FORBIDDEN_PREFIXES = (
     "docs/superpowers/specs/",
     "docs/superpowers/plans/",
 )
+"""Artefactos que jamas pueden entrar en la PR: documentos de diseno y planes.
 
-# Todo lo que no sea alfanumerico, punto, guion o guion bajo, al nombrar el fichero de log.
+Backstop ademas del allow-list. El estado del run ya no vive en el repo -vive en el issue de
+GitHub-, asi que no hay `.slice-runner/` que prohibir.
+"""
+
 _UNSAFE_FILENAME_RE = re.compile(r"[^\w.-]+")
+"""Todo lo que no sea alfanumerico, punto, guion o guion bajo, al nombrar el fichero de log."""
 
 
-@dataclass
+class Veredicto(StrEnum):
+    """El veredicto binario de un control determinista: lo que lee el orquestador."""
+
+    PASA = "PASA"
+    FALLA = "FALLA"
+
+
+def _veredicto_de(passed: bool) -> Veredicto:
+    return Veredicto.PASA if passed else Veredicto.FALLA
+
+
+@dataclass(frozen=True, kw_only=True, slots=True)
 class Resultado:
     """Resultado de un control determinista de veredicto unico (higiene del diff staged)."""
 
@@ -100,7 +117,7 @@ class Resultado:
     def to_dict(self) -> dict[str, object]:
         return {
             "control": self.control,
-            "veredicto": "PASA" if self.passed else "FALLA",
+            "veredicto": str(_veredicto_de(self.passed)),
             "hallazgos": self.hallazgos,
         }
 
@@ -121,48 +138,61 @@ def _norm(path: str) -> str:
     return PurePosixPath(path).as_posix()
 
 
-def comprueba_higiene_pr(
-    repo: str,
-    allow: list[str],
-    spec: str | None,
-) -> Resultado:
+def _motivo_de_rechazo(path: str, allowed: set[str], spec: str | None) -> str | None:
+    """Por que este fichero staged no puede entrar en la PR, o `None` si puede.
+
+    Una regla por fichero y en un solo sitio: antes era el cuerpo de un bucle que iba
+    mutando el `Resultado` a medias, con un `continue` por rama.
+
+    La ultima rama es fail-closed: sin lista declarada nada esta permitido, porque el control
+    nunca debe abrirse por omision del `--allow` -seria un falso negativo peligroso-.
+    """
+    if any(path.startswith(pref) for pref in FORBIDDEN_PREFIXES):
+        return f"artefacto prohibido staged: {path}"
+    if spec is not None and path == spec:
+        return f"la spec no puede entrar en la PR: {path}"
+    if path not in allowed:
+        motivo = (
+            "staged pero no se declaro ninguna ruta (--allow vacio)"
+            if not allowed
+            else "staged fuera de lo declarado por el implementador"
+        )
+        return f"{motivo}: {path}"
+    return None
+
+
+def comprueba_higiene_pr(repo: str, allow: list[str], spec: str | None) -> Resultado:
     """El diff staged debe ser subconjunto de lo declarado y no tocar artefactos."""
     staged = [_norm(p) for p in _staged_files(repo)]
-    result = Resultado(control="pr-hygiene", passed=True)
-
     if not staged:
-        result.passed = False
-        result.hallazgos.append("nada staged: no hay ficheros de codigo/test que abrir en PR")
-        return result
+        return Resultado(
+            control="pr-hygiene",
+            passed=False,
+            hallazgos=["nada staged: no hay ficheros de codigo/test que abrir en PR"],
+        )
 
     allowed = {_norm(p) for p in allow}
-    forbidden = set(FORBIDDEN_PREFIXES)
     spec_norm = _norm(spec) if spec else None
-
-    for path in staged:
-        if any(path.startswith(pref) for pref in forbidden):
-            result.passed = False
-            result.hallazgos.append(f"artefacto prohibido staged: {path}")
-            continue
-        if spec_norm and path == spec_norm:
-            result.passed = False
-            result.hallazgos.append(f"la spec no puede entrar en la PR: {path}")
-            continue
-        # Fail-closed: sin lista declarada, nada esta permitido. El control nunca
-        # debe abrirse por omision del --allow (seria un falso negativo peligroso).
-        if path not in allowed:
-            result.passed = False
-            motivo = (
-                "staged pero no se declaro ninguna ruta (--allow vacio)"
-                if not allowed
-                else "staged fuera de lo declarado por el implementador"
-            )
-            result.hallazgos.append(f"{motivo}: {path}")
-
-    return result
+    hallazgos = [m for path in staged if (m := _motivo_de_rechazo(path, allowed, spec_norm)) is not None]
+    return Resultado(control="pr-hygiene", passed=not hallazgos, hallazgos=hallazgos)
 
 
-@dataclass
+@dataclass(frozen=True, kw_only=True, slots=True)
+class OpcionesControl:
+    """Como se ejecutan los controles: donde, cuanto se espera y donde va la salida.
+
+    Agrupadas porque son las mismas para toda la pasada y viajaban como cuatro parametros
+    sueltos por dos funciones. `out` es lo que decide si la salida de un control fallido
+    viaja como texto o como ruta (ver `ResultadoControl`).
+    """
+
+    repo: str = "."
+    tail_lines: int = DEFAULT_TAIL
+    timeout: int = DEFAULT_TIMEOUT
+    out: str | None = None
+
+
+@dataclass(frozen=True, kw_only=True, slots=True)
 class ResultadoControl:
     """Resultado de un control ejecutado (lint, tipos, tests... lo que declare el repo).
 
@@ -180,21 +210,21 @@ class ResultadoControl:
     log: str = ""
 
     @property
-    def veredicto(self) -> str:
-        return "PASA" if self.passed else "FALLA"
+    def veredicto(self) -> Veredicto:
+        return _veredicto_de(self.passed)
 
     def to_dict(self) -> dict[str, object]:
         return {
             "nombre": self.nombre,
             "comando": self.comando,
-            "veredicto": self.veredicto,
+            "veredicto": str(self.veredicto),
             "exit_code": self.exit_code,
             "salida": self.salida,
             "log": self.log,
         }
 
 
-@dataclass
+@dataclass(frozen=True, kw_only=True, slots=True)
 class ResultadoControles:
     """Resultado agregado de todos los controles ejecutados."""
 
@@ -207,7 +237,7 @@ class ResultadoControles:
     def to_dict(self) -> dict[str, object]:
         return {
             "control": "controles",
-            "veredicto": "PASA" if self.passed else "FALLA",
+            "veredicto": str(_veredicto_de(self.passed)),
             "controles": [c.to_dict() for c in self.controles],
         }
 
@@ -234,67 +264,61 @@ def _log_path(out: str, nombre: str) -> Path:
     return Path(out) / f"{_UNSAFE_FILENAME_RE.sub('_', nombre) or 'control'}.log"
 
 
-def ejecuta_control(
-    repo: str,
-    nombre: str,
-    comando: str,
-    tail_lines: int,
-    timeout: int,
-    out: str | None = None,
-) -> ResultadoControl:
-    """Ejecuta un control y devuelve exit code y, solo si falla, donde esta su salida."""
+def ejecuta_control(nombre: str, comando: str, opciones: OpcionesControl) -> ResultadoControl:
+    """Ejecuta un control y devuelve exit code y, solo si falla, donde esta su salida.
+
+    `shell=True` es deliberado: el comando lo declara el issue del propio repo (`make test`,
+    `uv run pytest`...) y llega como una linea de shell, no como argv. `check=False` tambien:
+    el exit code ES el resultado que devolvemos, no una excepcion.
+
+    En PASA la salida se descarta, para no meter ruido de build en el contexto de quien
+    consuma esto. En FALLA con `--out`, el log entero va a disco y aqui solo viaja su ruta:
+    el orquestador la reenvia sin leerla y el implementador recibe el error completo en vez
+    de treinta lineas.
+    """
     try:
-        # `shell=True` es deliberado: el comando lo declara el issue del propio repo
-        # (`make test`, `uv run pytest`...) y llega como una linea de shell, no como argv.
-        # `check=False` tambien: el exit code ES el resultado que devolvemos, no una excepcion.
         proc = subprocess.run(
             comando,
             shell=True,
             check=False,
-            cwd=repo,
+            cwd=opciones.repo,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
-            timeout=timeout,
+            timeout=opciones.timeout,
         )
         exit_code, salida = proc.returncode, proc.stdout
     except subprocess.TimeoutExpired:
-        exit_code, salida = -1, f"timeout tras {timeout}s"
+        exit_code, salida = -1, f"timeout tras {opciones.timeout}s"
 
-    # En PASA la salida se descarta: el mensaje corto de exito evita meter ruido de
-    # build en el contexto de quien consuma esto.
     if exit_code == 0:
-        return ResultadoControl(nombre, comando, True, 0)
+        return ResultadoControl(nombre=nombre, comando=comando, passed=True, exit_code=0)
 
-    if out is None:
-        return ResultadoControl(nombre, comando, False, exit_code, salida=tail(salida, tail_lines))
+    if opciones.out is None:
+        return ResultadoControl(
+            nombre=nombre,
+            comando=comando,
+            passed=False,
+            exit_code=exit_code,
+            salida=tail(salida, opciones.tail_lines),
+        )
 
-    # Con `--out`, el log entero va a disco y aqui solo viaja su ruta: el orquestador la
-    # reenvia sin leerla y el implementador recibe el error completo, no 30 lineas.
-    destino = _log_path(out, nombre)
+    destino = _log_path(opciones.out, nombre)
     destino.parent.mkdir(parents=True, exist_ok=True)
     destino.write_text(salida, encoding="utf-8")
-    return ResultadoControl(nombre, comando, False, exit_code, log=str(destino))
+    return ResultadoControl(nombre=nombre, comando=comando, passed=False, exit_code=exit_code, log=str(destino))
 
 
-def ejecuta_controles(
-    repo: str,
-    specs: list[tuple[str, str]],
-    tail_lines: int,
-    timeout: int,
-    out: str | None = None,
-) -> ResultadoControles:
+def ejecuta_controles(specs: list[tuple[str, str]], opciones: OpcionesControl) -> ResultadoControles:
     """Ejecuta TODOS los controles, sin fail-fast.
 
     Una vuelta al implementador (spawn de agente + contexto) cuesta mas que volver a
     correr la suite, asi que se recolectan todos los fallos en una pasada.
     """
-    return ResultadoControles(
-        [ejecuta_control(repo, n, c, tail_lines, timeout, out) for n, c in specs]
-    )
+    return ResultadoControles(controles=[ejecuta_control(n, c, opciones) for n, c in specs])
 
 
-@dataclass
+@dataclass(frozen=True, kw_only=True, slots=True)
 class ResultadoBundle:
     """Resultado de materializar el diff de la slice en disco."""
 
@@ -307,7 +331,7 @@ class ResultadoBundle:
     def to_dict(self) -> dict[str, object]:
         return {
             "control": "diff-bundle",
-            "veredicto": "PASA" if self.passed else "FALLA",
+            "veredicto": str(_veredicto_de(self.passed)),
             "slice_diff": self.slice_diff,
             "files": self.files,
             "n_files": self.n_files,
@@ -340,9 +364,12 @@ def escribe_diff_bundle(repo: str, base: str, out: str) -> ResultadoBundle:
     --cached`. Por eso `pr-hygiene` corre justo antes en el paso 8; es lo que afirma
     que el conjunto staged es igual a la lista que declaro el implementador, y con eso
     le da integridad a este bundle.
+
+    Un indice vacio es FALLA, fail-closed igual que `pr-hygiene` con nada staged: sin nada
+    que verificar, un bundle vacio haria que el verificador diera PASA sobre la nada. Es
+    tambien el sintoma de haberse olvidado el `git add`.
     """
     rango = ["--merge-base", base]
-    result = ResultadoBundle(passed=True)
     try:
         diff = subprocess.run(
             ["git", "-C", repo, "diff", "--cached", *rango],
@@ -364,9 +391,6 @@ def escribe_diff_bundle(repo: str, base: str, out: str) -> ResultadoBundle:
 
     ficheros = [line for line in names.splitlines() if line.strip()]
     if not ficheros:
-        # Fail-closed, igual que `pr-hygiene` con nada staged: sin nada en el indice no
-        # hay nada que verificar, y un bundle vacio haria que el verificador diera PASA
-        # sobre la nada. Es tambien el sintoma de haberse olvidado el `git add`.
         return ResultadoBundle(
             passed=False,
             hallazgos=[f"nada staged respecto a {base}: nada que verificar (falta el git add?)"],
@@ -379,60 +403,135 @@ def escribe_diff_bundle(repo: str, base: str, out: str) -> ResultadoBundle:
     slice_diff.write_text(diff, encoding="utf-8")
     files_txt.write_text("\n".join(ficheros) + "\n", encoding="utf-8")
 
-    result.slice_diff = str(slice_diff)
-    result.files = str(files_txt)
-    result.n_files = len(ficheros)
-    return result
+    return ResultadoBundle(
+        passed=True,
+        slice_diff=str(slice_diff),
+        files=str(files_txt),
+        n_files=len(ficheros),
+    )
 
 
-def _emit_bundle(result: ResultadoBundle, as_json: bool) -> int:
-    if as_json:
-        print(json.dumps(result.to_dict(), ensure_ascii=False))
-    else:
-        print(f"[diff-bundle] {'PASA' if result.passed else 'FALLA'}")
-        if result.passed:
-            print(f"  slice.diff  {result.slice_diff}")
-            print(f"  files.txt   {result.files} ({result.n_files} ficheros)")
-        for h in result.hallazgos:
-            print(f"  - {h}")
-    return 0 if result.passed else 1
+class EstadoCI(StrEnum):
+    """Estados de la CI. `VERDE` hay que demostrarlo; el resto son grados de "no consta"."""
+
+    VERDE = "verde"
+    ROJO = "rojo"
+    PENDIENTE = "pendiente"
+    SIN_CHECKS = "sin-checks"
+    DESCONOCIDO = "desconocido"
 
 
-# Estados de la CI. `verde` hay que demostrarlo; el resto son grados de "no consta".
-CI_ESTADOS = ("verde", "rojo", "pendiente", "sin-checks", "desconocido")
+CI_EXIT = {
+    EstadoCI.VERDE: 0,
+    EstadoCI.ROJO: 1,
+    EstadoCI.PENDIENTE: 3,
+    EstadoCI.SIN_CHECKS: 4,
+    EstadoCI.DESCONOCIDO: 4,
+}
+"""Exit code por estado, uno por rama del paso 9 para que un tick decida sin parsear JSON.
 
-# Exit code por estado, uno por rama del paso 9 para que un tick pueda decidir sin
-# parsear JSON. El 2 esta reservado para error de uso, como en el resto del script.
-# Publico, y no `_CI_EXIT`, porque estos numeros los documenta el paso 9 de `SKILL.md`:
-# son contrato con quien invoca, no un detalle interno del clasificador.
-CI_EXIT = {"verde": 0, "rojo": 1, "pendiente": 3, "sin-checks": 4, "desconocido": 4}
+El 2 esta reservado para error de uso, como en el resto del script. Publico, y no `_CI_EXIT`,
+porque estos numeros los documenta el paso 9 de `SKILL.md`: son contrato con quien invoca, no
+un detalle interno del clasificador.
+"""
 
-# Los `bucket` que documenta `gh pr checks --help`. Uno fuera de esta lista es una
-# version de `gh` que sabe algo que este script no, y eso es `desconocido`, no verde.
 _CI_BUCKETS_ROJO = frozenset({"fail", "cancel"})
 _CI_BUCKETS_OK = frozenset({"pass", "skipping"})
 _CI_BUCKETS = _CI_BUCKETS_ROJO | _CI_BUCKETS_OK | {"pending"}
+"""Los `bucket` que documenta `gh pr checks --help`.
+
+Uno fuera de esta lista es una version de `gh` que sabe algo que este script no, y eso es
+`desconocido`, no verde.
+"""
 
 
-@dataclass
+@dataclass(frozen=True, kw_only=True, slots=True)
+class Check:
+    """Un check de la PR, tal como lo devuelve `gh pr checks --json`."""
+
+    name: str
+    bucket: str
+
+    def to_dict(self) -> dict[str, str]:
+        return {"name": self.name, "bucket": self.bucket}
+
+
+@dataclass(frozen=True, kw_only=True, slots=True)
 class ResultadoCI:
     """Estado de la CI de una PR, con los checks que lo sostienen."""
 
-    estado: str
-    checks: list[dict[str, str]] = field(default_factory=list)
+    estado: EstadoCI
+    checks: list[Check] = field(default_factory=list)
     hallazgos: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, object]:
         return {
             "control": "ci-status",
-            "estado": self.estado,
-            "checks": self.checks,
+            "estado": str(self.estado),
+            "checks": [c.to_dict() for c in self.checks],
             "hallazgos": self.hallazgos,
         }
 
 
+class _RespuestaIlegibleError(ValueError):
+    """La respuesta de `gh` no se lee como una lista de checks: eso siempre es `desconocido`."""
+
+
+def _lee_checks(stdout: str) -> list[Check]:
+    """La respuesta de `gh pr checks --json`, como lista de `Check`.
+
+    Lista vacia es un caso legitimo (`sin-checks`), no un error: lo clasifica quien llama.
+    Cualquier otra forma es `_RespuestaIlegibleError`.
+    """
+    try:
+        data = json.loads(stdout)
+    except json.JSONDecodeError as exc:
+        detalle = " ".join(stdout.split())[:200] or "(respuesta vacia)"
+        raise _RespuestaIlegibleError(f"respuesta de gh no parseable: {detalle}") from exc
+
+    if not isinstance(data, list):
+        raise _RespuestaIlegibleError(f"gh devolvio {type(data).__name__}, se esperaba una lista")
+    if any(not isinstance(c, dict) for c in data):
+        raise _RespuestaIlegibleError("algun check no es un objeto")
+    return [Check(name=str(c.get("name", "")), bucket=str(c.get("bucket", ""))) for c in data]
+
+
+def _clasifica_checks(checks: list[Check]) -> ResultadoCI:
+    """El estado que sostiene esta lista de checks. Fail-closed en cada rama.
+
+    Que todos los checks esten `skipping` es `sin-checks` y no verde: nada ha corrido, asi
+    que no hay verde que afirmar.
+    """
+    if not checks:
+        return ResultadoCI(estado=EstadoCI.SIN_CHECKS, hallazgos=["la PR no tiene ningun check"])
+
+    buckets = {c.bucket for c in checks}
+    if desconocidos := buckets - _CI_BUCKETS:
+        return ResultadoCI(
+            estado=EstadoCI.DESCONOCIDO,
+            checks=checks,
+            hallazgos=[f"bucket que este script no conoce: {sorted(desconocidos)}"],
+        )
+    if buckets & _CI_BUCKETS_ROJO:
+        rotos = sorted(c.name for c in checks if c.bucket in _CI_BUCKETS_ROJO)
+        return ResultadoCI(
+            estado=EstadoCI.ROJO,
+            checks=checks,
+            hallazgos=[f"checks en fallo o cancelados: {rotos}"],
+        )
+    if "pending" in buckets:
+        return ResultadoCI(estado=EstadoCI.PENDIENTE, checks=checks)
+    if "pass" not in buckets:
+        return ResultadoCI(
+            estado=EstadoCI.SIN_CHECKS,
+            checks=checks,
+            hallazgos=["todos los checks se saltaron: nada corrio"],
+        )
+    return ResultadoCI(estado=EstadoCI.VERDE, checks=checks)
+
+
 def clasifica_ci(stdout: str) -> ResultadoCI:
-    """Mapea la respuesta de `gh pr checks --json` a uno de los `CI_ESTADOS`.
+    """Mapea la respuesta de `gh pr checks --json` a uno de los `EstadoCI`.
 
     Funcion pura a proposito: es lo que se testea, sin red y sin `gh` instalado.
 
@@ -447,40 +546,10 @@ def clasifica_ci(stdout: str) -> ResultadoCI:
     cuatro minutos con la CI ya verde.
     """
     try:
-        data = json.loads(stdout)
-    except json.JSONDecodeError:
-        detalle = " ".join(stdout.split())[:200] or "(respuesta vacia)"
-        return ResultadoCI("desconocido", hallazgos=[f"respuesta de gh no parseable: {detalle}"])
-
-    if not isinstance(data, list):
-        return ResultadoCI(
-            "desconocido", hallazgos=[f"gh devolvio {type(data).__name__}, se esperaba una lista"]
-        )
-    if not data:
-        return ResultadoCI("sin-checks", hallazgos=["la PR no tiene ningun check"])
-
-    checks = [
-        {"name": str(c.get("name", "")), "bucket": str(c.get("bucket", ""))}
-        for c in data
-        if isinstance(c, dict)
-    ]
-    if len(checks) != len(data):
-        return ResultadoCI("desconocido", hallazgos=["algun check no es un objeto"])
-
-    buckets = {c["bucket"] for c in checks}
-    if desconocidos := buckets - _CI_BUCKETS:
-        return ResultadoCI(
-            "desconocido", checks, [f"bucket que este script no conoce: {sorted(desconocidos)}"]
-        )
-    if buckets & _CI_BUCKETS_ROJO:
-        rotos = sorted(c["name"] for c in checks if c["bucket"] in _CI_BUCKETS_ROJO)
-        return ResultadoCI("rojo", checks, [f"checks en fallo o cancelados: {rotos}"])
-    if "pending" in buckets:
-        return ResultadoCI("pendiente", checks)
-    if "pass" not in buckets:
-        # Todos `skipping`: nada ha corrido, asi que no hay verde que afirmar.
-        return ResultadoCI("sin-checks", checks, ["todos los checks se saltaron: nada corrio"])
-    return ResultadoCI("verde", checks)
+        checks = _lee_checks(stdout)
+    except _RespuestaIlegibleError as exc:
+        return ResultadoCI(estado=EstadoCI.DESCONOCIDO, hallazgos=[str(exc)])
+    return _clasifica_checks(checks)
 
 
 def consulta_ci(repo: str, pr: int) -> ResultadoCI:
@@ -498,45 +567,68 @@ def consulta_ci(repo: str, pr: int) -> ResultadoCI:
         check=False,
     )
     result = clasifica_ci(proc.stdout)
-    if result.estado == "desconocido" and proc.stderr.strip():
-        result.hallazgos.append(f"stderr de gh: {' '.join(proc.stderr.split())[:200]}")
+    if result.estado is EstadoCI.DESCONOCIDO and proc.stderr.strip():
+        detalle = f"stderr de gh: {' '.join(proc.stderr.split())[:200]}"
+        return replace(result, hallazgos=[*result.hallazgos, detalle])
     return result
 
 
-def _emit_ci(result: ResultadoCI, as_json: bool) -> int:
-    if as_json:
-        print(json.dumps(result.to_dict(), ensure_ascii=False))
-    else:
-        print(f"[ci-status] {result.estado}")
-        for c in result.checks:
-            print(f"  {c['bucket']:9} {c['name']}")
-        for h in result.hallazgos:
-            print(f"  - {h}")
-    return CI_EXIT[result.estado]
+class Severidad(StrEnum):
+    """Severidad de un hallazgo del juez. La rubrica vive en `agents/slice-verifier.md`."""
+
+    ALTA = "alta"
+    MEDIA = "media"
+    BAJA = "baja"
 
 
-SEVERIDADES = ("alta", "media", "baja")
-_VEREDICTOS_JUEZ = ("PASA", "FALLA")
+class VeredictoJuez(StrEnum):
+    """Los dos veredictos que puede emitir el juez adversarial."""
+
+    PASA = "PASA"
+    FALLA = "FALLA"
+
+
 _HALLAZGO_CLAVES = ("regla", "path", "severidad", "evidencia", "detalle")
 
 
-@dataclass
+@dataclass(frozen=True, kw_only=True, slots=True)
 class ResultadoVeredicto:
     """Validacion de la forma del veredicto del juez, con los conteos ya hechos."""
 
     passed: bool
     veredicto: str = ""
-    conteo: dict[str, int] = field(default_factory=dict)
+    conteo: dict[Severidad, int] = field(default_factory=dict)
     hallazgos: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, object]:
         return {
             "control": "verify-verdict",
-            "veredicto": "PASA" if self.passed else "FALLA",
+            "veredicto": str(_veredicto_de(self.passed)),
             "veredicto_juez": self.veredicto,
-            "conteo": self.conteo,
+            "conteo": {str(sev): n for sev, n in self.conteo.items()},
             "hallazgos": self.hallazgos,
         }
+
+
+def _valida_hallazgos(hallazgos: object) -> tuple[list[str], dict[Severidad, int]]:
+    """Revisa la lista de hallazgos: devuelve (fallos de forma, conteo por severidad)."""
+    conteo = dict.fromkeys(Severidad, 0)
+    if not isinstance(hallazgos, list):
+        return ([f"hallazgos deberia ser una lista, es {type(hallazgos).__name__}"], conteo)
+
+    fallos: list[str] = []
+    for i, h in enumerate(hallazgos):
+        if not isinstance(h, dict):
+            fallos.append(f"hallazgos[{i}] no es un objeto")
+            continue
+        if faltan := [k for k in _HALLAZGO_CLAVES if k not in h]:
+            fallos.append(f"hallazgos[{i}] sin {faltan}")
+        sev = h.get("severidad")
+        if sev in conteo:
+            conteo[Severidad(sev)] += 1
+        else:
+            fallos.append(f"hallazgos[{i}] con severidad invalida: {sev!r}")
+    return (fallos, conteo)
 
 
 def valida_veredicto(texto: str) -> ResultadoVeredicto:
@@ -553,73 +645,44 @@ def valida_veredicto(texto: str) -> ResultadoVeredicto:
 
     De paso devuelve `conteo` por severidad, que es lo que alimenta las metricas del paso
     9: antes lo contaba el orquestador a ojo sobre el JSON.
+
+    Un `PASA` con algun hallazgo `alta` es contradiccion interna, porque el contrato dice que
+    una `alta` implica FALLA. Al reves NO lo es: el juez puede escalar a FALLA por acumulacion
+    de `media`/`baja` explicando por que, y eso esta permitido.
     """
     try:
         data = json.loads(texto)
     except json.JSONDecodeError:
         detalle = " ".join(texto.split())[:200] or "(vacio)"
-        return ResultadoVeredicto(False, hallazgos=[f"no es JSON (prosa alrededor?): {detalle}"])
+        return ResultadoVeredicto(passed=False, hallazgos=[f"no es JSON (prosa alrededor?): {detalle}"])
 
     if not isinstance(data, dict):
-        return ResultadoVeredicto(
-            False, hallazgos=[f"se esperaba un objeto, no {type(data).__name__}"]
-        )
+        return ResultadoVeredicto(passed=False, hallazgos=[f"se esperaba un objeto, no {type(data).__name__}"])
 
     fallos: list[str] = []
     veredicto = data.get("veredicto")
-    if veredicto not in _VEREDICTOS_JUEZ:
-        fallos.append(
-            f"veredicto invalido: {veredicto!r} (esperado uno de {list(_VEREDICTOS_JUEZ)})"
-        )
+    if veredicto not in tuple(VeredictoJuez):
+        validos = [str(v) for v in VeredictoJuez]
+        fallos.append(f"veredicto invalido: {veredicto!r} (esperado uno de {validos})")
 
-    hallazgos = data.get("hallazgos")
-    conteo = dict.fromkeys(SEVERIDADES, 0)
-    if not isinstance(hallazgos, list):
-        fallos.append(f"hallazgos deberia ser una lista, es {type(hallazgos).__name__}")
-    else:
-        for i, h in enumerate(hallazgos):
-            if not isinstance(h, dict):
-                fallos.append(f"hallazgos[{i}] no es un objeto")
-                continue
-            if faltan := [k for k in _HALLAZGO_CLAVES if k not in h]:
-                fallos.append(f"hallazgos[{i}] sin {faltan}")
-            sev = h.get("severidad")
-            if sev in conteo:
-                conteo[sev] += 1
-            else:
-                fallos.append(f"hallazgos[{i}] con severidad invalida: {sev!r}")
+    fallos_forma, conteo = _valida_hallazgos(data.get("hallazgos"))
+    fallos += fallos_forma
 
-    # Contradiccion interna: el contrato dice que un hallazgo `alta` implica FALLA. Al
-    # reves NO es contradiccion: el juez puede escalar a FALLA por acumulacion de
-    # `media`/`baja` explicando por que, y eso esta permitido.
-    if veredicto == "PASA" and conteo["alta"]:
-        fallos.append(f"PASA con {conteo['alta']} hallazgo(s) de severidad alta")
+    if veredicto == VeredictoJuez.PASA and conteo[Severidad.ALTA]:
+        fallos.append(f"PASA con {conteo[Severidad.ALTA]} hallazgo(s) de severidad alta")
 
-    if fallos:
-        return ResultadoVeredicto(False, str(veredicto), conteo, fallos)
-    return ResultadoVeredicto(True, str(veredicto), conteo)
-
-
-def _emit_veredicto(result: ResultadoVeredicto, as_json: bool) -> int:
-    if as_json:
-        print(json.dumps(result.to_dict(), ensure_ascii=False))
-    else:
-        print(f"[verify-verdict] {'PASA' if result.passed else 'FALLA'}")
-        if result.passed:
-            c = result.conteo
-            print(f"  veredicto del juez: {result.veredicto}")
-            print(f"  hallazgos: alta={c['alta']} media={c['media']} baja={c['baja']}")
-        for h in result.hallazgos:
-            print(f"  - {h}")
-    return 0 if result.passed else 1
+    return ResultadoVeredicto(passed=not fallos, veredicto=str(veredicto), conteo=conteo, hallazgos=fallos)
 
 
 def _emit(result: Resultado, as_json: bool) -> int:
+    """Humano por defecto, JSON con `--json`: la convencion de los cinco subcomandos.
+
+    La comparte `issue_body.py` y la comprueba `tests/test_skill_contracts.py`.
+    """
     if as_json:
         print(json.dumps(result.to_dict(), ensure_ascii=False))
     else:
-        veredicto = "PASA" if result.passed else "FALLA"
-        print(f"[{result.control}] {veredicto}")
+        print(f"[{result.control}] {_veredicto_de(result.passed)}")
         for h in result.hallazgos:
             print(f"  - {h}")
     return 0 if result.passed else 1
@@ -629,13 +692,52 @@ def _emit_controles(result: ResultadoControles, as_json: bool) -> int:
     if as_json:
         print(json.dumps(result.to_dict(), ensure_ascii=False))
     else:
-        print(f"[controles] {'PASA' if result.passed else 'FALLA'}")
+        print(f"[controles] {_veredicto_de(result.passed)}")
         for c in result.controles:
             print(f"  {c.veredicto} {c.nombre} ({c.comando})")
             if c.log:
                 print(f"    log: {c.log}")
             for line in c.salida.splitlines():
                 print(f"    {line}")
+    return 0 if result.passed else 1
+
+
+def _emit_bundle(result: ResultadoBundle, as_json: bool) -> int:
+    if as_json:
+        print(json.dumps(result.to_dict(), ensure_ascii=False))
+    else:
+        print(f"[diff-bundle] {_veredicto_de(result.passed)}")
+        if result.passed:
+            print(f"  slice.diff  {result.slice_diff}")
+            print(f"  files.txt   {result.files} ({result.n_files} ficheros)")
+        for h in result.hallazgos:
+            print(f"  - {h}")
+    return 0 if result.passed else 1
+
+
+def _emit_ci(result: ResultadoCI, as_json: bool) -> int:
+    if as_json:
+        print(json.dumps(result.to_dict(), ensure_ascii=False))
+    else:
+        print(f"[ci-status] {result.estado}")
+        for c in result.checks:
+            print(f"  {c.bucket:9} {c.name}")
+        for h in result.hallazgos:
+            print(f"  - {h}")
+    return CI_EXIT[result.estado]
+
+
+def _emit_veredicto(result: ResultadoVeredicto, as_json: bool) -> int:
+    if as_json:
+        print(json.dumps(result.to_dict(), ensure_ascii=False))
+    else:
+        print(f"[verify-verdict] {_veredicto_de(result.passed)}")
+        if result.passed:
+            c = result.conteo
+            print(f"  veredicto del juez: {result.veredicto}")
+            print(f"  hallazgos: alta={c[Severidad.ALTA]} media={c[Severidad.MEDIA]} baja={c[Severidad.BAJA]}")
+        for h in result.hallazgos:
+            print(f"  - {h}")
     return 0 if result.passed else 1
 
 
@@ -708,30 +810,38 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main(argv: list[str] | None = None) -> int:
-    args = build_parser().parse_args(argv)
+def _cmd_pr_hygiene(args: argparse.Namespace) -> int:
+    return _emit(comprueba_higiene_pr(args.repo, args.allow, args.spec), args.json)
 
-    if args.subcomando == "pr-hygiene":
-        return _emit(comprueba_higiene_pr(args.repo, args.allow, args.spec), args.json)
 
-    if args.subcomando == "diff-bundle":
-        return _emit_bundle(escribe_diff_bundle(args.repo, args.base, args.out), args.json)
+def _cmd_diff_bundle(args: argparse.Namespace) -> int:
+    return _emit_bundle(escribe_diff_bundle(args.repo, args.base, args.out), args.json)
 
-    if args.subcomando == "ci-status":
-        return _emit_ci(consulta_ci(args.repo, args.pr), args.json)
 
-    if args.subcomando == "verify-verdict":
-        try:
-            texto = Path(args.file).read_text(encoding="utf-8")
-        except OSError as exc:
-            # Error de uso, no FALLA: el fichero lo escribe el orquestador, y confundirlo
-            # con un veredicto invalido le haria reinvocar al juez por su propio despiste.
-            print(f"error: no se pudo leer {args.file}: {exc}", file=sys.stderr)
-            return 2
-        return _emit_veredicto(valida_veredicto(texto), args.json)
+def _cmd_ci_status(args: argparse.Namespace) -> int:
+    return _emit_ci(consulta_ci(args.repo, args.pr), args.json)
 
-    # Error de uso (exit 2), no FALLA de control: confundirlos haria que el orquestador
-    # reintentara el paso 5 por un fallo que esta en su propia invocacion.
+
+def _cmd_verify_verdict(args: argparse.Namespace) -> int:
+    """No poder leer el fichero es error de uso (exit 2), no FALLA.
+
+    El fichero lo escribe el orquestador, y confundir su propio despiste con un veredicto
+    invalido le haria reinvocar al juez por nada.
+    """
+    try:
+        texto = Path(args.file).read_text(encoding="utf-8")
+    except OSError as exc:
+        print(f"error: no se pudo leer {args.file}: {exc}", file=sys.stderr)
+        return 2
+    return _emit_veredicto(valida_veredicto(texto), args.json)
+
+
+def _cmd_controles(args: argparse.Namespace) -> int:
+    """Un `--control` ausente o mal formado es error de uso (exit 2), no FALLA de control.
+
+    Confundirlos haria que el orquestador reintentara el paso 5 por un fallo que esta en su
+    propia invocacion.
+    """
     if not args.control:
         print("error: controles necesita al menos un --control nombre=comando", file=sys.stderr)
         return 2
@@ -741,9 +851,28 @@ def main(argv: list[str] | None = None) -> int:
         print(f"error: {exc}", file=sys.stderr)
         return 2
 
-    return _emit_controles(
-        ejecuta_controles(args.repo, specs, args.tail, args.timeout, args.out), args.json
-    )
+    opciones = OpcionesControl(repo=args.repo, tail_lines=args.tail, timeout=args.timeout, out=args.out)
+    return _emit_controles(ejecuta_controles(specs, opciones), args.json)
+
+
+_COMANDOS: dict[str, Callable[[argparse.Namespace], int]] = {
+    "pr-hygiene": _cmd_pr_hygiene,
+    "controles": _cmd_controles,
+    "diff-bundle": _cmd_diff_bundle,
+    "ci-status": _cmd_ci_status,
+    "verify-verdict": _cmd_verify_verdict,
+}
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Enruta al subcomando.
+
+    El dispatch es una tabla y no cinco `if` seguidos: cada subcomando tiene su funcion, asi
+    que la validacion de `--control` y la lectura del fichero del juez viven donde se usan en
+    vez de mezcladas con el enrutado.
+    """
+    args = build_parser().parse_args(argv)
+    return _COMANDOS[args.subcomando](args)
 
 
 if __name__ == "__main__":
