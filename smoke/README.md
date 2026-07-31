@@ -22,7 +22,9 @@ provocacion de cada uno esta escrita en "Como provocar los caminos de fallo", ma
 
 - `gh` autenticado (`gh auth status`) con permiso para crear issues y PRs.
 - Un **repo remoto propio** (p. ej. un fork/clon de la fixture) con GitHub Actions que corra los
-  controles (`make linting && make check-types && make test`) en `pull_request`.
+  controles (`make linting && make check-types && make test`) en `pull_request`. **La receta de
+  `ci-indeterminada` es la excepcion declarada**: necesita justo lo contrario -una copia sin ningun
+  workflow- y monta su propio repo, asi que no reutiliza este.
 - `uv`, `git`, `make` para el proyecto objetivo.
 
 ## Estructura
@@ -268,17 +270,70 @@ checks -que era justo el objetivo-, asi que el camino solo queda alcanzable en e
 copia de la fixture sin workflows, tal como queda recien creada, donde `controles.py ci-status` no puede
 medir y devuelve **exit 4**. Paso de ser el mas facil de disparar sin querer a necesitar montaje.
 
-Comprobado en la sonda del 2026-07-30 (issue #9, PR #10): el estado que sale es **`desconocido`, no
-`sin-checks`**. Con una PR sin checks, `gh pr checks --json` no escribe nada en stdout -manda "no
-checks reported" a stderr- y sale con **exit 1**, el mismo codigo que usa cuando la CI esta roja. Es
-decir que `sin-checks` solo es alcanzable por el camino de "todos los checks saltados", y que fiarse
-del exit code de `gh` habria confundido "esta PR no tiene CI" con "la CI ha fallado", mandando al
-implementador a arreglar un fallo inexistente. Los dos estados mapean al mismo exit 4 y a la misma
-rama, asi que la decision del orquestador es la correcta en ambos casos; lo que se pierde es
-precision en el diagnostico.
+La receta es la de "Como ejecutarlo" **con el paso 1 al reves**: la copia se sube **sin** CI -no "con CI
+en `pull_request`"- y el run entero -issue, rama, PR- vive en ella. Es la unica de las cuatro que corre
+contra un repo que **no** cumple `## Requisitos`, y a proposito: aqui la ausencia de checks es el sujeto
+del experimento, no un descuido del montaje.
 
-Debe dejar: la slice `bloqueada: ci-indeterminada` con el estado concreto (`sin-checks` o `desconocido`)
-en el issue, la metrica en `ci=none`, la **PR abierta** y **ningun reintento** al implementador: no hay
+**La receta en modo copia todavia no se ha corrido entera**: nadie la ha sondeado desde que el camino
+dejo de ser alcanzable in-tree, asi que los cuatro pasos estan escritos por lectura del codigo y del
+comportamiento de `gh`, no de una corrida observada. La primera vez que se ejecute puede pedir ajustes.
+
+1. **Copia la fixture y subela sin ningun workflow.** La fixture no trae `.github/`, asi que el `cp -r`
+   ya deja el estado que hace falta; lo que hay que hacer es **no** anadirle despues el workflow de
+   `pull_request`:
+
+   ```bash
+   cp -r smoke/fixture /tmp/slice-smoke-ci && cd /tmp/slice-smoke-ci
+   git init -q && git add -A && git commit -qm baseline
+   gh repo create <tu-usuario>/slice-smoke-ci --private --source=. --push
+   uv run python -V   # calienta el entorno: los controles locales tienen que pasar
+   ```
+
+2. **Confirma en el remoto que la copia no define ningun workflow, antes de gastar el run.** Es la
+   unica precondicion de la sonda, y lo que la rompe no es la fixture -no trae `.github/`- sino
+   reutilizar una copia a la que una receta anterior ya le monto el workflow de `pull_request`:
+
+   ```bash
+   gh api repos/<tu-usuario>/slice-smoke-ci/actions/workflows --jq '.total_count'   # tiene que dar 0
+   ```
+
+   Ese endpoint lista **solo los workflows definidos en la copia**, asi que un check impuesto desde
+   fuera -un required workflow o un ruleset de organizacion- daria 0 igualmente. No aplica aqui porque
+   el paso 1 crea el repo bajo tu cuenta personal, donde no hay organizacion que lo imponga; si alguna
+   vez se monta bajo una, la precondicion hay que comprobarla en los checks de la PR ya abierta.
+
+3. **Crea el issue con la spec de la fixture, en la copia**, tal cual y sin sembrar nada:
+   `gh issue create --title fizzbuzz --body-file spec.md`. Los controles que declara `spec.md`
+   (`make linting`, `make check-types`, `make test`) tienen que quedar **verdes**: este camino necesita
+   que el loop llegue al paso 9, asi que no se rompe nada de lo que rompen las otras recetas -si el
+   loop para antes, en `bloqueada: controles` o `bloqueada: verify`, no has sondeado este camino-.
+
+4. **Corre el loop** contra ese issue (`/slice-runner #<N>`) con la copia como directorio de trabajo.
+   Vale igual el aviso del symlink de mas arriba: el codigo bajo prueba es la copia, pero los scripts
+   que corren son los de la rama que tengas checkouteada en **este** repo.
+
+Lo que pasa entonces en el paso 9, y por que la copia sin workflows equivale a la vieja PR sin checks:
+`gh pr checks --json` no escribe nada en stdout -manda "no checks reported" a stderr- y sale con **exit
+1**, el mismo codigo que usa cuando la CI esta roja. `controles.py ci-status` no mira ese exit code:
+clasifica el stdout, y un stdout vacio es **`desconocido`** con **exit 4**, la rama de
+`ci-indeterminada`. Como la clasificacion depende solo del stdout, da igual **por que** no hay check -un
+`paths` que no matchea, o que no exista ningun workflow-, y por eso la receta nueva sondea el mismo
+camino que la vieja. Medido asi en la sonda del 2026-07-30 (issue #9, PR #10), en modo in-tree, **y solo
+ahi**: el estado observado fue `desconocido`, no `sin-checks`, y fiarse del exit code de `gh` habria
+confundido "esta PR no tiene CI" con "la CI ha fallado", mandando al implementador a arreglar un fallo
+inexistente. En modo copia la equivalencia esta razonada por el clasificador, no observada.
+
+El `sin-checks` literal esta fuera del alcance de esta receta: solo lo dan checks que corran y se
+salten, variante que nadie ha sondeado. No se pierde nada del camino, porque los dos estados mapean al
+mismo exit 4 y a la misma rama del paso 9; lo unico que cambia es la precision del diagnostico.
+
+Cuando acabes, esa copia **ya no sirve para las demas recetas** hasta que le montes el workflow de
+`pull_request` que pide `## Requisitos`; y en cuanto se lo montes, deja de servir para esta.
+
+Debe dejar: la slice `bloqueada: ci-indeterminada` con el estado `desconocido` en el issue -el otro
+estado posible, `sin-checks`, esta fuera del alcance de esta receta: mismo exit 4 y misma rama, pero no
+lo alcanza-, la metrica en `ci=none`, la **PR abierta** y **ningun reintento** al implementador: no hay
 nada que arreglar en el codigo. Que sea un estado propio y no se reparta entre los otros dos es lo
 importante de este camino: no es verde porque nadie midio, y no es rojo porque nada fallo. Tratarlo como
 rojo manda al implementador a arreglar un fallo inexistente, que es caro pero se ve. Tratarlo como verde
