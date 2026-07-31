@@ -151,12 +151,14 @@ creas la rama de la sonda desde `origin/master`, corres los scripts tal como est
 tu trabajo sin subir, y nada avisa. Paso tres veces el mismo dia. Antes de sondear un cambio: o lo subes,
 o ramificas desde local y aceptas que la PR arrastre tus commits.
 
-**Estas cuatro recetas asumen el modo in-tree**: issue y PR en este mismo repo, con la fixture donde
-esta (`smoke/fixture/`), no en el repo copiado que describe "Como ejecutarlo". La diferencia importa:
-en una copia de la fixture el arbol empieza en la propia fixture -los tests estan en `tests/`, no en
-`smoke/fixture/tests/`- y no hay ningun workflow, asi que la CI la monta quien copia y corre en todas
-las PRs. Con eso, la receta de `ci-indeterminada` no funciona tal cual y la de `ci-roja` apunta a
-rutas que ahi no existen.
+**Tres de estas cuatro recetas asumen el modo in-tree**: issue y PR en este mismo repo, con la
+fixture donde esta (`smoke/fixture/`), no en el repo copiado que describe "Como ejecutarlo". La
+diferencia importa: en una copia de la fixture el arbol empieza en la propia fixture -los tests estan
+en `tests/`, no en `smoke/fixture/tests/`-, asi que la receta de `ci-roja` apunta ahi a rutas que no
+existen. **`ci-indeterminada` es la excepcion y va justo al contrario**: in-tree ya no se alcanza
+-desde que `.github/workflows/check.yml` corre en toda PR de este repo, ninguna se queda sin checks-,
+asi que solo queda provocable en una copia **antes** de montarle la CI en `pull_request` que exige
+`## Requisitos`, cuando la copia todavia no tiene ningun workflow. Ver su seccion, mas abajo.
 
 **No describas la sonda en el cuerpo del issue.** El implementador lo lee entero, no solo la linea de
 su slice: en la sonda de `ci-roja` (issue #13) el cuerpo explicaba el sub-experimento -si tocaria un
@@ -257,11 +259,12 @@ si mismo un hallazgo del smoke.
 
 ### `ci-indeterminada`
 
-Se provoca con **una PR que no toque `smoke/fixture/**`**, y no hace falta nada mas. Este repo tiene un
-solo check, `.github/workflows/smoke-fixture.yml`, filtrado por `paths: smoke/fixture/**`, asi que una PR
-fuera de ese arbol -una slice que solo cambia documentacion, por ejemplo- no dispara ningun workflow:
-`controles.py ci-status` no puede medir y devuelve **exit 4**. Es la mas facil de provocar de las cuatro
-y, por lo mismo, la mas facil de disparar sin querer.
+**Ya no se provoca in-tree.** Se provocaba con una PR que no tocara `smoke/fixture/**`, cuando el unico
+check del repo era `.github/workflows/smoke-fixture.yml`, filtrado por `paths: smoke/fixture/**`. Desde
+que `.github/workflows/check.yml` corre `make check` en **toda** PR, ninguna PR de este repo se queda sin
+checks -que era justo el objetivo-, asi que el camino solo queda alcanzable en el **modo copia**: una
+copia de la fixture sin workflows, tal como queda recien creada, donde `controles.py ci-status` no puede
+medir y devuelve **exit 4**. Paso de ser el mas facil de disparar sin querer a necesitar montaje.
 
 Comprobado en la sonda del 2026-07-30 (issue #9, PR #10): el estado que sale es **`desconocido`, no
 `sin-checks`**. Con una PR sin checks, `gh pr checks --json` no escribe nada en stdout -manda "no
