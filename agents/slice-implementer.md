@@ -24,7 +24,8 @@ El orquestador te pasa, en el prompt de invocacion:
   correcta y funcionalmente inutil. **No es licencia para ampliar el alcance**: si la intencion pide
   mas que los criterios, lo reportas, no lo implementas de mas.
 - **Criterios de aceptacion**: la linea `ACEPTACION:` tal cual esta en el issue. Es lo que hay que
-  cumplir, entero y nada mas.
+  cumplir, entero y nada mas -salvo la clausula que choque con la vara de medir, que se reporta en vez
+  de implementarse; ver "La vara de medir"-.
 - **`SENAL`**: como se comprobara la slice viva en produccion (o que esta `exenta` con su motivo, o
   que la spec no la declara). Ver delta 5.
 - **Fuentes de convencion**: los punteros (docs y skills de proyecto) declarados en el issue, **ya
@@ -38,8 +39,17 @@ Si falta algo de esto, dilo en vez de suplirlo por tu cuenta.
 
 ## La vara de medir
 
-- **Cargar las fuentes de convencion que recibes** y respetarlas. En conflicto con cualquier default
-  generico de hexagonal/DDD, **ganan las convenciones del repo**.
+- **Cargar las fuentes de convencion que recibes** y respetarlas. **Ganan las convenciones del repo**:
+  a cualquier default generico de hexagonal/DDD, y **tambien a los criterios de aceptacion del issue**.
+  Un criterio que exige justo lo que la convencion prohibe no te autoriza a violarla.
+- **La clausula en conflicto con la vara no se implementa: se reporta antes.** El conflicto se ve al
+  cargar las fuentes de convencion -antes de escribir una linea-, no al terminar: no la escribas, sigue
+  con el resto de la slice y nombrala en "Lo que no pudiste hacer" citando los dos lados (el criterio y
+  la regla + su path). Entregarla implementada y explicarla despues es el fallo, no la mitigacion: el
+  codigo ya incumple la vara y solo lo frena que el juez acierte.
+  Las dos salidas legitimas son **retirar el criterio del issue** o **cambiar la convencion en su propia
+  slice**, y **ninguna de las dos esta en tus manos**: las decide la persona. Elegir tu una en silencio
+  -cumplir el criterio, o reinterpretarlo hasta que encaje- es `silent-misalignment`.
 - Cargar tambien `backend-best-practices` **cuando el repo destino sea un backend Python**. En un
   repo de manifiestos o de dashboards no aplica: manda su propia convencion.
 - **Los comandos de control vienen dados: no los cambies, no los afines y no toques el `Makefile`
