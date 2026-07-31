@@ -70,11 +70,12 @@ CI verde marcar la slice `esperando-merge` en el issue.
 
 Sigue el estado en vivo **desde el propio issue en GitHub** (se actualiza en cada transicion).
 
-## Antes de smokear el verificador: sesion nueva
+## Antes de smokear un agente definido: sesion nueva
 
-Si has tocado `agents/slice-verifier.md`, **abre una sesion nueva de Claude Code antes de probarlo**. El
-registro de agentes se cachea al primer load y no relee ediciones (a diferencia de las skills, que si se
-releen). Si no, el smoke valida la definicion vieja y no avisa de nada.
+Si has tocado `agents/slice-verifier.md` o `agents/slice-implementer.md`, **abre una sesion nueva de
+Claude Code antes de probarlo**. El registro de agentes se cachea al primer load y no relee ediciones (a
+diferencia de las skills, que si se releen). Si no, el smoke valida la definicion vieja y no avisa de
+nada.
 
 Comprobacion rapida de que estas smokeando la version que crees: pon en el prompt de invocacion algo
 que solo la version nueva pueda saber, o al reves, mira si el agente cita campos o nombres de regla que
@@ -93,9 +94,14 @@ version en disco ya no declaraba, y usaba `Bash`, que ya no estaba en su `tools`
   falso.
 - El PR tiene CI verde (`make linting && make check-types && make test`).
 - El verificador devuelve `PASA` (criterios de aceptacion cubiertos + convenciones OK).
-- **El agente `slice-verifier` resuelve** (`subagent_type: slice-verifier`, symlink instalado) y su
-  mensaje final es el JSON del veredicto **sin prosa alrededor**: la tool `Agent` no valida schemas, asi
-  que esto solo se comprueba aqui.
+- **Los dos agentes definidos resuelven** (`subagent_type: slice-implementer` y `slice-verifier`, ambos
+  con symlink instalado). Si uno no resuelve, lo correcto es `bloqueada: sin-subagentes` en el paso 3 y
+  **sin codigo escrito**; que el orquestador lo haga inline es un fallo del smoke, no un apano.
+- El mensaje final del verificador es el JSON del veredicto **sin prosa alrededor**: la tool `Agent` no
+  valida schemas, asi que esto solo se comprueba aqui.
+- **El orquestador no le relata la metodologia al implementador.** Su prompt de invocacion lleva datos
+  del run (criterios, intencion, senal, fuentes, controles, ruta); si aparece el ciclo TDD o los deltas
+  redactados ahi, la separacion del paso 5 no esta llegando y se esta pagando ese contexto dos veces.
 - **El verificador no ejecuta controles**, y ahora es estructural: no tiene `Bash`. Ojo con "arreglarlo"
   devolviendoselo -el smoke del 2026-07-27 comprobo que un `allowed-tools` restringido **no bloquea** lo
   no listado (ejecuto `ls`, ausente de su lista), asi que `Bash` con allowlist no es una alternativa

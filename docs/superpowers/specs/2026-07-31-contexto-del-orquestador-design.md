@@ -30,8 +30,9 @@ Fase 1: **bajar el coste por slice** y **dejar de afirmar lo que no es**. El ais
 
 Dos palancas de las cuatro identificadas. Las descartadas, con su motivo:
 
-- **Desencadenar `deploy-watch` del paso 10** (~6-10k tokens): descartada por ahora por decision del
-  usuario. `deploy-watch` se queda encadenado como esta.
+- **Desencadenar `deploy-watch` del paso 10** (~6-10k tokens, la palanca mas grande): descartada por
+  decision del usuario, que prefiere conservar el encadenado automatico tras el merge. `deploy-watch`
+  se queda como esta.
 - **Esperas con `Monitor` en vez de N ticks** (~1-3k tokens): descartada, el ahorro no paga el cambio.
 
 ## Decision 1: el implementador pasa a agente definido
@@ -82,8 +83,13 @@ instalacion apunta al directorio de la skill, asi que desde otro repo `docs/` no
 ahi seria un enlace roto en el unico momento en que alguien lo seguiria. `references/` viaja con la
 skill, como ya hacen `slicing.md` y `observabilidad.md`.
 
-Objetivo medible: de 8.500 palabras a **4.500 o menos**. Con la decision 1, el orquestador se ahorra
-del orden de 8k tokens por invocacion.
+Objetivo medible: de 8.500 palabras a **4.500 o menos**.
+
+**Resultado real: ~5.840 palabras (-31%), y el objetivo de 4.500 se declara no cumplido.** Al llegar
+ahi, lo que quedaba ya era regla o por que de una frase: bajar mas exigia borrar reglas para cumplir
+una cifra estimada **antes** de hacer el trabajo, no despues de medir cuanto relato habia. Se deja el
+numero real declarado. Con la decision 1, el ahorro por invocacion queda del orden de 4k tokens del
+`SKILL.md` mas ~1,5k del prompt que el orquestador ya no redacta.
 
 ### Invariantes que el adelgazamiento no puede romper
 
