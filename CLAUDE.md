@@ -38,9 +38,10 @@ git switch master && git pull --ff-only
   hay que resolverlo a mano justo cuando crees que has terminado.
 - **El cuerpo de la pull request cuenta el por que**, no el diff -misma vara que las PRs que abre
   `slice-runner`: si borras el cambio, ¿que queda roto o imposible?-.
-- `make check` en verde **antes** de abrir la pull request. El unico workflow del repo
-  (`.github/workflows/smoke-fixture.yml`) solo corre en PRs que tocan `smoke/fixture/**`, asi que en
-  el resto **no hay CI que te salve**: la vara es local.
+- `make check` en verde **antes** de abrir la pull request. `.github/workflows/check.yml` lo corre
+  tambien en **toda** PR, sin filtro de `paths`, asi que la vara se mide donde se decide mergear; el
+  local es para no descubrirlo en la CI. `.github/workflows/smoke-fixture.yml` sigue aparte porque
+  mide otro proyecto (`smoke/fixture/`, con su propio lockfile) y si esta filtrado por `paths`.
 - Esto es para el trabajo **sobre este repo**. Las ramas de una slice (`slice/NN-name`) las gestiona
   `slice-runner`, que ya trabajaba asi.
 

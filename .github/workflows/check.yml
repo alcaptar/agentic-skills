@@ -1,0 +1,19 @@
+name: check
+
+# La vara que los issues de este repo declaran (`make linting`, `make check-types`, `make test`,
+# o sea `make check`) medida donde se decide mergear: SIN filtro de `paths`, para que ninguna PR
+# llegue al merge sin checks. Antes solo habia `smoke-fixture.yml`, filtrado por
+# `smoke/fixture/**`, asi que el resto de las PRs no tenia CI y `slice-runner` cerraba en
+# `bloqueada: ci-indeterminada` slices sanas.
+on:
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Sin `python-version`: `requires-python` de `pyproject.toml` ya lo declara y uv lo resuelve.
+      - uses: astral-sh/setup-uv@v5
+      # El `uv run` de cada target del Makefile instala el grupo `dev` la primera vez.
+      - run: make check
