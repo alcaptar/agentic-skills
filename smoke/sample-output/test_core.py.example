@@ -23,7 +23,7 @@ class TestFizzbuzz:
         assert fizzbuzz(45) == "FizzBuzz"
 
     def test_raises_value_error_when_not_positive(self) -> None:
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="must be positive"):
             fizzbuzz(0)
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="must be positive"):
             fizzbuzz(-3)
