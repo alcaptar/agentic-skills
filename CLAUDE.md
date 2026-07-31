@@ -20,6 +20,30 @@ primero estas skills y trabaja segun ellas:
 Para cambios triviales (typo, formato) no hace falta el ritual completo, pero manten la
 coherencia con `ai-patterns`.
 
+## Como se entrega un cambio: rama, pull request, merge
+
+**Nada se commitea directamente en `master`**, ni siquiera un typo: hay un hook que bloquea el push
+sobre la rama protegida, asi que descubrirlo tarde cuesta rehacer el trabajo de sacarlo de `master`.
+
+```bash
+git switch -c <type>/<slug>          # refactor/contexto-del-orquestador, docs/flujo-rama-pr-merge
+git push -u origin <type>/<slug>
+gh pr create                          # cuerpo con la intencion: que estaba mal y deja de estarlo
+gh pr merge <N> --merge --delete-branch
+git switch master && git pull --ff-only
+```
+
+- **`--merge`, no `--squash` ni `--rebase`**: los dos ultimos reescriben los hashes y dejan tu
+  `master` local divergido de `origin/master`, con lo que el `git pull --ff-only` de despues falla y
+  hay que resolverlo a mano justo cuando crees que has terminado.
+- **El cuerpo de la pull request cuenta el por que**, no el diff -misma vara que las PRs que abre
+  `slice-runner`: si borras el cambio, ¿que queda roto o imposible?-.
+- `make check` en verde **antes** de abrir la pull request. El unico workflow del repo
+  (`.github/workflows/smoke-fixture.yml`) solo corre en PRs que tocan `smoke/fixture/**`, asi que en
+  el resto **no hay CI que te salve**: la vara es local.
+- Esto es para el trabajo **sobre este repo**. Las ramas de una slice (`slice/NN-name`) las gestiona
+  `slice-runner`, que ya trabajaba asi.
+
 ## Principios que no se rompen
 
 - **El que implementa no verifica** (subagentes distintos; el verificador es adversarial y
