@@ -105,6 +105,15 @@ class Registro:
     `bloqueada-controles` son veredictos distintos: una es un rechazo semantico del juez y la
     otra un fallo mecanico del agente. `coste_tokens` se queda en `None` si no se pasa: no se
     inventa.
+
+    `reintentos_verify` se amplio el 2026-07-31: eran las rondas por `FALLA` y ahora son **todas**
+    las vueltas al paso 5 que decide el juez, incluida la correccion de un hallazgo no bloqueante
+    que la regla del paso 7 manda arreglar. Las filas anteriores a esa fecha **no se marcan y el
+    historico se sigue agregando entero**, decidido asi y no por descuido: lo que este campo mide es
+    la frontera que lo separa de `descartes_verify` -el juez rechazo el codigo, frente a un agente que
+    no aguanto su contrato de salida- y esa frontera no se movio, con lo que las dos epocas cuentan la
+    misma cosa. Marcar la fecha partiria la serie en dos para conservar una distincion que ningun
+    agregado del reporte usa.
     """
 
     ts: str
@@ -413,7 +422,7 @@ def main(argv: list[str] | None = None) -> int:
         "--reintentos-verify",
         type=int,
         default=0,
-        help="rondas de verificacion por FALLA del juez (rechazo semantico)",
+        help="rondas de vuelta al paso 5 que decide el juez (rechazo semantico)",
     )
     rec.add_argument(
         "--descartes-verify",
