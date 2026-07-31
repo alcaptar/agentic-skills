@@ -137,12 +137,40 @@ son los unicos puntos donde para y decides tu.
   declara su linea `SENAL:` (como se comprueba viva), que es lo que `deploy-watch` consume despues; las
   exentas lo declaran con motivo.
 
+## Como se arranca un ciclo
+
+Solo hay dos comandos, y el segundo se repite:
+
+```
+/slice-spec              # una vez por feature: disena, trocea y crea el issue
+/slice-runner #42        # una vez por slice: la ejecuta hasta CI verde y para
+```
+
+Lo que hay que decidir a mano no es ninguno de los dos, es **donde cortas la sesion**: una sesion por
+slice. `/slice-spec` en la suya, y cada `/slice-runner` en una nueva. No es ceremonia -es que el
+orquestador vive en tu sesion y acumula el run entero (ver "El contexto")-, y es seguro porque **todo
+el estado esta en el issue**: al arrancar re-lee el issue, ve que slices estan mergeadas y coge la
+siguiente. Nada viaja en la conversacion.
+
+```
+sesion 1:  /slice-spec        -> issue #42 con la spec y las N slices
+sesion 2:  /slice-runner #42  -> slice-01 -> PR -> CI verde -> [mergeas tu] -> deploy-watch
+sesion 3:  /slice-runner #42  -> slice-02 -> ...
+```
+
+Si en una sesion te salta el aviso de compactar a mitad de slice, la respuesta no es compactar: es
+dejar que la slice termine (o que pare donde este, que el issue lo registra), abrir sesion nueva e
+invocar otra vez. Compactar deja al orquestador decidiendo con el contexto mutilado.
+
+`/loop` sirve para no teclear el comando cada vez, no para higiene de contexto: reinyecta el prompt en
+la **misma** conversacion. Usalo para una tanda corta de slices, no para una feature entera.
+
 ## Ejemplo: una feature de punta a punta
 
 Supongamos que hoy se pueden crear pedidos con cantidad negativa y el stock queda en negativo sin que
 nadie se entere.
 
-**1. Disenar y crear el issue**
+**1. Disenar y crear el issue** (sesion nueva)
 
 ```
 /slice-spec
@@ -182,7 +210,7 @@ y nadie se entera hasta el recuento fisico.
       SENAL: contador orders_rejected_total{reason="invalid_quantity"}
 ```
 
-**2. Ejecutar la primera slice**
+**2. Ejecutar la primera slice** (sesion nueva)
 
 ```
 /slice-runner #42
@@ -215,16 +243,14 @@ que arranca sin preguntar nada que pueda inferir: captura baseline, tickea las s
 radio de impacto del cambio, y comenta su veredicto en el issue #42. Si sale degradado, lanza el
 agente `sre` para el analisis de causa raiz y **te redacta el rollback** para que lo lances tu.
 
-**5. Siguiente slice**
+**5. Siguiente slice** (sesion nueva)
 
 ```
 /slice-runner #42
 ```
 
-`slice-02`, misma vara. **Abre sesion nueva para esta**: el issue tiene todo el estado, asi que no
-pierdes nada, y la sesion anterior ya lleva encima el run entero. Para encadenar sin volver a teclear:
-envuelve la skill en `/loop` -sabiendo que `/loop` reinyecta el prompt en la **misma** conversacion y no
-limpia el contexto-.
+`slice-02`, misma vara. La sesion anterior ya lleva encima el run entero y no hace falta para nada: el
+issue tiene el estado, asi que abrir otra no cuesta nada.
 
 ## El contexto
 
@@ -234,19 +260,19 @@ issue, lanza los subagentes, corre los controles y espera la CI. Todo lo caro es
 codigo los leen los subagentes en su propio contexto-, pero el orquestador acumula igual, y con varias
 slices por feature acaba tocando compactar.
 
-Lo que hay que saber:
+La asimetria, dicha entera: **el contexto desechable es el de los subagentes**, que nacen y mueren en
+cada slice; el de tu sesion no se limpia solo, y cada slice paga otra vez el `SKILL.md` del runner y
+los mensajes finales de sus agentes. De ahi la regla de la seccion anterior -una sesion por slice- y de
+ahi que compactar a mitad de run sea el caso a evitar y no un inconveniente.
 
-- **El contexto desechable es el de los subagentes**, no el de tu sesion. Cada slice paga otra vez el
-  `SKILL.md` del runner y los mensajes finales de sus agentes.
-- **Compactar a mitad de run es lo que hay que evitar**, no un inconveniente: deja al orquestador
-  decidiendo con el contexto mutilado, que es el fallo que este pipeline existe para prevenir.
-- **Sesion nueva entre slices.** Es seguro precisamente porque el estado esta en el issue: el runner
-  re-lee el issue al arrancar y retoma donde estaba.
-- **`/loop` no da contexto limpio.** Sirve para no teclear, no para higiene de contexto.
+Lo que se ha hecho para que quepa mas en cada sesion (2026-07-31): el relato largo salio del `SKILL.md`
+a `skills/slice-runner/references/por-que.md`, que solo se carga para cambiar la skill, y la
+metodologia del implementador se fue a su propio agente en vez de redactarla el orquestador en cada
+invocacion. Unas 5.000 palabras menos de contexto por slice.
 
-El coste del orquestador se recorto en el commit del 2026-07-31 (relato largo del `SKILL.md` a
-`skills/slice-runner/references/por-que.md`, y la metodologia del implementador a su propio agente).
-Sacarlo de la sesion del todo esta pendiente: ver el final de `docs/design-notes.md`.
+Lo que **no** esta hecho: sacar al orquestador de tu sesion, que es la unica forma de que el
+aislamiento deje de depender de que tu abras sesion nueva. Pendiente, con sus dos decisiones abiertas,
+al final de `docs/design-notes.md`.
 
 ## Instalacion
 
