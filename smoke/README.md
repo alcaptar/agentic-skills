@@ -328,12 +328,12 @@ El `sin-checks` literal esta fuera del alcance de esta receta: solo lo dan check
 salten, variante que nadie ha sondeado. No se pierde nada del camino, porque los dos estados mapean al
 mismo exit 4 y a la misma rama del paso 9; lo unico que cambia es la precision del diagnostico.
 
-Cuando acabes, esa copia **ya no sirve para las demas recetas** hasta que le montes el workflow de
-`pull_request` que pide `## Requisitos`; y en cuanto se lo montes, deja de servir para esta.
+Cuando acabes, esa copia **ya no sirve para el camino feliz de "Como ejecutarlo"** hasta que le montes
+el workflow de `pull_request` que pide `## Requisitos`; y en cuanto se lo montes, deja de servir para
+esta. Las otras tres recetas no se ven afectadas: corren in-tree y no usan copia.
 
-Debe dejar: la slice `bloqueada: ci-indeterminada` con el estado `desconocido` en el issue -el otro
-estado posible, `sin-checks`, esta fuera del alcance de esta receta: mismo exit 4 y misma rama, pero no
-lo alcanza-, la metrica en `ci=none`, la **PR abierta** y **ningun reintento** al implementador: no hay
+Debe dejar: la slice `bloqueada: ci-indeterminada` con el estado `desconocido` en el issue, la metrica
+en `ci=none`, la **PR abierta** y **ningun reintento** al implementador: no hay
 nada que arreglar en el codigo. Que sea un estado propio y no se reparta entre los otros dos es lo
 importante de este camino: no es verde porque nadie midio, y no es rojo porque nada fallo. Tratarlo como
 rojo manda al implementador a arreglar un fallo inexistente, que es caro pero se ve. Tratarlo como verde

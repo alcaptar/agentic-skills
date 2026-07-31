@@ -348,10 +348,13 @@ def escribe_diff_bundle(repo: str, base: str, out: str) -> ResultadoBundle:
     Se diffea el **indice** (`--cached`) contra el **branch-point** (`--merge-base`),
     no `HEAD`, por dos razones que el primer smoke real dejo claras:
 
-    - En el orden del paso 8 el commit va DESPUES de la verificacion, asi que contra
-      `HEAD` no habria nada que ver. Verificar antes de commitear es lo que permite
-      que un veto del verificador no deje rastro y que la slice siga siendo un solo
-      commit sin `--amend`.
+    - El tramo final va `git add` -> `pr-hygiene` -> controles -> `diff-bundle` ->
+      verificador -> commit (lo fija `skills/slice-runner/SKILL.md`; aqui se nombra por
+      sus fases y no por su numero de paso, que se desfasa en cuanto el tramo se
+      reordena). Con el commit DESPUES de la verificacion, contra `HEAD` no habria nada
+      que ver. Verificar antes de commitear es lo que permite que un veto del
+      verificador no deje rastro y que la slice siga siendo un solo commit sin
+      `--amend`.
     - El indice es exactamente lo que sera el commit, asi que el verificador juzga lo
       que ira en la PR y no una aproximacion.
 
@@ -361,7 +364,8 @@ def escribe_diff_bundle(repo: str, base: str, out: str) -> ResultadoBundle:
     expresarlo: `git diff --cached base...HEAD` no es sintaxis valida.
 
     Ojo con lo que esto NO ve: un fichero **untracked** es invisible a `git diff
-    --cached`. Por eso `pr-hygiene` corre justo antes en el paso 8; es lo que afirma
+    --cached`. Por eso `pr-hygiene` corre antes en ese orden -antes tambien de los
+    controles, que van entre los dos, no pegado a este subcomando-: es lo que afirma
     que el conjunto staged es igual a la lista que declaro el implementador, y con eso
     le da integridad a este bundle.
 

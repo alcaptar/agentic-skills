@@ -46,8 +46,8 @@ El orquestador te pasa, en el prompt de invocacion:
   cual esta en el issue.
 - **Checklist de slices del issue**: **todas** las slices, con su titulo, su estado y su motivo, no solo
   la tuya. Sirve para **una cosa**: distinguir "esto falta" de "esto lo cubre otra slice declarada del
-  mismo issue", que sin el dato no puedes distinguir -y ante media mitad de un contrato acabas degradando
-  la severidad por no poder constatar el alcance, en vez de decidir-.
+  mismo issue", separacion que sin el dato no puedes hacer -y viendo solo la mitad de un contrato acabas
+  degradando la severidad por no poder constatar el alcance, en vez de decidir-.
 
   **No es coartada.** Que exista una slice `pendiente` no da por hecho su trabajo (no existe hasta
   mergearse) ni excusa **ningun** defecto del diff que juzgas: si lo que falta cae dentro de **esta**
