@@ -420,6 +420,41 @@ que convive con un hallazgo `alta`) que leido a ojo pasa por bueno porque parsea
   el agente puede escalar si se acumulan, explicando por que).
 - Si FALLA: vuelve al paso 5 con los `hallazgos` (max 2 reintentos, presupuesto propio). Guarda el
   `conteo` y el veredicto final: alimentan las metricas del paso 9.
+- **Que hacer con cada hallazgo `media`/`baja`: lo decide una regla, no tu criterio.** No bloquean,
+  pero tampoco se ignoran: cada uno **vuelve al paso 5** a corregirse o **se acepta como deuda**, y lo
+  decide este par de preguntas sobre el hallazgo, en este orden.
+  1. **¿Deja el arbol incumpliendo la vara con la que se mide?** Dos formas, y **las dos cuentan**: una
+     **afirmacion falsa** -documentacion que dice algo que otra parte del arbol desmiente- o una
+     **violacion de una convencion del repo en el codigo** -el ejemplo canonico es el label de metrica
+     con un identificador de alta cardinalidad, que `agents/slice-verifier.md` califica de `media`
+     mientras la convencion no lo prohiba explicitamente-. Se responde **citando las dos partes** -la
+     afirmacion y lo que la desmiente, o la regla y el codigo que la incumple, cada una con su path-, y
+     **la cita la construyes tu**: el veredicto trae un solo `path` por hallazgo y solo los `alta` estan
+     obligados a evidencia citable, asi que el juez te da un lado y el otro lo buscas en el arbol o en
+     las fuentes de convencion del issue. Si con el arbol delante no puedes citarlas, no es
+     incumplimiento sino preferencia (redaccion, redundancia, formato, una errata que no cambia el
+     significado): **deuda**.
+  2. **¿Esta alguna de las dos partes en el diff de esta slice?** (lo dice `files.txt`, no tu memoria).
+     Si si, la slice creo o amplio el incumplimiento: **vuelve al paso 5**. Si no -ya estaba antes y el
+     diff solo lo hereda-: **deuda**, porque arreglarlo aqui mete en la PR codigo que ningun criterio
+     de esta slice pidio.
+
+  El eje es **si lo que la slice deja en el arbol cumple la vara**, y no la severidad, porque la
+  severidad ya tiene su trabajo -decidir el bloqueo, que sigue siendo cosa de `alta`- y como eje aqui no
+  separa los casos: un `baja` que deja una frase falsa se corrige y un `media` de estilo no.
+- **La ronda vuelve a pasar por los pasos 6 y 7**, como la de un `FALLA`: reestagear, `pr-hygiene` y
+  **reinvocar al juez** sobre el indice nuevo. No es opcional -el paso 8 solo commitea lo que ya se
+  juzgo-, y saltar al 8 con la correccion metida mete en la PR codigo que el verificador no vio.
+  Corregir un hallazgo no bloqueante **no** convierte el `PASA` en `FALLA` por si mismo: solo un
+  hallazgo `alta` tumba el veredicto. Lo que alimenta la metrica del paso 9 son el `conteo` y el
+  veredicto de la **ultima** verificacion, no los de la que abrio la ronda.
+- **La vuelta no estrena presupuesto**: gasta el **mismo** presupuesto del verificador (2 reintentos) y
+  se cuenta en `--reintentos-verify`. **Si el presupuesto se agota con hallazgos no bloqueantes
+  pendientes, los que queden pasan a deuda** y la slice sigue al paso 8: no se bloquea una slice por un
+  hallazgo que no bloquea.
+- **La deuda aceptada se escribe en el cuerpo de la PR** (paso 8), no en el chat: es el unico sitio
+  donde esa decision sobrevive a la sesion, y una deuda que solo tu recuerdas la paga el siguiente sin
+  saber que existia.
 - **Si agota los reintentos con FALLA**: marca la slice `bloqueada: verify`, **registra la metrica
   durable** (`veredicto=FALLA`, `ci=none`) y **para**. Sin PASA no se abre PR, y sin el registro el
   rechazo del verificador -justo lo que queremos medir- no dejaria rastro.
@@ -448,6 +483,9 @@ seria codigo que entra en la PR sin haber pasado por `pr-hygiene` ni por el veri
       ## Criterios de aceptacion cumplidos
       - <un criterio por linea, con donde vive su test>
 
+      ## Deuda aceptada
+      - <hallazgo no bloqueante que no se corrigio: regla + path, y por que se acepta>
+
       ## Senal a comprobar tras el despliegue
       <la linea SENAL de la slice, o "exenta - <motivo>">
 
@@ -456,6 +494,10 @@ seria codigo que entra en la PR sin haber pasado por `pr-hygiene` ni por el veri
   - **Nada de enumerar ficheros, clases ni modulos, ni de narrar el diff**: eso ya lo cuenta GitHub
     mejor que tu y en su sitio. Lo que un revisor no puede deducir del diff es **por que**, y ese es
     todo el trabajo de este cuerpo.
+  - **`## Deuda aceptada` solo si la hay**: los hallazgos `media`/`baja` que la regla del paso 7 dejo
+    sin corregir, uno por linea. No contradice lo anterior -no narra el diff, declara lo que se decidio
+    **no** arreglar y por que-, y sin ella la unica huella de esa decision seria tu contexto, que se
+    tira. Si no quedo ninguna, la seccion no se escribe: un "ninguna" es ruido.
   - **Si la intencion no venia declarada en el issue**, el encabezado lo dice: `## Intencion (inferida
     del issue, no declarada)`. Nunca la presentes como declarada.
   - **`Part of #<N>`**, no `Closes`: una PR es una slice, no la feature entera. Cross-repo,
@@ -519,7 +561,8 @@ python3 ~/.claude/skills/slice-runner/scripts/metrics.py record --repo <repo> --
   paso 7 (en `bloqueada-controles` son 0: no hubo juicio semantico). **No uses `FALLA` para un fallo de
   controles**: es mecanico, no un veto del juez, y confundirlos deja inservible su calibracion.
 - **Los dos contadores del verificador tampoco se mezclan, por el mismo motivo.**
-  `--reintentos-verify` son las rondas por **`FALLA`** (rechazo semantico, con vuelta al paso 5);
+  `--reintentos-verify` son las rondas de **vuelta al paso 5 que decide el juez** -por `FALLA`, o por un
+  hallazgo no bloqueante que la regla del paso 7 manda corregir-, o sea rechazo semantico;
   `--descartes-verify`, las invocaciones **descartadas por no devolver su JSON** (fallo mecanico del
   agente, sin tocar el codigo). Sumarlos haria que su indisciplina se leyera como que el juez encuentra
   defectos, y un descarte **no** descalifica la slice como "primer intento": el codigo salio limpio.

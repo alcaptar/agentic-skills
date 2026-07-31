@@ -194,6 +194,56 @@ validacion vive en la CLI, que es la frontera de escritura y el unico sitio con 
 haga cumplir; `abortada` se deja libre a proposito porque su vocabulario aun no esta canonicalizado y
 fijarlo ahi seria decidirlo de tapadillo.
 
+## Que hacer con un hallazgo que no bloquea (2026-07-31)
+
+El paso 7 declaraba desde el principio que `media` y `baja` **no bloquean**, y no decia nada mas, asi que
+la decision de que hacer con ellos la improvisaba el orquestador hallazgo a hallazgo. Medido en una sola
+jornada de trabajo sobre este repo, el mismo tipo de hallazgo recibio **tres tratos distintos**:
+reintento, deuda declarada, y reintento hasta agotar el presupuesto. En Nivel 1 se compensa porque la
+persona lo ve; en Nivel 2, con `/loop` y sin sesion supervisada, la varianza se hereda sin que nadie la
+mire.
+
+La regla salio de clasificar las **seis decisiones reales** de esa jornada: (1) un `README` que afirmaba
+de todas sus recetas lo que tras la slice solo valia para tres; (2) una docstring de modulo que decia que
+el exit 4 significa "para" cuando el paso 9 acababa de pasar a "cuenta un tick"; (3) `docs/design-notes.md`,
+declarado registro completo de decisiones, sin la decision que la slice tomaba; (4) un paso de receta que
+justificaba un precheck con un argumento que el comando no sostiene -reintento los cuatro-; (5) una
+docstring citando un numero de paso desfasado, defecto **preexistente**; (6) un parrafo sin re-envolver,
+una frase redundante y una errata gramatical -deuda los dos-.
+
+Se probo primero el eje obvio, **la severidad**, y no separa los casos: 1-3 son `media` y 4 es `baja`,
+todos con el mismo trato, mientras 5 y 6 son `baja` con el trato opuesto. El eje que si los separa es
+**si el arbol queda incumpliendo la vara** (1-4) frente a **mejorable pero conforme** (5-6), con el matiz
+del caso 5: el incumplimiento era preexistente y el diff solo lo heredaba. De ahi las dos preguntas del
+paso 7, y de ahi que la primera exija **citar las dos partes**: es lo que la hace comprobable en vez de
+una opinion, porque un incumplimiento tiene siempre dos lados -lo que la vara pide y lo que el arbol
+hace- y una preferencia solo uno.
+
+Los seis casos eran **todos de prosa de documentacion**, y por eso la primera redaccion de la pregunta 1
+hablaba solo de "afirmar algo falso". Con eso, un hallazgo cuyo sujeto es **codigo** la responde "no" por
+construccion -el codigo no afirma nada- y la clase entera caia en deuda automatica, incluido el ejemplo
+que el propio `agents/slice-verifier.md` califica de `media`: el label de metrica con un identificador de
+alta cardinalidad, un defecto que llega a produccion. La pregunta nombra por eso las **dos formas** del
+mismo eje: la afirmacion falsa es la forma que toma en documentacion, y la violacion de convencion
+citable con regla + path es la que toma en codigo. La alternativa -declarar que la regla solo gobierna
+hallazgos sobre lo que el arbol afirma- se descarto porque devuelve a improvisacion justo la clase de
+hallazgos que mas cuesta heredar, que es lo que esta decision venia a cerrar.
+
+**La cita la construye el orquestador, no se le exige al juez.** El esquema del veredicto trae un solo
+`path` por hallazgo, y `agents/slice-verifier.md` solo obliga a evidencia citable en `alta` -ademas de
+mandar degradar la severidad cuando no puede citarla-, asi que una regla que clasificara segun lo que el
+juez entrega en `media`/`baja` dependeria de algo que su contrato no promete. El hallazgo aporta un lado;
+el otro se busca en el arbol o en las fuentes de convencion del issue, y si con el arbol delante no
+aparece, la respuesta es "preferencia" y el trato es deuda. Cambiar el esquema o el contrato del juez para
+que entregue los dos lados seria mover la vara del verificador desde una decision que no va de eso.
+
+Lo que **no** cambia: `alta` sigue siendo lo unico que bloquea, y el presupuesto sigue siendo 2. La
+consecuencia obligada es que la regla diga tambien que pasa al agotarlo con hallazgos no bloqueantes
+pendientes -pasan a deuda-, porque la alternativa seria bloquear una slice por hallazgos que por
+definicion no bloquean. Y la deuda va al **cuerpo de la PR**: el chat se tira, el issue lleva la spec y no
+la revision, y el cuerpo de la PR es lo que queda leyendose junto al codigo cuando alguien se pregunte por
+que esa linea sigue asi.
+
 ## Las metricas y por que se separan los contadores
 
 `metrics.py report [--repo <repo>]` agrega: tasa de FALLA del verificador, tasa de bloqueo por
@@ -204,8 +254,9 @@ El coste en tokens no se mide aqui (sale de OTel de Claude Code).
 El **veto del juez** (`FALLA`) y el **bloqueo por controles** (`bloqueada-controles`) se registran
 aparte a proposito: uno es un rechazo semantico y el otro un fallo mecanico, y confundirlos deja
 inservible el unico instrumento que hay para calibrar al juez. Por el mismo motivo no se suman
-`--reintentos-verify` (rondas por FALLA) y `--descartes-verify` (invocaciones que no devolvieron su
-JSON): sumarlos haria que la indisciplina del agente se leyera como que el juez encuentra defectos.
+`--reintentos-verify` (rondas de vuelta al paso 5 que decide el juez) y `--descartes-verify`
+(invocaciones que no devolvieron su JSON): sumarlos haria que la indisciplina del agente se leyera como
+que el juez encuentra defectos.
 
 Referencia externa de calibracion: el juez de Honk veta **~25%** de miles de sesiones y el agente
 corrige la trayectoria **la mitad** de las veces. Es la tasa que nuestras metricas todavia no saben
