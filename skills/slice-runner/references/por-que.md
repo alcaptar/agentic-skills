@@ -135,6 +135,42 @@ todo-pass explicito con al menos un check que haya corrido**. Y de ahi el motivo
 `bloqueada: ci-indeterminada`: reusar `ci-roja` mentiria en el registro duradero y dejarla en
 `esperando-merge` afirmaria un verde que no hubo.
 
+## El indeterminado tiene ventana de gracia, y no se reclasifica (2026-07-31)
+
+`ci-indeterminada` arreglaba el diagnostico y se equivocaba en **cuando** creerselo: el paso 9 cerraba
+con el primer `desconocido`. Medido en dos PRs de este repo, el mismo estado significa cosas opuestas
+segun el momento. En la **#31**, a segundos de crearla, `ci-status` devolvio `desconocido` con exit 4 y
+los hallazgos "respuesta de gh no parseable: (respuesta vacia)" y "no checks reported on the ... branch";
+veinte segundos despues, `verde` con el check `check` en `pass`. En la **#20**, en cambio, el mismo
+`desconocido` era real y permanente -cuatro ticks-, porque entonces ningun workflow aplicaba a esa PR.
+O sea que cerrar en el tick 1 registra como no medible una slice sana, y con el orquestador fuera de la
+sesion de la persona no queda nadie mirando que lo compense.
+
+De ahi la ventana de gracia con el numero escrito -3 ticks consecutivos, 30 s o mas entre tick y tick-:
+deja pasar el caso de la #31 (resuelto en el tick 2) y sigue cerrando el de la #20 en el tick 3. En
+ticks queda expresado el mecanismo que ya tiene el paso, pero el numero solo no basta: sin separacion
+minima, tres ticks seguidos son tres segundos y la ventana no cubre nada. Dejarlo en "usa tu criterio"
+no es una opcion: es el juicio que la fase 2 no tiene a quien delegar.
+
+La alternativa barata -tratar `desconocido` como `pendiente`- destruye la garantia por los dos lados.
+`pendiente` significa "hay checks corriendo" y tickea hasta el timeout, asi que una PR sin CI pasaria de
+cerrar con un motivo exacto a colgarse cuatro minutos sin causa visible, que es justo el fallo que
+`ci-indeterminada` vino a arreglar. Lo que cambia aqui es **cuanto se espera antes de creerse el
+diagnostico**, no el diagnostico: agotada la ventana, el cierre es el mismo fail-closed de antes -ni
+verde, ni reintento de la slice, PR abierto-.
+
+**Y el numero se queda en prosa**, contra la regla de aqui abajo de que lo exacto pasa a script. No es
+excepcion por comodidad: la ventana es una cuenta **entre** invocaciones, y `ci-status` es de un tiro y
+sin estado a proposito -un script que poll-ee es la shell bloqueante que la skill prohibe, y persistir la
+cuenta exigiria justo el estado local que el repo no tiene (`.slice-runner/`, ledger, panel)-. Lo que si
+esta offloadeado es la parte clasificatoria, que es la que fallaba en silencio: el exit 4 dice
+"indeterminado" sin ambiguedad y nunca colapsa en verde; lo que queda a juicio es solo contar hasta tres
+y esperar entre medias. Es donde ya viven los demas presupuestos del loop ("maximo 2 reintentos por
+fase"), por el mismo motivo: los tickea el harness, no un proceso. De ahi que el numero este **escrito**
+en sus dos sitios -el paso 9 y la docstring de `skills/slice-runner/scripts/controles.py`- en vez de
+dejarse al criterio del agente. Coste aceptado: son dos copias de una regla exacta y ningun control las
+compara, asi que quien mueva el numero tiene que mover las dos a mano.
+
 ## Lo que es regla exacta pasa a script, sin excepciones (2026-07-30, tras el segundo smoke)
 
 Dos huecos que quedaban a juicio del agente, los dos con el mismo modo de fallo: parecen funcionar hasta

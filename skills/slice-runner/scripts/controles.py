@@ -48,10 +48,17 @@ confirma una persona). Por eso no hay autodeteccion aqui dentro.
 Exit codes. En `pr-hygiene`, `controles` y `diff-bundle`: 0 = PASA, 1 = FALLA, 2 = error de
 uso. `ci-status` no es binario y usa uno por rama del paso 9, para que un tick de shell
 pueda decidir sin parsear: 0 = verde, 1 = rojo, 2 = error de uso, 3 = pendiente (sigue
-tickeando), 4 = indeterminado (`sin-checks` o `desconocido`: para y no finjas un veredicto).
-A diferencia de `gh pr checks`, aqui el 1 significa **solo** CI roja: una invocacion mal
-formada es 2 y una respuesta ilegible es 4, nunca 1. Con --json imprime el resultado
-estructurado en stdout para que el orquestador lo consuma sin parsear prosa.
+tickeando), 4 = indeterminado (`sin-checks` o `desconocido`). El 4 **no es un veredicto ni
+un cierre**: los dos estados aparecen tambien de forma transitoria en la ventana entre abrir
+la PR y que GitHub registre los checks, asi que cuenta como un tick de la ventana de gracia
+que fija el paso 9 -3 ticks indeterminados consecutivos, 30 s o mas entre tick y tick- y
+solo al agotarla se cierra `bloqueada: ci-indeterminada`. Esa cuenta la lleva quien tickea,
+no el script: `ci-status` es de un tiro y no guarda estado entre invocaciones, porque un
+script que poll-ea es la shell bloqueante que la skill prohibe. Lo que el 4 si garantiza en
+todo caso es que no se finja un veredicto: nunca colapsa en verde. A diferencia de
+`gh pr checks`, aqui el 1 significa **solo** CI roja: una invocacion mal formada es 2 y una
+respuesta ilegible es 4, nunca 1. Con --json imprime el resultado estructurado en stdout
+para que el orquestador lo consuma sin parsear prosa.
 
 Uso:
     controles.py pr-hygiene --repo . --allow src/a.py --allow test/a.py [--spec ruta] [--json]
