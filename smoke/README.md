@@ -108,12 +108,14 @@ version en disco ya no declaraba, y usaba `Bash`, que ya no estaba en su `tools`
   valida a no tener `Bash`-.
 - **El verificador recibe el diff en disco** (`controles.py diff-bundle`), no lo calcula. Comprueba que
   `--out` apunta **fuera del repo**: un fichero de trabajo dentro no debe poder acabar en la PR.
-- **El orden del tramo 7-8 se respeta**: `git add` -> `pr-hygiene` -> `diff-bundle` -> verificador ->
-  **commit**. El commit va DESPUES del veredicto, asi que un FALLA no deja rastro y la slice sigue
-  siendo un solo commit sin `--amend`. Es donde el smoke del 2026-07-29 se encontro el defecto
-  bloqueante: `diff-bundle` mirava `<base>...HEAD` y el commit estaba despues, asi que el paso 7
-  recibia "sin cambios" con la slice entera implementada. Si vuelve a aparecer, alguien ha devuelto
-  el commit a su sitio anterior.
+- **El orden del tramo 6-8 se respeta**: `git add` -> `pr-hygiene` -> controles -> `diff-bundle` ->
+  verificador -> **commit**. Los tres primeros son el paso 6 (se stagea **antes** de medir: un control
+  que lee el indice no ve un fichero nuevo sin stagear), los dos siguientes el 7 y el commit el 8. El
+  commit va DESPUES del veredicto, asi que un FALLA no deja rastro y la slice sigue siendo un solo
+  commit sin `--amend`. Es donde el smoke del 2026-07-29 se encontro el defecto bloqueante:
+  `diff-bundle` mirava `<base>...HEAD` y el commit estaba despues, asi que el paso 7 recibia "sin
+  cambios" con la slice entera implementada. Si vuelve a aparecer, alguien ha devuelto el commit a su
+  sitio anterior.
 - **La CI se consulta con `controles.py ci-status`**, nunca con un `gh pr checks` a mano. Comprueba
   que un tick devuelve `verde`/`pendiente` y no "sin checks" con la CI ya terminada: `gh pr checks
   --json` **no tiene campo `conclusion`** (pero `gh run list --json` si), y pedirlo devuelve un error
@@ -224,9 +226,9 @@ Debe dejar: la slice `bloqueada: verify`, la metrica con `veredicto=FALLA`, `ci=
 `--descartes-verify` en 0: un descarte es el agente devolviendo un JSON que no
 parsea, un fallo distinto que no debe acabar contado aqui-. Y **ni PR ni commit**: el commit va despues
 del veredicto, asi que la rama tiene que quedarse sin ningun commit de la slice. Los cambios si quedan
-**stageados** -el paso 7 hace `git add` antes de invocar al juez, porque juzga el indice- y nada los
-desstagea al cerrar: esperar el arbol limpio es el falso defecto facil de reportar aqui. Si te
-encuentras un commit, el orden del tramo 7-8 se ha vuelto a invertir.
+**stageados** -el `git add` lo hace el paso 6, antes de los controles y del juez, y el juez juzga ese
+indice- y nada los desstagea al cerrar: esperar el arbol limpio es el falso defecto facil de reportar
+aqui. Si te encuentras un commit, el orden del tramo 6-8 se ha vuelto a invertir.
 
 ### `ci-roja`
 

@@ -303,17 +303,30 @@ Tu trabajo es pasarle **los datos del run**, no la metodologia:
   del log** de cada uno (paso 6). Reenvia rutas: no abras los logs.
 
 Devuelve: la lista explicita de rutas creadas o modificadas **marcando cada una como produccion o
-test** (es lo que se stageara en el paso 7 y lo que el verificador usa para el check de wiring), tests
+test** (es lo que se stageara en el paso 6 y lo que el verificador usa para el check de wiring), tests
 anadidos, resumen del enfoque, y lo que no pudo hacer.
 
-### 6. Controles deterministas (backstop del orquestador)
+### 6. Stagear lo declarado y correr los controles (backstop del orquestador)
 
-Antes de invocar al verificador, **re-ejecuta tu mismo** los controles declarados, con `--out` a un
-directorio **fuera del repo**:
+**El `git add` de la lista declarada va primero, y los controles despues** (`[det]` los dos): un control
+que lee el **indice** de git -como el que comprueba que toda ruta citada en los `.md` sigue en el arbol-
+no ve un fichero **nuevo** sin stagear, y el implementador **no toca `git`** por diseno, asi que medir
+antes de stagear inventa un rojo que nadie en el loop puede arreglar.
 
-    python3 ~/.claude/skills/slice-runner/scripts/controles.py controles --repo <repo-de-la-slice> \
-      --control lint="<cmd>" --control types="<cmd>" --control tests="<cmd>" \
-      --out <dir-fuera-del-repo> --json
+1. **Stagea SOLO los ficheros que devolvio el implementador**, con la lista explicita:
+   `git add <ruta1> <ruta2> ...`. **Prohibido `git add -A`, `git add .` o `git commit -a`**. En un
+   reintento se rehace: la lista nueva puede traer ficheros que antes no existian.
+2. **Higiene del diff staged**:
+   `python3 ~/.claude/skills/slice-runner/scripts/controles.py pr-hygiene --repo <repo-de-la-slice> --allow <ruta1> --allow <ruta2> ...`
+   con esa lista exacta. Exit 0 = PASA. Si FALLA (algo staged fuera de lo declarado, o un artefacto),
+   **corrige el staging** (`git restore --staged`) y reintenta; no lo re-interpretes a ojo. **No sigas
+   al 3 hasta PASA**: un fichero **untracked es invisible** al diff del indice, asi que esto es lo que
+   garantiza que lo que se mide -aqui y en el paso 7- sea exactamente lo que el implementador declaro.
+3. **Re-ejecuta tu mismo** los controles declarados, con `--out` a un directorio **fuera del repo**:
+
+       python3 ~/.claude/skills/slice-runner/scripts/controles.py controles --repo <repo-de-la-slice> \
+         --control lint="<cmd>" --control types="<cmd>" --control tests="<cmd>" \
+         --out <dir-fuera-del-repo> --json
 
 El implementador ya los corrio, pero **su auto-reporte no es fuente de verdad**: no es que su ejecucion
 valga menos -mismo script, mismo exit code- es que **no ves sus tool calls, solo su mensaje final en
@@ -340,29 +353,21 @@ tu la transcribas-, y **no tiene `Bash`** (`tools: Read, Grep, Glob, Skill`), as
 ejecutar controles es **estructural por ausencia de la tool**, no cumplimiento de una instruccion.
 `model: inherit` conserva el modelo fuerte, que el juicio mas sutil requiere.
 
-**Antes de invocarlo, deja el indice listo, en este orden (`[det]`).** Juzga el **indice**, no `HEAD`,
-porque el commit va **despues** (paso 8): asi un veto no deja rastro que deshacer y la slice sigue
-siendo un solo commit sin `--amend`; y como el indice es exactamente lo que sera el commit, juzga lo
-que ira en la PR y no una aproximacion.
+**El indice ya esta listo desde el paso 6**: staged con la lista declarada y con `pr-hygiene` en PASA.
+Lo que se juzga es ese **indice**, no `HEAD`, porque el commit va **despues** (paso 8): asi un veto no
+deja rastro que deshacer y la slice sigue siendo un solo commit sin `--amend`; y como el indice es
+exactamente lo que sera el commit, juzga lo que ira en la PR y no una aproximacion.
 
-1. **Stagea SOLO los ficheros que devolvio el implementador**, con la lista explicita:
-   `git add <ruta1> <ruta2> ...`. **Prohibido `git add -A`, `git add .` o `git commit -a`**.
-2. **Higiene del diff staged**:
-   `python3 ~/.claude/skills/slice-runner/scripts/controles.py pr-hygiene --repo <repo-de-la-slice> --allow <ruta1> --allow <ruta2> ...`
-   con esa lista exacta. Exit 0 = PASA. Si FALLA (algo staged fuera de lo declarado, o un artefacto),
-   **corrige el staging** (`git restore --staged`) y reintenta; no lo re-interpretes a ojo. **No sigas
-   al 3 hasta PASA**: un fichero **untracked es invisible** al diff del indice, asi que esto es lo que
-   garantiza que el verificador juzgue exactamente lo que el implementador declaro.
-3. **Materializa el diff**, que el verificador no puede calcular:
+**Antes de invocarlo, materializa el diff (`[det]`)**, que el verificador no puede calcular:
 
-       python3 ~/.claude/skills/slice-runner/scripts/controles.py diff-bundle --repo <repo-de-la-slice> \
-         --base <base> --out <dir-fuera-del-repo> --json
+    python3 ~/.claude/skills/slice-runner/scripts/controles.py diff-bundle --repo <repo-de-la-slice> \
+      --base <base> --out <dir-fuera-del-repo> --json
 
-   Escribe `slice.diff` y `files.txt` y devuelve sus rutas. `--out` va **fuera del repo**: un fichero
-   de trabajo dentro nunca debe poder acabar en la PR. El rango lo fija el script -el indice contra el
-   branch-point- y no tu criterio: sin anclar ahi, los commits que la base haya avanzado saldrian como
-   borrados y el verificador cazaria violaciones fantasma. Si devuelve FALLA (base inexistente, o nada
-   staged), arreglalo antes de invocar: "nada staged" suele ser el `git add` olvidado del punto 1.
+Escribe `slice.diff` y `files.txt` y devuelve sus rutas. `--out` va **fuera del repo**: un fichero de
+trabajo dentro nunca debe poder acabar en la PR. El rango lo fija el script -el indice contra el
+branch-point- y no tu criterio: sin anclar ahi, los commits que la base haya avanzado saldrian como
+borrados y el verificador cazaria violaciones fantasma. Si devuelve FALLA (base inexistente, o nada
+staged), arreglalo antes de invocar: "nada staged" suele ser el `git add` olvidado del paso 6.
 
 **No le pases nada de los controles** (estan verdes por construccion: un resumen seria cero informacion
 y solo gastaria contexto) **ni el "resumen del enfoque"** del implementador: juzga el diff, no la
@@ -419,8 +424,8 @@ completo esta en `agents/slice-verifier.md`.
 ### 8. Commitear y abrir PR
 
 El indice ya esta staged, con `pr-hygiene` en PASA, y el verificador dio PASA sobre **ese** indice.
-Aqui solo se commitea lo que ya se juzgo: **no stagees nada mas entre el paso 7 y el commit**, porque
-seria codigo que entra en la PR sin haber pasado por el verificador.
+Aqui solo se commitea lo que ya se juzgo: **no stagees nada mas desde el `git add` del paso 6**, porque
+seria codigo que entra en la PR sin haber pasado por `pr-hygiene` ni por el verificador.
 
 - **Conventional commit.** Mensaje y titulo de PR = `type(name): resumen`, con el `name` de la slice
   como scope: `feat(cantidad-vo): add Cantidad value object`. Lo unico determinista aqui es que el
