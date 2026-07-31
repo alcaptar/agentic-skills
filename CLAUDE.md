@@ -60,11 +60,16 @@ coherencia con `ai-patterns`.
   (comandos, rama, controles, PR, CI), medido con la vara de **ese** repo (su subseccion `### org/repo` en
   las fuentes de convencion). El issue sigue siendo uno: una feature = un issue.
 
-## Tras tocar el agente verificador
+## Tras tocar un agente definido
 
-`agents/slice-verifier.md` no se relee en caliente: el registro de agentes se cachea al primer load de la
-sesion, al contrario que las skills. Si lo editas, **la sesion en curso sigue usando la version vieja**.
-Para probarlo hace falta sesion nueva; si no, el smoke valida la definicion equivocada en silencio.
+`agents/slice-implementer.md` y `agents/slice-verifier.md` no se releen en caliente: el registro de
+agentes se cachea al primer load de la sesion, al contrario que las skills. Si editas uno, **la sesion en
+curso sigue usando la version vieja**. Para probarlo hace falta sesion nueva; si no, el smoke valida la
+definicion equivocada en silencio.
+
+Los dos son la mitad de "el que implementa no verifica", asi que la metodologia del implementador vive en
+su system prompt y **no** se relata desde `slice-runner`: el orquestador solo le pasa los datos del run.
+Si anades una regla de como implementar, va en el agente; si es un dato del run, va en el paso 5.
 
 ## Verificacion tras tocar los scripts o las skills
 

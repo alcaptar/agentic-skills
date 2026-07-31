@@ -14,8 +14,11 @@ terminado y no lo esta. Al final revisar lo que hizo cuesta mas que haberlo hech
 
 Este repo es el intento de arreglar eso con **estructura en vez de confianza**:
 
-- **Trabajo troceado en rebanadas verticales** (*slices*) pequenas y entregables. Cada slice arranca
-  con contexto limpio, asi que ninguna sesion vive lo suficiente para degradarse.
+- **Trabajo troceado en rebanadas verticales** (*slices*) pequenas y entregables, con **todo el estado
+  en un issue de GitHub**: los subagentes que hacen el trabajo nacen y mueren en cada slice -ahi el
+  contexto si es desechable-, y como no queda nada en la sesion, puedes tirarla y abrir otra entre
+  slices en vez de compactar. Lo que no se limpia solo es el contexto del **orquestador**, que vive en
+  tu sesion: eso lo decides tu (ver "El contexto" mas abajo).
 - **El que implementa no verifica.** Dos subagentes distintos, con instrucciones distintas, y el
   verificador es adversarial y no puede ejecutar nada (no tiene `Bash`): su unico trabajo es juzgar.
 - **Lo mecanico lo deciden scripts, no el juicio de un agente.** Si es una regla exacta (¿esta verde
@@ -98,6 +101,7 @@ son los unicos puntos donde para y decides tu.
 |---|---|---|
 | `skills/slice-spec/SKILL.md` | Skill de autoria | Convierte una idea en una spec bien formada y **crea el issue**. Envuelve `superpowers:brainstorming` para el diseno; el troceo lo lleva su propio cerebro (`skills/slice-spec/references/slicing.md`). Modo `validate` para auditar una spec existente. No escribe codigo. |
 | `skills/slice-runner/SKILL.md` | Skill orquestadora | Ejecuta **una** slice de punta a punta: alinear, implementar, controlar, verificar, abrir PR, esperar integracion continua verde, y **parar**. No mergea. |
+| `agents/slice-implementer.md` | Definicion de subagente | El implementador. Su metodologia -ciclo TDD, exencion de capa, integridad de tests preexistentes, refactor tras cada verde, instrumentar la senal- va en su *system prompt*, no relatada por el orquestador: no se puede parafrasear ni saltar un item, y no cuesta contexto de la sesion. Tiene `Bash` porque correr el ciclo y los controles es su cometido. |
 | `agents/slice-verifier.md` | Definicion de subagente | El juez adversarial. Su rubrica va en el *system prompt* (verbatim en cada invocacion, no parafraseada) y sus herramientas son `Read, Grep, Glob, Skill`: **sin `Bash`**, asi que su incapacidad de ejecutar controles es estructural, no una promesa. |
 | `skills/deploy-watch/SKILL.md` | Skill de post-merge | Vigila el despliegue en produccion, read-only. Orquesta por tick las skills de observabilidad que haya (Prometheus, Elasticsearch, logs de Google Cloud, Sentry...) segun el radio de impacto del cambio. Nunca ejecuta rollback: lo redacta. |
 | `skills/slice-runner/scripts/controles.py` | Script determinista | Cinco subcomandos: `controles` (ejecutar los comandos declarados; el log va a disco), `pr-hygiene` (que el diff staged solo tenga los ficheros de la slice), `diff-bundle` (materializar el diff para el juez, que no puede calcularlo), `ci-status` (estado de la integracion continua en un tiro) y `verify-verdict` (validar la forma del veredicto y contar severidades). |
@@ -133,12 +137,40 @@ son los unicos puntos donde para y decides tu.
   declara su linea `SENAL:` (como se comprueba viva), que es lo que `deploy-watch` consume despues; las
   exentas lo declaran con motivo.
 
+## Como se arranca un ciclo
+
+Solo hay dos comandos, y el segundo se repite:
+
+```
+/slice-spec              # una vez por feature: disena, trocea y crea el issue
+/slice-runner #42        # una vez por slice: la ejecuta hasta CI verde y para
+```
+
+Lo que hay que decidir a mano no es ninguno de los dos, es **donde cortas la sesion**: una sesion por
+slice. `/slice-spec` en la suya, y cada `/slice-runner` en una nueva. No es ceremonia -es que el
+orquestador vive en tu sesion y acumula el run entero (ver "El contexto")-, y es seguro porque **todo
+el estado esta en el issue**: al arrancar re-lee el issue, ve que slices estan mergeadas y coge la
+siguiente. Nada viaja en la conversacion.
+
+```
+sesion 1:  /slice-spec        -> issue #42 con la spec y las N slices
+sesion 2:  /slice-runner #42  -> slice-01 -> PR -> CI verde -> [mergeas tu] -> deploy-watch
+sesion 3:  /slice-runner #42  -> slice-02 -> ...
+```
+
+Si en una sesion te salta el aviso de compactar a mitad de slice, la respuesta no es compactar: es
+dejar que la slice termine (o que pare donde este, que el issue lo registra), abrir sesion nueva e
+invocar otra vez. Compactar deja al orquestador decidiendo con el contexto mutilado.
+
+`/loop` sirve para no teclear el comando cada vez, no para higiene de contexto: reinyecta el prompt en
+la **misma** conversacion. Usalo para una tanda corta de slices, no para una feature entera.
+
 ## Ejemplo: una feature de punta a punta
 
 Supongamos que hoy se pueden crear pedidos con cantidad negativa y el stock queda en negativo sin que
 nadie se entere.
 
-**1. Disenar y crear el issue**
+**1. Disenar y crear el issue** (sesion nueva)
 
 ```
 /slice-spec
@@ -178,7 +210,7 @@ y nadie se entera hasta el recuento fisico.
       SENAL: contador orders_rejected_total{reason="invalid_quantity"}
 ```
 
-**2. Ejecutar la primera slice**
+**2. Ejecutar la primera slice** (sesion nueva)
 
 ```
 /slice-runner #42
@@ -211,14 +243,36 @@ que arranca sin preguntar nada que pueda inferir: captura baseline, tickea las s
 radio de impacto del cambio, y comenta su veredicto en el issue #42. Si sale degradado, lanza el
 agente `sre` para el analisis de causa raiz y **te redacta el rollback** para que lo lances tu.
 
-**5. Siguiente slice**
+**5. Siguiente slice** (sesion nueva)
 
 ```
 /slice-runner #42
 ```
 
-Contexto limpio, `slice-02`, misma vara. Para encadenar sin volver a teclear: envuelve la skill en
-`/loop`.
+`slice-02`, misma vara. La sesion anterior ya lleva encima el run entero y no hace falta para nada: el
+issue tiene el estado, asi que abrir otra no cuesta nada.
+
+## El contexto
+
+De las tres skills, la unica que vive en tu sesion es el **orquestador** de `slice-runner`: lee el
+issue, lanza los subagentes, corre los controles y espera la CI. Todo lo caro esta deliberadamente
+**fuera** de el -el output de build va a disco y solo se reenvian rutas; las convenciones, el diff y el
+codigo los leen los subagentes en su propio contexto-, pero el orquestador acumula igual, y con varias
+slices por feature acaba tocando compactar.
+
+La asimetria, dicha entera: **el contexto desechable es el de los subagentes**, que nacen y mueren en
+cada slice; el de tu sesion no se limpia solo, y cada slice paga otra vez el `SKILL.md` del runner y
+los mensajes finales de sus agentes. De ahi la regla de la seccion anterior -una sesion por slice- y de
+ahi que compactar a mitad de run sea el caso a evitar y no un inconveniente.
+
+Lo que se ha hecho para que quepa mas en cada sesion (2026-07-31): el relato largo salio del `SKILL.md`
+a `skills/slice-runner/references/por-que.md`, que solo se carga para cambiar la skill, y la
+metodologia del implementador se fue a su propio agente en vez de redactarla el orquestador en cada
+invocacion. Unas 5.000 palabras menos de contexto por slice.
+
+Lo que **no** esta hecho: sacar al orquestador de tu sesion, que es la unica forma de que el
+aislamiento deje de depender de que tu abras sesion nueva. Pendiente, con sus dos decisiones abiertas,
+al final de `docs/design-notes.md`.
 
 ## Instalacion
 
@@ -231,18 +285,19 @@ Code. Ambos directorios son **de usuario**, no de proyecto: valen en cualquier r
 ln -s "$PWD/skills/slice-spec" ~/.claude/skills/slice-spec
 ln -s "$PWD/skills/slice-runner" ~/.claude/skills/slice-runner
 ln -s "$PWD/skills/deploy-watch" ~/.claude/skills/deploy-watch
+ln -s "$PWD/agents/slice-implementer.md" ~/.claude/agents/slice-implementer.md
 ln -s "$PWD/agents/slice-verifier.md" ~/.claude/agents/slice-verifier.md
 ```
 
-El del agente **no es opcional**: sin el, `subagent_type: slice-verifier` no resuelve y el paso de
-verificacion de `slice-runner` rompe.
+Los de los agentes **no son opcionales**: sin ellos, `subagent_type: slice-implementer` o
+`slice-verifier` no resuelven y `slice-runner` para en el paso 3 con `bloqueada: sin-subagentes`.
 
 > **Gotcha verificado (2026-07-27): las skills se releen, los agentes no.** Editar un `SKILL.md`
-> cambia el comportamiento en la sesion en curso; editar `agents/slice-verifier.md` **no**. El
+> cambia el comportamiento en la sesion en curso; editar una definicion de `agents/` **no**. El
 > registro de agentes se cachea al primer load, asi que la sesion sigue usando la definicion vieja:
-> se comprobo lanzandolo tras reescribirlo y viendo que citaba campos de su system prompt anterior y
-> usaba una herramienta que la version nueva ya no declara. **Tras tocar el agente hay que abrir
-> sesion nueva antes de probarlo**, o el smoke valida la version equivocada sin avisar.
+> se comprobo lanzando el verificador tras reescribirlo y viendo que citaba campos de su system prompt
+> anterior y usaba una herramienta que la version nueva ya no declara. **Tras tocar un agente hay que
+> abrir sesion nueva antes de probarlo**, o el smoke valida la version equivocada sin avisar.
 
 Otra consecuencia del symlink: **la rama en la que estas decide que codigo corre**. Si sondeas un
 cambio de los scripts desde una rama creada en `origin/master`, corres los de `origin` y nada avisa.
