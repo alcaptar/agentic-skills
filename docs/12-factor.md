@@ -19,6 +19,9 @@ sabe por que existe; sin el segundo, la auditoria seria una opinion.
 5. El spike valida que `claude -p` es la funcion sin estado que hace falta, **y anade un requisito que
    no estaba previsto**: el aislamiento del implementador hay que decidirlo antes de escribir el
    orquestador, no despues.
+6. **Acotar las herramientas de cada llamada es a la vez la garantia y la palanca de coste**: darle al
+   verificador solo lo que necesita para juzgar hace que su incapacidad de ejecutar sea estructural
+   **y** parte el coste por la mitad. No hay que elegir entre seguro y barato.
 
 ## Mapeo factor por factor
 
@@ -144,31 +147,49 @@ directamente lo que hoy declara `skills/slice-runner/SKILL.md`: *"el cumplimient
 estocastico"*. Con el esquema desaparece, y con el probablemente el contador `--descartes-verify`
 entero. Varia el **numero** de hallazgos, no el veredicto, que es la varianza que se espera de un juez.
 
-**`--disallowedTools` bloquea de verdad, pero la intuicion lleva al flag equivocado.** Los dos flags no
-son simetricos y confundirlos es peor que no usar ninguno:
+**Hay tres flags de herramientas y solo uno restringe de verdad.** No son variaciones del mismo
+mecanismo: hacen tres cosas distintas, y la intuicion lleva a los dos equivocados.
 
-- `--disallowedTools Bash` deja la herramienta **fuera del juego**: el agente responde que no tiene
-  ninguna herramienta de shell disponible y `permission_denials` queda **vacio**, porque nunca lo
-  intento. Ausencia estructural, que es justo lo que el `allowed-tools` del frontmatter no daba (lo
-  refuto el smoke del 2026-07-27, en `docs/design-notes.md`).
-- Adversarialmente, el agente **intento escapar delegando en un subagente**. Fallo porque la denegacion
-  **se hereda al subagente**. Verificado, y es load-bearing: sin esa herencia, delegar seria la puerta
-  de atras del control entero.
-- `--allowedTools 'Read,Grep,Glob'` **no restringe: pre-aprueba.** Con eso puesto, `Bash` seguia
+- **`--tools 'Read,Grep,Glob'` es el que restringe**: fija el conjunto integrado disponible, asi que el
+  resto **no existe**. Con eso puesto y un prompt que le pide explicitamente buscar cualquier via de
+  ejecucion, el agente enumero sus tres herramientas y se rindio **en un turno**, con
+  `permission_denials` vacio. Es lo que el `allowed-tools` del frontmatter prometia y no daba (lo refuto
+  el smoke del 2026-07-27, en `docs/design-notes.md`).
+- **No cubre las herramientas de servidores externos** (el flag dice "del conjunto integrado"): con
+  `--tools` acotado a tres, los servidores de Kubernetes seguian enteros en el inventario que el propio
+  agente recito. Para dejarlos fuera hace falta ademas **`--strict-mcp-config`** sin pasar ninguna
+  configuracion.
+- **`--disallowedTools Bash` tambien produce ausencia**, y ademas **se hereda al subagente**: el agente
+  intento escapar delegando en uno, y fallo por eso. Verificado, y es load-bearing -sin esa herencia,
+  delegar seria la puerta de atras del control entero-. Sirve como denegacion puntual, pero como
+  mecanismo principal obliga a mantener una lista negra que se queda corta cada vez que aparece una
+  herramienta nueva.
+- **`--allowedTools 'Read,Grep,Glob'` no restringe: pre-aprueba.** Con eso puesto, `Bash` seguia
   disponible, el agente lo invoco, quedo registrado en `permission_denials`, y la llamada **acabo
   pidiendo aprobacion humana** en vez de devolver un veredicto. En un proceso no interactivo eso es una
   llamada perdida, no un fallo seguro.
 
-**Coste y latencia, con un matiz que cambia la lectura.** Unos **30.000 tokens de preambulo por
-llamada**, irreducibles: reemplazar el prompt de sistema con `--system-prompt` no baja nada frente a
-anadirlo con `--append-system-prompt` (105.873 contra 99.090 acumulados), y acotar herramientas baja un
-14%. Lo que pesa son las definiciones de herramientas, no el prompt. El verificador con haiku sale a
-0,07-0,11 dolares y 50-86 segundos por llamada.
+**El preambulo no es irreducible: acotar el conjunto de herramientas lo parte por la mitad.** Lo que
+pesa son las definiciones de herramientas, no el prompt de sistema -reemplazarlo con `--system-prompt`
+no baja nada frente a anadirlo con `--append-system-prompt`: 105.873 contra 99.090 acumulados-. Pero
+quitar las herramientas si baja, y mucho. Misma tarea, mismo modelo, mismo system prompt, mismo esquema:
 
-El matiz: **eso no es coste nuevo**. Los subagentes de hoy ya pagan su propio preambulo. Lo que la
-arquitectura propia elimina es el coste del orquestador, que pasa a ser Python y cuesta **cero tokens**.
-Esta ultima frase es **razonamiento, no medicion**: no se puede instrumentar el consumo de un subagente
-desde dentro de la sesion que lo lanza.
+| | Sin acotar | `--tools 'Read,Grep,Glob' --strict-mcp-config` |
+|---|---|---|
+| Contrato (`verify-verdict`) | exit 0, PASA | exit 0, PASA |
+| Preambulo acumulado | 99.090 | **32.074** |
+| Coste | 0,109 $ | **0,052 $** |
+| Duracion | 51-86 s | **29 s** |
+| Turnos | 6 | 5 |
+
+O sea que la receta del verificador -restringir a lo que de verdad necesita para juzgar- **es a la vez
+la garantia y la palanca de coste**: la mitad de dinero, un tercio del tiempo, y la incapacidad de
+ejecutar pasa a ser estructural. No hay que elegir entre seguro y barato.
+
+Y sobre el coste absoluto: **no es coste nuevo**. Los subagentes de hoy ya pagan su propio preambulo. Lo
+que la arquitectura propia elimina es el coste del orquestador, que pasa a ser Python y cuesta **cero
+tokens**. Esta ultima frase es **razonamiento, no medicion**: no se puede instrumentar el consumo de un
+subagente desde dentro de la sesion que lo lanza.
 
 ### Lo que obliga a cambiar el diseno
 
@@ -191,6 +212,11 @@ De ahi que la unica combinacion que funciona sea **permisos amplios con aislamie
 ejecucion"-. El aislamiento deja de ser una mejora del Nivel 3 y pasa a ser **requisito de la primera
 version**.
 
+Lo que `--tools` si aporta aqui es **acotar que hay que aislar**: al implementador se le da el conjunto
+minimo que necesita para su ciclo, con lo que el aislamiento tiene que cubrir lo que `Bash` puede hacer y
+no treinta herramientas mas los conectores externos. Reduce el problema, no lo resuelve: una vez `Bash`
+esta presente, no hay forma de acotarlo por patron.
+
 **`--bare` no sirve con autenticacion de suscripcion.** Devuelve `Not logged in` y exit 1: exige
 `ANTHROPIC_API_KEY` estricta y nunca lee OAuth ni el llavero. La via de minimizar contexto con ese flag
 implica una facturacion aparte.
@@ -205,9 +231,11 @@ implica una facturacion aparte.
 
 ### Un footgun operativo
 
-Los flags variadicos (`--disallowedTools A B C`) **se tragan el prompt posicional** y la invocacion
-muere con `Input must be provided either through stdin or as a prompt argument`. Hay que usar la forma
-con comas y pasar el prompt por entrada estandar.
+Los flags variadicos (`--tools A B C`, `--disallowedTools A B C`, `--allowedTools A B C`) **se tragan el
+prompt posicional** y la invocacion muere con `Input must be provided either through stdin or as a prompt
+argument`. Hay que usar la forma con comas y pasar el prompt por entrada estandar. Importa mas de lo que
+parece porque `--tools` es el flag de la receta recomendada: el fallo no es silencioso, pero se parece a
+un problema de prompt y no a uno de parseo de argumentos.
 
 ## Fuentes
 
