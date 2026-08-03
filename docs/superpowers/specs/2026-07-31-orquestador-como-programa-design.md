@@ -116,6 +116,35 @@ se cambia el formato. No se soportan los dos, por el mismo argumento con el que 
 
 ## Decision 3 — Forma del programa
 
+### Estructura del proyecto: el layout del boilerplate, no su runtime
+
+El programa vive en `src/slice_runner/` con `py.typed` y capas `domain` / `application` /
+`infrastructure`, y **los tests dentro del paquete espejando el arbol de fuentes**
+(`src/slice_runner/tests/<capa>/`), siguiendo el layout de `mercadona/mo.boilerplate.fastapi`.
+
+**Lo que NO se trae**, aunque este en el boilerplate: `docker/`, `alembic/`, el modulo de bases de
+datos, `gunicorn` y el `app.py` -no hay ni HTTP ni base de datos-; los `requirements/*.txt`, porque
+`uv` ya gestiona el toolchain aqui y mejor; las reglas `FAST` de ruff; y `S` (bandit) activado, que en
+este repo esta apagado con motivo escrito en `pyproject.toml`.
+
+**Y una que es incorrecta aqui, no solo innecesaria**: el `Makefile` del boilerplate envuelve cada
+control en `docker compose exec -T app`. Este programa **lanza `claude -p`**, asi que meterlo en un
+contenedor es exactamente el problema que la decision 1 dejo fuera de alcance, y ademas la
+autenticacion de suscripcion no viaja al contenedor. Los controles siguen corriendo en el anfitrion
+con `uv run`.
+
+**Por que clonar no aportaba**: el tooling ya estaba convergido antes de esta decision -el
+`pyproject.toml` de este repo cita explicitamente al boilerplate, y coinciden en `line-length`,
+`quote-style`, `extend-safe-fixes`, mypy estricto y el `select` de ruff-. Lo unico que faltaba era el
+layout, que son cuatro cosas: el paquete bajo `src/`, las capas, los tests co-localizados y el
+`pythonpath`.
+
+**El reparto de los tests, que no es deriva de dos convenciones**: los del programa van co-localizados;
+`tests/` se queda con lo que **no tiene paquete donde vivir** -los contratos entre los `.md` del repo- y
+con lo que siga sirviendo a las skills. Es un reparto por naturaleza del sujeto, y ademas transitorio:
+segun avanzan las slices que mueven la logica de `controles.py` y borran el parser del checklist, sus
+tests se mueven o se van con ellos.
+
 ### La maquina de estados es una funcion pura
 
 ```python
