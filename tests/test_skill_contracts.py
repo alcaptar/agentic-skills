@@ -15,6 +15,7 @@ step passes; changing one side alone fails. That is the only drift these tests e
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import importlib
 import json
 import re
@@ -24,6 +25,8 @@ from pathlib import Path
 import controles
 import issue_body
 import metrics
+from slice_runner.domain import veredicto
+from slice_runner.infrastructure import verificador
 
 _ROOT = Path(__file__).resolve().parents[1]
 _RUNNER = _ROOT / "skills" / "slice-runner" / "SKILL.md"
@@ -142,6 +145,31 @@ def test_verifier_verdict_schema_is_identical_in_the_agent_and_in_the_runner() -
     )
 
 
+def test_tools_the_program_grants_the_judge_are_the_ones_his_prompt_declares() -> None:
+    """The agent header lists the judge's tools; `--tools` in the argv is what grants them.
+
+    The header is stripped before the prompt travels, so a tool listed there and absent from the
+    argv is simply not granted -- while the rubric that does travel keeps ordering the judge to use
+    it (two of its nine items load a skill). That is a rubric with items the judge cannot execute,
+    and neither the argv nor the prompt says so: the empty yardstick the rubric itself names as the
+    root cause of silent deviations. The reverse -- granting what the prompt never mentions -- is a
+    capability nobody wrote down.
+    """
+    header = re.search(r"\A---\n(.*?)\n---\n", _read(_VERIFIER), re.DOTALL)
+    assert header, f"cannot find the YAML header in {_rel(_VERIFIER)}"
+    listed = re.findall(r"^tools:\s*(.+)$", header.group(1), re.MULTILINE)
+    assert len(listed) == 1, f"expected exactly one `tools:` line in the header of {_rel(_VERIFIER)}"
+    declared = {tool.strip() for tool in listed[0].split(",")}
+
+    argv = verificador.argv_del_verificador()
+    granted = set(argv[argv.index("--tools") + 1].split(","))
+
+    assert declared == granted, (
+        f"{_rel(_VERIFIER)} and the argv of slice_runner's verifier disagree on the judge's tools: "
+        f"only in the prompt {sorted(declared - granted)}, only in the argv {sorted(granted - declared)}"
+    )
+
+
 def test_severity_levels_in_the_verdict_schema_are_the_ones_the_validator_accepts() -> None:
     """The rubric's severities and the validator's must be the same set.
 
@@ -163,6 +191,48 @@ def test_severity_levels_in_the_verdict_schema_are_the_ones_the_validator_accept
         f"only in the skill {sorted(documented - set(controles.Severidad))}, "
         f"only in the validator {sorted(set(controles.Severidad) - documented)}"
     )
+
+
+def _documented_finding() -> dict[str, object]:
+    """The single example finding in the rubric, which is where the verdict's fields are stated."""
+    schema = _sole_json_block(_VERIFIER)
+    assert isinstance(schema, dict)
+    hallazgos = schema["hallazgos"]
+    assert isinstance(hallazgos, list)
+    assert hallazgos
+    primero = hallazgos[0]
+    assert isinstance(primero, dict)
+    return primero
+
+
+def test_the_finding_fields_in_the_rubric_are_the_ones_the_program_models() -> None:
+    """The rubric states the finding's fields; `Hallazgo` is what the program converts them into.
+
+    A field documented but not modelled is dropped on the way in -- silently, because the JSON
+    schema the program sends is built from `Hallazgo` too, so the judge is never even asked for
+    it. The reverse makes the program demand a field the rubric never told the judge to emit.
+    """
+    documented = set(_documented_finding())
+
+    modelled = {f.name for f in dataclasses.fields(veredicto.Hallazgo)}
+    assert documented == modelled, (
+        f"the finding in {_rel(_VERIFIER)} and slice_runner's `Hallazgo` disagree: "
+        f"only in the rubric {sorted(documented - modelled)}, only in the program {sorted(modelled - documented)}"
+    )
+
+
+def test_the_verdicts_and_severities_in_the_rubric_are_the_ones_the_program_accepts() -> None:
+    """Same drift, on the two closed vocabularies.
+
+    These reach the judge as `enum` values in `--json-schema`, so a level in the rubric that the
+    program does not know is one the judge is forbidden from emitting -- and one the program knows
+    but the rubric does not document is dead vocabulary nobody will ever produce.
+    """
+    schema = _sole_json_block(_VERIFIER)
+    assert isinstance(schema, dict)
+
+    assert {v.strip() for v in str(schema["veredicto"]).split("|")} == set(veredicto.Dictamen)
+    assert {s.strip() for s in str(_documented_finding()["severidad"]).split("|")} == set(veredicto.Severidad)
 
 
 _CRITERION_ANCHOR = "declarar la degradacion en el artefacto"

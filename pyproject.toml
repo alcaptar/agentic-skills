@@ -1,8 +1,16 @@
-# Este repo no es un paquete: es la fuente de verdad de las skills, y su codigo Python
-# son los scripts deterministas que las skills invocan (`controles.py`, `issue_body.py`,
-# `deploy_core.py`, `metrics.py`, `discover_conventions.py`, `discover_controles.py`). El
-# `[project]` existe solo para que `uv` pueda gestionar el toolchain de calidad;
-# `package = false` lo deja claro.
+# Este repo no es un paquete: es la fuente de verdad de las skills, su codigo Python son los
+# scripts deterministas que las skills invocan (`controles.py`, `issue_body.py`,
+# `deploy_core.py`, `metrics.py`, `discover_conventions.py`, `discover_controles.py`), y desde
+# ahora tambien el programa orquestador de `src/slice_runner/`. El `[project]` existe solo para
+# que `uv` pueda gestionar el toolchain de calidad; `package = false` lo deja claro, y el
+# ejecutable instalable no es de esta fase.
+#
+# Consecuencia de `package = false` que hay que saber para lanzar el programa: uv no instala el
+# proyecto, y `python -m` solo mira el directorio actual, asi que la ruta de importacion se pone a
+# mano (`src`, y los scripts porque el programa importa `controles`):
+#
+#     PYTHONPATH=src:skills/slice-runner/scripts \
+#         uv run python -m slice_runner verificar --repo . --base master
 #
 # La config replica la que el repo ya exige a su propia fixture de smoke
 # (`smoke/fixture/pyproject.toml`): misma vara para el harness que para lo que valida.
@@ -55,6 +63,9 @@ extend-safe-fixes = ["TC001", "TC002", "TC003", "TC004", "UP037"]
 # assert no es una constante magica sin nombrar, es el valor esperado, y ponerle nombre lo
 # unico que hace es esconder de que va el test.
 "tests/*" = ["PLR0913", "PLR2004"]
+# Los del programa viven dentro del paquete (`src/slice_runner/tests/`), asi que el patron de
+# arriba -relativo a la raiz- no los alcanza y necesitan su propia linea.
+"src/slice_runner/tests/*" = ["PLR0913", "PLR2004"]
 
 [tool.ruff.lint.isort]
 # Los scripts se importan por nombre (via `pythonpath` de pytest), asi que isort no puede
@@ -68,6 +79,7 @@ known-first-party = [
     "discover_conventions",
     "issue_body",
     "metrics",
+    "slice_runner",
 ]
 
 # `S` (flake8-bandit) NO se activa a proposito, y es la unica desviacion del ruleset que
@@ -82,8 +94,16 @@ skip-magic-trailing-comma = false
 
 [tool.mypy]
 strict = true
+# `src` para que `slice_runner` resuelva sin instalar el paquete, y el directorio de los scripts
+# porque el programa importa `controles` mientras su logica siga viviendo alli.
+mypy_path = "src:skills/slice-runner/scripts"
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
-# controles.py y metrics.py se importan por nombre, via este pythonpath.
-pythonpath = ["skills/slice-runner/scripts", "skills/deploy-watch/scripts"]
+# Dos arboles de test a proposito: los del programa van co-localizados dentro del paquete y
+# `tests/` se queda con lo que no tiene paquete donde vivir (los contratos entre los `.md`) y con
+# lo que sirve a las skills. El reparto lo razona
+# `docs/superpowers/specs/2026-07-31-orquestador-como-programa-design.md`.
+testpaths = ["tests", "src/slice_runner/tests"]
+# controles.py y metrics.py se importan por nombre, via este pythonpath; `src` es lo que hace
+# importable `slice_runner` sin instalar el proyecto.
+pythonpath = ["src", "skills/slice-runner/scripts", "skills/deploy-watch/scripts"]

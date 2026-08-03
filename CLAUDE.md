@@ -110,17 +110,23 @@ vs `issue_body.py`, veredictos de `metrics.py`, el JSON del verificador en `agen
 compara, asi que reescribir las dos copias a la vez pasa y tocar solo una falla. Si editas una
 skill y `make check` se pone rojo ahi, es que has movido una mitad del contrato: mueve la otra.
 
-Lo compartido por la suite vive en `tests/conftest.py`: la fixture `repo` y los helpers de
-escribir/stagear. No vuelvas a definirlos en un fichero de tests -hubo tres `_write` con firmas
-distintas a la vez, y leer cualquier test obligaba a subir a la cabecera-. Ahi tambien esta
-`RAMA_BASE`: los repos de prueba fijan su rama con `git init -b`, porque `init.defaultBranch` es
-config de la maquina y el bloque de `diff-bundle` se cae en una que use `main`.
+Lo compartido por la suite de `tests/` vive en `tests/conftest.py`: la fixture `repo` y los helpers
+de escribir/stagear. No vuelvas a definirlos en un fichero de tests -hubo tres `_write` con firmas
+distintas a la vez, y leer cualquier test obligaba a subir a la cabecera-.
 
-El mismo fichero comprueba que **toda ruta de este repo citada en los `.md` existe**. Aqui no se
-enlaza con markdown: se citan rutas en backticks, asi que lo que se valida es el token, no el
-enlace. Solo entran los que empiezan por un directorio de primer nivel del repo -eso deja fuera
-por construccion los nombres sueltos (`controles.py`), las rutas de otros repos y los patrones de
-rama (`slice/NN-name`)-. Dos ficheros no se escanean, cada uno por lo que **es**:
+Lo que comparten **los dos** arboles de test vive en `src/slice_runner/tests/repo_de_prueba.py`:
+`RAMA_BASE`, el helper de `git` y el repo recien inicializado, que `tests/conftest.py` importa de
+ahi. La direccion es esa porque `src` entra en el `pythonpath` y el directorio de `conftest` no, asi
+que `src/slice_runner/tests/` no puede consumir de `tests/` y al reves si. `RAMA_BASE` se fija
+explicitamente (`git init -b`) porque `init.defaultBranch` es config de la maquina y el bloque de
+`diff-bundle` se cae en una que use `main`.
+
+`tests/test_skill_contracts.py` comprueba ademas que **toda ruta de este repo citada en los `.md`
+existe**, en `test_every_repo_path_cited_in_the_docs_still_exists`. Aqui no se enlaza con markdown:
+se citan rutas en backticks, asi que lo que se valida es el token, no el enlace. Solo entran los que
+empiezan por un directorio de primer nivel del repo -eso deja fuera por construccion los nombres
+sueltos (`controles.py`), las rutas de otros repos y los patrones de rama (`slice/NN-name`)-. Dos
+ficheros no se escanean, cada uno por lo que **es**:
 `docs/superpowers/specs/` (registro fechado, describe el arbol de su dia) y
 `skills/slice-spec/references/observabilidad.md` (documenta rutas de repos ajenos).
 

@@ -36,9 +36,10 @@ import subprocess
 from pathlib import Path
 
 import pytest
-from conftest import RAMA_BASE, git, stagea
+from conftest import stagea
 
 import controles
+from slice_runner.tests.repo_de_prueba import RAMA_BASE, git
 
 
 def test_subconjunto_declarado_pasa(repo: Path) -> None:
@@ -330,9 +331,30 @@ def test_diff_bundle_ignora_lo_que_no_esta_staged(repo_con_rama: Path, tmp_path:
 
 
 def test_diff_bundle_falla_si_la_base_no_existe(repo_con_rama: Path, tmp_path: Path) -> None:
+    """El motivo lo distingue del indice vacio, que es el otro FALLA de este control.
+
+    Los dos dejan el bundle sin escribir y se arreglan en sitios distintos -uno es el `git add`
+    olvidado, este es el flag mal escrito-, asi que quien ramifica por el resultado lo necesita.
+    """
     res = controles.escribe_diff_bundle(str(repo_con_rama), "no-existe", str(tmp_path / "b"))
     assert not res.passed
+    assert res.motivo is controles.MotivoSinBundle.REPO_O_BASE_NO_RESOLUBLE
     assert any("no-existe" in h for h in res.hallazgos)
+
+
+def test_diff_bundle_no_culpa_a_la_base_cuando_lo_que_no_resuelve_es_el_repo(tmp_path: Path) -> None:
+    """Un `--repo` que no es un repo git cae por el mismo `git diff` que una base inexistente.
+
+    El motivo tiene que cubrir los dos sin afirmar cual fue: nombrarlo solo por la base hace que el
+    resultado -y el mensaje que sale de el- asegure una causa que aqui no ocurrio.
+    """
+    fuera_de_git = tmp_path / "no-es-un-repo"
+    fuera_de_git.mkdir()
+
+    res = controles.escribe_diff_bundle(str(fuera_de_git), RAMA_BASE, str(tmp_path / "b"))
+
+    assert not res.passed
+    assert res.motivo is controles.MotivoSinBundle.REPO_O_BASE_NO_RESOLUBLE
 
 
 def test_diff_bundle_falla_si_no_hay_nada_staged(repo: Path, tmp_path: Path) -> None:
@@ -342,6 +364,7 @@ def test_diff_bundle_falla_si_no_hay_nada_staged(repo: Path, tmp_path: Path) -> 
     _baseline(repo)
     res = controles.escribe_diff_bundle(str(repo), RAMA_BASE, str(tmp_path / "b"))
     assert not res.passed
+    assert res.motivo is controles.MotivoSinBundle.INDICE_VACIO
     assert any("nada staged" in h for h in res.hallazgos)
 
 
