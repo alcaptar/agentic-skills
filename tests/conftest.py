@@ -6,9 +6,9 @@ JSON por lineas. Leer cualquier test obligaba a subir a la cabecera a averiguar 
 Aqui viven los que son de verdad comunes -escribir en un arbol y stagear-; lo que solo tiene
 sentido en un fichero se queda alli, con un nombre que dice de que va.
 
-`RAMA_BASE`, `git` y el repo recien inicializado ya **no** se definen aqui: los comparte tambien el
+`BASE_BRANCH`, `git` y el repo recien inicializado ya **no** se definen aqui: los comparte tambien el
 arbol de test del programa (`src/slice_runner/tests/`), que no puede importar de este directorio, asi
-que su origen unico es `src/slice_runner/tests/repo_de_prueba.py` y esto los consume.
+que su origen unico es `src/slice_runner/tests/git_repo.py` y esto los consume.
 """
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from slice_runner.tests.repo_de_prueba import git, inicializa_repo
+from slice_runner.tests.git_repo import git, init_repo
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -40,4 +40,4 @@ def stagea(repo: Path, rel: str, content: str = "x") -> None:
 @pytest.fixture
 def repo(tmp_path: Path) -> Path:
     """Repo git vacio con identidad y rama base deterministas."""
-    return inicializa_repo(tmp_path)
+    return init_repo(tmp_path)

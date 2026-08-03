@@ -105,19 +105,22 @@ make check   # linting (ruff check + format) + mypy strict + pytest; todo debe e
 **`make check` tambien cubre los `.md`**, no solo el codigo: `tests/test_skill_contracts.py`
 compara los contratos que hoy estan escritos dos veces (motivos de `bloqueada:` en `SKILL.md`
 vs `issue_body.py`, veredictos de `metrics.py`, el JSON del verificador en `agents/` y en
-`slice-runner`, y el criterio de degradacion sin subagentes duplicado a proposito en
-`slice-runner` y `deploy-watch`). Cada test **extrae** el vocabulario de ambos lados y los
-compara, asi que reescribir las dos copias a la vez pasa y tocar solo una falla. Si editas una
+`slice-runner`, las herramientas que `src/slice_runner/` concede al juez vs las que declara su
+prompt, las claves del hallazgo en la rubrica vs el mapeo `FINDING_CONTRACT_KEYS` del programa, los
+veredictos y las severidades de la rubrica vs los que el programa acepta, y el criterio de
+degradacion sin subagentes duplicado a proposito en `slice-runner` y `deploy-watch`). Cada test
+**extrae** el vocabulario de ambos lados y los compara, asi que reescribir las dos copias a la vez
+pasa y tocar solo una falla. Si editas una
 skill y `make check` se pone rojo ahi, es que has movido una mitad del contrato: mueve la otra.
 
 Lo compartido por la suite de `tests/` vive en `tests/conftest.py`: la fixture `repo` y los helpers
 de escribir/stagear. No vuelvas a definirlos en un fichero de tests -hubo tres `_write` con firmas
 distintas a la vez, y leer cualquier test obligaba a subir a la cabecera-.
 
-Lo que comparten **los dos** arboles de test vive en `src/slice_runner/tests/repo_de_prueba.py`:
-`RAMA_BASE`, el helper de `git` y el repo recien inicializado, que `tests/conftest.py` importa de
+Lo que comparten **los dos** arboles de test vive en `src/slice_runner/tests/git_repo.py`:
+`BASE_BRANCH`, el helper de `git` y el repo recien inicializado, que `tests/conftest.py` importa de
 ahi. La direccion es esa porque `src` entra en el `pythonpath` y el directorio de `conftest` no, asi
-que `src/slice_runner/tests/` no puede consumir de `tests/` y al reves si. `RAMA_BASE` se fija
+que `src/slice_runner/tests/` no puede consumir de `tests/` y al reves si. `BASE_BRANCH` se fija
 explicitamente (`git init -b`) porque `init.defaultBranch` es config de la maquina y el bloque de
 `diff-bundle` se cae en una que use `main`.
 
@@ -142,10 +145,29 @@ loop en una sesion con agente, `make test PYTEST_ARGS="--nf -x --tb=short --disa
 Las prescribe `backend-engineering:backend-best-practices`, y este repo las cumple entero salvo una
 desviacion declarada (`S`, ver abajo). Lo que hay que saber antes de escribir una linea:
 
-- **Cero comentarios en los `.py`.** El *por que* va en docstrings -de modulo, de funcion, o de
-  atributo justo debajo de la constante que explica-, no en `#`. La unica excepcion es el shebang.
-  Que el rationale viva en el docstring es lo que hace que se lea desde fuera (`help()`, el editor)
-  en vez de solo al abrir el fichero por la linea correcta.
+- **Cero prosa en los `.py`: ni comentarios ni docstrings.** Nada de `#`, y tampoco docstring de
+  modulo, de clase, de funcion ni de atributo. La unica excepcion es el shebang. Si un trozo de
+  codigo no se entiende sin un parrafo al lado, **el arreglo es el codigo y no el parrafo**: nombres
+  que digan lo que hacen, funciones pequenas con una responsabilidad, tipos que hagan imposible el
+  mal uso, constantes con nombre en vez de literales -un `if` que necesitaba tres lineas de
+  explicacion es casi siempre una funcion con nombre esperando a nacer, y un invariante que se
+  explicaba en prosa es casi siempre un test que falta-. El *por que* va al registro duradero, que
+  aqui son el **cuerpo de la pull request** y `docs/`: es lo que se sigue leyendo cuando el fichero
+  ya se ha reescrito tres veces.
+- **El codigo va en ingles**, no solo los commits y las pull requests: nombres de fichero y de
+  modulo, clases, funciones, metodos, variables, parametros, constantes, miembros de enum,
+  excepciones, nombres de test, nombres de subcomando, y los mensajes de error que ve una persona.
+  Se queda en castellano solo lo que es **dato de un contrato** y no codigo: los valores del
+  veredicto del juez (`PASA`/`FALLA`, `alta`/`media`/`baja`) y las claves de su JSON (`regla`,
+  `evidencia`...), porque los fija la rubrica de `agents/slice-verifier.md`, los valida
+  `skills/slice-runner/scripts/controles.py` y traducirlos rompe el contrato en vez de renombrar
+  una variable. **Clave del contrato no es nombre de campo**: los campos del dataclass van en
+  ingles y la traduccion vive en un unico mapeo (`FINDING_CONTRACT_KEYS`), que es tambien de donde
+  sale el `--json-schema` y lo que el test de contrato compara contra la rubrica -asi el contrato
+  se lee en un sitio en vez de estar repartido por cada `to_dict` y cada `from_dict`-. Esto ya
+  estaba dicho en `docs/design-notes.md` y aun asi
+  `src/slice_runner/` nacio entero en castellano: una convencion escrita donde nadie la carga antes
+  de escribir no mide nada, por eso vive aqui.
 - **Los dataclasses son `frozen=True, kw_only=True, slots=True`.** Sin excepciones: si algo se
   construia por partes y luego se mutaba, se construye una vez al final o se usa
   `dataclasses.replace`. Es lo que hizo falta en `parse_body` y en `comprueba_higiene_pr`.
@@ -162,6 +184,14 @@ desviacion declarada (`S`, ver abajo). Lo que hay que saber antes de escribir un
 - **Lo que llega de fuera se valida al entrar.** El payload de `deploy_core` y las filas del log de
   `metrics` se convierten a dataclass en un `from_dict`/`from_row` que rechaza clave desconocida y
   tipo equivocado. Nada de `cast`: un `cast` no comprueba, solo calla a mypy.
+
+**Las dos primeras reglas son nuevas y los scripts viejos no las cumplen todavia**: los `.py` de
+`skills/` estan en castellano y llenos de docstrings -y una de esas docstrings,
+`skills/slice-runner/scripts/controles.py`, es una de las dos copias declaradas del numero de la
+ventana de gracia de la CI, asi que borrarla a ciegas tira un contrato-. Rigen para el codigo nuevo,
+y `src/slice_runner/` es el primero que las cumple entero. La migracion de los scripts es deuda
+declarada y se hace **fichero entero o nada**: media migracion se lee peor que ninguna, asi que lo
+que se anada hoy a uno de esos ficheros sigue el estilo de su modulo anfitrion.
 
 Dos decisiones de config que no hay que re-litigar (razonadas en `pyproject.toml`): `ruff` **no**
 formatea los `.md` -aqui los `.md` son el producto- y las reglas `S` (bandit) estan **desactivadas**

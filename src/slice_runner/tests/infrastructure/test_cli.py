@@ -1,10 +1,3 @@
-"""Tests de la linea de comandos: el veredicto por salida estandar y el codigo de salida.
-
-Van de punta a punta con el repo de verdad -el diff se empaqueta con `git`- y con el payload del
-harness grabado, que es la unica pieza que se sustituye. Los codigos de salida se escriben como
-literales a proposito: son el contrato de la orden, no un detalle del programa.
-"""
-
 from __future__ import annotations
 
 import json
@@ -12,150 +5,141 @@ from pathlib import Path
 
 import pytest
 
-from slice_runner.infrastructure.cli import build_parser, ejecuta_verificar
-from slice_runner.tests.infrastructure.soporte import (
-    ProcesoGrabado,
-    con_veredicto,
+from slice_runner.infrastructure.cli import build_parser, run_verify
+from slice_runner.tests.git_repo import BASE_BRANCH
+from slice_runner.tests.infrastructure.support import (
+    RecordedProcess,
+    UnrunnableProcess,
     payload,
-    repo_con_slice_staged,
-    repo_sin_nada_staged,
+    repo_with_nothing_staged,
+    repo_with_the_slice_staged,
+    with_verdict,
 )
-from slice_runner.tests.repo_de_prueba import RAMA_BASE
 
-_HALLAZGO_ALTA = {
+_HIGH_SEVERITY_FINDING = {
     "regla": "boundaries",
     "path": "mod.py",
     "severidad": "alta",
-    "evidencia": "requests en el dominio",
-    "detalle": "la I/O va detras de un puerto",
+    "evidencia": "requests in the domain",
+    "detalle": "I/O goes behind a port",
 }
 
 
-def test_un_pasa_sale_con_cero_y_emite_el_veredicto_por_salida_estandar(
+def test_a_pass_exits_with_zero_and_emits_the_verdict_as_json_on_standard_output(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """El veredicto va a salida estandar como JSON porque lo consume un programa, no una persona."""
-    repo = repo_con_slice_staged(tmp_path)
-    proceso = ProcesoGrabado(con_veredicto({"veredicto": "PASA", "hallazgos": []}))
+    repo = repo_with_the_slice_staged(tmp_path)
+    process = RecordedProcess(with_verdict({"veredicto": "PASA", "hallazgos": []}))
 
-    codigo = ejecuta_verificar(repo=str(repo), base=RAMA_BASE, proceso=proceso)
+    code = run_verify(repo=str(repo), base=BASE_BRANCH, process=process)
 
-    assert codigo == 0
+    assert code == 0
     assert json.loads(capsys.readouterr().out) == {"veredicto": "PASA", "hallazgos": []}
 
 
-def test_un_falla_sale_con_uno_y_emite_los_hallazgos(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    """Los cuatro hallazgos de la llamada grabada tienen que llegar enteros a la salida: quien
-    reintenta la slice los necesita, y un veredicto sin hallazgos no dice que arreglar."""
-    repo = repo_con_slice_staged(tmp_path)
-    proceso = ProcesoGrabado(payload("receta-completa"))
+def test_a_fail_exits_with_one_and_emits_every_finding_whoever_retries_the_slice_needs(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    repo = repo_with_the_slice_staged(tmp_path)
+    process = RecordedProcess(payload("full-recipe"))
 
-    codigo = ejecuta_verificar(repo=str(repo), base=RAMA_BASE, proceso=proceso)
+    code = run_verify(repo=str(repo), base=BASE_BRANCH, process=process)
 
-    assert codigo == 1
-    emitido = json.loads(capsys.readouterr().out)
-    assert emitido["veredicto"] == "FALLA"
-    assert [h["severidad"] for h in emitido["hallazgos"]] == ["alta", "alta", "media", "media"]
-
-
-def test_un_veredicto_incoherente_sale_con_dos(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    """Un `PASA` con un hallazgo alta cumple el esquema y contradice el contrato.
-
-    Sale con 2 y no con 0 porque lo que hay no es un veredicto: tratarlo como PASA es mergear con
-    un hallazgo bloqueante encima de la mesa.
-    """
-    repo = repo_con_slice_staged(tmp_path)
-    proceso = ProcesoGrabado(con_veredicto({"veredicto": "PASA", "hallazgos": [_HALLAZGO_ALTA]}))
-
-    codigo = ejecuta_verificar(repo=str(repo), base=RAMA_BASE, proceso=proceso)
-
-    assert codigo == 2
-    salida = capsys.readouterr()
-    assert salida.out == ""
-    assert "alta" in salida.err
+    assert code == 1
+    emitted = json.loads(capsys.readouterr().out)
+    assert emitted["veredicto"] == "FALLA"
+    assert [h["severidad"] for h in emitted["hallazgos"]] == ["alta", "alta", "media", "media"]
 
 
-def test_sin_nada_staged_sale_con_tres_y_no_invoca_al_juez(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    """Fail-closed antes de gastar una invocacion del harness.
+def test_an_incoherent_verdict_exits_with_two_instead_of_being_treated_as_a_pass(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    repo = repo_with_the_slice_staged(tmp_path)
+    process = RecordedProcess(with_verdict({"veredicto": "PASA", "hallazgos": [_HIGH_SEVERITY_FINDING]}))
 
-    Y con un codigo propio: confundirlo con el 1 haria pasar un `git add` olvidado por un veto del
-    juez, que es la lectura que manda a arreglar el codigo equivocado.
-    """
-    repo = repo_sin_nada_staged(tmp_path)
-    proceso = ProcesoGrabado(con_veredicto({"veredicto": "PASA", "hallazgos": []}))
+    code = run_verify(repo=str(repo), base=BASE_BRANCH, process=process)
 
-    codigo = ejecuta_verificar(repo=str(repo), base=RAMA_BASE, proceso=proceso)
+    assert code == 2
+    output = capsys.readouterr()
+    assert output.out == ""
+    assert "PASA con 1 hallazgo" in output.err
 
-    assert codigo == 3
-    assert proceso.llamadas == 0
+
+def test_a_judge_that_cannot_be_launched_exits_with_two_instead_of_with_the_code_of_the_veto(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    repo = repo_with_the_slice_staged(tmp_path)
+
+    code = run_verify(repo=str(repo), base=BASE_BRANCH, process=UnrunnableProcess())
+
+    assert code == 2
+    output = capsys.readouterr()
+    assert output.out == ""
+    assert "claude" in output.err
+
+
+def test_with_nothing_staged_it_exits_with_three_without_spending_an_invocation_of_the_judge(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    repo = repo_with_nothing_staged(tmp_path)
+    process = RecordedProcess(with_verdict({"veredicto": "PASA", "hallazgos": []}))
+
+    code = run_verify(repo=str(repo), base=BASE_BRANCH, process=process)
+
+    assert code == 3
+    assert process.calls == 0
     assert "staged" in capsys.readouterr().err
 
 
-def test_una_base_que_no_resuelve_no_sale_con_el_codigo_del_indice_vacio(
+def test_a_base_that_does_not_resolve_does_not_exit_with_the_code_of_the_empty_index(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """`--base main` en un repo cuya rama es `master` es un flag mal escrito, no un indice vacio.
+    repo = repo_with_the_slice_staged(tmp_path)
+    process = RecordedProcess(with_verdict({"veredicto": "PASA", "hallazgos": []}))
 
-    Los dos salian con 3 y con el mismo mensaje, asi que quien ramifica por codigo de salida -y eso
-    es lo que hara el orquestador- se iba a buscar un `git add` que nunca falto. Una persona lo
-    distinguia leyendo el texto de git en stderr; un programa no.
-    """
-    repo = repo_con_slice_staged(tmp_path)
-    proceso = ProcesoGrabado(con_veredicto({"veredicto": "PASA", "hallazgos": []}))
+    code = run_verify(repo=str(repo), base="does-not-exist", process=process)
 
-    codigo = ejecuta_verificar(repo=str(repo), base="no-existe", proceso=proceso)
-
-    assert codigo == 4
-    assert proceso.llamadas == 0
-    assert "no-existe" in capsys.readouterr().err
+    assert code == 4
+    assert process.calls == 0
+    assert "does-not-exist" in capsys.readouterr().err
 
 
-def test_un_repo_que_no_resuelve_sale_con_cuatro_sin_culpar_a_la_base(
+def test_a_repo_that_does_not_resolve_exits_with_four_without_blaming_the_base(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """Un `--repo` que no es un repo git es el mismo error de uso -sale 4-, pero no es la base.
+    outside_git = tmp_path / "not-a-repo"
+    outside_git.mkdir()
+    process = RecordedProcess(with_verdict({"veredicto": "PASA", "hallazgos": []}))
 
-    El mensaje se lee para arreglar la invocacion, asi que afirmar que la base no existe manda a
-    corregir el flag que estaba bien mientras el que sobra o falta es el otro.
-    """
-    fuera_de_git = tmp_path / "no-es-un-repo"
-    fuera_de_git.mkdir()
-    proceso = ProcesoGrabado(con_veredicto({"veredicto": "PASA", "hallazgos": []}))
+    code = run_verify(repo=str(outside_git), base=BASE_BRANCH, process=process)
 
-    codigo = ejecuta_verificar(repo=str(fuera_de_git), base=RAMA_BASE, proceso=proceso)
-
-    assert codigo == 4
-    assert proceso.llamadas == 0
-    assert "el repo o la base" in capsys.readouterr().err
+    assert code == 4
+    assert process.calls == 0
+    assert "the repo or the base" in capsys.readouterr().err
 
 
-def test_el_juez_recibe_el_diff_de_la_slice_ya_materializado(tmp_path: Path) -> None:
-    """El bundle existe en disco cuando el juez lo lee, y trae el cambio del indice.
+def test_the_judge_gets_the_slice_diff_already_materialised_on_disk(tmp_path: Path) -> None:
+    repo = repo_with_the_slice_staged(tmp_path)
+    process = RecordedProcess(payload("full-recipe"))
 
-    Es lo que hace que el juez pueda juzgar sin `Bash`: si el prompt llevara rutas de un bundle
-    que nadie escribio, sus `Read` fallarian y el veredicto saldria de la nada.
-    """
-    repo = repo_con_slice_staged(tmp_path)
-    proceso = ProcesoGrabado(payload("receta-completa"))
+    run_verify(repo=str(repo), base=BASE_BRANCH, process=process)
 
-    ejecuta_verificar(repo=str(repo), base=RAMA_BASE, proceso=proceso)
-
-    rutas = [linea.split(": ", 1)[1] for linea in proceso.entrada.splitlines() if linea.startswith("- `slice.diff`")]
-    assert len(rutas) == 1
-    diff = Path(rutas[0]).read_text(encoding="utf-8")
+    paths = [line.split(": ", 1)[1] for line in process.stdin.splitlines() if line.startswith("- `slice.diff`")]
+    assert len(paths) == 1
+    diff = Path(paths[0]).read_text(encoding="utf-8")
     assert "+    return 2" in diff
 
 
-def test_la_orden_documentada_se_parsea_con_el_repo_y_la_base() -> None:
-    """`verificar --repo <ruta> --base <rama>` es la orden que el contrato de la linea de comandos
-    fija, asi que renombrar un flag rompe a quien la invoca."""
-    args = build_parser().parse_args(["verificar", "--repo", "/repos/proyecto", "--base", "master"])
+def test_the_documented_command_parses_with_the_repo_and_the_base() -> None:
+    args = build_parser().parse_args(["verify", "--repo", "/repos/project", "--base", "master"])
 
-    assert (args.repo, args.base) == ("/repos/proyecto", "master")
+    assert (args.repo, args.base) == ("/repos/project", "master")
 
 
-def test_la_base_no_tiene_valor_por_defecto() -> None:
-    """Fail-closed: una base adivinada -`master` cuando el repo usa `main`- da un diff que no es el
-    de la slice, y el juez lo verifica sin poder notarlo."""
+def test_the_base_has_no_default_value_because_a_guessed_one_diffs_the_wrong_range(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
     with pytest.raises(SystemExit):
-        build_parser().parse_args(["verificar", "--repo", "/repos/proyecto"])
+        build_parser().parse_args(["verify", "--repo", "/repos/project"])
+
+    assert "the following arguments are required: --base" in capsys.readouterr().err

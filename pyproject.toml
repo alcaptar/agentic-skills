@@ -10,7 +10,7 @@
 # mano (`src`, y los scripts porque el programa importa `controles`):
 #
 #     PYTHONPATH=src:skills/slice-runner/scripts \
-#         uv run python -m slice_runner verificar --repo . --base master
+#         uv run python -m slice_runner verify --repo . --base master
 #
 # La config replica la que el repo ya exige a su propia fixture de smoke
 # (`smoke/fixture/pyproject.toml`): misma vara para el harness que para lo que valida.

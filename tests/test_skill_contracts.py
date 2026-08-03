@@ -15,7 +15,6 @@ step passes; changing one side alone fails. That is the only drift these tests e
 from __future__ import annotations
 
 import argparse
-import dataclasses
 import importlib
 import json
 import re
@@ -25,8 +24,10 @@ from pathlib import Path
 import controles
 import issue_body
 import metrics
-from slice_runner.domain import veredicto
-from slice_runner.infrastructure import verificador
+from slice_runner.domain import verdict
+from slice_runner.domain.diff import SliceDiff
+from slice_runner.domain.verification import VerificationRequest
+from slice_runner.infrastructure import verifier
 
 _ROOT = Path(__file__).resolve().parents[1]
 _RUNNER = _ROOT / "skills" / "slice-runner" / "SKILL.md"
@@ -145,6 +146,13 @@ def test_verifier_verdict_schema_is_identical_in_the_agent_and_in_the_runner() -
     )
 
 
+_A_VERIFICATION_REQUEST = VerificationRequest(
+    repo="/repos/project",
+    instructions="You are the adversarial verifier.",
+    diff=SliceDiff(slice_diff=Path("/bundle/slice.diff"), files=Path("/bundle/files.txt"), n_files=1),
+)
+
+
 def test_tools_the_program_grants_the_judge_are_the_ones_his_prompt_declares() -> None:
     """The agent header lists the judge's tools; `--tools` in the argv is what grants them.
 
@@ -161,7 +169,7 @@ def test_tools_the_program_grants_the_judge_are_the_ones_his_prompt_declares() -
     assert len(listed) == 1, f"expected exactly one `tools:` line in the header of {_rel(_VERIFIER)}"
     declared = {tool.strip() for tool in listed[0].split(",")}
 
-    argv = verificador.argv_del_verificador()
+    argv = verifier.verifier_argv(_A_VERIFICATION_REQUEST)
     granted = set(argv[argv.index("--tools") + 1].split(","))
 
     assert declared == granted, (
@@ -205,19 +213,19 @@ def _documented_finding() -> dict[str, object]:
     return primero
 
 
-def test_the_finding_fields_in_the_rubric_are_the_ones_the_program_models() -> None:
-    """The rubric states the finding's fields; `Hallazgo` is what the program converts them into.
+def test_the_finding_keys_in_the_rubric_are_the_ones_the_program_maps_its_fields_to() -> None:
+    """The rubric states the finding's keys; the program's fields reach them through one mapping.
 
-    A field documented but not modelled is dropped on the way in -- silently, because the JSON
-    schema the program sends is built from `Hallazgo` too, so the judge is never even asked for
-    it. The reverse makes the program demand a field the rubric never told the judge to emit.
+    A key documented but not mapped is dropped on the way in -- silently, because the JSON schema
+    the program sends is built from that same mapping, so the judge is never even asked for it. The
+    reverse makes the program demand a key the rubric never told the judge to emit.
     """
     documented = set(_documented_finding())
 
-    modelled = {f.name for f in dataclasses.fields(veredicto.Hallazgo)}
-    assert documented == modelled, (
-        f"the finding in {_rel(_VERIFIER)} and slice_runner's `Hallazgo` disagree: "
-        f"only in the rubric {sorted(documented - modelled)}, only in the program {sorted(modelled - documented)}"
+    mapped = set(verdict.FINDING_CONTRACT_KEYS.values())
+    assert documented == mapped, (
+        f"the finding in {_rel(_VERIFIER)} and slice_runner's `FINDING_CONTRACT_KEYS` disagree: "
+        f"only in the rubric {sorted(documented - mapped)}, only in the program {sorted(mapped - documented)}"
     )
 
 
@@ -231,8 +239,8 @@ def test_the_verdicts_and_severities_in_the_rubric_are_the_ones_the_program_acce
     schema = _sole_json_block(_VERIFIER)
     assert isinstance(schema, dict)
 
-    assert {v.strip() for v in str(schema["veredicto"]).split("|")} == set(veredicto.Dictamen)
-    assert {s.strip() for s in str(_documented_finding()["severidad"]).split("|")} == set(veredicto.Severidad)
+    assert {v.strip() for v in str(schema["veredicto"]).split("|")} == set(verdict.Ruling)
+    assert {s.strip() for s in str(_documented_finding()["severidad"]).split("|")} == set(verdict.Severity)
 
 
 _CRITERION_ANCHOR = "declarar la degradacion en el artefacto"

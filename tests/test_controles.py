@@ -39,7 +39,7 @@ import pytest
 from conftest import stagea
 
 import controles
-from slice_runner.tests.repo_de_prueba import RAMA_BASE, git
+from slice_runner.tests.git_repo import BASE_BRANCH, git
 
 
 def test_subconjunto_declarado_pasa(repo: Path) -> None:
@@ -285,7 +285,7 @@ def repo_con_base_avanzada(repo: Path) -> Path:
     """
     _baseline(repo)
     git(repo, "switch", "-c", "slice/01-x")
-    git(repo, "switch", RAMA_BASE)
+    git(repo, "switch", BASE_BRANCH)
     stagea(repo, "src/otro.py", "x = 1\n")
     git(repo, "commit", "-m", "avanza la base")
     git(repo, "switch", "slice/01-x")
@@ -298,7 +298,7 @@ def test_diff_bundle_escribe_diff_y_lista(repo_con_rama: Path, tmp_path: Path) -
     el verificador puede cazarlo sin `git`.
     """
     out = tmp_path / "bundle"
-    res = controles.escribe_diff_bundle(str(repo_con_rama), RAMA_BASE, str(out))
+    res = controles.escribe_diff_bundle(str(repo_con_rama), BASE_BRANCH, str(out))
     assert res.passed
     assert sorted((out / "files.txt").read_text(encoding="utf-8").split()) == [
         "src/a.py",
@@ -314,7 +314,7 @@ def test_diff_bundle_no_arrastra_el_avance_de_la_base(repo_con_base_avanzada: Pa
     saldria como borrado y el verificador cazaria un fantasma.
     """
     out = tmp_path / "bundle"
-    res = controles.escribe_diff_bundle(str(repo_con_base_avanzada), RAMA_BASE, str(out))
+    res = controles.escribe_diff_bundle(str(repo_con_base_avanzada), BASE_BRANCH, str(out))
     assert res.passed
     assert "src/otro.py" not in (out / "files.txt").read_text(encoding="utf-8")
 
@@ -326,7 +326,7 @@ def test_diff_bundle_ignora_lo_que_no_esta_staged(repo_con_rama: Path, tmp_path:
     """
     (repo_con_rama / "src" / "sin_stagear.py").write_text("y = 2\n", encoding="utf-8")
     out = tmp_path / "bundle"
-    controles.escribe_diff_bundle(str(repo_con_rama), RAMA_BASE, str(out))
+    controles.escribe_diff_bundle(str(repo_con_rama), BASE_BRANCH, str(out))
     assert "sin_stagear" not in (out / "files.txt").read_text(encoding="utf-8")
 
 
@@ -351,7 +351,7 @@ def test_diff_bundle_no_culpa_a_la_base_cuando_lo_que_no_resuelve_es_el_repo(tmp
     fuera_de_git = tmp_path / "no-es-un-repo"
     fuera_de_git.mkdir()
 
-    res = controles.escribe_diff_bundle(str(fuera_de_git), RAMA_BASE, str(tmp_path / "b"))
+    res = controles.escribe_diff_bundle(str(fuera_de_git), BASE_BRANCH, str(tmp_path / "b"))
 
     assert not res.passed
     assert res.motivo is controles.MotivoSinBundle.REPO_O_BASE_NO_RESOLUBLE
@@ -362,7 +362,7 @@ def test_diff_bundle_falla_si_no_hay_nada_staged(repo: Path, tmp_path: Path) -> 
     add`, que con el orden nuevo es el error facil de cometer.
     """
     _baseline(repo)
-    res = controles.escribe_diff_bundle(str(repo), RAMA_BASE, str(tmp_path / "b"))
+    res = controles.escribe_diff_bundle(str(repo), BASE_BRANCH, str(tmp_path / "b"))
     assert not res.passed
     assert res.motivo is controles.MotivoSinBundle.INDICE_VACIO
     assert any("nada staged" in h for h in res.hallazgos)
@@ -377,9 +377,9 @@ def test_diff_bundle_da_lo_mismo_antes_y_despues_del_commit(repo_con_rama: Path,
     (solo despues del commit) o que un diff del arbol de trabajo (que ademas no ve los
     untracked). Ese margen es lo que hace que reordenar el paso 8 no sea fragil.
     """
-    antes = controles.escribe_diff_bundle(str(repo_con_rama), RAMA_BASE, str(tmp_path / "antes"))
+    antes = controles.escribe_diff_bundle(str(repo_con_rama), BASE_BRANCH, str(tmp_path / "antes"))
     git(repo_con_rama, "commit", "-m", "slice")
-    despues = controles.escribe_diff_bundle(str(repo_con_rama), RAMA_BASE, str(tmp_path / "despues"))
+    despues = controles.escribe_diff_bundle(str(repo_con_rama), BASE_BRANCH, str(tmp_path / "despues"))
 
     assert antes.passed
     assert despues.passed
@@ -398,7 +398,7 @@ def test_main_diff_bundle_json_imprime_las_rutas(
             "--repo",
             str(repo_con_rama),
             "--base",
-            RAMA_BASE,
+            BASE_BRANCH,
             "--out",
             str(out),
             "--json",
