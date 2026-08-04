@@ -52,15 +52,28 @@ class TestWhatTheJudgeIsGranted:
 
 
 class TestWhatTheJudgeIsTold:
-    def test_the_prompt_carries_the_rubric_and_the_paths_written_to_disk(self) -> None:
+    def test_the_prompt_carries_the_rubric_the_repo_and_where_the_diff_was_written(self) -> None:
         request = VerificationRequestMother.with_the_diff_in(_WRITTEN_TO)
 
         prompt = JudgeInvocation(request=request).prompt
 
         assert request.instructions in prompt
         assert str(request.diff.diff) in prompt
-        assert str(request.diff.files) in prompt
         assert request.repo in prompt
+
+    def test_the_scope_travels_in_the_prompt_so_it_does_not_depend_on_the_judge_opening_a_file(self) -> None:
+        request = VerificationRequestMother.with_the_diff_in(_WRITTEN_TO, files=("src/a.py", "src/tests/test_a.py"))
+
+        prompt = JudgeInvocation(request=request).prompt
+
+        assert "src/a.py" in prompt
+        assert "src/tests/test_a.py" in prompt
+        assert "(2)" in prompt
+
+    def test_the_count_is_not_a_field_of_its_own_so_it_cannot_disagree_with_the_list(self) -> None:
+        request = VerificationRequestMother.with_the_diff_in(_WRITTEN_TO, files=("src/a.py",))
+
+        assert "(1)" in JudgeInvocation(request=request).prompt
 
     def test_the_rubric_opens_the_prompt_so_the_run_data_reads_as_an_appendix_and_not_as_the_brief(self) -> None:
         request = VerificationRequestMother.with_the_diff_in(_WRITTEN_TO)

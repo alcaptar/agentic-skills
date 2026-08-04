@@ -6,7 +6,11 @@ from typing import TYPE_CHECKING
 from controles import MotivoSinBundle, escribe_diff_bundle
 from slice_runner.domain.diff_on_disk import DiffOnDisk
 from slice_runner.domain.diff_writer import DiffWriter
-from slice_runner.domain.exceptions import DiffNotWrittenError, EmptyIndexError, UnresolvableRepoOrBaseError
+from slice_runner.domain.exceptions import (
+    DiffNotWrittenError,
+    EmptyIndexError,
+    UnresolvableRepoOrBaseError,
+)
 
 if TYPE_CHECKING:
     from controles import ResultadoBundle
@@ -21,11 +25,11 @@ class GitDiffWriter(DiffWriter):
         if not result.passed:
             raise self._failure_of(result)
 
-        return DiffOnDisk(
-            diff=Path(result.slice_diff),
-            files=Path(result.files),
-            n_files=result.n_files,
-        )
+        return DiffOnDisk(diff=Path(result.slice_diff), files=self._listed_in(Path(result.files)))
+
+    @staticmethod
+    def _listed_in(listing: Path) -> tuple[str, ...]:
+        return tuple(line for line in listing.read_text(encoding="utf-8").splitlines() if line.strip())
 
     @staticmethod
     def _failure_of(result: ResultadoBundle) -> DiffNotWrittenError:

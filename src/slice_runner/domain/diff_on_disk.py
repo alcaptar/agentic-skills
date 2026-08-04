@@ -10,5 +10,4 @@ if TYPE_CHECKING:
 @dataclass(frozen=True, kw_only=True, slots=True)
 class DiffOnDisk:
     diff: Path
-    files: Path
-    n_files: int
+    files: tuple[str, ...]

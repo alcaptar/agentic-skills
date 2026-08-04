@@ -64,9 +64,14 @@ El orquestador te pasa, en el prompt de invocacion:
   `## Fuentes de convencion` del issue, **ya filtrados por el repo de la slice**. Son tu **vara de medir
   principal**. Si la slice vive en otro repo (alertas, dashboards), la vara es la de **ese** repo: no
   midas contra las convenciones del repo de la app ni contra defaults de backend que ahi no aplican.
-- **`slice.diff`**: ruta a un fichero con el diff completo de la slice (`<base>...HEAD`, generado por
-  `controles.py diff-bundle`). Es tu fuente para todo lo que sea "que cambio". Leelo entero.
-- **`files.txt`**: ruta a la lista de ficheros tocados, una por linea.
+- **`slice.diff`**: ruta a un fichero con el diff completo de la slice, generado por
+  `controles.py diff-bundle`. Es el **indice** contra el branch-point de la base, **no** `HEAD`: el
+  commit se hace despues de verificarte, asi que contra `HEAD` no habria nada que ver, y el indice es
+  exactamente lo que sera el commit. No esperes encontrar commits ni historia: lo que lees es lo que ira
+  en la pull request. Es tu fuente para todo lo que sea "que cambio". Leelo entero.
+- **La lista de ficheros que toca la slice**: una ruta por linea. Segun quien te invoque llega en el
+  propio prompt o como ruta a un fichero; en los dos casos es la lista completa y es la que fija el
+  **alcance**, no tu lectura del diff.
 - **Ruta del repo**: para leer con `Read`/`Grep`/`Glob` el codigo alrededor del diff, que necesitas
   para juzgar convenciones y boundaries.
 
@@ -127,7 +132,7 @@ Recorrela **entera** y reporta item a item. No la amplies con criterios propios 
    ya existia es **FALLA (severidad alta)**, citando path + linea. Cambios puramente aditivos (nuevos
    asserts, nuevos tests) o refactor de test que preserva los asserts **no** son hallazgo.
 
-7. **Fixture/wiring theater (siempre alta).** Cruza `files.txt` con la lista etiquetada
+7. **Fixture/wiring theater (siempre alta).** Cruza la lista de ficheros de la slice con la etiquetada
    produccion/test: si la suite esta verde pero el diff **no toca ningun fichero de produccion** (solo
    tests/fixtures), el efecto puede estarlo produciendo el fixture y no el codigo. Prueba de borrado
    (juicio por lectura): "¿pasaria la suite revirtiendo solo los cambios de test, con el codigo de

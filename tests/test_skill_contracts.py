@@ -175,6 +175,42 @@ def test_tools_the_program_grants_the_judge_are_the_ones_his_prompt_declares() -
     )
 
 
+def _slice_diff_bullet() -> str:
+    """The rubric's own description of what `slice.diff` contains."""
+    bullet = re.search(r"^- \*\*`slice\.diff`\*\*:(.*?)(?=^- \*\*)", _read(_VERIFIER), re.DOTALL | re.MULTILINE)
+    assert bullet, f"cannot find the `slice.diff` bullet in {_rel(_VERIFIER)}"
+    return bullet.group(1)
+
+
+def test_the_rubric_describes_the_diff_range_the_script_actually_produces() -> None:
+    """The rubric told the judge the diff was `<base>...HEAD` while the script diffs the index.
+
+    It was true once and stopped being true when the range moved to `--cached --merge-base`, for a
+    reason written at length in `controles.py`: the commit happens after verification, so against
+    `HEAD` there would be nothing to see. Nobody updated the sentence that travels to the judge as its
+    system prompt, and nothing measured it -- the other contract tests here compare closed
+    vocabularies, not prose describing a git range.
+
+    A false premise about what it is looking at is how a judge produces confidently wrong findings:
+    expecting commits, or reasoning about history that is not in the range.
+
+    This test guards the sentence only. That the bundle really diffs the index is pinned behaviourally
+    by the `diff_bundle` tests in `tests/test_controles.py`, which stage a change and assert what comes
+    out; asserting it here by grepping the function's source would pass on its own docstring.
+    """
+    bullet = _slice_diff_bullet()
+
+    assert "..HEAD" not in bullet, (
+        f"{_rel(_VERIFIER)} describes `slice.diff` as a range ending at `HEAD`, but "
+        f"`escribe_diff_bundle` diffs the staged index against the branch-point. The judge would be "
+        f"told it looks at committed history when it looks at the index"
+    )
+    assert "indice" in bullet.lower(), (
+        f"{_rel(_VERIFIER)} no longer tells the judge that `slice.diff` is the index. Omitting it is "
+        f"not enough: the judge has to know it is looking at what the commit will be, not at history"
+    )
+
+
 def test_severity_levels_in_the_verdict_schema_are_the_ones_the_validator_accepts() -> None:
     """The rubric's severities and the validator's must be the same set.
 

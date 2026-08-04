@@ -11,9 +11,11 @@ if TYPE_CHECKING:
 
 
 class DiffOnDiskMother:
-    @staticmethod
-    def inside(directory: Path, *, n_files: int = 2) -> DiffOnDisk:
-        return DiffOnDisk(diff=directory / "slice.diff", files=directory / "files.txt", n_files=n_files)
+    TOUCHED: ClassVar[tuple[str, ...]] = ("src/mod.py", "src/tests/test_mod.py")
+
+    @classmethod
+    def written_in(cls, directory: Path, *, files: tuple[str, ...] | None = None) -> DiffOnDisk:
+        return DiffOnDisk(diff=directory / "slice.diff", files=files or cls.TOUCHED)
 
 
 class VerifySliceParamsMother:
@@ -33,9 +35,11 @@ class VerificationRequestMother:
     INSTRUCTIONS: ClassVar[str] = "You are the adversarial verifier."
 
     @classmethod
-    def with_the_diff_in(cls, directory: Path, *, repo: str | None = None) -> VerificationRequest:
+    def with_the_diff_in(
+        cls, directory: Path, *, repo: str | None = None, files: tuple[str, ...] | None = None
+    ) -> VerificationRequest:
         return VerificationRequest(
             repo=repo or cls.REPO,
             instructions=cls.INSTRUCTIONS,
-            diff=DiffOnDiskMother.inside(directory),
+            diff=DiffOnDiskMother.written_in(directory, files=files),
         )

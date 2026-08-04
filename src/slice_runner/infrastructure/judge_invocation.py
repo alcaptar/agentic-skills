@@ -44,7 +44,8 @@ class JudgeInvocation:
                 "",
                 f"- ruta del repo: {self.request.repo}",
                 f"- `slice.diff`: {diff.diff}",
-                f"- `files.txt`: {diff.files} ({diff.n_files} ficheros)",
+                f"- ficheros que toca la slice ({len(diff.files)}):",
+                *(f"  - {path}" for path in diff.files),
             ]
         )
 

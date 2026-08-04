@@ -15,7 +15,7 @@ from slice_runner.tests.mothers.verification_mother import (
     VerifySliceParamsMother,
 )
 
-_DIFF = DiffOnDiskMother.inside(Path("/tmp/written-diff"), n_files=3)
+_DIFF = DiffOnDiskMother.written_in(Path("/tmp/written-diff"))
 
 _PARAMS = VerifySliceParamsMother.against_the_base()
 

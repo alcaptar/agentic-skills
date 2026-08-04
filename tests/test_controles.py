@@ -347,11 +347,16 @@ def test_diff_bundle_ignora_lo_que_no_esta_staged(repo_con_rama: Path, tmp_path:
     """El control juzga el indice: lo que no se ha stageado no va a entrar en el commit, asi que tampoco debe
     entrar en el bundle. Es la contrapartida del test de abajo: esta ceguera es justo por lo que `pr-
     hygiene` corre ANTES en el paso 8.
+
+    El cambio sin stagear es sobre un fichero **ya trackeado**, y eso es lo que hace que el test mida algo:
+    antes creaba un fichero nuevo, que `git diff` ignora lleve o no `--cached`, asi que pasaba igual con el
+    indice y con el arbol de trabajo -o sea, no fijaba el `--cached` que su propio nombre afirma-.
     """
-    (repo_con_rama / "src" / "sin_stagear.py").write_text("y = 2\n", encoding="utf-8")
+    (repo_con_rama / "src" / "a.py").write_text("def f() -> int:\n    return 999\n", encoding="utf-8")
     out = tmp_path / "bundle"
     controles.escribe_diff_bundle(str(repo_con_rama), Git.BASE_BRANCH, str(out))
-    assert "sin_stagear" not in (out / "files.txt").read_text(encoding="utf-8")
+    assert "999" not in (out / "slice.diff").read_text(encoding="utf-8")
+    assert "return 2" in (out / "slice.diff").read_text(encoding="utf-8")
 
 
 @pytest.mark.integration
