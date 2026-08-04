@@ -345,11 +345,20 @@ class MotivoSinBundle(StrEnum):
 
 @dataclass(frozen=True, kw_only=True, slots=True)
 class ResultadoBundle:
-    """Resultado de materializar el diff de la slice en disco."""
+    """Resultado de materializar el diff de la slice en disco.
+
+    `ficheros` es la lista que `files.txt` contiene, y **no** entra en `to_dict()` a proposito: quien
+    consume el JSON es el orquestador, que solo necesita la ruta -meterle la lista entera seria llenarle
+    el contexto que tiene que durar todo el run-. La lista esta aqui para quien llama por importacion
+    (`src/slice_runner/`), que la manda en el prompt del juez y asi no depende de que el juez decida
+    abrir un fichero. Escribirla ademas en disco sigue haciendo falta mientras el orquestador sea la
+    skill y le pase la ruta al subagente.
+    """
 
     passed: bool
     slice_diff: str = ""
     files: str = ""
+    ficheros: list[str] = field(default_factory=list)
     n_files: int = 0
     motivo: MotivoSinBundle | None = None
     hallazgos: list[str] = field(default_factory=list)
@@ -445,6 +454,7 @@ def escribe_diff_bundle(repo: str, base: str, out: str) -> ResultadoBundle:
         passed=True,
         slice_diff=str(slice_diff),
         files=str(files_txt),
+        ficheros=ficheros,
         n_files=len(ficheros),
     )
 

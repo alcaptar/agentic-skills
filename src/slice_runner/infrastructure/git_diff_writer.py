@@ -25,11 +25,7 @@ class GitDiffWriter(DiffWriter):
         if not result.passed:
             raise self._failure_of(result)
 
-        return DiffOnDisk(diff=Path(result.slice_diff), files=self._listed_in(Path(result.files)))
-
-    @staticmethod
-    def _listed_in(listing: Path) -> tuple[str, ...]:
-        return tuple(line for line in listing.read_text(encoding="utf-8").splitlines() if line.strip())
+        return DiffOnDisk(diff=Path(result.slice_diff), files=tuple(result.ficheros))
 
     @staticmethod
     def _failure_of(result: ResultadoBundle) -> DiffNotWrittenError:
