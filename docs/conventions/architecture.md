@@ -19,16 +19,16 @@ dependencia ahi es un fallo en la maquina de otra persona.
 ```
 src/slice_runner/
   domain/
-    {value_object}.py     un value object por modulo (finding, verdict, slice_diff...)
+    {value_object}.py     un value object por modulo (finding, verdict, judge, slice_diff...)
     {enum}.py             un vocabulario cerrado por modulo (ruling, severity)
-    {puerto}.py           un puerto por fichero (diff_reader, verifier)
+    {puerto}.py           un puerto por fichero (diff_reader, verifier, skill_library)
     exceptions.py         las excepciones del dominio
   application/
     actions/{name}.py     casos de uso que mutan estado
   infrastructure/
     {impl}_{puerto}.py    el adaptador se llama como su implementacion
     {payload}.py          un modelo de frontera por concepto
-    slice_verifier_prompt.py  el prompt del juez, constante de modulo tras su puerto
+    slice_verifier_judge.py   el juez de este repo: su rubrica, sus herramientas, lo que puede leer
     cli.py                entrypoint
   tests/                  co-localizados, espejando las capas de arriba
     mothers/              Object Mothers

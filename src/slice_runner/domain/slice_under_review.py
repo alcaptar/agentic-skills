@@ -8,7 +8,6 @@ if TYPE_CHECKING:
 
 
 @dataclass(frozen=True, kw_only=True, slots=True)
-class JudgePrompt:
-    rubric: str
+class SliceUnderReview:
     repo: str
     diff: SliceDiff

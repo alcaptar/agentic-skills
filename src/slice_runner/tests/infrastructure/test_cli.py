@@ -8,6 +8,8 @@ import pytest
 
 from slice_runner.infrastructure.cli import Cli
 from slice_runner.infrastructure.exit_code import ExitCode
+from slice_runner.infrastructure.local_skill_library import LocalSkillLibrary
+from slice_runner.tests.argv import Argv
 from slice_runner.tests.doubles import RealExceptTheJudge, UnrunnableJudge
 from slice_runner.tests.git_repo import Git
 from slice_runner.tests.mothers.judge_output_mother import HarnessEnvelopeMother, JudgeVerdictMother
@@ -15,6 +17,11 @@ from slice_runner.tests.mothers.repo_mother import RepoMother
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+
+@pytest.fixture(autouse=True)
+def toolbox_of_this_machine_out_of_the_way(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv(LocalSkillLibrary.CONFIG_VARIABLE, str(tmp_path / "no-toolbox"))
 
 
 @pytest.mark.integration
@@ -130,6 +137,61 @@ class TestTheDiffTheJudgeReads:
         Cli(process=process).verify(repo=str(repo), base=Git.BASE_BRANCH)
 
         assert "slice.diff" not in process.stdin
+
+
+@pytest.mark.integration
+class TestWhatTheJudgeWasDeniedReading:
+    def test_a_denied_read_is_warned_about_on_standard_error_because_the_yardstick_may_be_incomplete(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        repo = RepoMother.with_the_slice_staged(tmp_path)
+        process = RealExceptTheJudge(HarnessEnvelopeMother.denying_a_read())
+
+        code = Cli(process=process).verify(repo=str(repo), base=Git.BASE_BRANCH)
+
+        output = capsys.readouterr()
+        assert code == ExitCode.PASS
+        assert HarnessEnvelopeMother.DENIED_READ in output.err
+        assert json.loads(output.out) == {"veredicto": "PASA", "hallazgos": []}
+
+    def test_a_run_with_nothing_denied_says_nothing_so_the_warning_keeps_meaning_something(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        repo = RepoMother.with_the_slice_staged(tmp_path)
+        process = RealExceptTheJudge(HarnessEnvelopeMother.carrying(JudgeVerdictMother.passing()))
+
+        Cli(process=process).verify(repo=str(repo), base=Git.BASE_BRANCH)
+
+        assert capsys.readouterr().err == ""
+
+
+@pytest.mark.integration
+class TestWhatTheJudgeMayRead:
+    def test_the_toolbox_of_the_machine_is_granted_next_to_the_repo(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        toolbox = tmp_path / "toolbox"
+        (toolbox / "skills").mkdir(parents=True)
+        monkeypatch.setenv(LocalSkillLibrary.CONFIG_VARIABLE, str(toolbox))
+        repo = RepoMother.with_the_slice_staged(tmp_path)
+        process = RealExceptTheJudge(HarnessEnvelopeMother.recorded())
+
+        Cli(process=process).verify(repo=str(repo), base=Git.BASE_BRANCH)
+
+        assert Argv(process.argv).values_of("--add-dir") == [str(repo), str(toolbox / "skills")]
+
+    def test_what_the_judge_may_read_is_told_to_the_judge_and_not_only_granted_in_the_argv(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        toolbox = tmp_path / "toolbox"
+        (toolbox / "skills").mkdir(parents=True)
+        monkeypatch.setenv(LocalSkillLibrary.CONFIG_VARIABLE, str(toolbox))
+        repo = RepoMother.with_the_slice_staged(tmp_path)
+        process = RealExceptTheJudge(HarnessEnvelopeMother.recorded())
+
+        Cli(process=process).verify(repo=str(repo), base=Git.BASE_BRANCH)
+
+        assert str(toolbox / "skills") in process.stdin
 
 
 @pytest.mark.integration

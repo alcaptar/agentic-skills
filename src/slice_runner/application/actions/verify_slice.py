@@ -1,15 +1,16 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import TYPE_CHECKING
 
-from slice_runner.domain.judge_prompt import JudgePrompt
+from slice_runner.domain.slice_under_review import SliceUnderReview
 
 if TYPE_CHECKING:
     from slice_runner.domain.diff_reader import DiffReader
-    from slice_runner.domain.prompt_provider import PromptProvider
-    from slice_runner.domain.slice_diff import SliceDiff
-    from slice_runner.domain.verdict import Verdict
+    from slice_runner.domain.judge import Judge
+    from slice_runner.domain.skill_library import SkillLibrary
+    from slice_runner.domain.verification import Verification
     from slice_runner.domain.verifier import Verifier
 
 
@@ -20,19 +21,19 @@ class VerifySliceParams:
 
 
 class VerifySlice:
-    def __init__(self, *, reader: DiffReader, verifier: Verifier, prompt_provider: PromptProvider) -> None:
+    def __init__(self, *, reader: DiffReader, verifier: Verifier, judge: Judge, skills: SkillLibrary) -> None:
         self._reader = reader
         self._verifier = verifier
-        self._prompt_provider = prompt_provider
+        self._judge = judge
+        self._skills = skills
 
-    def execute(self, params: VerifySliceParams) -> Verdict:
+    def execute(self, params: VerifySliceParams) -> Verification:
         diff = self._reader.read(repo=params.repo, base=params.base)
 
-        return self._verifier.verify(self._prompt(repo=params.repo, diff=diff))
-
-    def _prompt(self, *, repo: str, diff: SliceDiff) -> JudgePrompt:
-        return JudgePrompt(
-            rubric=self._prompt_provider.rubric(),
-            repo=repo,
-            diff=diff,
+        return self._verifier.verify(
+            self._judge_reading(params.repo),
+            SliceUnderReview(repo=params.repo, diff=diff),
         )
+
+    def _judge_reading(self, repo: str) -> Judge:
+        return self._judge.also_reading(Path(repo), *self._skills.directories())

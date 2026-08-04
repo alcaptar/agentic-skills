@@ -70,12 +70,23 @@ importar**: un smoke que solo importe el modulo lo da por bueno. Lo evita
   le toca-. **Acoplar el flujo nuevo al viejo para ahorrar duplicacion sale mas caro que la
   duplicacion**, porque el viejo esta condenado: el rango del diff son tres flags y su motivo esta en
   las convenciones, no en el codigo del script.
-- **El prompt del juez es del programa.** Vive como constante de modulo en
-  `src/slice_runner/infrastructure/slice_verifier_prompt.py`, detras del puerto `PromptProvider`, igual
-  que un `PromptProvider` de un chat con un modelo. `agents/slice-verifier.md` es del **flujo viejo** y
-  se queda congelado: el programa no lo lee. Son dos copias de la rubrica a proposito, con la del
-  programa diciendo la verdad sobre lo que el programa manda -que hoy son tres insumos de los siete que
-  la vieja declara-.
+- **El juez es un objeto, no un prompt suelto.** `Judge(rubric, tools, readable)` es un value object del
+  dominio y agrupa **todo lo que define al juez**; quien lo construye con la rubrica de este repo es
+  `src/slice_runner/infrastructure/slice_verifier_judge.py`, y el entrypoint lo inyecta al caso de uso.
+  La forma viene del agente raiz de `roman_expert/chat_agents` en
+  `mercadona/mo.staff.django-playground`, y **sustituye a un `PromptProvider`** que solo devolvia texto:
+  con la rubrica detras de un puerto, las herramientas como constante de `JudgeInvocation` y los
+  directorios legibles derivados del repo dentro del `argv`, lo que definia al juez vivia en tres capas y
+  nada obligaba a que cuadrase -la rubrica ordenaba cargar skills que el juez no podia leer, y el
+  veredicto salia igual de limpio-. Un puerto para un valor constante era indireccion; el invariante
+  necesitaba un objeto.
+- **El texto de la rubrica se queda en infraestructura**, no en la factoria de aplicacion como en el chat
+  de agentes de ese repo: aqui el prompt es lo que se le manda a **un ejecutable concreto** por su
+  entrada estandar, con su esquema y sus flags, y cambia con la receta medida contra `claude -p`. Que la
+  capa que conoce el harness sea la misma que redacta lo que el harness recibe es lo que evita que
+  aplicacion tenga opinion sobre el transporte. `agents/slice-verifier.md` es del **flujo viejo** y se
+  queda congelado: el programa no lo lee. Son dos copias de la rubrica a proposito, con la del programa
+  diciendo la verdad sobre lo que el programa manda.
 - Un codigo de salida distinto de cero **es un dato**, no una excepcion: se lanza el proceso con
   `check=False` y el adaptador interpreta, porque el motivo esta en `stderr` y una excepcion lo borra.
 
@@ -96,6 +107,7 @@ importar**: un smoke que solo importe el modulo lo da por bueno. Lo evita
 - `extra="ignore"` en un modelo de frontera. **Una clave desconocida tiene que romper.**
 - `strict=True` a nivel de modelo.
 - Un `ValidationError` de Pydantic escapando de la capa.
-- Duplicar en el programa una regla que ya vive en `controles.py`.
+- Duplicar en el programa una regla que ya vive en `controles.py` **sin declararlo con su motivo** en la
+  seccion de adaptadores: la duplicacion declarada es la decision de esta capa, la silenciosa es el fallo.
 - `check=True` al lanzar un proceso cuyo `stderr` lleva el motivo del fallo.
 - Un adaptador que ademas decide politica (reintentos, presupuesto).

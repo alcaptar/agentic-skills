@@ -7,13 +7,19 @@ import pytest
 from slice_runner.infrastructure.judge_invocation import JudgeInvocation
 from slice_runner.infrastructure.verdict_payload import VerdictPayload
 from slice_runner.tests.argv import Argv
-from slice_runner.tests.mothers.verification_mother import JudgePromptMother
+from slice_runner.tests.mothers.verification_mother import JudgeMother, SliceUnderReviewMother
+
+_JUDGE = JudgeMother.reading_the_repo_and_its_yardstick()
 
 
 class TestWhatTheJudgeIsGranted:
     @pytest.fixture
     def argv(self) -> Argv:
-        return Argv(JudgeInvocation(prompt=JudgePromptMother.for_the_slice()).argv)
+        return Argv(
+            JudgeInvocation(
+                judge=JudgeMother.reading_the_repo_and_its_yardstick(), review=SliceUnderReviewMother.of_the_slice()
+            ).argv
+        )
 
     def test_the_tools_travel_in_a_single_comma_separated_argument(self, argv: Argv) -> None:
         assert argv.value_of("--tools") == "Read,Grep,Glob,Skill"
@@ -29,7 +35,7 @@ class TestWhatTheJudgeIsGranted:
     def test_the_only_directory_granted_is_the_repo_because_the_diff_is_no_longer_a_file_somewhere(
         self, argv: Argv
     ) -> None:
-        assert argv.values_of("--add-dir") == [JudgePromptMother.REPO]
+        assert argv.values_of("--add-dir") == [SliceUnderReviewMother.REPO, str(JudgeMother.YARDSTICK)]
 
     def test_the_mcp_servers_are_bounded(self, argv: Argv) -> None:
         assert argv.contains("--strict-mcp-config")
@@ -47,40 +53,50 @@ class TestWhatTheJudgeIsGranted:
 
 class TestWhatTravelsOnStandardInput:
     def test_the_rubric_opens_it_so_the_run_data_reads_as_an_appendix_and_not_as_the_brief(self) -> None:
-        prompt = JudgePromptMother.for_the_slice()
+        review = SliceUnderReviewMother.of_the_slice()
 
-        text = JudgeInvocation(prompt=prompt).text
+        text = JudgeInvocation(judge=_JUDGE, review=review).text
 
-        assert text.startswith(prompt.rubric)
-        assert text.index("## Datos del run") > text.index(prompt.rubric)
+        assert text.startswith(_JUDGE.rubric)
+        assert text.index("## Datos del run") > text.index(_JUDGE.rubric)
 
     def test_it_carries_the_repo_the_judge_still_has_to_read_around_the_diff(self) -> None:
-        prompt = JudgePromptMother.for_the_slice()
+        review = SliceUnderReviewMother.of_the_slice()
 
-        assert prompt.repo in JudgeInvocation(prompt=prompt).text
+        assert review.repo in JudgeInvocation(judge=_JUDGE, review=review).text
 
     def test_the_diff_itself_travels_so_a_verdict_cannot_be_reached_without_having_been_shown_it(self) -> None:
-        prompt = JudgePromptMother.for_the_slice(text="-    return 1\n+    return 2\n")
+        review = SliceUnderReviewMother.of_the_slice(text="-    return 1\n+    return 2\n")
 
-        assert "+    return 2" in JudgeInvocation(prompt=prompt).text
+        assert "+    return 2" in JudgeInvocation(judge=_JUDGE, review=review).text
 
     def test_the_diff_closes_the_prompt_so_no_delimiter_has_to_survive_its_own_content(self) -> None:
-        prompt = JudgePromptMother.for_the_slice(text='+_RUBRIC = """\\\n+```json\n+{}\n+```\n')
+        review = SliceUnderReviewMother.of_the_slice(text='+_RUBRIC = """\\\n+```json\n+{}\n+```\n')
 
-        text = JudgeInvocation(prompt=prompt).text
+        text = JudgeInvocation(judge=_JUDGE, review=review).text
 
-        assert text.endswith(prompt.diff.text)
+        assert text.endswith(review.diff.text)
 
     def test_it_carries_the_scope_so_it_does_not_depend_on_the_judge_reading_the_diff_the_same_way(self) -> None:
-        prompt = JudgePromptMother.for_the_slice(files=("src/a.py", "src/tests/test_a.py"))
+        review = SliceUnderReviewMother.of_the_slice(files=("src/a.py", "src/tests/test_a.py"))
 
-        text = JudgeInvocation(prompt=prompt).text
+        text = JudgeInvocation(judge=_JUDGE, review=review).text
 
         assert "src/a.py" in text
         assert "src/tests/test_a.py" in text
         assert "(2)" in text
 
+    def test_what_the_judge_may_read_is_labelled_apart_from_the_files_of_the_slice(self) -> None:
+        review = SliceUnderReviewMother.of_the_slice(files=("src/a.py",))
+
+        text = JudgeInvocation(judge=_JUDGE, review=review).text
+
+        assert text.index("src/a.py") < text.index("directorios que puedes leer")
+        assert text.index("directorios que puedes leer") < text.index(str(JudgeMother.YARDSTICK))
+
     def test_the_prompt_does_not_also_travel_in_the_argv(self) -> None:
-        invocation = JudgeInvocation(prompt=JudgePromptMother.for_the_slice())
+        invocation = JudgeInvocation(
+            judge=JudgeMother.reading_the_repo_and_its_yardstick(), review=SliceUnderReviewMother.of_the_slice()
+        )
 
         assert invocation.text not in invocation.argv

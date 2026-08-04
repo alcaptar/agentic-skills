@@ -32,6 +32,18 @@ class JudgeVerdictMother:
 class HarnessEnvelopeMother:
     RECORDED: ClassVar[tuple[str, ...]] = ("full-recipe", "unbounded-tools")
 
+    DENIED_READ: ClassVar[str] = (
+        "/Users/someone/.claude/plugins/cache/skills/backend-engineering/2.0.2/skills/"
+        "backend-best-practices/references/code-style.md"
+    )
+    DENIALS_AS_THE_HARNESS_SENDS_THEM: ClassVar[tuple[dict[str, object], ...]] = (
+        {
+            "tool_name": "Read",
+            "tool_use_id": "toolu_0144pjK1fnAQrn8fSEFV9sZA",
+            "tool_input": {"file_path": DENIED_READ, "limit": 1},
+        },
+    )
+
     _DIRECTORY: ClassVar[Path] = Path(__file__).resolve().parents[1] / "payloads"
 
     @classmethod
@@ -53,3 +65,9 @@ class HarnessEnvelopeMother:
     @classmethod
     def without(cls, key: str) -> dict[str, object]:
         return {name: value for name, value in cls.recorded().items() if name != key}
+
+    @classmethod
+    def denying_a_read(cls, verdict: dict[str, object] | None = None) -> dict[str, object]:
+        return cls.carrying(verdict or JudgeVerdictMother.passing()) | {
+            "permission_denials": [dict(denial) for denial in cls.DENIALS_AS_THE_HARNESS_SENDS_THEM]
+        }

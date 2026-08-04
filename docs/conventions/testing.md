@@ -91,8 +91,9 @@ Los metodos son **escenarios con nombre** (`without_line`, `passing`, `high_seve
   doblados, luego los de **infraestructura**. Lo de dentro del dominio se cubre **por ese camino**, no
   con tests propios.
 - **No hay tests unitarios de dominio**, ni siquiera cuando el dominio tiene comportamiento. Que
-  `JudgePrompt` compone bien el prompt se comprueba en el test del caso de uso -mirando lo que recibio
-  el verificador-, y que `Verdict` rechaza un `PASA` con un hallazgo `alta` se comprueba en el test de
+  `Judge.also_reading` no muta el juez inyectado se comprueba en el test del caso de uso -ejecutandolo
+  dos veces y mirando el juez que se le paso-, y que `Verdict` rechaza un `PASA` con un hallazgo `alta`
+  se comprueba en el test de
   frontera y en el de la orden, que es el camino real por el que llega un veredicto incoherente. La
   unica excepcion es un value object con validacion propia que no se pueda alcanzar de otra forma. Un
   test que solo comprueba que un dataclass guarda lo que le pasas mide el lenguaje, no el codigo.

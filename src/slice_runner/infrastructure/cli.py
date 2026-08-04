@@ -15,8 +15,9 @@ from slice_runner.infrastructure.claude_verifier import ClaudeVerifier
 from slice_runner.infrastructure.exit_code import ExitCode
 from slice_runner.infrastructure.git_diff_reader import GitDiffReader
 from slice_runner.infrastructure.local_process import LocalProcess
+from slice_runner.infrastructure.local_skill_library import LocalSkillLibrary
 from slice_runner.infrastructure.process import ProcessNotRunnableError
-from slice_runner.infrastructure.slice_verifier_prompt import SliceVerifierPrompt
+from slice_runner.infrastructure.slice_verifier_judge import SliceVerifierJudge
 from slice_runner.infrastructure.verdict_payload import VerdictPayload
 
 if TYPE_CHECKING:
@@ -49,7 +50,7 @@ class Cli:
 
     def verify(self, *, repo: str, base: str) -> int:
         try:
-            verdict = self._action().execute(self._params(repo=repo, base=base))
+            verification = self._action().execute(self._params(repo=repo, base=base))
         except UnresolvableRepoOrBaseError as error:
             return self._reported(f"the repo or the base requested do not resolve: {error}", ExitCode.USAGE_ERROR)
         except DiffNotReadableError as error:
@@ -62,15 +63,28 @@ class Cli:
                 ExitCode.NO_USABLE_VERDICT,
             )
 
-        print(json.dumps(VerdictPayload.from_domain(verdict).to_contract(), ensure_ascii=False))
+        self._warn_about(verification.denied_reads)
+        print(json.dumps(VerdictPayload.from_domain(verification.verdict).to_contract(), ensure_ascii=False))
 
-        return ExitCode.of(verdict.ruling)
+        return ExitCode.of(verification.verdict.ruling)
 
     def _action(self) -> VerifySlice:
         return VerifySlice(
             reader=GitDiffReader(process=self._process),
             verifier=ClaudeVerifier(process=self._process),
-            prompt_provider=SliceVerifierPrompt(),
+            judge=SliceVerifierJudge.adversarial(),
+            skills=LocalSkillLibrary(),
+        )
+
+    @staticmethod
+    def _warn_about(denied_reads: tuple[str, ...]) -> None:
+        if not denied_reads:
+            return
+
+        print(
+            f"the judge was denied {len(denied_reads)} read(s), so it may have measured with an incomplete "
+            f"yardstick: {', '.join(denied_reads)}",
+            file=sys.stderr,
         )
 
     @staticmethod

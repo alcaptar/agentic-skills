@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from slice_runner.domain.prompt_provider import PromptProvider
+from typing import ClassVar
+
+from slice_runner.domain.judge import Judge
 
 _RUBRIC = """\
 # Verificador adversarial de slice
@@ -54,11 +56,11 @@ aceptacion, ni el checklist de slices del issue, ni la `SENAL`, ni los punteros 
 convencion. El programa que te invoca esta a medio construir y esos insumos los tiene un orquestador que
 aun no los manda.
 
-**El unico directorio que se te concede es el del repo.** Tienes `Skill`, pero las skills que esta
-rubrica te manda cargar viven fuera de el, asi que sus documentos de referencia pueden quedarte
-inalcanzables. Si te pasa, **declaralo en el veredicto** en el item que se queda sin vara, en vez de
-saltartelo: una skill que no se puede leer es la vara vacia otra vez, y en silencio no se distingue de
-un item conforme.
+**Los directorios que puedes leer van listados en "Datos del run"**, y son los unicos: el repo de la
+slice y la biblioteca de skills de esta maquina. Si una skill que esta rubrica te manda cargar no esta
+bajo ninguno de ellos -o si una lectura te sale denegada-, **declaralo en el veredicto** en el item que
+se queda sin vara, en vez de saltartelo: una skill que no se puede leer es la vara vacia otra vez, y en
+silencio no se distingue de un item conforme.
 
 **Dilo en el veredicto en vez de suplirlo por tu cuenta.** Un item que depende de un insumo que no ha
 llegado se reporta como sin veredicto por falta de dato, no como conforme y no inventandose el criterio:
@@ -200,6 +202,9 @@ bloque de codigo que lo envuelva. El orquestador lo consume como dato.
 """
 
 
-class SliceVerifierPrompt(PromptProvider):
-    def rubric(self) -> str:
-        return _RUBRIC
+class SliceVerifierJudge:
+    TOOLS: ClassVar[tuple[str, ...]] = ("Read", "Grep", "Glob", "Skill")
+
+    @classmethod
+    def adversarial(cls) -> Judge:
+        return Judge(rubric=_RUBRIC, tools=cls.TOOLS)

@@ -19,6 +19,7 @@ import importlib
 import json
 import re
 import subprocess
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -29,10 +30,9 @@ import metrics
 from slice_runner.domain.ruling import Ruling
 from slice_runner.domain.severity import Severity
 from slice_runner.infrastructure.exit_code import ExitCode
-from slice_runner.infrastructure.judge_invocation import JudgeInvocation
-from slice_runner.infrastructure.slice_verifier_prompt import SliceVerifierPrompt
+from slice_runner.infrastructure.local_skill_library import LocalSkillLibrary
+from slice_runner.infrastructure.slice_verifier_judge import SliceVerifierJudge
 from slice_runner.infrastructure.verdict_payload import FindingPayload
-from slice_runner.tests.mothers.verification_mother import JudgePromptMother
 
 _ROOT = Path(__file__).resolve().parents[1]
 _RUNNER = _ROOT / "skills" / "slice-runner" / "SKILL.md"
@@ -40,15 +40,16 @@ _DEPLOY_WATCH = _ROOT / "skills" / "deploy-watch" / "SKILL.md"
 _VERIFIER = _ROOT / "agents" / "slice-verifier.md"
 
 
+_PROGRAM_JUDGE = SliceVerifierJudge.adversarial()
+"""The judge the PROGRAM builds, which owns its rubric, its tools and what it may read.
+
+`agents/slice-verifier.md` belongs to the old flow (skill + subagent) and stays frozen; the program
+owns its judge, so every contract about what the program tells the judge is measured against this.
+"""
+
+
 def _program_rubric() -> str:
-    """The rubric the PROGRAM sends, which is its own copy and no longer `agents/slice-verifier.md`.
-
-    The agent file is the old flow's (skill + subagent) and stays frozen; the program owns its
-    prompt, so every contract about what the program tells the judge is measured against this.
-    """
-    rubric: str = SliceVerifierPrompt().rubric()
-
-    return rubric
+    return _PROGRAM_JUDGE.rubric
 
 
 def _read(path: Path) -> str:
@@ -166,13 +167,8 @@ def test_verifier_verdict_schema_is_identical_in_the_agent_and_in_the_runner() -
     )
 
 
-_A_JUDGE_PROMPT = JudgePromptMother.for_the_slice()
-
-
 def _granted_tools() -> set[str]:
-    argv = JudgeInvocation(prompt=_A_JUDGE_PROMPT).argv
-
-    return set(argv[argv.index("--tools") + 1].split(","))
+    return set(_PROGRAM_JUDGE.tools)
 
 
 def test_the_program_does_not_grant_the_judge_what_its_own_rubric_says_he_does_not_have() -> None:
@@ -195,17 +191,52 @@ def test_the_program_does_not_grant_the_judge_what_its_own_rubric_says_he_does_n
     )
 
 
-def test_the_program_grants_the_tool_its_rubric_orders_the_judge_to_use() -> None:
-    """Two of the nine items tell the judge to load a skill. A rubric with items the judge cannot
-    execute is the empty yardstick the rubric itself names as the root cause of silent deviations --
-    and nothing would say so: the judge would just skip them.
+_SKILL_ORDER_RE = re.compile(r"(?:corre|carga)[^.]*?`([a-z][a-z0-9-]{4,})`", re.IGNORECASE)
+
+
+def _skills_the_rubric_orders() -> set[str]:
+    """The skills the rubric tells the judge to load, taken from the rubric itself."""
+    return set(_SKILL_ORDER_RE.findall(_program_rubric()))
+
+
+def test_every_skill_the_rubric_orders_is_one_the_judge_can_actually_load() -> None:
+    """The whole invariant in one place: ordered skill -> `Skill` granted -> and reachable.
+
+    It used to be two contracts measuring halves -- one that `Skill` is granted, one that the rubric
+    does not promise a file that is not there -- and neither caught the real hole: the rubric ordered
+    two skills whose `references/` sat outside every granted directory, so items 1 and 8 were judged
+    with no yardstick and the verdict came back just as clean. Measured live: without the grant the
+    envelope carries `permission_denials` and the judge answers that it has no permission.
+
+    That hole is why `Judge` exists as one object. This is the test that object makes possible.
+
+    Reachability needs a machine that has the library, so it is skipped where there is none (the
+    continuous integration runner has no `~/.claude`); what always runs is the tools half.
     """
-    if "skill" not in _program_rubric().lower():
-        pytest.skip("the rubric no longer asks the judge to load a skill")
+    ordered = _skills_the_rubric_orders()
+    assert ordered, (
+        "no skill is ordered anywhere in the program's rubric. Either the items that loaded one are "
+        "gone -- and then `Skill` should stop being granted -- or the sentence changed shape and this "
+        "contract stopped measuring anything"
+    )
 
     assert "Skill" in _granted_tools(), (
-        f"the rubric orders the judge to load a skill but the argv grants only {sorted(_granted_tools())}"
+        f"the rubric orders {sorted(ordered)} but the judge is granted only {sorted(_granted_tools())}"
     )
+
+    trees = LocalSkillLibrary().directories()
+    if not trees:
+        pytest.skip("this machine has no skill library, so reachability cannot be measured from here")
+
+    unreachable = sorted(name for name in ordered if not _somewhere_under(trees, name))
+    assert not unreachable, (
+        f"the rubric orders {unreachable}, the judge is granted {[str(tree) for tree in trees]}, and "
+        f"nothing under them is named like that: those items would be judged with an empty yardstick"
+    )
+
+
+def _somewhere_under(trees: tuple[Path, ...], name: str) -> bool:
+    return any(next(tree.rglob(name), None) is not None for tree in trees)
 
 
 def _diff_bullet() -> str:
@@ -465,6 +496,7 @@ def _claimed_repo_paths(markdown: str, top_level: frozenset[str]) -> set[str]:
     return claimed
 
 
+@pytest.mark.integration
 def test_every_repo_path_cited_in_the_docs_still_exists() -> None:
     """A path in the prose is a claim about the tree, and a rename breaks it silently.
 
@@ -513,6 +545,7 @@ _README = _ROOT / "README.md"
 _LAUNCH = re.compile(r"[^\n`|]*python -m slice_runner")
 
 
+@pytest.mark.integration
 def test_every_documented_way_to_launch_the_program_carries_the_import_path() -> None:
     """`package = false` means the program is not installed, so `python -m` alone cannot find it.
 
@@ -547,4 +580,44 @@ def test_the_exit_codes_the_readme_documents_are_the_ones_the_program_can_return
     assert documented == {int(code) for code in ExitCode}, (
         f"README.md and ExitCode disagree: only in the README {sorted(documented - {int(c) for c in ExitCode})}, "
         f"only in the enum {sorted({int(c) for c in ExitCode} - documented)}"
+    )
+
+
+_FIXTURE_PYPROJECT = _ROOT / "smoke" / "fixture" / "pyproject.toml"
+
+
+def _ruff_lint(path: Path) -> dict[str, object]:
+    section = tomllib.loads(_read(path)).get("tool", {}).get("ruff", {}).get("lint", {})
+    assert isinstance(section, dict), f"{_rel(path)} has no [tool.ruff.lint] section"
+
+    return section
+
+
+def _selected_rules(path: Path) -> list[str]:
+    selected = _ruff_lint(path).get("select")
+    assert isinstance(selected, list), f"{_rel(path)} does not select any ruff rule explicitly"
+
+    return sorted(str(rule) for rule in selected)
+
+
+def test_the_smoke_fixture_is_linted_with_the_same_yardstick_as_the_repo() -> None:
+    """`architecture.md`: "the smoke fixture carries the same `select` as the root. Touch one, touch
+    the other", because the fixture is the subject the runner slices in the smoke -- a laxer yardstick
+    there "would give the runner a pass that is not worth anything".
+
+    The convention was written and nothing measured it: adding `TID` to the root and forgetting the
+    fixture was caught by the judge, not by `make check`. A convention nothing measures does not
+    measure anything -- which is the failure this repo already paid for once, in Spanish identifiers.
+    """
+    root_pyproject = _ROOT / "pyproject.toml"
+
+    assert _selected_rules(root_pyproject) == _selected_rules(_FIXTURE_PYPROJECT), (
+        f"the `select` of pyproject.toml and {_rel(_FIXTURE_PYPROJECT)} have diverged: the fixture "
+        f"would be measured with a different yardstick than the repo it stands in for"
+    )
+
+    root, fixture = _ruff_lint(root_pyproject), _ruff_lint(_FIXTURE_PYPROJECT)
+    assert root.get("flake8-tidy-imports") == fixture.get("flake8-tidy-imports"), (
+        f"a rule in the `select` is configured differently in {_rel(_FIXTURE_PYPROJECT)}, so the same "
+        f"code would pass in one and fail in the other"
     )

@@ -7,6 +7,7 @@ from pydantic import Field
 
 from slice_runner.domain.exceptions import InvalidVerdictError
 from slice_runner.infrastructure.contract_model import ContractModel
+from slice_runner.infrastructure.permission_denial import PermissionDenial
 
 if TYPE_CHECKING:
     from slice_runner.infrastructure.process import ProcessOutput
@@ -23,7 +24,7 @@ class HarnessOutput(ContractModel):
     fast_mode_state: object = None
     model_usage: object = Field(alias="modelUsage", default=None)
     num_turns: object = None
-    permission_denials: object = None
+    permission_denials: tuple[PermissionDenial, ...] = ()
     result: object = None
     session_id: object = None
     stop_reason: object = None
