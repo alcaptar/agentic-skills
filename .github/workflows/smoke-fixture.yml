@@ -18,4 +18,17 @@ jobs:
       - run: uv sync
       - run: make linting
       - run: make check-types
-      - run: make test
+      # La fixture es el sujeto **virgen** del smoke: nace sin tests porque el primero lo escribe el
+      # runner durante el propio smoke. `pytest` sale 5 ("no tests collected") y `make` lo convierte en
+      # 2, asi que exigir `make test` a secas condena este workflow a fallar en cuanto alguien toque la
+      # fixture. Paso exactamente eso: los runs verdes de antes llevaban un `tests/test_core.py` que
+      # habia dejado una ejecucion del smoke, y al devolver la fixture a su estado inicial nadie se
+      # entero -este workflow solo se dispara con `paths: smoke/fixture/**`-. Lo que se mide es que
+      # **si hay tests, pasen**.
+      - name: make test (si la fixture ya tiene tests)
+        run: |
+          if compgen -G "tests/test_*.py" > /dev/null; then
+            make test
+          else
+            echo "la fixture esta en su estado inicial, sin tests: el primero lo escribe el runner"
+          fi

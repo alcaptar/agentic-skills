@@ -19,16 +19,37 @@ import importlib
 import json
 import re
 import subprocess
+import tomllib
 from pathlib import Path
+
+import pytest
 
 import controles
 import issue_body
 import metrics
+from slice_runner.domain.ruling import Ruling
+from slice_runner.domain.severity import Severity
+from slice_runner.infrastructure.exit_code import ExitCode
+from slice_runner.infrastructure.local_skill_library import LocalSkillLibrary
+from slice_runner.infrastructure.slice_verifier_judge import SliceVerifierJudge
+from slice_runner.infrastructure.verdict_payload import FindingPayload
 
 _ROOT = Path(__file__).resolve().parents[1]
 _RUNNER = _ROOT / "skills" / "slice-runner" / "SKILL.md"
 _DEPLOY_WATCH = _ROOT / "skills" / "deploy-watch" / "SKILL.md"
 _VERIFIER = _ROOT / "agents" / "slice-verifier.md"
+
+
+_PROGRAM_JUDGE = SliceVerifierJudge.adversarial()
+"""The judge the PROGRAM builds, which owns its rubric, its tools and what it may read.
+
+`agents/slice-verifier.md` belongs to the old flow (skill + subagent) and stays frozen; the program
+owns its judge, so every contract about what the program tells the judge is measured against this.
+"""
+
+
+def _program_rubric() -> str:
+    return _PROGRAM_JUDGE.rubric
 
 
 def _read(path: Path) -> str:
@@ -124,8 +145,12 @@ def _json_shape(value: object) -> object:
 
 
 def _sole_json_block(path: Path) -> object:
-    blocks = re.findall(r"```json\n(.*?)```", _read(path), re.DOTALL)
-    assert len(blocks) == 1, f"expected exactly one ```json block in {_rel(path)}, found {len(blocks)}"
+    return _sole_json_block_in(_read(path), where=_rel(path))
+
+
+def _sole_json_block_in(markdown: str, *, where: str = "the program's rubric") -> object:
+    blocks = re.findall(r"```json\n(.*?)```", markdown, re.DOTALL)
+    assert len(blocks) == 1, f"expected exactly one ```json block in {where}, found {len(blocks)}"
     return json.loads(blocks[0])
 
 
@@ -139,6 +164,130 @@ def test_verifier_verdict_schema_is_identical_in_the_agent_and_in_the_runner() -
     assert _json_shape(_sole_json_block(_VERIFIER)) == _json_shape(_sole_json_block(_RUNNER)), (
         f"the verdict JSON in {_rel(_VERIFIER)} and {_rel(_RUNNER)} no longer have the same "
         f"shape; both copies describe the same contract and must be updated together"
+    )
+
+
+def _granted_tools() -> set[str]:
+    return set(_PROGRAM_JUDGE.tools)
+
+
+def test_the_program_does_not_grant_the_judge_what_its_own_rubric_says_he_does_not_have() -> None:
+    """The rubric tells the judge it has no `Bash`, "a proposito", and builds three items on that.
+
+    It is what stops it from trying to run lint or tests, and what justifies handing it the diff
+    already computed. Granting `Bash` would make the rubric a lie the judge reads first, and the judge
+    would have no way to know which half is true. The old flow enforces the same thing structurally,
+    through the `tools:` header of `agents/slice-verifier.md`; the program has no header, so this is
+    where it gets enforced.
+    """
+    rubric = _program_rubric()
+    assert "No tienes `Bash`" in rubric, (
+        "the program's rubric no longer tells the judge it has no `Bash`; either restore it or stop "
+        "building the 'you do not run anything' items on a premise that is not stated"
+    )
+
+    assert "Bash" not in _granted_tools(), (
+        f"the argv grants {sorted(_granted_tools())}, and its own rubric tells the judge it has no `Bash`"
+    )
+
+
+_SKILL_ORDER_RE = re.compile(r"(?:corre|carga)[^.]*?`([a-z][a-z0-9-]{4,})`", re.IGNORECASE)
+
+
+def _skills_the_rubric_orders() -> set[str]:
+    """The skills the rubric tells the judge to load, taken from the rubric itself."""
+    return set(_SKILL_ORDER_RE.findall(_program_rubric()))
+
+
+def test_every_skill_the_rubric_orders_is_one_the_judge_can_actually_load() -> None:
+    """The whole invariant in one place: ordered skill -> `Skill` granted -> and reachable.
+
+    It used to be two contracts measuring halves -- one that `Skill` is granted, one that the rubric
+    does not promise a file that is not there -- and neither caught the real hole: the rubric ordered
+    two skills whose `references/` sat outside every granted directory, so items 1 and 8 were judged
+    with no yardstick and the verdict came back just as clean. Measured live: without the grant the
+    envelope carries `permission_denials` and the judge answers that it has no permission.
+
+    That hole is why `Judge` exists as one object. This is the test that object makes possible.
+
+    Reachability needs a machine that has the library, so it is skipped where there is none (the
+    continuous integration runner has no `~/.claude`); what always runs is the tools half.
+    """
+    ordered = _skills_the_rubric_orders()
+    assert ordered, (
+        "no skill is ordered anywhere in the program's rubric. Either the items that loaded one are "
+        "gone -- and then `Skill` should stop being granted -- or the sentence changed shape and this "
+        "contract stopped measuring anything"
+    )
+
+    assert "Skill" in _granted_tools(), (
+        f"the rubric orders {sorted(ordered)} but the judge is granted only {sorted(_granted_tools())}"
+    )
+
+    trees = LocalSkillLibrary().directories()
+    if not trees:
+        pytest.skip("this machine has no skill library, so reachability cannot be measured from here")
+
+    unreachable = sorted(name for name in ordered if not _somewhere_under(trees, name))
+    assert not unreachable, (
+        f"the rubric orders {unreachable}, the judge is granted {[str(tree) for tree in trees]}, and "
+        f"nothing under them is named like that: those items would be judged with an empty yardstick"
+    )
+
+
+def _somewhere_under(trees: tuple[Path, ...], name: str) -> bool:
+    return any(next(tree.rglob(name), None) is not None for tree in trees)
+
+
+def _diff_bullet() -> str:
+    """The rubric's own description of the diff it hands the judge."""
+    bullet = re.search(
+        r"^- \*\*El diff completo de la slice\*\*(.*?)(?=^- \*\*)", _program_rubric(), re.DOTALL | re.MULTILINE
+    )
+    assert bullet, "cannot find the diff bullet in the program's rubric"
+    return bullet.group(1)
+
+
+def test_the_rubric_does_not_promise_a_file_the_program_no_longer_writes() -> None:
+    """The diff travels inside the prompt, so `slice.diff` is a path that no longer exists.
+
+    A rubric that still named it would send the judge to open a file that was never written -- and
+    the judge has `Read`, so it would fail silently rather than loudly, and then judge whatever it
+    could reach instead. That failure mode is exactly why the diff moved into the prompt: what is
+    already in front of the judge cannot be skipped. `GitDiffReader` writing nothing is pinned in
+    `src/slice_runner/tests/infrastructure/test_git_diff_reader.py`; this guards the prose.
+    """
+    assert "slice.diff" not in _program_rubric(), (
+        "the program's rubric still names `slice.diff`, but the program writes no patch: the diff "
+        "travels inside the prompt. Either the file came back or the sentence has to go"
+    )
+
+
+def test_the_rubric_describes_the_diff_range_the_program_actually_produces() -> None:
+    """The rubric told the judge the diff was `<base>...HEAD` while the script diffs the index.
+
+    It was true once and stopped being true when the range moved to `--cached --merge-base`, for a
+        reason recorded in `docs/conventions/infrastructure.md`: the commit happens after verification, so
+        against `HEAD` there would be nothing to see. Nobody updated the sentence that travels to the judge,
+        and nothing measured it -- the other contract tests here compare closed vocabularies, not prose
+        describing a git range. The range is now produced by `GitDiffReader`, whose behaviour is pinned in
+        `src/slice_runner/tests/infrastructure/test_git_diff_reader.py`.
+
+        A false premise about what it is looking at is how a judge produces confidently wrong findings:
+        expecting commits, or reasoning about history that is not in the range.
+
+        This test guards the sentence only; the behaviour is pinned by the reader's own tests.
+    """
+    bullet = _diff_bullet()
+
+    assert "..HEAD" not in bullet, (
+        "the program's rubric describes the diff as a range ending at `HEAD`, but `GitDiffReader` "
+        "diffs the staged index against the branch-point. The judge would be told it looks at committed "
+        "history when it looks at the index"
+    )
+    assert "indice" in bullet.lower(), (
+        "the program's rubric no longer tells the judge that the diff is the index. Omitting it is "
+        "not enough: the judge has to know it is looking at what the commit will be, not at history"
     )
 
 
@@ -163,6 +312,48 @@ def test_severity_levels_in_the_verdict_schema_are_the_ones_the_validator_accept
         f"only in the skill {sorted(documented - set(controles.Severidad))}, "
         f"only in the validator {sorted(set(controles.Severidad) - documented)}"
     )
+
+
+def _documented_finding() -> dict[str, object]:
+    """The single example finding in the rubric, which is where the verdict's fields are stated."""
+    schema = _sole_json_block_in(_program_rubric())
+    assert isinstance(schema, dict)
+    hallazgos = schema["hallazgos"]
+    assert isinstance(hallazgos, list)
+    assert hallazgos
+    primero = hallazgos[0]
+    assert isinstance(primero, dict)
+    return primero
+
+
+def test_the_finding_keys_in_the_rubric_are_the_ones_the_program_maps_its_fields_to() -> None:
+    """The rubric states the finding's keys; the program's fields reach them through one mapping.
+
+    A key documented but not aliased is dropped on the way in -- silently, because the JSON schema
+    the program sends is generated from those same aliases, so the judge is never even asked for it.
+    The reverse makes the program demand a key the rubric never told the judge to emit.
+    """
+    documented = set(_documented_finding())
+
+    mapped = FindingPayload.contract_keys()
+    assert documented == mapped, (
+        f"the finding in the program's rubric and the aliases of `FindingPayload` disagree: "
+        f"only in the rubric {sorted(documented - mapped)}, only in the program {sorted(mapped - documented)}"
+    )
+
+
+def test_the_verdicts_and_severities_in_the_rubric_are_the_ones_the_program_accepts() -> None:
+    """Same drift, on the two closed vocabularies.
+
+    These reach the judge as `enum` values in `--json-schema`, so a level in the rubric that the
+    program does not know is one the judge is forbidden from emitting -- and one the program knows
+    but the rubric does not document is dead vocabulary nobody will ever produce.
+    """
+    schema = _sole_json_block_in(_program_rubric())
+    assert isinstance(schema, dict)
+
+    assert {v.strip() for v in str(schema["veredicto"]).split("|")} == set(Ruling)
+    assert {s.strip() for s in str(_documented_finding()["severidad"]).split("|")} == set(Severity)
 
 
 _CRITERION_ANCHOR = "declarar la degradacion en el artefacto"
@@ -305,6 +496,7 @@ def _claimed_repo_paths(markdown: str, top_level: frozenset[str]) -> set[str]:
     return claimed
 
 
+@pytest.mark.integration
 def test_every_repo_path_cited_in_the_docs_still_exists() -> None:
     """A path in the prose is a claim about the tree, and a rename breaks it silently.
 
@@ -345,4 +537,87 @@ def test_every_repo_path_cited_in_the_docs_still_exists() -> None:
     )
     assert not broken, "the docs cite paths that are not in the tree:\n" + "\n".join(
         f"  {path}  <- cited in {', '.join(sorted(sources))}" for path, sources in sorted(broken.items())
+    )
+
+
+_README = _ROOT / "README.md"
+
+_LAUNCH = re.compile(r"[^\n`|]*python -m slice_runner")
+
+
+@pytest.mark.integration
+def test_every_documented_way_to_launch_the_program_carries_the_import_path() -> None:
+    """`package = false` means the program is not installed, so `python -m` alone cannot find it.
+
+    The command is written in three places on purpose -- the README (how you run it), `pyproject.toml`
+    (why the path is needed) and `docs/conventions/architecture.md` (the table that tells the two kinds
+    of Python code apart) -- and one of them said `uv run python -m slice_runner` with no `PYTHONPATH`.
+    That does not fail with a hint: it fails with `No module named slice_runner`, and the reader has no
+    reason to doubt the yardstick. This is the one contract where a copy that does not run is worse than
+    no copy at all.
+    """
+    missing: dict[str, list[str]] = {}
+    for source in ["README.md", "pyproject.toml", *_tracked("docs/conventions/*.md")]:
+        for invocation in _LAUNCH.findall(_read(_ROOT / source)):
+            if "PYTHONPATH=src" not in invocation:
+                missing.setdefault(source, []).append(invocation.strip())
+
+    assert not missing, "these documented invocations of the program cannot import it:\n" + "\n".join(
+        f"  {source}: {', '.join(found)}" for source, found in sorted(missing.items())
+    )
+
+
+def test_the_exit_codes_the_readme_documents_are_the_ones_the_program_can_return() -> None:
+    """`docs/conventions/infrastructure.md` says the exit codes are a contract and are documented.
+
+    They are the whole output of a run for whoever scripts it: `1` is a verdict and `2` is the absence
+    of one, and a caller that cannot tell them apart retries a veto or merges an unjudged slice. The
+    convention was being broken by its own slice -- the enum existed, the tests pinned it, and there was
+    nowhere to read it. A new member added without documenting it is the failure this catches.
+    """
+    documented = {int(code) for code in re.findall(r"^\| `(\d+)` \|", _read(_README), re.MULTILINE)}
+
+    assert documented == {int(code) for code in ExitCode}, (
+        f"README.md and ExitCode disagree: only in the README {sorted(documented - {int(c) for c in ExitCode})}, "
+        f"only in the enum {sorted({int(c) for c in ExitCode} - documented)}"
+    )
+
+
+_FIXTURE_PYPROJECT = _ROOT / "smoke" / "fixture" / "pyproject.toml"
+
+
+def _ruff_lint(path: Path) -> dict[str, object]:
+    section = tomllib.loads(_read(path)).get("tool", {}).get("ruff", {}).get("lint", {})
+    assert isinstance(section, dict), f"{_rel(path)} has no [tool.ruff.lint] section"
+
+    return section
+
+
+def _selected_rules(path: Path) -> list[str]:
+    selected = _ruff_lint(path).get("select")
+    assert isinstance(selected, list), f"{_rel(path)} does not select any ruff rule explicitly"
+
+    return sorted(str(rule) for rule in selected)
+
+
+def test_the_smoke_fixture_is_linted_with_the_same_yardstick_as_the_repo() -> None:
+    """`architecture.md`: "the smoke fixture carries the same `select` as the root. Touch one, touch
+    the other", because the fixture is the subject the runner slices in the smoke -- a laxer yardstick
+    there "would give the runner a pass that is not worth anything".
+
+    The convention was written and nothing measured it: adding `TID` to the root and forgetting the
+    fixture was caught by the judge, not by `make check`. A convention nothing measures does not
+    measure anything -- which is the failure this repo already paid for once, in Spanish identifiers.
+    """
+    root_pyproject = _ROOT / "pyproject.toml"
+
+    assert _selected_rules(root_pyproject) == _selected_rules(_FIXTURE_PYPROJECT), (
+        f"the `select` of pyproject.toml and {_rel(_FIXTURE_PYPROJECT)} have diverged: the fixture "
+        f"would be measured with a different yardstick than the repo it stands in for"
+    )
+
+    root, fixture = _ruff_lint(root_pyproject), _ruff_lint(_FIXTURE_PYPROJECT)
+    assert root.get("flake8-tidy-imports") == fixture.get("flake8-tidy-imports"), (
+        f"a rule in the `select` is configured differently in {_rel(_FIXTURE_PYPROJECT)}, so the same "
+        f"code would pass in one and fail in the other"
     )

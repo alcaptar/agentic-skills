@@ -1,0 +1,124 @@
+from __future__ import annotations
+
+from pathlib import Path
+from typing import TYPE_CHECKING
+from unittest.mock import Mock, create_autospec
+
+import pytest
+
+from slice_runner.application.actions.verify_slice import VerifySlice
+from slice_runner.domain.diff_reader import DiffReader
+from slice_runner.domain.exceptions import DiffNotReadableError
+from slice_runner.domain.skill_library import SkillLibrary
+from slice_runner.domain.verification import Verification
+from slice_runner.domain.verifier import Verifier
+from slice_runner.tests.mothers.verdict_mother import VerdictMother
+from slice_runner.tests.mothers.verification_mother import JudgeMother, SliceDiffMother, VerifySliceParamsMother
+
+if TYPE_CHECKING:
+    from slice_runner.domain.judge import Judge
+    from slice_runner.domain.slice_under_review import SliceUnderReview
+
+_DIFF = SliceDiffMother.of_the_slice(files=("src/a.py", "src/tests/test_a.py"))
+
+_PARAMS = VerifySliceParamsMother.against_the_base()
+
+_YARDSTICK = (Path("/toolbox/skills"), Path("/toolbox/plugins"))
+
+
+class TestVerifySlice:
+    @pytest.fixture
+    def reader(self) -> Mock:
+        reader: Mock = create_autospec(DiffReader, spec_set=True, instance=True)
+        reader.read.return_value = _DIFF
+        return reader
+
+    @pytest.fixture
+    def verifier(self) -> Mock:
+        verifier: Mock = create_autospec(Verifier, spec_set=True, instance=True)
+        verifier.verify.return_value = Verification(verdict=VerdictMother.passing())
+        return verifier
+
+    @pytest.fixture
+    def skills(self) -> Mock:
+        skills: Mock = create_autospec(SkillLibrary, spec_set=True, instance=True)
+        skills.directories.return_value = _YARDSTICK
+        return skills
+
+    @pytest.fixture
+    def judge(self) -> Judge:
+        return JudgeMother.adversarial()
+
+    @pytest.fixture
+    def action(self, reader: Mock, verifier: Mock, judge: Judge, skills: Mock) -> VerifySlice:
+        return VerifySlice(reader=reader, verifier=verifier, judge=judge, skills=skills)
+
+    @staticmethod
+    def _judged_by(verifier: Mock) -> Judge:
+        judge: Judge = verifier.verify.call_args.args[0]
+        return judge
+
+    @staticmethod
+    def _reviewed(verifier: Mock) -> SliceUnderReview:
+        review: SliceUnderReview = verifier.verify.call_args.args[1]
+        return review
+
+    def test_the_diff_is_read_for_the_repo_and_base_that_were_asked_for(
+        self, action: VerifySlice, reader: Mock
+    ) -> None:
+        action.execute(_PARAMS)
+
+        reader.read.assert_called_once_with(repo=_PARAMS.repo, base=_PARAMS.base)
+
+    def test_the_judge_gets_the_diff_that_was_just_read_and_not_the_repo_and_base(
+        self, action: VerifySlice, verifier: Mock
+    ) -> None:
+        action.execute(_PARAMS)
+
+        assert self._reviewed(verifier).diff is _DIFF
+
+    def test_what_the_judge_may_read_is_decided_here_and_is_the_repo_plus_the_yardstick(
+        self, action: VerifySlice, verifier: Mock
+    ) -> None:
+        action.execute(_PARAMS)
+
+        assert self._judged_by(verifier).readable == (Path(_PARAMS.repo), *_YARDSTICK)
+
+    def test_the_injected_judge_is_left_untouched_so_one_run_cannot_widen_the_next(
+        self, action: VerifySlice, judge: Judge
+    ) -> None:
+        action.execute(_PARAMS)
+        action.execute(_PARAMS)
+
+        assert judge.readable == ()
+
+    def test_the_judge_keeps_the_rubric_and_the_tools_it_was_built_with(
+        self, action: VerifySlice, verifier: Mock
+    ) -> None:
+        action.execute(_PARAMS)
+
+        judged_by = self._judged_by(verifier)
+        assert (judged_by.rubric, judged_by.tools) == (JudgeMother.RUBRIC, JudgeMother.TOOLS)
+
+    def test_the_repo_travels_as_data_and_not_only_as_something_the_judge_may_read(
+        self, action: VerifySlice, verifier: Mock
+    ) -> None:
+        action.execute(_PARAMS)
+
+        assert self._reviewed(verifier).repo == _PARAMS.repo
+
+    def test_the_verification_comes_back_without_being_reinterpreted(self, action: VerifySlice, verifier: Mock) -> None:
+        expected = Verification(verdict=VerdictMother.failing(), denied_reads=("Read /toolbox/skills/x.md",))
+        verifier.verify.return_value = expected
+
+        assert action.execute(_PARAMS) is expected
+
+    def test_with_no_diff_to_read_the_judge_is_not_invoked_at_all(
+        self, action: VerifySlice, reader: Mock, verifier: Mock
+    ) -> None:
+        reader.read.side_effect = DiffNotReadableError("nothing staged against master")
+
+        with pytest.raises(DiffNotReadableError):
+            action.execute(_PARAMS)
+
+        verifier.verify.assert_not_called()

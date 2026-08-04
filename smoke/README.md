@@ -239,7 +239,10 @@ dejando la CI mas ancha que lo declarado: en `## Controles` declara solo `lint: 
 la fixture, **fuera de los ficheros de la slice**, un fallo que solo vea la CI -un test que falla en
 `smoke/fixture/tests/`, o un error de tipos en un modulo que la slice no toca-, commiteado en la baseline
 antes de correr el loop. `.github/workflows/smoke-fixture.yml` corre `make linting`, `make check-types` y
-`make test`, asi que el paso 6 la deja pasar con solo el lint verde y la CI la tumba. No es un montaje
+`make test`, asi que el paso 6 la deja pasar con solo el lint verde y la CI la tumba. **El paso de tests
+es condicional**: la fixture nace virgen y `pytest` sale "no tests collected", asi que el workflow solo
+exige `make test` cuando hay `tests/test_*.py` -que es el caso de esta receta en cuanto siembras el test
+que falla, y tambien el de cualquier run que ya haya implementado una slice-. No es un montaje
 artificial: es el riesgo real de que los controles los declare una persona y queden mas estrechos que la
 CI, y este camino existe justo para eso.
 

@@ -325,6 +325,24 @@ def ejecuta_controles(specs: list[tuple[str, str]], opciones: OpcionesControl) -
     return ResultadoControles(controles=[ejecuta_control(n, c, opciones) for n, c in specs])
 
 
+class MotivoSinBundle(StrEnum):
+    """Por que no hay bundle que verificar. Los dos casos salen FALLA y no se arreglan igual.
+
+    Un indice vacio es el `git add` olvidado; lo otro es la invocacion mal escrita: un `--base main`
+    en un repo cuya rama es `master`, pero tambien un `--repo` que no existe o que existe y no es un
+    repo git. Los tres caen por el mismo `git diff`, que falla igual y no dice cual de los dos
+    argumentos sobra, asi que el motivo los nombra a los dos en vez de asegurar el que no consta.
+    Afinarlo exigiria preguntarle a git por cada argumento por separado, y para quien lo recibe la
+    accion es la misma: revisar la invocacion.
+
+    El texto de los hallazgos lleva lo que dijo git, pero quien ramifica por el resultado necesita
+    el motivo, no una subcadena.
+    """
+
+    INDICE_VACIO = "indice-vacio"
+    REPO_O_BASE_NO_RESOLUBLE = "repo-o-base-no-resoluble"
+
+
 @dataclass(frozen=True, kw_only=True, slots=True)
 class ResultadoBundle:
     """Resultado de materializar el diff de la slice en disco."""
@@ -333,6 +351,7 @@ class ResultadoBundle:
     slice_diff: str = ""
     files: str = ""
     n_files: int = 0
+    motivo: MotivoSinBundle | None = None
     hallazgos: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, object]:
@@ -342,6 +361,7 @@ class ResultadoBundle:
             "slice_diff": self.slice_diff,
             "files": self.files,
             "n_files": self.n_files,
+            "motivo": str(self.motivo) if self.motivo else "",
             "hallazgos": self.hallazgos,
         }
 
@@ -379,6 +399,11 @@ def escribe_diff_bundle(repo: str, base: str, out: str) -> ResultadoBundle:
     Un indice vacio es FALLA, fail-closed igual que `pr-hygiene` con nada staged: sin nada
     que verificar, un bundle vacio haria que el verificador diera PASA sobre la nada. Es
     tambien el sintoma de haberse olvidado el `git add`.
+
+    Los dos modos de fallo llevan `motivo` distinto (`MotivoSinBundle`), que es lo que permite
+    ramificar sin leer el texto: una invocacion que no resuelve -`--base` o `--repo`- tambien
+    deja el bundle sin escribir, y contarla como indice vacio manda a buscar un `git add` que
+    nunca falto.
     """
     rango = ["--merge-base", base]
     try:
@@ -397,13 +422,15 @@ def escribe_diff_bundle(repo: str, base: str, out: str) -> ResultadoBundle:
     except subprocess.CalledProcessError as exc:
         return ResultadoBundle(
             passed=False,
-            hallazgos=[f"no se pudo diffear contra {base!r}: {exc.stderr.strip() or exc}"],
+            motivo=MotivoSinBundle.REPO_O_BASE_NO_RESOLUBLE,
+            hallazgos=[f"no se pudo diffear {repo!r} contra {base!r}: {exc.stderr.strip() or exc}"],
         )
 
     ficheros = [line for line in names.splitlines() if line.strip()]
     if not ficheros:
         return ResultadoBundle(
             passed=False,
+            motivo=MotivoSinBundle.INDICE_VACIO,
             hallazgos=[f"nada staged respecto a {base}: nada que verificar (falta el git add?)"],
         )
 

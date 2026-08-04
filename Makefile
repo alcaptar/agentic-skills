@@ -16,7 +16,7 @@ test:
 	uv run pytest -q $(PYTEST_ARGS)
 
 check-types:
-	uv run mypy skills tests
+	uv run mypy skills tests src
 
 check-style:
 	uv run ruff check .
