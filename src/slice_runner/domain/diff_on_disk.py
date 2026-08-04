@@ -8,7 +8,7 @@ if TYPE_CHECKING:
 
 
 @dataclass(frozen=True, kw_only=True, slots=True)
-class SliceDiff:
-    slice_diff: Path
+class DiffOnDisk:
+    diff: Path
     files: Path
     n_files: int

@@ -5,13 +5,13 @@ class InvalidVerdictError(ValueError):
     pass
 
 
-class DiffNotBundlableError(ValueError):
+class DiffNotWrittenError(ValueError):
     pass
 
 
-class EmptyIndexError(DiffNotBundlableError):
+class EmptyIndexError(DiffNotWrittenError):
     pass
 
 
-class UnresolvableRepoOrBaseError(DiffNotBundlableError):
+class UnresolvableRepoOrBaseError(DiffNotWrittenError):
     pass

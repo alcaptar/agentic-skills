@@ -9,14 +9,14 @@ from typing import TYPE_CHECKING
 
 from slice_runner.application.actions.verify_slice import VerifySlice, VerifySliceParams
 from slice_runner.domain.exceptions import (
-    DiffNotBundlableError,
+    DiffNotWrittenError,
     InvalidVerdictError,
     UnresolvableRepoOrBaseError,
 )
 from slice_runner.infrastructure.agent_prompt import AgentPrompt
 from slice_runner.infrastructure.claude_verifier import ClaudeVerifier
 from slice_runner.infrastructure.exit_code import ExitCode
-from slice_runner.infrastructure.git_diff_bundler import GitDiffBundler
+from slice_runner.infrastructure.git_diff_writer import GitDiffWriter
 from slice_runner.infrastructure.local_process import LocalProcess
 from slice_runner.infrastructure.process import ProcessNotRunnableError
 from slice_runner.infrastructure.verdict_payload import VerdictPayload
@@ -54,7 +54,7 @@ class Cli:
             verdict = self._action().execute(self._params(repo=repo, base=base))
         except UnresolvableRepoOrBaseError as error:
             return self._reported(f"the repo or the base requested do not resolve: {error}", ExitCode.USAGE_ERROR)
-        except DiffNotBundlableError as error:
+        except DiffNotWrittenError as error:
             return self._reported(f"there is no diff to verify: {error}", ExitCode.NO_DIFF)
         except InvalidVerdictError as error:
             return self._reported(f"the judge left no usable verdict: {error}", ExitCode.NO_USABLE_VERDICT)
@@ -69,7 +69,7 @@ class Cli:
 
     def _action(self) -> VerifySlice:
         return VerifySlice(
-            bundler=GitDiffBundler(destination=self._bundle_destination_outside_the_repo()),
+            writer=GitDiffWriter(destination=self._destination_outside_the_repo()),
             verifier=ClaudeVerifier(process=self._process),
         )
 
@@ -78,7 +78,7 @@ class Cli:
         return VerifySliceParams(repo=repo, base=base, instructions=AgentPrompt.read(AgentPrompt.JUDGE))
 
     @staticmethod
-    def _bundle_destination_outside_the_repo() -> Path:
+    def _destination_outside_the_repo() -> Path:
         return Path(tempfile.mkdtemp(prefix="slice-runner-"))
 
     @staticmethod

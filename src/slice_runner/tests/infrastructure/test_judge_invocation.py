@@ -10,13 +10,13 @@ from slice_runner.infrastructure.verdict_payload import VerdictPayload
 from slice_runner.tests.argv import Argv
 from slice_runner.tests.mothers.verification_mother import VerificationRequestMother
 
-_BUNDLE = Path("/bundle")
+_WRITTEN_TO = Path("/written-diff")
 
 
 class TestWhatTheJudgeIsGranted:
     @pytest.fixture
     def argv(self) -> Argv:
-        return Argv(JudgeInvocation(request=VerificationRequestMother.with_the_bundle_in(_BUNDLE)).argv)
+        return Argv(JudgeInvocation(request=VerificationRequestMother.with_the_diff_in(_WRITTEN_TO)).argv)
 
     def test_the_tools_travel_in_a_single_comma_separated_argument(self, argv: Argv) -> None:
         assert argv.value_of("--tools") == "Read,Grep,Glob,Skill"
@@ -29,8 +29,8 @@ class TestWhatTheJudgeIsGranted:
 
         assert granted.isdisjoint({"Bash", "Write", "Edit"})
 
-    def test_tool_access_to_the_bundle_and_to_the_repo_he_has_to_read(self, argv: Argv) -> None:
-        assert argv.values_of("--add-dir") == [str(_BUNDLE), VerificationRequestMother.REPO]
+    def test_tool_access_to_where_the_diff_was_written_and_to_the_repo_he_has_to_read(self, argv: Argv) -> None:
+        assert argv.values_of("--add-dir") == [str(_WRITTEN_TO), VerificationRequestMother.REPO]
 
     def test_each_directory_travels_with_its_own_flag_so_the_argv_does_not_depend_on_its_arity(
         self, argv: Argv
@@ -52,18 +52,18 @@ class TestWhatTheJudgeIsGranted:
 
 
 class TestWhatTheJudgeIsTold:
-    def test_the_prompt_carries_the_rubric_and_the_paths_of_the_bundle(self) -> None:
-        request = VerificationRequestMother.with_the_bundle_in(_BUNDLE)
+    def test_the_prompt_carries_the_rubric_and_the_paths_written_to_disk(self) -> None:
+        request = VerificationRequestMother.with_the_diff_in(_WRITTEN_TO)
 
         prompt = JudgeInvocation(request=request).prompt
 
         assert request.instructions in prompt
-        assert str(request.diff.slice_diff) in prompt
+        assert str(request.diff.diff) in prompt
         assert str(request.diff.files) in prompt
         assert request.repo in prompt
 
     def test_the_rubric_opens_the_prompt_so_the_run_data_reads_as_an_appendix_and_not_as_the_brief(self) -> None:
-        request = VerificationRequestMother.with_the_bundle_in(_BUNDLE)
+        request = VerificationRequestMother.with_the_diff_in(_WRITTEN_TO)
 
         prompt = JudgeInvocation(request=request).prompt
 

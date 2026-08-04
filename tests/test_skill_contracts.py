@@ -147,7 +147,7 @@ def test_verifier_verdict_schema_is_identical_in_the_agent_and_in_the_runner() -
     )
 
 
-_A_VERIFICATION_REQUEST = VerificationRequestMother.with_the_bundle_in(Path("/bundle"))
+_A_VERIFICATION_REQUEST = VerificationRequestMother.with_the_diff_in(Path("/bundle"))
 
 
 def test_tools_the_program_grants_the_judge_are_the_ones_his_prompt_declares() -> None:

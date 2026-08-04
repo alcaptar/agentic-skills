@@ -14,8 +14,8 @@ Los casos de uso. Orquestan; la logica vive en el dominio y la entrada/salida de
 
 ```python
 class VerifySlice:
-    def __init__(self, *, bundler: DiffBundler, verifier: Verifier) -> None:
-        self._bundler = bundler
+    def __init__(self, *, writer: DiffWriter, verifier: Verifier) -> None:
+        self._writer = writer
         self._verifier = verifier
 
     def execute(self, params: VerifySliceParams) -> Verdict:

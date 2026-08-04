@@ -21,7 +21,7 @@ class TestTheVerdictOfARecordedCall:
     ) -> None:
         process = RecordedProcess(HarnessEnvelopeMother.recorded(recorded))
 
-        verdict = ClaudeVerifier(process=process).verify(VerificationRequestMother.with_the_bundle_in(tmp_path))
+        verdict = ClaudeVerifier(process=process).verify(VerificationRequestMother.with_the_diff_in(tmp_path))
 
         assert verdict.ruling is Ruling.FAIL
         assert len(verdict.findings) == 4
@@ -29,7 +29,7 @@ class TestTheVerdictOfARecordedCall:
     def test_the_first_finding_of_the_recorded_call_arrives_whole(self, tmp_path: Path) -> None:
         process = RecordedProcess(HarnessEnvelopeMother.recorded())
 
-        verdict = ClaudeVerifier(process=process).verify(VerificationRequestMother.with_the_bundle_in(tmp_path))
+        verdict = ClaudeVerifier(process=process).verify(VerificationRequestMother.with_the_diff_in(tmp_path))
 
         first = verdict.findings[0]
         assert (first.rule, first.path, first.line) == ("convenciones", "mod.py", 11)
@@ -37,7 +37,7 @@ class TestTheVerdictOfARecordedCall:
 
 class TestHowTheJudgeIsCalled:
     def test_the_prompt_travels_on_standard_input_and_not_in_the_argv(self, tmp_path: Path) -> None:
-        request = VerificationRequestMother.with_the_bundle_in(tmp_path)
+        request = VerificationRequestMother.with_the_diff_in(tmp_path)
         process = RecordedProcess(HarnessEnvelopeMother.recorded())
 
         ClaudeVerifier(process=process).verify(request)
@@ -50,6 +50,6 @@ class TestHowTheJudgeIsCalled:
     ) -> None:
         process = RecordedProcess(HarnessEnvelopeMother.recorded())
 
-        ClaudeVerifier(process=process).verify(VerificationRequestMother.with_the_bundle_in(tmp_path))
+        ClaudeVerifier(process=process).verify(VerificationRequestMother.with_the_diff_in(tmp_path))
 
         assert process.calls == 1

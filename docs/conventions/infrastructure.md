@@ -59,11 +59,18 @@ importar**: un smoke que solo importe el modulo lo da por bueno. Lo evita
 ## Adaptadores
 
 - Implementan un puerto y nada mas. **El modulo se llama como la implementacion**, no como el puerto:
-  `git_diff_bundler.py`, `claude_verifier.py`, `local_process.py`. Asi el par puerto/adaptador se lee
+  `git_diff_writer.py`, `claude_verifier.py`, `local_process.py`. Asi el par puerto/adaptador se lee
   en el nombre y caben dos implementaciones sin renombrar nada.
 - **Se reutiliza `skills/slice-runner/scripts/controles.py` por importacion** donde ya resuelve el
-  problema (materializar el diff, validar la coherencia del veredicto). Duplicar esa logica crearia una
-  segunda copia de una regla cuya fuente unica esta declarada.
+  problema (escribir el diff en disco, validar la coherencia del veredicto). Duplicar esa logica crearia
+  una segunda copia de una regla cuya fuente unica esta declarada.
+- **El programa y el script no comparten vocabulario, y es deliberado.** Lo que el programa llama
+  `DiffWriter` / `DiffOnDisk`, el script lo llama `diff-bundle` / `escribe_diff_bundle` /
+  `ResultadoBundle`. La palabra vieja arrastraba una colision con `git bundle`, que es un comando real
+  de git y significa otra cosa, y en el programa se cambio; en el script no, porque `diff-bundle` es un
+  **subcomando documentado** en `skills/slice-runner/SKILL.md` que la skill invoca por su nombre, y
+  renombrarlo es tocar contrato. Al leer `git_diff_writer.py` se ven los dos vocabularios en la misma
+  pantalla: eso no es un despiste, es la frontera. Alinear el script es una slice propia.
 - Un codigo de salida distinto de cero **es un dato**, no una excepcion: se lanza el proceso con
   `check=False` y el adaptador interpreta, porque el motivo esta en `stderr` y una excepcion lo borra.
 

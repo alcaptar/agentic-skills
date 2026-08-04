@@ -109,8 +109,8 @@ class TestWhenThereIsNothingToJudge:
 
 
 @pytest.mark.integration
-class TestTheBundleTheJudgeReads:
-    def test_the_judge_gets_the_slice_diff_already_materialised_on_disk(self, tmp_path: Path) -> None:
+class TestTheDiffTheJudgeReads:
+    def test_the_judge_gets_the_diff_already_written_to_disk(self, tmp_path: Path) -> None:
         repo = RepoMother.with_the_slice_staged(tmp_path)
         process = RecordedProcess(HarnessEnvelopeMother.recorded())
 

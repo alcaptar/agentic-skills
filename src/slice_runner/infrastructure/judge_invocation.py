@@ -43,13 +43,13 @@ class JudgeInvocation:
                 "## Datos del run",
                 "",
                 f"- ruta del repo: {self.request.repo}",
-                f"- `slice.diff`: {diff.slice_diff}",
+                f"- `slice.diff`: {diff.diff}",
                 f"- `files.txt`: {diff.files} ({diff.n_files} ficheros)",
             ]
         )
 
     @property
     def _grants_to_read(self) -> list[str]:
-        directories = [str(self.request.diff.slice_diff.parent), self.request.repo]
+        directories = [str(self.request.diff.diff.parent), self.request.repo]
 
         return [argument for directory in directories for argument in ("--add-dir", directory)]

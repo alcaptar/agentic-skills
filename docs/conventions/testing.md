@@ -78,8 +78,8 @@ Los metodos son **escenarios con nombre** (`without_line`, `passing`, `high_seve
   `argv` y el `stdin` que recibio, `UnrunnableProcess` levanta. Un `Mock` no sirve cuando el test
   necesita preguntar por lo que se le paso.
 - **Nada de mockear value objects**: se usan instancias reales.
-- El arrange **no se construye con la pieza bajo prueba**. El repo de un test de `GitDiffBundler` se
-  monta con `git` de verdad, no con el propio bundler.
+- El arrange **no se construye con la pieza bajo prueba**. El repo de un test de `GitDiffWriter` se
+  monta con `git` de verdad, no con el propio `GitDiffWriter`.
 
 ## Que se testea y que no
 

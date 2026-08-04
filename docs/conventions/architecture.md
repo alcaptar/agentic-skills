@@ -19,9 +19,9 @@ dependencia ahi es un fallo en la maquina de otra persona.
 ```
 src/slice_runner/
   domain/
-    {value_object}.py     un value object por modulo (finding, verdict, slice_diff...)
+    {value_object}.py     un value object por modulo (finding, verdict, diff_on_disk...)
     {enum}.py             un vocabulario cerrado por modulo (ruling, severity)
-    {puerto}.py           un puerto por fichero (diff_bundler, verifier)
+    {puerto}.py           un puerto por fichero (diff_writer, verifier)
     exceptions.py         todas las excepciones del dominio
   application/
     actions/{name}.py     casos de uso que mutan estado

@@ -3,17 +3,17 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, ClassVar
 
 from slice_runner.application.actions.verify_slice import VerifySliceParams
-from slice_runner.domain.slice_diff import SliceDiff
+from slice_runner.domain.diff_on_disk import DiffOnDisk
 from slice_runner.domain.verification_request import VerificationRequest
 
 if TYPE_CHECKING:
     from pathlib import Path
 
 
-class SliceDiffMother:
+class DiffOnDiskMother:
     @staticmethod
-    def inside(bundle: Path, *, n_files: int = 2) -> SliceDiff:
-        return SliceDiff(slice_diff=bundle / "slice.diff", files=bundle / "files.txt", n_files=n_files)
+    def inside(directory: Path, *, n_files: int = 2) -> DiffOnDisk:
+        return DiffOnDisk(diff=directory / "slice.diff", files=directory / "files.txt", n_files=n_files)
 
 
 class VerifySliceParamsMother:
@@ -33,9 +33,9 @@ class VerificationRequestMother:
     INSTRUCTIONS: ClassVar[str] = "You are the adversarial verifier."
 
     @classmethod
-    def with_the_bundle_in(cls, bundle: Path, *, repo: str | None = None) -> VerificationRequest:
+    def with_the_diff_in(cls, directory: Path, *, repo: str | None = None) -> VerificationRequest:
         return VerificationRequest(
             repo=repo or cls.REPO,
             instructions=cls.INSTRUCTIONS,
-            diff=SliceDiffMother.inside(bundle),
+            diff=DiffOnDiskMother.inside(directory),
         )
