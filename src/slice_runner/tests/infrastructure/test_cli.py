@@ -55,7 +55,7 @@ class TestWhenThereIsNoVerdictToTrust:
         assert code == ExitCode.NO_USABLE_VERDICT
         output = capsys.readouterr()
         assert output.out == ""
-        assert "PASA with 1 hallazgo" in output.err
+        assert "PASA with 1 finding" in output.err
 
     def test_a_judge_that_cannot_be_launched_exits_with_two_instead_of_with_the_code_of_the_veto(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]

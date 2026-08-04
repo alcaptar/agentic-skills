@@ -36,7 +36,7 @@ class TestVerifySlice:
     @pytest.fixture
     def prompt_provider(self) -> Mock:
         provider: Mock = create_autospec(PromptProvider, spec_set=True, instance=True)
-        provider.system_template.return_value = _RUBRIC
+        provider.rubric.return_value = _RUBRIC
         return provider
 
     @pytest.fixture
@@ -57,35 +57,17 @@ class TestVerifySlice:
 
         assert verifier.verify.call_args.args[0].diff is _DIFF
 
-    def test_the_prompt_opens_with_the_rubric_the_provider_gave_and_not_with_the_run_data(
+    def test_the_prompt_carries_the_rubric_the_provider_gave_and_not_one_of_its_own(
         self, action: VerifySlice, verifier: Mock
     ) -> None:
         action.execute(_PARAMS)
 
-        text = verifier.verify.call_args.args[0].build()
-        assert text.startswith(_RUBRIC)
-        assert text.index("## Datos del run") > text.index(_RUBRIC)
+        assert verifier.verify.call_args.args[0].rubric == _RUBRIC
 
-    def test_the_prompt_carries_the_repo_and_where_the_diff_was_written(
-        self, action: VerifySlice, verifier: Mock
-    ) -> None:
-        text = self._prompt_of(action, verifier)
+    def test_the_prompt_carries_the_repo_that_was_asked_for(self, action: VerifySlice, verifier: Mock) -> None:
+        action.execute(_PARAMS)
 
-        assert _PARAMS.repo in text
-        assert str(_DIFF.diff) in text
-
-    def test_the_prompt_carries_the_scope_so_it_does_not_depend_on_the_judge_opening_a_file(
-        self, action: VerifySlice, verifier: Mock
-    ) -> None:
-        text = self._prompt_of(action, verifier)
-
-        assert "src/a.py" in text
-        assert "src/tests/test_a.py" in text
-
-    def test_the_count_of_files_is_derived_from_the_list_so_it_cannot_disagree_with_it(
-        self, action: VerifySlice, verifier: Mock
-    ) -> None:
-        assert f"({len(_DIFF.files)})" in self._prompt_of(action, verifier)
+        assert verifier.verify.call_args.args[0].repo == _PARAMS.repo
 
     def test_the_verdict_comes_back_without_being_reinterpreted(self, action: VerifySlice, verifier: Mock) -> None:
         expected = VerdictMother.failing()
@@ -102,10 +84,3 @@ class TestVerifySlice:
             action.execute(_PARAMS)
 
         verifier.verify.assert_not_called()
-
-    @staticmethod
-    def _prompt_of(action: VerifySlice, verifier: Mock) -> str:
-        action.execute(_PARAMS)
-
-        text: str = verifier.verify.call_args.args[0].build()
-        return text

@@ -6,11 +6,10 @@
 # que no se construye nada, y el ejecutable instalable no es de esta fase.
 #
 # Consecuencia de `package = false` que hay que saber para lanzar el programa: uv no instala el
-# proyecto, y `python -m` solo mira el directorio actual, asi que la ruta de importacion se pone a
-# mano (`src`, y los scripts porque el programa importa `controles`):
+# proyecto, y `python -m` solo mira el directorio actual, asi que la ruta de importacion se pone a mano.
+# Solo `src`: el programa es autocontenido y no importa nada de `skills/`.
 #
-#     PYTHONPATH=src:skills/slice-runner/scripts \
-#         uv run python -m slice_runner verify --repo . --base master
+#     PYTHONPATH=src uv run python -m slice_runner verify --repo . --base master
 #
 # La config replica la que el repo ya exige a su propia fixture de smoke
 # (`smoke/fixture/pyproject.toml`): misma vara para el harness que para lo que valida.
@@ -110,8 +109,8 @@ skip-magic-trailing-comma = false
 
 [tool.mypy]
 strict = true
-# `src` para que `slice_runner` resuelva sin instalar el paquete, y el directorio de los scripts
-# porque el programa importa `controles` mientras su logica siga viviendo alli.
+# `src` para que `slice_runner` resuelva sin instalar el paquete, y el directorio de los scripts porque
+# `tests/` los importa por nombre. El programa **no**: es autocontenido.
 mypy_path = "src:skills/slice-runner/scripts"
 
 [tool.pytest.ini_options]

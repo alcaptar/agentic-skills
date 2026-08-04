@@ -34,7 +34,20 @@ class JudgeInvocation:
 
     @property
     def text(self) -> str:
-        return self.prompt.build()
+        diff = self.prompt.diff
+
+        return "\n".join(
+            [
+                self.prompt.rubric,
+                "",
+                "## Datos del run",
+                "",
+                f"- ruta del repo: {self.prompt.repo}",
+                f"- `slice.diff`: {diff.diff}",
+                f"- ficheros que toca la slice ({len(diff.files)}):",
+                *(f"  - {path}" for path in diff.files),
+            ]
+        )
 
     @property
     def _grants_to_read(self) -> list[str]:

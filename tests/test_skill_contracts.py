@@ -45,7 +45,9 @@ def _program_rubric() -> str:
     The agent file is the old flow's (skill + subagent) and stays frozen; the program owns its
     prompt, so every contract about what the program tells the judge is measured against this.
     """
-    return SliceVerifierPrompt().system_template()
+    rubric: str = SliceVerifierPrompt().rubric()
+
+    return rubric
 
 
 def _read(path: Path) -> str:
@@ -212,32 +214,31 @@ def _slice_diff_bullet() -> str:
     return bullet.group(1)
 
 
-def test_the_rubric_describes_the_diff_range_the_script_actually_produces() -> None:
+def test_the_rubric_describes_the_diff_range_the_program_actually_produces() -> None:
     """The rubric told the judge the diff was `<base>...HEAD` while the script diffs the index.
 
     It was true once and stopped being true when the range moved to `--cached --merge-base`, for a
-    reason written at length in `controles.py`: the commit happens after verification, so against
-    `HEAD` there would be nothing to see. Nobody updated the sentence that travels to the judge as its
-    system prompt, and nothing measured it -- the other contract tests here compare closed
-    vocabularies, not prose describing a git range.
+        reason recorded in `docs/conventions/infrastructure.md`: the commit happens after verification, so
+        against `HEAD` there would be nothing to see. Nobody updated the sentence that travels to the judge,
+        and nothing measured it -- the other contract tests here compare closed vocabularies, not prose
+        describing a git range. The range is now produced by `GitDiffWriter`, whose behaviour is pinned in
+        `src/slice_runner/tests/infrastructure/test_git_diff_writer.py`.
 
-    A false premise about what it is looking at is how a judge produces confidently wrong findings:
-    expecting commits, or reasoning about history that is not in the range.
+        A false premise about what it is looking at is how a judge produces confidently wrong findings:
+        expecting commits, or reasoning about history that is not in the range.
 
-    This test guards the sentence only. That the bundle really diffs the index is pinned behaviourally
-    by the `diff_bundle` tests in `tests/test_controles.py`, which stage a change and assert what comes
-    out; asserting it here by grepping the function's source would pass on its own docstring.
+        This test guards the sentence only; the behaviour is pinned by the writer's own tests.
     """
     bullet = _slice_diff_bullet()
 
     assert "..HEAD" not in bullet, (
-        f"{_rel(_VERIFIER)} describes `slice.diff` as a range ending at `HEAD`, but "
-        f"`escribe_diff_bundle` diffs the staged index against the branch-point. The judge would be "
-        f"told it looks at committed history when it looks at the index"
+        "the program's rubric describes `slice.diff` as a range ending at `HEAD`, but `GitDiffWriter` "
+        "diffs the staged index against the branch-point. The judge would be told it looks at committed "
+        "history when it looks at the index"
     )
     assert "indice" in bullet.lower(), (
-        f"{_rel(_VERIFIER)} no longer tells the judge that `slice.diff` is the index. Omitting it is "
-        f"not enough: the judge has to know it is looking at what the commit will be, not at history"
+        "the program's rubric no longer tells the judge that `slice.diff` is the index. Omitting it is "
+        "not enough: the judge has to know it is looking at what the commit will be, not at history"
     )
 
 

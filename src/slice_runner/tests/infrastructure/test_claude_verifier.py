@@ -6,6 +6,7 @@ import pytest
 
 from slice_runner.domain.ruling import Ruling
 from slice_runner.infrastructure.claude_verifier import ClaudeVerifier
+from slice_runner.infrastructure.judge_invocation import JudgeInvocation
 from slice_runner.tests.doubles import RecordedProcess
 from slice_runner.tests.mothers.judge_output_mother import HarnessEnvelopeMother
 from slice_runner.tests.mothers.verification_mother import JudgePromptMother
@@ -42,7 +43,7 @@ class TestHowTheJudgeIsCalled:
 
         ClaudeVerifier(process=process).verify(prompt)
 
-        assert process.stdin == prompt.build()
+        assert process.stdin == JudgeInvocation(prompt=prompt).text
         assert process.stdin not in process.argv
 
     def test_the_judge_is_invoked_exactly_once_because_a_retry_is_a_decision_of_whoever_orchestrates(

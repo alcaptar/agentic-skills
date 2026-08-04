@@ -32,7 +32,7 @@ class VerifySlice:
 
     def _prompt(self, *, repo: str, diff: DiffOnDisk) -> JudgePrompt:
         return JudgePrompt(
-            system_template=self._prompt_provider.system_template(),
+            rubric=self._prompt_provider.rubric(),
             repo=repo,
             diff=diff,
         )

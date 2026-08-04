@@ -52,10 +52,30 @@ class TestWhatTheJudgeIsGranted:
 
 
 class TestWhatTravelsOnStandardInput:
-    def test_it_is_the_prompt_itself_and_not_a_rewrite_of_it(self) -> None:
+    def test_the_rubric_opens_it_so_the_run_data_reads_as_an_appendix_and_not_as_the_brief(self) -> None:
         prompt = JudgePromptMother.with_the_diff_in(_WRITTEN_TO)
 
-        assert JudgeInvocation(prompt=prompt).text == prompt.build()
+        text = JudgeInvocation(prompt=prompt).text
+
+        assert text.startswith(prompt.rubric)
+        assert text.index("## Datos del run") > text.index(prompt.rubric)
+
+    def test_it_carries_the_repo_and_where_the_diff_was_written(self) -> None:
+        prompt = JudgePromptMother.with_the_diff_in(_WRITTEN_TO)
+
+        text = JudgeInvocation(prompt=prompt).text
+
+        assert prompt.repo in text
+        assert str(prompt.diff.diff) in text
+
+    def test_it_carries_the_scope_so_it_does_not_depend_on_the_judge_opening_a_file(self) -> None:
+        prompt = JudgePromptMother.with_the_diff_in(_WRITTEN_TO, files=("src/a.py", "src/tests/test_a.py"))
+
+        text = JudgeInvocation(prompt=prompt).text
+
+        assert "src/a.py" in text
+        assert "src/tests/test_a.py" in text
+        assert "(2)" in text
 
     def test_the_prompt_does_not_also_travel_in_the_argv(self) -> None:
         invocation = JudgeInvocation(prompt=JudgePromptMother.with_the_diff_in(_WRITTEN_TO))

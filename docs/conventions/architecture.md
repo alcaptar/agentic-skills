@@ -40,9 +40,11 @@ src/slice_runner/
 - **Un concepto por modulo**: un value object, un enum, un puerto o un adaptador por fichero. Las
   excepciones del dominio son la excepcion a la regla y viven juntas en `domain/exceptions.py`, porque
   se leen como un catalogo y quien las captura suele querer ver la jerarquia de una vez.
-- **Los tests del programa viven dentro del paquete**, no en `tests/`, y **espejan esta estructura**:
-  un fichero de test por modulo de produccion. El reparto de los dos arboles esta en
-  `docs/conventions/testing.md`.
+- **Los tests del programa viven dentro del paquete**, no en `tests/`, y espejan la estructura de las
+  capas **que se testean**: `src/slice_runner/tests/application/` y
+  `src/slice_runner/tests/infrastructure/`. No hay un arbol de tests de dominio, y no es un olvido -la
+  estrategia es outside-in y lo de dentro del dominio se cubre por ese camino-. El
+  reparto de los dos arboles y el porque estan en `docs/conventions/testing.md`.
 - El flujo de dependencias va hacia dentro: `infrastructure` conoce `application` y `domain`,
   `application` conoce `domain`, y `domain` no conoce a nadie.
 

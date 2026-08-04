@@ -35,7 +35,7 @@ class JudgePromptMother:
         cls, directory: Path, *, repo: str | None = None, files: tuple[str, ...] | None = None
     ) -> JudgePrompt:
         return JudgePrompt(
-            system_template=cls.RUBRIC,
+            rubric=cls.RUBRIC,
             repo=repo or cls.REPO,
             diff=DiffOnDiskMother.written_in(directory, files=files),
         )

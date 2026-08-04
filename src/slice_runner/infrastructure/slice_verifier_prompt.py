@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from slice_runner.domain.prompt_provider import PromptProvider
 
-_SYSTEM_TEMPLATE = """\
+_RUBRIC = """\
 # Verificador adversarial de slice
 
 Eres el segundo par de ojos de una slice ya implementada por **otro** agente. Tu papel es
@@ -195,5 +195,5 @@ bloque de codigo que lo envuelva. El orquestador lo consume como dato.
 
 
 class SliceVerifierPrompt(PromptProvider):
-    def system_template(self) -> str:
-        return _SYSTEM_TEMPLATE
+    def rubric(self) -> str:
+        return _RUBRIC

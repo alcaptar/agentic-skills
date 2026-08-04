@@ -20,6 +20,6 @@ class Verdict:
         blocking = [finding for finding in self.findings if finding.severity is Severity.HIGH]
         if self.ruling is Ruling.PASS and blocking:
             raise InvalidVerdictError(
-                f"a PASA with {len(blocking)} hallazgo of severity {Severity.HIGH} contradicts the rubric: "
-                f"one high-severity finding means FALLA"
+                f"a {Ruling.PASS} with {len(blocking)} finding(s) of severity {Severity.HIGH} contradicts the "
+                f"rubric: one high-severity finding means {Ruling.FAIL}"
             )
