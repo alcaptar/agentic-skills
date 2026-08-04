@@ -70,6 +70,12 @@ extend-safe-fixes = ["TC001", "TC002", "TC003", "TC004", "UP037"]
 # arriba -relativo a la raiz- no los alcanza y necesitan su propia linea.
 "src/slice_runner/tests/*" = ["PLR0913", "PLR2004"]
 
+[tool.ruff.lint.flake8-tidy-imports]
+# `docs/conventions/code-style.md` dice "sin imports relativos" y dice que lo mide `TID`. Con el
+# default (`parents`) solo marcaba `from ..x import y` y dejaba pasar el relativo de hermano, o sea que
+# la frase era mas estricta que lo que medía: la mitad de la regla no medía nada.
+ban-relative-imports = "all"
+
 [tool.ruff.lint.flake8-type-checking]
 # Pydantic resuelve las anotaciones de campo **en runtime** al crear el modelo, asi que un tipo que
 # `TC002` mueva a `if TYPE_CHECKING:` deja el modelo "not fully defined" y revienta en la primera

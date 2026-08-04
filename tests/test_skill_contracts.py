@@ -28,6 +28,7 @@ import issue_body
 import metrics
 from slice_runner.domain.ruling import Ruling
 from slice_runner.domain.severity import Severity
+from slice_runner.infrastructure.exit_code import ExitCode
 from slice_runner.infrastructure.judge_invocation import JudgeInvocation
 from slice_runner.infrastructure.slice_verifier_prompt import SliceVerifierPrompt
 from slice_runner.infrastructure.verdict_payload import FindingPayload
@@ -504,4 +505,46 @@ def test_every_repo_path_cited_in_the_docs_still_exists() -> None:
     )
     assert not broken, "the docs cite paths that are not in the tree:\n" + "\n".join(
         f"  {path}  <- cited in {', '.join(sorted(sources))}" for path, sources in sorted(broken.items())
+    )
+
+
+_README = _ROOT / "README.md"
+
+_LAUNCH = re.compile(r"[^\n`|]*python -m slice_runner")
+
+
+def test_every_documented_way_to_launch_the_program_carries_the_import_path() -> None:
+    """`package = false` means the program is not installed, so `python -m` alone cannot find it.
+
+    The command is written in three places on purpose -- the README (how you run it), `pyproject.toml`
+    (why the path is needed) and `docs/conventions/architecture.md` (the table that tells the two kinds
+    of Python code apart) -- and one of them said `uv run python -m slice_runner` with no `PYTHONPATH`.
+    That does not fail with a hint: it fails with `No module named slice_runner`, and the reader has no
+    reason to doubt the yardstick. This is the one contract where a copy that does not run is worse than
+    no copy at all.
+    """
+    missing: dict[str, list[str]] = {}
+    for source in ["README.md", "pyproject.toml", *_tracked("docs/conventions/*.md")]:
+        for invocation in _LAUNCH.findall(_read(_ROOT / source)):
+            if "PYTHONPATH=src" not in invocation:
+                missing.setdefault(source, []).append(invocation.strip())
+
+    assert not missing, "these documented invocations of the program cannot import it:\n" + "\n".join(
+        f"  {source}: {', '.join(found)}" for source, found in sorted(missing.items())
+    )
+
+
+def test_the_exit_codes_the_readme_documents_are_the_ones_the_program_can_return() -> None:
+    """`docs/conventions/infrastructure.md` says the exit codes are a contract and are documented.
+
+    They are the whole output of a run for whoever scripts it: `1` is a verdict and `2` is the absence
+    of one, and a caller that cannot tell them apart retries a veto or merges an unjudged slice. The
+    convention was being broken by its own slice -- the enum existed, the tests pinned it, and there was
+    nowhere to read it. A new member added without documenting it is the failure this catches.
+    """
+    documented = {int(code) for code in re.findall(r"^\| `(\d+)` \|", _read(_README), re.MULTILINE)}
+
+    assert documented == {int(code) for code in ExitCode}, (
+        f"README.md and ExitCode disagree: only in the README {sorted(documented - {int(c) for c in ExitCode})}, "
+        f"only in the enum {sorted({int(c) for c in ExitCode} - documented)}"
     )

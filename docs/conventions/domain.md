@@ -35,7 +35,10 @@ de comandos salen de un solo sitio.
 ## Excepciones
 
 - Nombradas por lo que pasa, no por donde: `InvalidVerdictError`, `EmptyIndexError`,
-  `UnresolvableRepoOrBaseError`, `ProcessNotRunnableError`.
+  `UnresolvableRepoOrBaseError`.
+- El catalogo es el de las excepciones **del dominio**. Un puerto que solo consume la infraestructura
+  lleva la suya con el (`ProcessNotRunnableError`, en `infrastructure/process.py`): esta declarado con su
+  motivo en `docs/conventions/architecture.md`.
 - Jerarquia cuando el consumidor necesita distinguir: `EmptyIndexError` y
   `UnresolvableRepoOrBaseError` heredan de `DiffNotReadableError` porque la interfaz de linea de
   comandos les da codigos de salida distintos, y quien no distingue captura la de arriba.

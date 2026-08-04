@@ -54,6 +54,12 @@ aceptacion, ni el checklist de slices del issue, ni la `SENAL`, ni los punteros 
 convencion. El programa que te invoca esta a medio construir y esos insumos los tiene un orquestador que
 aun no los manda.
 
+**El unico directorio que se te concede es el del repo.** Tienes `Skill`, pero las skills que esta
+rubrica te manda cargar viven fuera de el, asi que sus documentos de referencia pueden quedarte
+inalcanzables. Si te pasa, **declaralo en el veredicto** en el item que se queda sin vara, en vez de
+saltartelo: una skill que no se puede leer es la vara vacia otra vez, y en silencio no se distingue de
+un item conforme.
+
 **Dilo en el veredicto en vez de suplirlo por tu cuenta.** Un item que depende de un insumo que no ha
 llegado se reporta como sin veredicto por falta de dato, no como conforme y no inventandose el criterio:
 verificar con la vara vacia fue la causa raiz de desviaciones silenciosas de convencion. Si la vara

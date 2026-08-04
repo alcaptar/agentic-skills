@@ -7,7 +7,7 @@ No es lo mismo y no se miden igual:
 | | `src/slice_runner/` | `skills/*/scripts/*.py` |
 |---|---|---|
 | Que es | El programa orquestador | Los scripts deterministas que invoca una skill |
-| Quien lo lanza | `uv run python -m slice_runner` | La skill, con el `python3` de la maquina |
+| Quien lo lanza | `PYTHONPATH=src uv run python -m slice_runner` | La skill, con el `python3` de la maquina |
 | Dependencias | `pydantic`, y **nada de `skills/`** | **stdlib puro**, sin excepcion |
 | Convenciones | Las cumple entero | Deuda declarada (ver `CLAUDE.md`) |
 
@@ -19,10 +19,10 @@ dependencia ahi es un fallo en la maquina de otra persona.
 ```
 src/slice_runner/
   domain/
-    {value_object}.py     un value object por modulo (finding, verdict, diff_on_disk...)
+    {value_object}.py     un value object por modulo (finding, verdict, slice_diff...)
     {enum}.py             un vocabulario cerrado por modulo (ruling, severity)
-    {puerto}.py           un puerto por fichero (diff_writer, verifier)
-    exceptions.py         todas las excepciones del dominio
+    {puerto}.py           un puerto por fichero (diff_reader, verifier)
+    exceptions.py         las excepciones del dominio
   application/
     actions/{name}.py     casos de uso que mutan estado
   infrastructure/
@@ -40,6 +40,12 @@ src/slice_runner/
 - **Un concepto por modulo**: un value object, un enum, un puerto o un adaptador por fichero. Las
   excepciones del dominio son la excepcion a la regla y viven juntas en `domain/exceptions.py`, porque
   se leen como un catalogo y quien las captura suele querer ver la jerarquia de una vez.
+- **Un puerto que solo consume la infraestructura vive con su adaptador**, no en `domain/`. Es el caso
+  de `infrastructure/process.py`, que declara el puerto `Process` junto a su `ProcessNotRunnableError`:
+  el dominio no lanza procesos ni sabe que existen -lo necesitan `GitDiffReader` y `ClaudeVerifier`-, y
+  subirlo a `domain/` metería ahí el vocabulario de subproceso, que es exactamente lo que esa capa se
+  define por no tener. Consecuencia: `domain/exceptions.py` es el catalogo de las excepciones **del
+  dominio**, no de todas las del programa.
 - **Los tests del programa viven dentro del paquete**, no en `tests/`, y espejan la estructura de las
   capas **que se testean**: `src/slice_runner/tests/application/` y
   `src/slice_runner/tests/infrastructure/`. No hay un arbol de tests de dominio, y no es un olvido -la
