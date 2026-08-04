@@ -183,7 +183,7 @@ error, nunca mezclados. El codigo de salida es el contrato con quien lo invoca:
 |---|---|
 | `0` | PASA: ningun hallazgo de severidad alta |
 | `1` | FALLA: el juez veta la slice |
-| `2` | No hay veredicto de fiar (el juez no arranco, o devolvio uno incoherente) |
+| `2` | No hay veredicto de fiar: un proceso del run no se pudo lanzar, o el juez devolvio un veredicto incoherente |
 | `3` | No hay nada que juzgar: el indice esta vacio (¿falto el `git add`?) |
 | `4` | El repo o la base no resuelven |
 

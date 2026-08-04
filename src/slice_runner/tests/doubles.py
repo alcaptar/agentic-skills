@@ -34,15 +34,6 @@ class UnrunnableJudge(Process):
         raise ProcessNotRunnableError(f"{argv[0]}: no such executable")
 
 
-class SpeechlessProcess(Process):
-    def __init__(self, *, stderr: str, code: int = 1) -> None:
-        self._stderr = stderr
-        self._code = code
-
-    def run(self, argv: list[str], *, stdin: str) -> ProcessOutput:
-        return ProcessOutput(code=self._code, stdout="", stderr=self._stderr)
-
-
 class RealExceptTheJudge(Process):
     def __init__(self, judge_output: dict[str, object]) -> None:
         self._judge_output = judge_output

@@ -19,13 +19,14 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 
-@pytest.fixture(autouse=True)
-def toolbox_of_this_machine_out_of_the_way(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv(LocalSkillLibrary.CONFIG_VARIABLE, str(tmp_path / "no-toolbox"))
+class BlindToTheToolboxOfThisMachine:
+    @pytest.fixture(autouse=True)
+    def toolbox_out_of_reach(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv(LocalSkillLibrary.CONFIG_VARIABLE, str(tmp_path / "no-toolbox"))
 
 
 @pytest.mark.integration
-class TestTheExitCodeOfTheVerdict:
+class TestTheExitCodeOfTheVerdict(BlindToTheToolboxOfThisMachine):
     def test_a_pass_exits_with_zero_and_emits_the_verdict_as_json_on_standard_output(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
@@ -52,7 +53,7 @@ class TestTheExitCodeOfTheVerdict:
 
 
 @pytest.mark.integration
-class TestWhenThereIsNoVerdictToTrust:
+class TestWhenThereIsNoVerdictToTrust(BlindToTheToolboxOfThisMachine):
     def test_an_incoherent_verdict_exits_with_two_instead_of_being_treated_as_a_pass(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
@@ -81,7 +82,7 @@ class TestWhenThereIsNoVerdictToTrust:
 
 
 @pytest.mark.integration
-class TestWhenThereIsNothingToJudge:
+class TestWhenThereIsNothingToJudge(BlindToTheToolboxOfThisMachine):
     @pytest.fixture
     def process(self) -> RealExceptTheJudge:
         return RealExceptTheJudge(HarnessEnvelopeMother.carrying(JudgeVerdictMother.passing()))
@@ -119,7 +120,7 @@ class TestWhenThereIsNothingToJudge:
 
 
 @pytest.mark.integration
-class TestTheDiffTheJudgeReads:
+class TestTheDiffTheJudgeReads(BlindToTheToolboxOfThisMachine):
     def test_the_judge_is_handed_the_diff_of_the_index_inside_the_prompt(self, tmp_path: Path) -> None:
         repo = RepoMother.with_the_slice_staged(tmp_path)
         process = RealExceptTheJudge(HarnessEnvelopeMother.recorded())
@@ -140,7 +141,7 @@ class TestTheDiffTheJudgeReads:
 
 
 @pytest.mark.integration
-class TestWhatTheJudgeWasDeniedReading:
+class TestWhatTheJudgeWasDeniedReading(BlindToTheToolboxOfThisMachine):
     def test_a_denied_read_is_warned_about_on_standard_error_because_the_yardstick_may_be_incomplete(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
@@ -195,7 +196,7 @@ class TestWhatTheJudgeMayRead:
 
 
 @pytest.mark.integration
-class TestTheEntrypoint:
+class TestTheEntrypoint(BlindToTheToolboxOfThisMachine):
     @pytest.fixture(autouse=True)
     def judge_out_of_reach(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         toolbox = tmp_path / "only-git"

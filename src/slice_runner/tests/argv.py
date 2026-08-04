@@ -21,9 +21,6 @@ class Argv:
     def values_of(self, flag: str) -> list[str]:
         return [following for previous, following in pairwise(self._argv) if previous == flag]
 
-    def occurrences_of(self, flag: str) -> int:
-        return self._argv.count(flag)
-
     def contains(self, flag: str) -> bool:
         return flag in self._argv
 
