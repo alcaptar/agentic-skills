@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import shutil
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 
@@ -12,6 +12,9 @@ from slice_runner.tests.doubles import RealExceptTheJudge, UnrunnableJudge
 from slice_runner.tests.git_repo import Git
 from slice_runner.tests.mothers.judge_output_mother import HarnessEnvelopeMother, JudgeVerdictMother
 from slice_runner.tests.mothers.repo_mother import RepoMother
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 @pytest.mark.integration
@@ -110,20 +113,23 @@ class TestWhenThereIsNothingToJudge:
 
 @pytest.mark.integration
 class TestTheDiffTheJudgeReads:
-    def test_the_judge_gets_the_diff_already_written_to_disk(self, tmp_path: Path) -> None:
+    def test_the_judge_is_handed_the_diff_of_the_index_inside_the_prompt(self, tmp_path: Path) -> None:
         repo = RepoMother.with_the_slice_staged(tmp_path)
         process = RealExceptTheJudge(HarnessEnvelopeMother.recorded())
 
         Cli(process=process).verify(repo=str(repo), base=Git.BASE_BRANCH)
 
-        assert "+    return 2" in self._diff_the_prompt_points_at(process.stdin)
+        assert "+    return 2" in process.stdin
 
-    @staticmethod
-    def _diff_the_prompt_points_at(prompt: str) -> str:
-        pointers = [line.split(": ", 1)[1] for line in prompt.splitlines() if line.startswith("- `slice.diff`")]
-        assert len(pointers) == 1
+    def test_no_path_to_a_materialised_patch_travels_because_there_is_no_patch_to_point_at(
+        self, tmp_path: Path
+    ) -> None:
+        repo = RepoMother.with_the_slice_staged(tmp_path)
+        process = RealExceptTheJudge(HarnessEnvelopeMother.recorded())
 
-        return Path(pointers[0]).read_text(encoding="utf-8")
+        Cli(process=process).verify(repo=str(repo), base=Git.BASE_BRANCH)
+
+        assert "slice.diff" not in process.stdin
 
 
 @pytest.mark.integration

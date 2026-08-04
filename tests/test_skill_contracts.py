@@ -165,7 +165,7 @@ def test_verifier_verdict_schema_is_identical_in_the_agent_and_in_the_runner() -
     )
 
 
-_A_JUDGE_PROMPT = JudgePromptMother.with_the_diff_in(Path("/written-diff"))
+_A_JUDGE_PROMPT = JudgePromptMother.for_the_slice()
 
 
 def _granted_tools() -> set[str]:
@@ -177,8 +177,8 @@ def _granted_tools() -> set[str]:
 def test_the_program_does_not_grant_the_judge_what_its_own_rubric_says_he_does_not_have() -> None:
     """The rubric tells the judge it has no `Bash`, "a proposito", and builds three items on that.
 
-    It is what stops it from trying to run lint or tests, and what justifies handing it the diff on
-    disk instead. Granting `Bash` would make the rubric a lie the judge reads first, and the judge
+    It is what stops it from trying to run lint or tests, and what justifies handing it the diff
+    already computed. Granting `Bash` would make the rubric a lie the judge reads first, and the judge
     would have no way to know which half is true. The old flow enforces the same thing structurally,
     through the `tools:` header of `agents/slice-verifier.md`; the program has no header, so this is
     where it gets enforced.
@@ -207,11 +207,28 @@ def test_the_program_grants_the_tool_its_rubric_orders_the_judge_to_use() -> Non
     )
 
 
-def _slice_diff_bullet() -> str:
-    """The rubric's own description of what `slice.diff` contains."""
-    bullet = re.search(r"^- \*\*`slice\.diff`\*\*:(.*?)(?=^- \*\*)", _program_rubric(), re.DOTALL | re.MULTILINE)
-    assert bullet, "cannot find the `slice.diff` bullet in the program's rubric"
+def _diff_bullet() -> str:
+    """The rubric's own description of the diff it hands the judge."""
+    bullet = re.search(
+        r"^- \*\*El diff completo de la slice\*\*(.*?)(?=^- \*\*)", _program_rubric(), re.DOTALL | re.MULTILINE
+    )
+    assert bullet, "cannot find the diff bullet in the program's rubric"
     return bullet.group(1)
+
+
+def test_the_rubric_does_not_promise_a_file_the_program_no_longer_writes() -> None:
+    """The diff travels inside the prompt, so `slice.diff` is a path that no longer exists.
+
+    A rubric that still named it would send the judge to open a file that was never written -- and
+    the judge has `Read`, so it would fail silently rather than loudly, and then judge whatever it
+    could reach instead. That failure mode is exactly why the diff moved into the prompt: what is
+    already in front of the judge cannot be skipped. `GitDiffReader` writing nothing is pinned in
+    `src/slice_runner/tests/infrastructure/test_git_diff_reader.py`; this guards the prose.
+    """
+    assert "slice.diff" not in _program_rubric(), (
+        "the program's rubric still names `slice.diff`, but the program writes no patch: the diff "
+        "travels inside the prompt. Either the file came back or the sentence has to go"
+    )
 
 
 def test_the_rubric_describes_the_diff_range_the_program_actually_produces() -> None:
@@ -221,23 +238,23 @@ def test_the_rubric_describes_the_diff_range_the_program_actually_produces() -> 
         reason recorded in `docs/conventions/infrastructure.md`: the commit happens after verification, so
         against `HEAD` there would be nothing to see. Nobody updated the sentence that travels to the judge,
         and nothing measured it -- the other contract tests here compare closed vocabularies, not prose
-        describing a git range. The range is now produced by `GitDiffWriter`, whose behaviour is pinned in
-        `src/slice_runner/tests/infrastructure/test_git_diff_writer.py`.
+        describing a git range. The range is now produced by `GitDiffReader`, whose behaviour is pinned in
+        `src/slice_runner/tests/infrastructure/test_git_diff_reader.py`.
 
         A false premise about what it is looking at is how a judge produces confidently wrong findings:
         expecting commits, or reasoning about history that is not in the range.
 
-        This test guards the sentence only; the behaviour is pinned by the writer's own tests.
+        This test guards the sentence only; the behaviour is pinned by the reader's own tests.
     """
-    bullet = _slice_diff_bullet()
+    bullet = _diff_bullet()
 
     assert "..HEAD" not in bullet, (
-        "the program's rubric describes `slice.diff` as a range ending at `HEAD`, but `GitDiffWriter` "
+        "the program's rubric describes the diff as a range ending at `HEAD`, but `GitDiffReader` "
         "diffs the staged index against the branch-point. The judge would be told it looks at committed "
         "history when it looks at the index"
     )
     assert "indice" in bullet.lower(), (
-        "the program's rubric no longer tells the judge that `slice.diff` is the index. Omitting it is "
+        "the program's rubric no longer tells the judge that the diff is the index. Omitting it is "
         "not enough: the judge has to know it is looking at what the commit will be, not at history"
     )
 

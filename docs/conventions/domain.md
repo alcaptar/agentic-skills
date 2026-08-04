@@ -37,7 +37,7 @@ de comandos salen de un solo sitio.
 - Nombradas por lo que pasa, no por donde: `InvalidVerdictError`, `EmptyIndexError`,
   `UnresolvableRepoOrBaseError`, `ProcessNotRunnableError`.
 - Jerarquia cuando el consumidor necesita distinguir: `EmptyIndexError` y
-  `UnresolvableRepoOrBaseError` heredan de `DiffNotBundlableError` porque la interfaz de linea de
+  `UnresolvableRepoOrBaseError` heredan de `DiffNotReadableError` porque la interfaz de linea de
   comandos les da codigos de salida distintos, y quien no distingue captura la de arriba.
 - Heredan del tipo que corresponde (`ValueError`, `OSError`), no de `Exception` a secas.
 

@@ -10,12 +10,12 @@ Los casos de uso. Orquestan; la logica vive en el dominio y la entrada/salida de
 - `<Name>Params` -y `<Name>Result` si devuelve datos- son dataclasses frozen **en el mismo modulo**.
 - Las dependencias entran por constructor, con `*` para forzar el paso por nombre.
 - **Depende de puertos, nunca de adaptadores.** El caso de uso no sabe que hay un subproceso al otro
-  lado, ni que el diff se materializa con `git`.
+  lado, ni que el diff lo calcula `git`.
 
 ```python
 class VerifySlice:
-    def __init__(self, *, writer: DiffWriter, verifier: Verifier) -> None:
-        self._writer = writer
+    def __init__(self, *, reader: DiffReader, verifier: Verifier) -> None:
+        self._reader = reader
         self._verifier = verifier
 
     def execute(self, params: VerifySliceParams) -> Verdict:

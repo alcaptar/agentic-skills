@@ -11,8 +11,10 @@ class Git:
     BASE_BRANCH: ClassVar[str] = "master"
 
     @staticmethod
-    def run(repo: Path, *args: str) -> None:
-        subprocess.run(["git", "-C", str(repo), *args], check=True, capture_output=True)
+    def run(repo: Path, *args: str) -> str:
+        done = subprocess.run(["git", "-C", str(repo), *args], check=True, capture_output=True, text=True)
+
+        return done.stdout
 
     @classmethod
     def init_repo(cls, root: Path) -> Path:

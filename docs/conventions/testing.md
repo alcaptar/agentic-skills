@@ -77,13 +77,13 @@ Los metodos son **escenarios con nombre** (`without_line`, `passing`, `high_seve
 - **Dobles con estado a mano**, en `src/slice_runner/tests/doubles.py`: `RecordedProcess` graba el
   `argv` y el `stdin` que recibio. Un `Mock` no sirve cuando el test necesita preguntar por lo que se le
   paso.
-- **Un doble dobla lo que su nombre dice y nada mas.** La orden inyecta **un solo** `Process` al escritor
+- **Un doble dobla lo que su nombre dice y nada mas.** La orden inyecta **un solo** `Process` al lector
   del diff y al juez, asi que `RealExceptTheJudge` y `UnrunnableJudge` lanzan `git` de verdad y solo
   interceptan al juez. Un doble que respondiera a cualquier `argv` con el sobre del juez haria que el
-  escritor leyese JSON donde espera un diff, y el test pasaria o fallaria por el motivo equivocado.
+  lector leyese JSON donde espera un diff, y el test pasaria o fallaria por el motivo equivocado.
 - **Nada de mockear value objects**: se usan instancias reales.
-- El arrange **no se construye con la pieza bajo prueba**. El repo de un test de `GitDiffWriter` se
-  monta con `git` de verdad, no con el propio `GitDiffWriter`.
+- El arrange **no se construye con la pieza bajo prueba**. El repo de un test de `GitDiffReader` se
+  monta con `git` de verdad, no con el propio `GitDiffReader`.
 
 ## Que se testea y que no
 

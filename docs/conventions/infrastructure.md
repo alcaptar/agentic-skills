@@ -59,7 +59,7 @@ importar**: un smoke que solo importe el modulo lo da por bueno. Lo evita
 ## Adaptadores
 
 - Implementan un puerto y nada mas. **El modulo se llama como la implementacion**, no como el puerto:
-  `git_diff_writer.py`, `claude_verifier.py`, `local_process.py`. Asi el par puerto/adaptador se lee
+  `git_diff_reader.py`, `claude_verifier.py`, `local_process.py`. Asi el par puerto/adaptador se lee
   en el nombre y caben dos implementaciones sin renombrar nada.
 - **El programa no importa nada de `skills/`.** Es autocontenido: lanza `git` el mismo por el puerto
   `Process`, y valida el veredicto con sus propios modelos. Hubo una version que reutilizaba

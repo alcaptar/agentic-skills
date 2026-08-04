@@ -1,19 +1,18 @@
 from __future__ import annotations
 
-from pathlib import Path
 from unittest.mock import Mock, create_autospec
 
 import pytest
 
 from slice_runner.application.actions.verify_slice import VerifySlice
-from slice_runner.domain.diff_writer import DiffWriter
-from slice_runner.domain.exceptions import DiffNotWrittenError
+from slice_runner.domain.diff_reader import DiffReader
+from slice_runner.domain.exceptions import DiffNotReadableError
 from slice_runner.domain.prompt_provider import PromptProvider
 from slice_runner.domain.verifier import Verifier
 from slice_runner.tests.mothers.verdict_mother import VerdictMother
-from slice_runner.tests.mothers.verification_mother import DiffOnDiskMother, VerifySliceParamsMother
+from slice_runner.tests.mothers.verification_mother import SliceDiffMother, VerifySliceParamsMother
 
-_DIFF = DiffOnDiskMother.written_in(Path("/tmp/written-diff"), files=("src/a.py", "src/tests/test_a.py"))
+_DIFF = SliceDiffMother.of_the_slice(files=("src/a.py", "src/tests/test_a.py"))
 
 _PARAMS = VerifySliceParamsMother.against_the_base()
 
@@ -22,10 +21,10 @@ _RUBRIC = "You are the adversarial verifier. Walk the closed rubric."
 
 class TestVerifySlice:
     @pytest.fixture
-    def writer(self) -> Mock:
-        writer: Mock = create_autospec(DiffWriter, spec_set=True, instance=True)
-        writer.write.return_value = _DIFF
-        return writer
+    def reader(self) -> Mock:
+        reader: Mock = create_autospec(DiffReader, spec_set=True, instance=True)
+        reader.read.return_value = _DIFF
+        return reader
 
     @pytest.fixture
     def verifier(self) -> Mock:
@@ -40,17 +39,17 @@ class TestVerifySlice:
         return provider
 
     @pytest.fixture
-    def action(self, writer: Mock, verifier: Mock, prompt_provider: Mock) -> VerifySlice:
-        return VerifySlice(writer=writer, verifier=verifier, prompt_provider=prompt_provider)
+    def action(self, reader: Mock, verifier: Mock, prompt_provider: Mock) -> VerifySlice:
+        return VerifySlice(reader=reader, verifier=verifier, prompt_provider=prompt_provider)
 
-    def test_the_diff_is_written_for_the_repo_and_base_that_were_asked_for(
-        self, action: VerifySlice, writer: Mock
+    def test_the_diff_is_read_for_the_repo_and_base_that_were_asked_for(
+        self, action: VerifySlice, reader: Mock
     ) -> None:
         action.execute(_PARAMS)
 
-        writer.write.assert_called_once_with(repo=_PARAMS.repo, base=_PARAMS.base)
+        reader.read.assert_called_once_with(repo=_PARAMS.repo, base=_PARAMS.base)
 
-    def test_the_judge_gets_the_diff_that_was_just_written_and_not_the_repo_and_base(
+    def test_the_judge_gets_the_diff_that_was_just_read_and_not_the_repo_and_base(
         self, action: VerifySlice, verifier: Mock
     ) -> None:
         action.execute(_PARAMS)
@@ -75,12 +74,12 @@ class TestVerifySlice:
 
         assert action.execute(_PARAMS) is expected
 
-    def test_with_no_diff_to_write_the_judge_is_not_invoked_at_all(
-        self, action: VerifySlice, writer: Mock, verifier: Mock
+    def test_with_no_diff_to_read_the_judge_is_not_invoked_at_all(
+        self, action: VerifySlice, reader: Mock, verifier: Mock
     ) -> None:
-        writer.write.side_effect = DiffNotWrittenError("nothing staged against master")
+        reader.read.side_effect = DiffNotReadableError("nothing staged against master")
 
-        with pytest.raises(DiffNotWrittenError):
+        with pytest.raises(DiffNotReadableError):
             action.execute(_PARAMS)
 
         verifier.verify.assert_not_called()

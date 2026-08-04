@@ -3,19 +3,17 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-import tempfile
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 from slice_runner.application.actions.verify_slice import VerifySlice, VerifySliceParams
 from slice_runner.domain.exceptions import (
-    DiffNotWrittenError,
+    DiffNotReadableError,
     InvalidVerdictError,
     UnresolvableRepoOrBaseError,
 )
 from slice_runner.infrastructure.claude_verifier import ClaudeVerifier
 from slice_runner.infrastructure.exit_code import ExitCode
-from slice_runner.infrastructure.git_diff_writer import GitDiffWriter
+from slice_runner.infrastructure.git_diff_reader import GitDiffReader
 from slice_runner.infrastructure.local_process import LocalProcess
 from slice_runner.infrastructure.process import ProcessNotRunnableError
 from slice_runner.infrastructure.slice_verifier_prompt import SliceVerifierPrompt
@@ -54,7 +52,7 @@ class Cli:
             verdict = self._action().execute(self._params(repo=repo, base=base))
         except UnresolvableRepoOrBaseError as error:
             return self._reported(f"the repo or the base requested do not resolve: {error}", ExitCode.USAGE_ERROR)
-        except DiffNotWrittenError as error:
+        except DiffNotReadableError as error:
             return self._reported(f"there is no diff to verify: {error}", ExitCode.NO_DIFF)
         except InvalidVerdictError as error:
             return self._reported(f"the judge left no usable verdict: {error}", ExitCode.NO_USABLE_VERDICT)
@@ -70,7 +68,7 @@ class Cli:
 
     def _action(self) -> VerifySlice:
         return VerifySlice(
-            writer=GitDiffWriter(process=self._process, destination=self._destination_outside_the_repo()),
+            reader=GitDiffReader(process=self._process),
             verifier=ClaudeVerifier(process=self._process),
             prompt_provider=SliceVerifierPrompt(),
         )
@@ -78,10 +76,6 @@ class Cli:
     @staticmethod
     def _params(*, repo: str, base: str) -> VerifySliceParams:
         return VerifySliceParams(repo=repo, base=base)
-
-    @staticmethod
-    def _destination_outside_the_repo() -> Path:
-        return Path(tempfile.mkdtemp(prefix="slice-runner-"))
 
     @staticmethod
     def _reported(reason: str, code: ExitCode) -> ExitCode:
