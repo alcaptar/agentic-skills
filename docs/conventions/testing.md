@@ -75,17 +75,27 @@ Los metodos son **escenarios con nombre** (`without_line`, `passing`, `high_seve
 
 - **`create_autospec(X, spec_set=True, instance=True)`** para puertos sin estado.
 - **Dobles con estado a mano**, en `src/slice_runner/tests/doubles.py`: `RecordedProcess` graba el
-  `argv` y el `stdin` que recibio, `UnrunnableProcess` levanta. Un `Mock` no sirve cuando el test
-  necesita preguntar por lo que se le paso.
+  `argv` y el `stdin` que recibio. Un `Mock` no sirve cuando el test necesita preguntar por lo que se le
+  paso.
+- **Un doble dobla lo que su nombre dice y nada mas.** La orden inyecta **un solo** `Process` al escritor
+  del diff y al juez, asi que `RealExceptTheJudge` y `UnrunnableJudge` lanzan `git` de verdad y solo
+  interceptan al juez. Un doble que respondiera a cualquier `argv` con el sobre del juez haria que el
+  escritor leyese JSON donde espera un diff, y el test pasaria o fallaria por el motivo equivocado.
 - **Nada de mockear value objects**: se usan instancias reales.
 - El arrange **no se construye con la pieza bajo prueba**. El repo de un test de `GitDiffWriter` se
   monta con `git` de verdad, no con el propio `GitDiffWriter`.
 
 ## Que se testea y que no
 
-- **No hay tests unitarios de dominio** salvo un value object con validacion propia. El dominio queda
-  cubierto por los tests de aplicacion y de frontera; un test que solo comprueba que un dataclass
-  guarda lo que le pasas mide el lenguaje, no el codigo.
+- **Outside-in, y en este orden**: primero los tests de la **capa de aplicacion** con los puertos
+  doblados, luego los de **infraestructura**. Lo de dentro del dominio se cubre **por ese camino**, no
+  con tests propios.
+- **No hay tests unitarios de dominio**, ni siquiera cuando el dominio tiene comportamiento. Que
+  `JudgePrompt` compone bien el prompt se comprueba en el test del caso de uso -mirando lo que recibio
+  el verificador-, y que `Verdict` rechaza un `PASA` con un hallazgo `alta` se comprueba en el test de
+  frontera y en el de la orden, que es el camino real por el que llega un veredicto incoherente. La
+  unica excepcion es un value object con validacion propia que no se pueda alcanzar de otra forma. Un
+  test que solo comprueba que un dataclass guarda lo que le pasas mide el lenguaje, no el codigo.
 - **Aplicacion**: puertos mockeados por constructor, y el assert sobre el **efecto observable** (que
   recibio el puerto, que devolvio el caso de uso), no sobre la llamada.
 - **Frontera**: el assert es la **carga literal** que se envia o se recibe, no un modelo de ella
@@ -129,4 +139,4 @@ lo que **es**: `docs/superpowers/specs/` (registro fechado, describe el arbol de
 - Un helper de test suelto a nivel de modulo, o repetido en dos ficheros.
 - Arrange construido con la pieza bajo prueba.
 - Assert contra un modelo del formato reimplementado en el test, en vez de contra la carga literal.
-- Un test de dominio que solo comprueba que un dataclass guarda sus campos.
+- Un test de dominio. Lo que hay dentro se cubre desde aplicacion y desde la frontera.

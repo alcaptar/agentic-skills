@@ -8,7 +8,7 @@ No es lo mismo y no se miden igual:
 |---|---|---|
 | Que es | El programa orquestador | Los scripts deterministas que invoca una skill |
 | Quien lo lanza | `uv run python -m slice_runner` | La skill, con el `python3` de la maquina |
-| Dependencias | `pydantic` | **stdlib puro**, sin excepcion |
+| Dependencias | `pydantic`, y **nada de `skills/`** | **stdlib puro**, sin excepcion |
 | Convenciones | Las cumple entero | Deuda declarada (ver `CLAUDE.md`) |
 
 Los scripts son stdlib puro **porque no hay `uv` que resuelva nada** cuando los lanza la skill: una
@@ -28,6 +28,7 @@ src/slice_runner/
   infrastructure/
     {impl}_{puerto}.py    el adaptador se llama como su implementacion
     {payload}.py          un modelo de frontera por concepto
+    slice_verifier_prompt.py  el prompt del juez, constante de modulo tras su puerto
     cli.py                entrypoint
   tests/                  co-localizados, espejando las capas de arriba
     mothers/              Object Mothers

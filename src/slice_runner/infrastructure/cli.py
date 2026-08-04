@@ -13,12 +13,12 @@ from slice_runner.domain.exceptions import (
     InvalidVerdictError,
     UnresolvableRepoOrBaseError,
 )
-from slice_runner.infrastructure.agent_prompt import AgentPrompt
 from slice_runner.infrastructure.claude_verifier import ClaudeVerifier
 from slice_runner.infrastructure.exit_code import ExitCode
 from slice_runner.infrastructure.git_diff_writer import GitDiffWriter
 from slice_runner.infrastructure.local_process import LocalProcess
 from slice_runner.infrastructure.process import ProcessNotRunnableError
+from slice_runner.infrastructure.slice_verifier_prompt import SliceVerifierPrompt
 from slice_runner.infrastructure.verdict_payload import VerdictPayload
 
 if TYPE_CHECKING:
@@ -60,7 +60,8 @@ class Cli:
             return self._reported(f"the judge left no usable verdict: {error}", ExitCode.NO_USABLE_VERDICT)
         except ProcessNotRunnableError as error:
             return self._reported(
-                f"the judge could not be launched, so there is no verdict: {error}", ExitCode.NO_USABLE_VERDICT
+                f"a process the run needs could not be launched, so there is no verdict: {error}",
+                ExitCode.NO_USABLE_VERDICT,
             )
 
         print(json.dumps(VerdictPayload.from_domain(verdict).to_contract(), ensure_ascii=False))
@@ -69,13 +70,14 @@ class Cli:
 
     def _action(self) -> VerifySlice:
         return VerifySlice(
-            writer=GitDiffWriter(destination=self._destination_outside_the_repo()),
+            writer=GitDiffWriter(process=self._process, destination=self._destination_outside_the_repo()),
             verifier=ClaudeVerifier(process=self._process),
+            prompt_provider=SliceVerifierPrompt(),
         )
 
     @staticmethod
     def _params(*, repo: str, base: str) -> VerifySliceParams:
-        return VerifySliceParams(repo=repo, base=base, instructions=AgentPrompt.read(AgentPrompt.JUDGE))
+        return VerifySliceParams(repo=repo, base=base)
 
     @staticmethod
     def _destination_outside_the_repo() -> Path:

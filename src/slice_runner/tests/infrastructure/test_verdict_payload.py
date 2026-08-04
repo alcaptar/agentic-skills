@@ -105,8 +105,8 @@ class TestWhatTheJudgeIsAllowedToReturn:
     def test_a_pass_that_comes_with_a_high_severity_finding_is_rejected(self) -> None:
         incoherent = JudgeVerdictMother.passing_with(JudgeVerdictMother.high_severity_finding())
 
-        with pytest.raises(InvalidVerdictError, match="PASA con 1 hallazgo"):
-            VerdictPayload.from_dict(incoherent)
+        with pytest.raises(InvalidVerdictError, match="PASA with 1 hallazgo"):
+            VerdictPayload.from_dict(incoherent).to_domain()
 
     def test_a_key_we_do_not_know_in_a_finding_is_rejected_instead_of_ignored(self) -> None:
         invented = JudgeVerdictMother.high_severity_finding() | {"campo_nuevo_del_juez": "invented"}

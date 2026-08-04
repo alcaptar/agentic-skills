@@ -8,7 +8,7 @@ import pytest
 from slice_runner.infrastructure.judge_invocation import JudgeInvocation
 from slice_runner.infrastructure.verdict_payload import VerdictPayload
 from slice_runner.tests.argv import Argv
-from slice_runner.tests.mothers.verification_mother import VerificationRequestMother
+from slice_runner.tests.mothers.verification_mother import JudgePromptMother
 
 _WRITTEN_TO = Path("/written-diff")
 
@@ -16,7 +16,7 @@ _WRITTEN_TO = Path("/written-diff")
 class TestWhatTheJudgeIsGranted:
     @pytest.fixture
     def argv(self) -> Argv:
-        return Argv(JudgeInvocation(request=VerificationRequestMother.with_the_diff_in(_WRITTEN_TO)).argv)
+        return Argv(JudgeInvocation(prompt=JudgePromptMother.with_the_diff_in(_WRITTEN_TO)).argv)
 
     def test_the_tools_travel_in_a_single_comma_separated_argument(self, argv: Argv) -> None:
         assert argv.value_of("--tools") == "Read,Grep,Glob,Skill"
@@ -30,7 +30,7 @@ class TestWhatTheJudgeIsGranted:
         assert granted.isdisjoint({"Bash", "Write", "Edit"})
 
     def test_tool_access_to_where_the_diff_was_written_and_to_the_repo_he_has_to_read(self, argv: Argv) -> None:
-        assert argv.values_of("--add-dir") == [str(_WRITTEN_TO), VerificationRequestMother.REPO]
+        assert argv.values_of("--add-dir") == [str(_WRITTEN_TO), JudgePromptMother.REPO]
 
     def test_each_directory_travels_with_its_own_flag_so_the_argv_does_not_depend_on_its_arity(
         self, argv: Argv
@@ -51,34 +51,13 @@ class TestWhatTheJudgeIsGranted:
         assert argv.values_that_follow_another_value() == []
 
 
-class TestWhatTheJudgeIsTold:
-    def test_the_prompt_carries_the_rubric_the_repo_and_where_the_diff_was_written(self) -> None:
-        request = VerificationRequestMother.with_the_diff_in(_WRITTEN_TO)
+class TestWhatTravelsOnStandardInput:
+    def test_it_is_the_prompt_itself_and_not_a_rewrite_of_it(self) -> None:
+        prompt = JudgePromptMother.with_the_diff_in(_WRITTEN_TO)
 
-        prompt = JudgeInvocation(request=request).prompt
+        assert JudgeInvocation(prompt=prompt).text == prompt.build()
 
-        assert request.instructions in prompt
-        assert str(request.diff.diff) in prompt
-        assert request.repo in prompt
+    def test_the_prompt_does_not_also_travel_in_the_argv(self) -> None:
+        invocation = JudgeInvocation(prompt=JudgePromptMother.with_the_diff_in(_WRITTEN_TO))
 
-    def test_the_scope_travels_in_the_prompt_so_it_does_not_depend_on_the_judge_opening_a_file(self) -> None:
-        request = VerificationRequestMother.with_the_diff_in(_WRITTEN_TO, files=("src/a.py", "src/tests/test_a.py"))
-
-        prompt = JudgeInvocation(request=request).prompt
-
-        assert "src/a.py" in prompt
-        assert "src/tests/test_a.py" in prompt
-        assert "(2)" in prompt
-
-    def test_the_count_is_not_a_field_of_its_own_so_it_cannot_disagree_with_the_list(self) -> None:
-        request = VerificationRequestMother.with_the_diff_in(_WRITTEN_TO, files=("src/a.py",))
-
-        assert "(1)" in JudgeInvocation(request=request).prompt
-
-    def test_the_rubric_opens_the_prompt_so_the_run_data_reads_as_an_appendix_and_not_as_the_brief(self) -> None:
-        request = VerificationRequestMother.with_the_diff_in(_WRITTEN_TO)
-
-        prompt = JudgeInvocation(request=request).prompt
-
-        assert prompt.startswith(request.instructions)
-        assert prompt.index("## Datos del run") > prompt.index(request.instructions)
+        assert invocation.text not in invocation.argv

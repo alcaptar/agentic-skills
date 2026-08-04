@@ -61,16 +61,21 @@ importar**: un smoke que solo importe el modulo lo da por bueno. Lo evita
 - Implementan un puerto y nada mas. **El modulo se llama como la implementacion**, no como el puerto:
   `git_diff_writer.py`, `claude_verifier.py`, `local_process.py`. Asi el par puerto/adaptador se lee
   en el nombre y caben dos implementaciones sin renombrar nada.
-- **Se reutiliza `skills/slice-runner/scripts/controles.py` por importacion** donde ya resuelve el
-  problema (escribir el diff en disco, validar la coherencia del veredicto). Duplicar esa logica crearia
-  una segunda copia de una regla cuya fuente unica esta declarada.
-- **El programa y el script no comparten vocabulario, y es deliberado.** Lo que el programa llama
-  `DiffWriter` / `DiffOnDisk`, el script lo llama `diff-bundle` / `escribe_diff_bundle` /
-  `ResultadoBundle`. La palabra vieja arrastraba una colision con `git bundle`, que es un comando real
-  de git y significa otra cosa, y en el programa se cambio; en el script no, porque `diff-bundle` es un
-  **subcomando documentado** en `skills/slice-runner/SKILL.md` que la skill invoca por su nombre, y
-  renombrarlo es tocar contrato. Al leer `git_diff_writer.py` se ven los dos vocabularios en la misma
-  pantalla: eso no es un despiste, es la frontera. Alinear el script es una slice propia.
+- **El programa no importa nada de `skills/`.** Es autocontenido: lanza `git` el mismo por el puerto
+  `Process`, y valida el veredicto con sus propios modelos. Hubo una version que reutilizaba
+  `escribe_diff_bundle` y `valida_veredicto` de `controles.py` para no duplicar logica, y el resultado
+  fue peor: obligaba a que el programa arrastrase el `pythonpath` del script, a escribir un `files.txt`
+  que solo el flujo viejo necesita, y a pasar el veredicto por un validador que Pydantic ya hacia
+  redundante -de `valida_veredicto` solo quedaba util un invariante, que ahora vive en `Verdict`, donde
+  le toca-. **Acoplar el flujo nuevo al viejo para ahorrar duplicacion sale mas caro que la
+  duplicacion**, porque el viejo esta condenado: el rango del diff son tres flags y su motivo esta en
+  las convenciones, no en el codigo del script.
+- **El prompt del juez es del programa.** Vive como constante de modulo en
+  `src/slice_runner/infrastructure/slice_verifier_prompt.py`, detras del puerto `PromptProvider`, igual
+  que un `PromptProvider` de un chat con un modelo. `agents/slice-verifier.md` es del **flujo viejo** y
+  se queda congelado: el programa no lo lee. Son dos copias de la rubrica a proposito, con la del
+  programa diciendo la verdad sobre lo que el programa manda -que hoy son tres insumos de los siete que
+  la vieja declara-.
 - Un codigo de salida distinto de cero **es un dato**, no una excepcion: se lanza el proceso con
   `check=False` y el adaptador interpreta, porque el motivo esta en `stderr` y una excepcion lo borra.
 

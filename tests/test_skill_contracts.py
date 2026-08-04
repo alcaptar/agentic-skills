@@ -21,19 +21,31 @@ import re
 import subprocess
 from pathlib import Path
 
+import pytest
+
 import controles
 import issue_body
 import metrics
 from slice_runner.domain.ruling import Ruling
 from slice_runner.domain.severity import Severity
 from slice_runner.infrastructure.judge_invocation import JudgeInvocation
+from slice_runner.infrastructure.slice_verifier_prompt import SliceVerifierPrompt
 from slice_runner.infrastructure.verdict_payload import FindingPayload
-from slice_runner.tests.mothers.verification_mother import VerificationRequestMother
+from slice_runner.tests.mothers.verification_mother import JudgePromptMother
 
 _ROOT = Path(__file__).resolve().parents[1]
 _RUNNER = _ROOT / "skills" / "slice-runner" / "SKILL.md"
 _DEPLOY_WATCH = _ROOT / "skills" / "deploy-watch" / "SKILL.md"
 _VERIFIER = _ROOT / "agents" / "slice-verifier.md"
+
+
+def _program_rubric() -> str:
+    """The rubric the PROGRAM sends, which is its own copy and no longer `agents/slice-verifier.md`.
+
+    The agent file is the old flow's (skill + subagent) and stays frozen; the program owns its
+    prompt, so every contract about what the program tells the judge is measured against this.
+    """
+    return SliceVerifierPrompt().system_template()
 
 
 def _read(path: Path) -> str:
@@ -129,8 +141,12 @@ def _json_shape(value: object) -> object:
 
 
 def _sole_json_block(path: Path) -> object:
-    blocks = re.findall(r"```json\n(.*?)```", _read(path), re.DOTALL)
-    assert len(blocks) == 1, f"expected exactly one ```json block in {_rel(path)}, found {len(blocks)}"
+    return _sole_json_block_in(_read(path), where=_rel(path))
+
+
+def _sole_json_block_in(markdown: str, *, where: str = "the program's rubric") -> object:
+    blocks = re.findall(r"```json\n(.*?)```", markdown, re.DOTALL)
+    assert len(blocks) == 1, f"expected exactly one ```json block in {where}, found {len(blocks)}"
     return json.loads(blocks[0])
 
 
@@ -147,38 +163,52 @@ def test_verifier_verdict_schema_is_identical_in_the_agent_and_in_the_runner() -
     )
 
 
-_A_VERIFICATION_REQUEST = VerificationRequestMother.with_the_diff_in(Path("/bundle"))
+_A_JUDGE_PROMPT = JudgePromptMother.with_the_diff_in(Path("/written-diff"))
 
 
-def test_tools_the_program_grants_the_judge_are_the_ones_his_prompt_declares() -> None:
-    """The agent header lists the judge's tools; `--tools` in the argv is what grants them.
+def _granted_tools() -> set[str]:
+    argv = JudgeInvocation(prompt=_A_JUDGE_PROMPT).argv
 
-    The header is stripped before the prompt travels, so a tool listed there and absent from the
-    argv is simply not granted -- while the rubric that does travel keeps ordering the judge to use
-    it (two of its nine items load a skill). That is a rubric with items the judge cannot execute,
-    and neither the argv nor the prompt says so: the empty yardstick the rubric itself names as the
-    root cause of silent deviations. The reverse -- granting what the prompt never mentions -- is a
-    capability nobody wrote down.
+    return set(argv[argv.index("--tools") + 1].split(","))
+
+
+def test_the_program_does_not_grant_the_judge_what_its_own_rubric_says_he_does_not_have() -> None:
+    """The rubric tells the judge it has no `Bash`, "a proposito", and builds three items on that.
+
+    It is what stops it from trying to run lint or tests, and what justifies handing it the diff on
+    disk instead. Granting `Bash` would make the rubric a lie the judge reads first, and the judge
+    would have no way to know which half is true. The old flow enforces the same thing structurally,
+    through the `tools:` header of `agents/slice-verifier.md`; the program has no header, so this is
+    where it gets enforced.
     """
-    header = re.search(r"\A---\n(.*?)\n---\n", _read(_VERIFIER), re.DOTALL)
-    assert header, f"cannot find the YAML header in {_rel(_VERIFIER)}"
-    listed = re.findall(r"^tools:\s*(.+)$", header.group(1), re.MULTILINE)
-    assert len(listed) == 1, f"expected exactly one `tools:` line in the header of {_rel(_VERIFIER)}"
-    declared = {tool.strip() for tool in listed[0].split(",")}
+    rubric = _program_rubric()
+    assert "No tienes `Bash`" in rubric, (
+        "the program's rubric no longer tells the judge it has no `Bash`; either restore it or stop "
+        "building the 'you do not run anything' items on a premise that is not stated"
+    )
 
-    argv = JudgeInvocation(request=_A_VERIFICATION_REQUEST).argv
-    granted = set(argv[argv.index("--tools") + 1].split(","))
+    assert "Bash" not in _granted_tools(), (
+        f"the argv grants {sorted(_granted_tools())}, and its own rubric tells the judge it has no `Bash`"
+    )
 
-    assert declared == granted, (
-        f"{_rel(_VERIFIER)} and the argv of slice_runner's verifier disagree on the judge's tools: "
-        f"only in the prompt {sorted(declared - granted)}, only in the argv {sorted(granted - declared)}"
+
+def test_the_program_grants_the_tool_its_rubric_orders_the_judge_to_use() -> None:
+    """Two of the nine items tell the judge to load a skill. A rubric with items the judge cannot
+    execute is the empty yardstick the rubric itself names as the root cause of silent deviations --
+    and nothing would say so: the judge would just skip them.
+    """
+    if "skill" not in _program_rubric().lower():
+        pytest.skip("the rubric no longer asks the judge to load a skill")
+
+    assert "Skill" in _granted_tools(), (
+        f"the rubric orders the judge to load a skill but the argv grants only {sorted(_granted_tools())}"
     )
 
 
 def _slice_diff_bullet() -> str:
     """The rubric's own description of what `slice.diff` contains."""
-    bullet = re.search(r"^- \*\*`slice\.diff`\*\*:(.*?)(?=^- \*\*)", _read(_VERIFIER), re.DOTALL | re.MULTILINE)
-    assert bullet, f"cannot find the `slice.diff` bullet in {_rel(_VERIFIER)}"
+    bullet = re.search(r"^- \*\*`slice\.diff`\*\*:(.*?)(?=^- \*\*)", _program_rubric(), re.DOTALL | re.MULTILINE)
+    assert bullet, "cannot find the `slice.diff` bullet in the program's rubric"
     return bullet.group(1)
 
 
@@ -236,7 +266,7 @@ def test_severity_levels_in_the_verdict_schema_are_the_ones_the_validator_accept
 
 def _documented_finding() -> dict[str, object]:
     """The single example finding in the rubric, which is where the verdict's fields are stated."""
-    schema = _sole_json_block(_VERIFIER)
+    schema = _sole_json_block_in(_program_rubric())
     assert isinstance(schema, dict)
     hallazgos = schema["hallazgos"]
     assert isinstance(hallazgos, list)
@@ -257,7 +287,7 @@ def test_the_finding_keys_in_the_rubric_are_the_ones_the_program_maps_its_fields
 
     mapped = FindingPayload.contract_keys()
     assert documented == mapped, (
-        f"the finding in {_rel(_VERIFIER)} and the aliases of slice_runner's `FindingPayload` disagree: "
+        f"the finding in the program's rubric and the aliases of `FindingPayload` disagree: "
         f"only in the rubric {sorted(documented - mapped)}, only in the program {sorted(mapped - documented)}"
     )
 
@@ -269,7 +299,7 @@ def test_the_verdicts_and_severities_in_the_rubric_are_the_ones_the_program_acce
     program does not know is one the judge is forbidden from emitting -- and one the program knows
     but the rubric does not document is dead vocabulary nobody will ever produce.
     """
-    schema = _sole_json_block(_VERIFIER)
+    schema = _sole_json_block_in(_program_rubric())
     assert isinstance(schema, dict)
 
     assert {v.strip() for v in str(schema["veredicto"]).split("|")} == set(Ruling)

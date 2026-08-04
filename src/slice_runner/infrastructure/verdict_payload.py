@@ -1,12 +1,9 @@
 from __future__ import annotations
 
-import json
 from typing import Self
 
 from pydantic import Field
 
-from controles import valida_veredicto
-from slice_runner.domain.exceptions import InvalidVerdictError
 from slice_runner.domain.finding import Finding
 from slice_runner.domain.ruling import Ruling
 from slice_runner.domain.severity import Severity
@@ -61,10 +58,7 @@ class VerdictPayload(ContractModel):
 
     @classmethod
     def from_dict(cls, data: dict[str, object]) -> Self:
-        payload = cls._validated(data, "the judge did not emit the verdict of the rubric")
-        payload._reject_if_incoherent()
-
-        return payload
+        return cls._validated(data, "the judge did not emit the verdict of the rubric")
 
     @classmethod
     def from_domain(cls, verdict: Verdict) -> Self:
@@ -77,8 +71,3 @@ class VerdictPayload(ContractModel):
 
     def to_domain(self) -> Verdict:
         return Verdict(ruling=self.ruling, findings=tuple(finding.to_domain() for finding in self.findings))
-
-    def _reject_if_incoherent(self) -> None:
-        review = valida_veredicto(json.dumps(self.to_contract(), ensure_ascii=False))
-        if not review.passed:
-            raise InvalidVerdictError("; ".join(review.hallazgos))

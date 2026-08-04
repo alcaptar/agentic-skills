@@ -3,12 +3,23 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
+from slice_runner.domain.exceptions import InvalidVerdictError
+from slice_runner.domain.ruling import Ruling
+from slice_runner.domain.severity import Severity
+
 if TYPE_CHECKING:
     from slice_runner.domain.finding import Finding
-    from slice_runner.domain.ruling import Ruling
 
 
 @dataclass(frozen=True, kw_only=True, slots=True)
 class Verdict:
     ruling: Ruling
     findings: tuple[Finding, ...] = field(default_factory=tuple)
+
+    def __post_init__(self) -> None:
+        blocking = [finding for finding in self.findings if finding.severity is Severity.HIGH]
+        if self.ruling is Ruling.PASS and blocking:
+            raise InvalidVerdictError(
+                f"a PASA with {len(blocking)} hallazgo of severity {Severity.HIGH} contradicts the rubric: "
+                f"one high-severity finding means FALLA"
+            )

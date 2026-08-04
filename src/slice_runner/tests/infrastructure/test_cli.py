@@ -8,7 +8,7 @@ import pytest
 
 from slice_runner.infrastructure.cli import Cli
 from slice_runner.infrastructure.exit_code import ExitCode
-from slice_runner.tests.doubles import RecordedProcess, UnrunnableProcess
+from slice_runner.tests.doubles import RealExceptTheJudge, UnrunnableJudge
 from slice_runner.tests.git_repo import Git
 from slice_runner.tests.mothers.judge_output_mother import HarnessEnvelopeMother, JudgeVerdictMother
 from slice_runner.tests.mothers.repo_mother import RepoMother
@@ -20,7 +20,7 @@ class TestTheExitCodeOfTheVerdict:
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
         repo = RepoMother.with_the_slice_staged(tmp_path)
-        process = RecordedProcess(HarnessEnvelopeMother.carrying(JudgeVerdictMother.passing()))
+        process = RealExceptTheJudge(HarnessEnvelopeMother.carrying(JudgeVerdictMother.passing()))
 
         code = Cli(process=process).verify(repo=str(repo), base=Git.BASE_BRANCH)
 
@@ -31,7 +31,7 @@ class TestTheExitCodeOfTheVerdict:
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
         repo = RepoMother.with_the_slice_staged(tmp_path)
-        process = RecordedProcess(HarnessEnvelopeMother.recorded())
+        process = RealExceptTheJudge(HarnessEnvelopeMother.recorded())
 
         code = Cli(process=process).verify(repo=str(repo), base=Git.BASE_BRANCH)
 
@@ -48,21 +48,21 @@ class TestWhenThereIsNoVerdictToTrust:
     ) -> None:
         repo = RepoMother.with_the_slice_staged(tmp_path)
         incoherent = JudgeVerdictMother.passing_with(JudgeVerdictMother.high_severity_finding(path="mod.py"))
-        process = RecordedProcess(HarnessEnvelopeMother.carrying(incoherent))
+        process = RealExceptTheJudge(HarnessEnvelopeMother.carrying(incoherent))
 
         code = Cli(process=process).verify(repo=str(repo), base=Git.BASE_BRANCH)
 
         assert code == ExitCode.NO_USABLE_VERDICT
         output = capsys.readouterr()
         assert output.out == ""
-        assert "PASA con 1 hallazgo" in output.err
+        assert "PASA with 1 hallazgo" in output.err
 
     def test_a_judge_that_cannot_be_launched_exits_with_two_instead_of_with_the_code_of_the_veto(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
         repo = RepoMother.with_the_slice_staged(tmp_path)
 
-        code = Cli(process=UnrunnableProcess()).verify(repo=str(repo), base=Git.BASE_BRANCH)
+        code = Cli(process=UnrunnableJudge()).verify(repo=str(repo), base=Git.BASE_BRANCH)
 
         assert code == ExitCode.NO_USABLE_VERDICT
         output = capsys.readouterr()
@@ -73,11 +73,11 @@ class TestWhenThereIsNoVerdictToTrust:
 @pytest.mark.integration
 class TestWhenThereIsNothingToJudge:
     @pytest.fixture
-    def process(self) -> RecordedProcess:
-        return RecordedProcess(HarnessEnvelopeMother.carrying(JudgeVerdictMother.passing()))
+    def process(self) -> RealExceptTheJudge:
+        return RealExceptTheJudge(HarnessEnvelopeMother.carrying(JudgeVerdictMother.passing()))
 
     def test_with_nothing_staged_it_exits_with_three_without_spending_an_invocation_of_the_judge(
-        self, tmp_path: Path, capsys: pytest.CaptureFixture[str], process: RecordedProcess
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str], process: RealExceptTheJudge
     ) -> None:
         repo = RepoMother.with_nothing_staged(tmp_path)
 
@@ -88,7 +88,7 @@ class TestWhenThereIsNothingToJudge:
         assert "staged" in capsys.readouterr().err
 
     def test_a_base_that_does_not_resolve_does_not_exit_with_the_code_of_the_empty_index(
-        self, tmp_path: Path, capsys: pytest.CaptureFixture[str], process: RecordedProcess
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str], process: RealExceptTheJudge
     ) -> None:
         repo = RepoMother.with_the_slice_staged(tmp_path)
 
@@ -99,7 +99,7 @@ class TestWhenThereIsNothingToJudge:
         assert "does-not-exist" in capsys.readouterr().err
 
     def test_a_repo_that_does_not_resolve_exits_with_four_without_blaming_the_base(
-        self, tmp_path: Path, capsys: pytest.CaptureFixture[str], process: RecordedProcess
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str], process: RealExceptTheJudge
     ) -> None:
         code = Cli(process=process).verify(repo=str(RepoMother.outside_git(tmp_path)), base=Git.BASE_BRANCH)
 
@@ -112,7 +112,7 @@ class TestWhenThereIsNothingToJudge:
 class TestTheDiffTheJudgeReads:
     def test_the_judge_gets_the_diff_already_written_to_disk(self, tmp_path: Path) -> None:
         repo = RepoMother.with_the_slice_staged(tmp_path)
-        process = RecordedProcess(HarnessEnvelopeMother.recorded())
+        process = RealExceptTheJudge(HarnessEnvelopeMother.recorded())
 
         Cli(process=process).verify(repo=str(repo), base=Git.BASE_BRANCH)
 

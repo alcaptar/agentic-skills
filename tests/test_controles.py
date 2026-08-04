@@ -332,33 +332,6 @@ def test_diff_bundle_escribe_diff_y_lista(repo_con_rama: Path, tmp_path: Path) -
 
 
 @pytest.mark.integration
-def test_diff_bundle_devuelve_la_lista_y_coincide_con_lo_que_escribio(repo_con_rama: Path, tmp_path: Path) -> None:
-    """El resultado trae la lista de ficheros, no solo su ruta: quien llama por importacion la manda en el
-    prompt del juez y asi el alcance no depende de que el juez decida abrir un fichero.
-
-    El dato queda en dos sitios -en `ficheros` y en `files.txt`-, asi que lo que fija este test es que no
-    puedan divergir: el fichero sigue escribiendose porque el orquestador que todavia es la skill le pasa
-    la ruta al subagente.
-    """
-    out = tmp_path / "bundle"
-    res = controles.escribe_diff_bundle(str(repo_con_rama), Git.BASE_BRANCH, str(out))
-    assert res.ficheros == ["src/a.py", "tests/test_a.py"]
-    assert res.ficheros == (out / "files.txt").read_text(encoding="utf-8").split()
-    assert res.n_files == len(res.ficheros)
-
-
-@pytest.mark.integration
-def test_diff_bundle_no_mete_la_lista_en_el_json_del_orquestador(repo_con_rama: Path, tmp_path: Path) -> None:
-    """`to_dict` es lo que lee el orquestador, y ahi va la ruta y no la lista: meterle los nombres enteros
-    seria llenarle el contexto que tiene que durar todo el run, y no los necesita para nada.
-    """
-    res = controles.escribe_diff_bundle(str(repo_con_rama), Git.BASE_BRANCH, str(tmp_path / "bundle"))
-
-    assert "ficheros" not in res.to_dict()
-    assert res.to_dict()["files"] == res.files
-
-
-@pytest.mark.integration
 def test_diff_bundle_no_arrastra_el_avance_de_la_base(repo_con_base_avanzada: Path, tmp_path: Path) -> None:
     """Un commit en la base posterior al branch-point NO debe aparecer en el bundle: sin `--merge-base`
     saldria como borrado y el verificador cazaria un fantasma.
