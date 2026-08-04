@@ -56,6 +56,7 @@ select = [
     "PGH",  # pygrep-hooks
     "FURB", # refurb
     "PT",   # flake8-pytest-style
+    "TID",  # flake8-tidy-imports
 ]
 fixable = ["ALL"]
 future-annotations = true
@@ -107,6 +108,13 @@ mypy_path = "src:skills/slice-runner/scripts"
 # lo que sirve a las skills. El reparto lo razona
 # `docs/superpowers/specs/2026-07-31-orquestador-como-programa-design.md`.
 testpaths = ["tests", "src/slice_runner/tests"]
+# Un solo marcador, con un criterio que no se puede discutir en review: el test lanza un
+# subproceso de verdad (`git`, un comando declarado, un ejecutable). Es lo que cuesta tiempo y lo
+# que depende de la maquina; escribir en `tmp_path` no entra. Sirve para acortar el ciclo con
+# `-m "not integration"` y para que la suite entera siga siendo la vara al cerrar una slice.
+markers = [
+    "integration: lanza un subproceso real (se deselecciona con -m 'not integration')",
+]
 # controles.py y metrics.py se importan por nombre, via este pythonpath; `src` es lo que hace
 # importable `slice_runner` sin instalar el proyecto.
 pythonpath = ["src", "skills/slice-runner/scripts", "skills/deploy-watch/scripts"]

@@ -17,6 +17,7 @@ class RecordedProcess(Process):
         self.argv = argv
         self.stdin = stdin
         self.calls += 1
+
         return ProcessOutput(code=self._code, stdout=json.dumps(self._output), stderr="")
 
 

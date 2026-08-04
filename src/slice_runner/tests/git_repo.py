@@ -20,4 +20,5 @@ class Git:
         cls.run(root, "init", "-b", cls.BASE_BRANCH)
         cls.run(root, "config", "user.email", "t@example.com")
         cls.run(root, "config", "user.name", "test")
+
         return root

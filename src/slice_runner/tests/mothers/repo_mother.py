@@ -18,16 +18,19 @@ class RepoMother:
         Git.run(repo, "switch", "-c", "slice/01-x")
         (repo / "mod.py").write_text("def f() -> int:\n    return 2\n", encoding="utf-8")
         Git.run(repo, "add", "mod.py")
+
         return repo
 
     @staticmethod
     def with_nothing_staged(root: Path) -> Path:
         repo = RepoMother.with_the_slice_staged(root)
         Git.run(repo, "reset", "--hard")
+
         return repo
 
     @staticmethod
     def outside_git(root: Path) -> Path:
         outside = root / "not-a-repo"
         outside.mkdir()
+
         return outside

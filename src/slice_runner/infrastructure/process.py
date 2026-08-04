@@ -27,4 +27,5 @@ class LocalProcess(Process):
             finished = subprocess.run(argv, input=stdin, capture_output=True, text=True, check=False)
         except OSError as exc:
             raise ProcessNotRunnableError(f"{argv[0]}: {exc.strerror or exc}") from exc
+
         return ProcessOutput(code=finished.returncode, stdout=finished.stdout, stderr=finished.stderr)

@@ -12,6 +12,7 @@ from slice_runner.tests.mothers.judge_output_mother import HarnessEnvelopeMother
 from slice_runner.tests.mothers.repo_mother import RepoMother
 
 
+@pytest.mark.integration
 class TestTheExitCodeOfTheVerdict:
     def test_a_pass_exits_with_zero_and_emits_the_verdict_as_json_on_standard_output(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
@@ -38,6 +39,7 @@ class TestTheExitCodeOfTheVerdict:
         assert [finding["severidad"] for finding in emitted["hallazgos"]] == ["alta", "alta", "media", "media"]
 
 
+@pytest.mark.integration
 class TestWhenThereIsNoVerdictToTrust:
     def test_an_incoherent_verdict_exits_with_two_instead_of_being_treated_as_a_pass(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
@@ -66,6 +68,7 @@ class TestWhenThereIsNoVerdictToTrust:
         assert "claude" in output.err
 
 
+@pytest.mark.integration
 class TestWhenThereIsNothingToJudge:
     @pytest.fixture
     def process(self) -> RecordedProcess:
@@ -103,6 +106,7 @@ class TestWhenThereIsNothingToJudge:
         assert "the repo or the base" in capsys.readouterr().err
 
 
+@pytest.mark.integration
 class TestTheBundleTheJudgeReads:
     def test_the_judge_gets_the_slice_diff_already_materialised_on_disk(self, tmp_path: Path) -> None:
         repo = RepoMother.with_the_slice_staged(tmp_path)
@@ -116,6 +120,7 @@ class TestTheBundleTheJudgeReads:
     def _diff_the_prompt_points_at(prompt: str) -> str:
         pointers = [line.split(": ", 1)[1] for line in prompt.splitlines() if line.startswith("- `slice.diff`")]
         assert len(pointers) == 1
+
         return Path(pointers[0]).read_text(encoding="utf-8")
 
 

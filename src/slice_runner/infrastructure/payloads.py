@@ -23,6 +23,7 @@ class JsonSchema:
     def flat(cls, model: type[BaseModel]) -> dict[str, object]:
         schema = model.model_json_schema(by_alias=True)
         definitions: dict[str, dict[str, object]] = schema.pop(cls._DEFINITIONS, {})
+
         return cls._resolved_object(schema, definitions)
 
     @classmethod
@@ -30,6 +31,7 @@ class JsonSchema:
         reference = node.get(cls._REFERENCE)
         if isinstance(reference, str):
             return cls._resolved_object(definitions[reference.rsplit("/", 1)[-1]], definitions)
+
         return {key: cls._resolved(value, definitions) for key, value in node.items() if key not in cls._NOISE}
 
     @classmethod
@@ -38,6 +40,7 @@ class JsonSchema:
             return cls._resolved_object(node, definitions)
         if isinstance(node, list):
             return [cls._resolved(item, definitions) for item in node]
+
         return node
 
 
@@ -62,6 +65,7 @@ class ContractModel(BaseModel):
         given = reported["input"]
         if isinstance(given, str | int | float | type(None)):
             return f"{complaint} (got {given!r})"
+
         return complaint
 
     def to_contract(self) -> dict[str, object]:
@@ -81,7 +85,7 @@ class FindingPayload(ContractModel):
         return {str(declared.alias) for declared in cls.model_fields.values()}
 
     @classmethod
-    def of(cls, finding: Finding) -> FindingPayload:
+    def from_domain(cls, finding: Finding) -> Self:
         return cls.model_validate(
             {
                 "regla": finding.rule,
@@ -116,14 +120,15 @@ class VerdictPayload(ContractModel):
     def from_dict(cls, data: dict[str, object]) -> VerdictPayload:
         payload = cls._validated(data, "the judge did not emit the verdict of the rubric")
         payload._reject_if_incoherent()
+
         return payload
 
     @classmethod
-    def of(cls, verdict: Verdict) -> VerdictPayload:
+    def from_domain(cls, verdict: Verdict) -> Self:
         return cls.model_validate(
             {
                 "veredicto": verdict.ruling,
-                "hallazgos": [FindingPayload.of(finding) for finding in verdict.findings],
+                "hallazgos": [FindingPayload.from_domain(finding) for finding in verdict.findings],
             }
         )
 
@@ -166,6 +171,7 @@ class HarnessOutput(ContractModel):
         envelope = cls.from_dict(cls._decoded(output))
         if envelope.is_error:
             raise InvalidVerdictError("the harness marked the call as failed (`is_error`)")
+
         return envelope
 
     @classmethod
@@ -182,6 +188,7 @@ class HarnessOutput(ContractModel):
             ) from error
         if not isinstance(data, dict):
             raise InvalidVerdictError(f"the harness envelope has to be an object, not {type(data).__name__}")
+
         return data
 
     @staticmethod

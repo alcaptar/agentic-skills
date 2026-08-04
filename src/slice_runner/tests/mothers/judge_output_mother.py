@@ -39,6 +39,7 @@ class HarnessEnvelopeMother:
         data = json.loads((cls._DIRECTORY / f"{name}.json").read_text(encoding="utf-8"))
         if not isinstance(data, dict):
             raise TypeError(f"the recorded payload {name} is not an object")
+
         return data
 
     @classmethod

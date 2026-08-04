@@ -24,12 +24,14 @@ class TestVerifySlice:
     def bundler(self) -> Mock:
         bundler: Mock = create_autospec(DiffBundler, spec_set=True, instance=True)
         bundler.bundle.return_value = _DIFF
+
         return bundler
 
     @pytest.fixture
     def verifier(self) -> Mock:
         verifier: Mock = create_autospec(Verifier, spec_set=True, instance=True)
         verifier.verify.return_value = VerdictMother.passing()
+
         return verifier
 
     def test_the_judge_receives_the_bundle_that_was_just_packed_and_not_the_repo_and_base(

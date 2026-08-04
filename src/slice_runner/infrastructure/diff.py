@@ -24,6 +24,7 @@ class GitDiffBundler(DiffBundler):
         result = escribe_diff_bundle(repo, base, str(self._destination))
         if not result.passed:
             raise self._failure_of(result)
+
         return SliceDiff(
             slice_diff=Path(result.slice_diff),
             files=Path(result.files),
@@ -37,4 +38,5 @@ class GitDiffBundler(DiffBundler):
             return UnresolvableRepoOrBaseError(detail)
         if result.motivo is MotivoSinBundle.INDICE_VACIO:
             return EmptyIndexError(detail)
+
         return DiffNotBundlableError(detail)

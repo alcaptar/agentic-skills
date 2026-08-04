@@ -5,6 +5,7 @@ import pytest
 from slice_runner.infrastructure.process import LocalProcess, ProcessNotRunnableError
 
 
+@pytest.mark.integration
 class TestLocalProcess:
     _NOT_INSTALLED = "slice-runner-executable-that-is-not-installed"
 

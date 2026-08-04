@@ -1,0 +1,80 @@
+# Capa de infraestructura
+
+Adaptadores de los puertos, modelos de frontera y entrypoints. Es la unica capa que sabe que hay un
+subproceso, un `git` o un sistema de ficheros al otro lado.
+
+## Lo que llega de fuera se valida al entrar
+
+Sin excepcion, y sin `cast`: un `cast` no comprueba, solo calla a `mypy`.
+
+- **En la frontera del programa, el esquema es Pydantic.** Los payloads que cruzan la frontera -el
+  veredicto del juez y el sobre del harness- son `BaseModel` en
+  `src/slice_runner/infrastructure/payloads.py`.
+- **En los scripts de `skills/`, dataclass con `from_dict`/`from_row` a mano**, que rechaza clave
+  desconocida y tipo equivocado. Son stdlib puro (ver `docs/conventions/architecture.md`), asi que no
+  hay Pydantic que usar.
+
+## Modelos de frontera
+
+- `extra="forbid"`: una clave que no conocemos es un **rechazo**, no un campo ignorado. Significa que
+  el otro lado cambio de forma y nuestras suposiciones pueden estar viejas.
+- `frozen=True` y `populate_by_name=False`: se entra por el `alias`, que es el nombre del contrato, y
+  no por el nombre del campo.
+- **Un `alias` por campo, y de ahi salen las tres cosas**: el `--json-schema` que se le manda al juez,
+  la validacion de lo que devuelve, y el JSON que emite la interfaz de linea de comandos. Antes eran
+  tres copias cosidas a mano y existia un test de contrato solo para que no divergieran.
+- La conversion al dominio vive en el modelo: `from_domain(cls, entity) -> Self` para entrar,
+  `to_domain(self)` para salir. **Nunca un helper de mapeo en el caso de uso.**
+- Un `ValidationError` de Pydantic no sale de la capa: se traduce a la excepcion del dominio que el
+  entrypoint sabe mapear.
+
+### `strict=True` por campo, no a nivel de modelo
+
+A nivel de modelo rompe el parseo: en modo estricto un `StrEnum` deja de aceptar su propia cadena y un
+modelo anidado deja de aceptar un `dict`, con lo que el JSON del juez no valida.
+
+Por campo, donde la coercion es peligrosa:
+
+- **`is_error`**: sin estricto, Pydantic convierte la cadena `"no"` en `False`. O sea, el harness
+  declarando que la llamada fallo y el programa leyendo que no hubo fallo.
+- **`linea`**: sin estricto acepta `"11"`, `1.5` y `True`.
+
+La vara para decidir: **¿que valor equivocado pasaria por bueno, y que decision tomariamos con el?**
+Si la respuesta es "ninguna que importe", laxo vale.
+
+### El esquema se emite plano
+
+`JsonSchema.flat` resuelve los `$ref` y borra los `title`. Dos motivos: la **forma plana es la unica
+medida de verdad** contra un `claude -p` real, y los `title` solo gastan tokens del prompt. Hay un test
+que falla si vuelve a colarse una referencia.
+
+## Adaptadores
+
+- Implementan un puerto y nada mas. El nombre lleva la tecnologia: `GitDiffBundler`, `ClaudeVerifier`,
+  `LocalProcess`.
+- **Se reutiliza `skills/slice-runner/scripts/controles.py` por importacion** donde ya resuelve el
+  problema (materializar el diff, validar la coherencia del veredicto). Duplicar esa logica crearia una
+  segunda copia de una regla cuya fuente unica esta declarada.
+- Un codigo de salida distinto de cero **es un dato**, no una excepcion: se lanza el proceso con
+  `check=False` y el adaptador interpreta, porque el motivo esta en `stderr` y una excepcion lo borra.
+
+## Entrypoints
+
+- Una clase (`Cli`), con `main` como `@classmethod`, que `__main__.py` invoca.
+- **Es el unico sitio que monta el grafo de dependencias**: elige los adaptadores concretos y los
+  inyecta. No hay contenedor de inyeccion: hay un adaptador por puerto, y la costura de test la da el
+  constructor.
+- **Mapea las excepciones tipadas del dominio a codigos de salida**, con `IntEnum`. La respuesta va a
+  `stderr` y el resultado a `stdout`, siempre separados: hay tests que comprueban que un fallo no
+  escribe nada en `stdout`.
+- Los codigos de salida son contrato con quien invoca el programa: se documentan y no se reordenan.
+
+## Antipatrones
+
+- Un `cast` para callar a `mypy`.
+- `extra="ignore"` en un modelo de frontera. **Una clave desconocida tiene que romper.**
+- `strict=True` a nivel de modelo.
+- Un `ValidationError` de Pydantic escapando de la capa.
+- Duplicar en el programa una regla que ya vive en `controles.py`.
+- `check=True` al lanzar un proceso cuyo `stderr` lleva el motivo del fallo.
+- Un adaptador que ademas decide politica (reintentos, presupuesto).

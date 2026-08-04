@@ -44,6 +44,7 @@ class Cli:
     @classmethod
     def main(cls, argv: list[str] | None = None) -> int:
         arguments = cls.parser().parse_args(argv)
+
         return cls(process=LocalProcess()).verify(repo=arguments.repo, base=arguments.base)
 
     @classmethod
@@ -57,6 +58,7 @@ class Cli:
         verify = subcommands.add_parser("verify", help="judge the index of a slice against its base")
         verify.add_argument("--repo", required=True, help="path of the slice's repo")
         verify.add_argument("--base", required=True, help="base branch the diff is taken against")
+
         return parser
 
     def verify(self, *, repo: str, base: str) -> int:
@@ -73,7 +75,8 @@ class Cli:
                 f"the judge could not be launched, so there is no verdict: {error}", ExitCode.NO_USABLE_VERDICT
             )
 
-        print(json.dumps(VerdictPayload.of(verdict).to_contract(), ensure_ascii=False))
+        print(json.dumps(VerdictPayload.from_domain(verdict).to_contract(), ensure_ascii=False))
+
         return ExitCode.of(verdict.ruling)
 
     def _action(self) -> VerifySlice:
@@ -93,4 +96,5 @@ class Cli:
     @staticmethod
     def _reported(reason: str, code: ExitCode) -> ExitCode:
         print(reason, file=sys.stderr)
+
         return code

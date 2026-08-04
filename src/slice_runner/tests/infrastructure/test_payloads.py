@@ -22,19 +22,19 @@ class TestTheContractVocabulary:
 
 class TestWhatTheProgramEmits:
     def test_a_finding_without_a_line_leaves_the_key_out_instead_of_emitting_null(self) -> None:
-        emitted = FindingPayload.of(FindingMother.without_line()).to_contract()
+        emitted = FindingPayload.from_domain(FindingMother.without_line()).to_contract()
 
         assert "linea" not in emitted
 
     def test_a_finding_with_a_line_emits_it_as_an_integer_not_as_text(self) -> None:
-        emitted = FindingPayload.of(FindingMother.with_line(42)).to_contract()
+        emitted = FindingPayload.from_domain(FindingMother.with_line(42)).to_contract()
 
         assert emitted["linea"] == 42
 
     def test_the_verdict_serialises_with_the_contract_vocabulary_not_with_the_domain_names(self) -> None:
         verdict = VerdictMother.failing(FindingMother.without_line())
 
-        assert VerdictPayload.of(verdict).to_contract() == {
+        assert VerdictPayload.from_domain(verdict).to_contract() == {
             "veredicto": "FALLA",
             "hallazgos": [
                 {
@@ -50,7 +50,7 @@ class TestWhatTheProgramEmits:
     def test_a_verdict_survives_the_round_trip_through_the_contract_without_losing_a_field(self) -> None:
         verdict = VerdictMother.failing(FindingMother.with_line(11), FindingMother.without_line())
 
-        assert VerdictPayload.of(verdict).to_domain() == verdict
+        assert VerdictPayload.from_domain(verdict).to_domain() == verdict
 
 
 class TestTheSchemaTheJudgeReceives:
@@ -88,6 +88,7 @@ class TestTheSchemaTheJudgeReceives:
             assert isinstance(node, dict)
             node = node[key]
         assert isinstance(node, dict)
+
         return node
 
 

@@ -38,6 +38,7 @@ class JudgeInvocation:
     @property
     def prompt(self) -> str:
         diff = self.request.diff
+
         return "\n".join(
             [
                 self.request.instructions,
@@ -53,6 +54,7 @@ class JudgeInvocation:
     @property
     def _grants_to_read(self) -> list[str]:
         directories = [str(self.request.diff.slice_diff.parent), self.request.repo]
+
         return [argument for directory in directories for argument in ("--add-dir", directory)]
 
 
@@ -64,4 +66,5 @@ class ClaudeVerifier(Verifier):
         invocation = JudgeInvocation(request=request)
         output = self._process.run(invocation.argv, stdin=invocation.prompt)
         envelope = HarnessOutput.from_process(output)
+
         return VerdictPayload.from_dict(envelope.structured_output).to_domain()

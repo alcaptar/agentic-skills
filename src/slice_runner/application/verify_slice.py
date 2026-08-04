@@ -25,4 +25,5 @@ class VerifySlice:
 
     def execute(self, params: VerifySliceParams) -> Verdict:
         diff = self._bundler.bundle(repo=params.repo, base=params.base)
+
         return self._verifier.verify(VerificationRequest(repo=params.repo, instructions=params.instructions, diff=diff))

@@ -15,6 +15,7 @@ class Argv:
         values = self.values_of(flag)
         if len(values) != 1:
             raise AssertionError(f"expected exactly one {flag} with a value, found {len(values)}")
+
         return values[0]
 
     def values_of(self, flag: str) -> list[str]:
