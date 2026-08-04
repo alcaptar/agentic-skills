@@ -110,6 +110,7 @@ son los unicos puntos donde para y decides tu.
 | `skills/slice-runner/scripts/metrics.py` | Registro durable | Telemetria del loop (veredicto, reintentos de controles / de verificacion / de integracion continua, descartes del juez) en `~/.claude/slice-runner/metrics.jsonl`, fuera del repo. Sirve para decidir cuando subir de nivel de autonomia. |
 | `skills/deploy-watch/scripts/deploy_core.py` | Nucleo puro | La decision go/no-go: umbrales relativos a baseline, confirmacion sostenida, scorecard, veredicto. La toma el codigo, no la impresion del agente. |
 | `skills/deploy-watch/references/monitoring.md`, `skills/slice-spec/references/slicing.md`, `skills/slice-spec/references/observabilidad.md` | Documentos de referencia | Conocimiento cargado bajo demanda: que senales mirar y como leerlas, como trocear, y como decidir la observabilidad de una slice. |
+| `src/slice_runner/` | Programa orquestador | El trozo del pipeline que ya **no** es un agente: hoy solo `verify`, que empaqueta el diff de la slice, invoca al juez como una llamada sin estado (`claude -p` con el esquema del veredicto) y emite el veredicto por salida estandar con su codigo de salida. Capas separadas (`domain/`, `application/`, `infrastructure/`) y tests co-localizados. El *por que* de esta forma esta en `docs/superpowers/specs/2026-07-31-orquestador-como-programa-design.md`. |
 | `docs/` | Memoria del proyecto | `design-notes.md` (cada decision y su porque, para no re-derivarlo), `research-agent-loops.md` (research citado), `maturity-map.md` (donde encaja el pipeline), `12-factor.md` (auditoria contra los 12 factores + el spike que mide si `claude -p` sirve de agente sin estado), `docs/superpowers/specs/` (un design-doc por cambio). |
 | `tests/` | Unit tests offline | La logica pura se cubre en **dos arboles**: aqui la de los scripts -cuerpo del issue, controles, metricas, nucleo del deploy- y los **contratos duplicados a proposito** entre skills; en `src/slice_runner/tests/`, co-localizada dentro del paquete, la de `src/slice_runner/`. |
 | `smoke/` | Smoke test real | Lo que los unit tests no pueden cubrir: la entrada/salida real contra `gh` y la integracion continua de GitHub Actions, con una fixture autocontenida y las recetas para provocar cada camino de fallo. Ver `smoke/README.md`. |
@@ -336,6 +337,7 @@ criterio de degradacion) extrayendo el vocabulario de ambos lados, y comprueba q
 este repo citada en los `.md` existe**. Si editas una skill y eso se pone rojo, has movido una mitad
 del contrato.
 
-El toolchain lo gestiona `uv`, asi que no hay que instalar nada a mano. Las convenciones de este repo
-y el ritual antes de tocar una skill estan en `CLAUDE.md`; el detalle de cada decision, en
-`docs/design-notes.md`.
+El toolchain lo gestiona `uv`, asi que no hay que instalar nada a mano; lanzalo siempre por ahi,
+porque el programa de `src/` depende de `pydantic` y los scripts de `skills/` son stdlib puro. Las
+convenciones de este repo y el ritual antes de tocar una skill estan en `CLAUDE.md`; el detalle de
+cada decision, en `docs/design-notes.md`.

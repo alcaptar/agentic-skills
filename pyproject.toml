@@ -1,9 +1,9 @@
 # Este repo no es un paquete: es la fuente de verdad de las skills, su codigo Python son los
 # scripts deterministas que las skills invocan (`controles.py`, `issue_body.py`,
 # `deploy_core.py`, `metrics.py`, `discover_conventions.py`, `discover_controles.py`), y desde
-# ahora tambien el programa orquestador de `src/slice_runner/`. El `[project]` existe solo para
-# que `uv` pueda gestionar el toolchain de calidad; `package = false` lo deja claro, y el
-# ejecutable instalable no es de esta fase.
+# ahora tambien el programa orquestador de `src/slice_runner/`. El `[project]` existe para que `uv`
+# gestione el toolchain de calidad y la unica dependencia de ejecucion; `package = false` deja claro
+# que no se construye nada, y el ejecutable instalable no es de esta fase.
 #
 # Consecuencia de `package = false` que hay que saber para lanzar el programa: uv no instala el
 # proyecto, y `python -m` solo mira el directorio actual, asi que la ruta de importacion se pone a
@@ -18,6 +18,9 @@
 name = "agentic-skills"
 version = "0.0.0"
 requires-python = ">=3.11"
+# Unica dependencia de ejecucion, y solo del programa de `src/`: los `.py` de `skills/` siguen
+# siendo stdlib puro porque los invoca la skill con el `python3` que haya en la maquina, sin `uv`.
+dependencies = ["pydantic>=2.7"]
 
 [tool.uv]
 package = false

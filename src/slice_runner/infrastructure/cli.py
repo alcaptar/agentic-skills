@@ -4,68 +4,93 @@ import argparse
 import json
 import sys
 import tempfile
+from enum import IntEnum
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from slice_runner.application.verify_slice import VerifySlice, VerifySliceParams
 from slice_runner.domain.diff import DiffNotBundlableError, UnresolvableRepoOrBaseError
 from slice_runner.domain.verdict import InvalidVerdictError, Ruling
 from slice_runner.infrastructure.diff import GitDiffBundler
-from slice_runner.infrastructure.process import LocalProcess, Process, ProcessNotRunnableError
-from slice_runner.infrastructure.prompt import JUDGE_PROMPT_PATH, read_agent_prompt
+from slice_runner.infrastructure.payloads import VerdictPayload
+from slice_runner.infrastructure.process import LocalProcess, ProcessNotRunnableError
+from slice_runner.infrastructure.prompt import AgentPrompt
 from slice_runner.infrastructure.verifier import ClaudeVerifier
 
-EXIT_BY_RULING = {Ruling.PASS: 0, Ruling.FAIL: 1}
-EXIT_NO_USABLE_VERDICT = 2
-EXIT_NO_DIFF = 3
-EXIT_USAGE_ERROR = 4
+if TYPE_CHECKING:
+    from slice_runner.infrastructure.process import Process
 
 
-def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        prog="python -m slice_runner",
-        description="Slice orchestrator. See `docs/superpowers/specs/` for the design.",
-    )
-    sub = parser.add_subparsers(dest="command", required=True)
+class ExitCode(IntEnum):
+    PASS = 0
+    FAIL = 1
+    NO_USABLE_VERDICT = 2
+    NO_DIFF = 3
+    USAGE_ERROR = 4
 
-    verify = sub.add_parser("verify", help="judge the index of a slice against its base")
-    verify.add_argument("--repo", required=True, help="path of the slice's repo")
-    verify.add_argument("--base", required=True, help="base branch the diff is taken against")
-    return parser
-
-
-def _bundle_destination_outside_the_repo() -> Path:
-    return Path(tempfile.mkdtemp(prefix="slice-runner-"))
-
-
-def run_verify(*, repo: str, base: str, process: Process) -> int:
-    action = VerifySlice(
-        bundler=GitDiffBundler(destination=_bundle_destination_outside_the_repo()),
-        verifier=ClaudeVerifier(process=process),
-    )
-    params = VerifySliceParams(
-        repo=repo,
-        base=base,
-        instructions=read_agent_prompt(JUDGE_PROMPT_PATH),
-    )
-    try:
-        verdict = action.execute(params)
-    except UnresolvableRepoOrBaseError as exc:
-        print(f"the repo or the base requested do not resolve: {exc}", file=sys.stderr)
-        return EXIT_USAGE_ERROR
-    except DiffNotBundlableError as exc:
-        print(f"there is no diff to verify: {exc}", file=sys.stderr)
-        return EXIT_NO_DIFF
-    except InvalidVerdictError as exc:
-        print(f"the judge left no usable verdict: {exc}", file=sys.stderr)
-        return EXIT_NO_USABLE_VERDICT
-    except ProcessNotRunnableError as exc:
-        print(f"the judge could not be launched, so there is no verdict: {exc}", file=sys.stderr)
-        return EXIT_NO_USABLE_VERDICT
-
-    print(json.dumps(verdict.to_dict(), ensure_ascii=False))
-    return EXIT_BY_RULING[verdict.ruling]
+    @classmethod
+    def of(cls, ruling: Ruling) -> ExitCode:
+        match ruling:
+            case Ruling.PASS:
+                return cls.PASS
+            case Ruling.FAIL:
+                return cls.FAIL
 
 
-def main(argv: list[str] | None = None) -> int:
-    args = build_parser().parse_args(argv)
-    return run_verify(repo=args.repo, base=args.base, process=LocalProcess())
+class Cli:
+    def __init__(self, *, process: Process) -> None:
+        self._process = process
+
+    @classmethod
+    def main(cls, argv: list[str] | None = None) -> int:
+        arguments = cls.parser().parse_args(argv)
+        return cls(process=LocalProcess()).verify(repo=arguments.repo, base=arguments.base)
+
+    @classmethod
+    def parser(cls) -> argparse.ArgumentParser:
+        parser = argparse.ArgumentParser(
+            prog="python -m slice_runner",
+            description="Slice orchestrator. See `docs/superpowers/specs/` for the design.",
+        )
+        subcommands = parser.add_subparsers(dest="command", required=True)
+
+        verify = subcommands.add_parser("verify", help="judge the index of a slice against its base")
+        verify.add_argument("--repo", required=True, help="path of the slice's repo")
+        verify.add_argument("--base", required=True, help="base branch the diff is taken against")
+        return parser
+
+    def verify(self, *, repo: str, base: str) -> int:
+        try:
+            verdict = self._action().execute(self._params(repo=repo, base=base))
+        except UnresolvableRepoOrBaseError as error:
+            return self._reported(f"the repo or the base requested do not resolve: {error}", ExitCode.USAGE_ERROR)
+        except DiffNotBundlableError as error:
+            return self._reported(f"there is no diff to verify: {error}", ExitCode.NO_DIFF)
+        except InvalidVerdictError as error:
+            return self._reported(f"the judge left no usable verdict: {error}", ExitCode.NO_USABLE_VERDICT)
+        except ProcessNotRunnableError as error:
+            return self._reported(
+                f"the judge could not be launched, so there is no verdict: {error}", ExitCode.NO_USABLE_VERDICT
+            )
+
+        print(json.dumps(VerdictPayload.of(verdict).to_contract(), ensure_ascii=False))
+        return ExitCode.of(verdict.ruling)
+
+    def _action(self) -> VerifySlice:
+        return VerifySlice(
+            bundler=GitDiffBundler(destination=self._bundle_destination_outside_the_repo()),
+            verifier=ClaudeVerifier(process=self._process),
+        )
+
+    @staticmethod
+    def _params(*, repo: str, base: str) -> VerifySliceParams:
+        return VerifySliceParams(repo=repo, base=base, instructions=AgentPrompt.read(AgentPrompt.JUDGE))
+
+    @staticmethod
+    def _bundle_destination_outside_the_repo() -> Path:
+        return Path(tempfile.mkdtemp(prefix="slice-runner-"))
+
+    @staticmethod
+    def _reported(reason: str, code: ExitCode) -> ExitCode:
+        print(reason, file=sys.stderr)
+        return code

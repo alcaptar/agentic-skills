@@ -106,23 +106,31 @@ make check   # linting (ruff check + format) + mypy strict + pytest; todo debe e
 compara los contratos que hoy estan escritos dos veces (motivos de `bloqueada:` en `SKILL.md`
 vs `issue_body.py`, veredictos de `metrics.py`, el JSON del verificador en `agents/` y en
 `slice-runner`, las herramientas que `src/slice_runner/` concede al juez vs las que declara su
-prompt, las claves del hallazgo en la rubrica vs el mapeo `FINDING_CONTRACT_KEYS` del programa, los
+prompt, las claves del hallazgo en la rubrica vs los alias de `FindingPayload` en el programa, los
 veredictos y las severidades de la rubrica vs los que el programa acepta, y el criterio de
 degradacion sin subagentes duplicado a proposito en `slice-runner` y `deploy-watch`). Cada test
 **extrae** el vocabulario de ambos lados y los compara, asi que reescribir las dos copias a la vez
-pasa y tocar solo una falla. Si editas una
-skill y `make check` se pone rojo ahi, es que has movido una mitad del contrato: mueve la otra.
+pasa y tocar solo una falla. Si editas una skill y `make check` se pone rojo ahi, es que has movido
+una mitad del contrato: mueve la otra.
 
 Lo compartido por la suite de `tests/` vive en `tests/conftest.py`: la fixture `repo` y los helpers
 de escribir/stagear. No vuelvas a definirlos en un fichero de tests -hubo tres `_write` con firmas
 distintas a la vez, y leer cualquier test obligaba a subir a la cabecera-.
 
-Lo que comparten **los dos** arboles de test vive en `src/slice_runner/tests/git_repo.py`:
-`BASE_BRANCH`, el helper de `git` y el repo recien inicializado, que `tests/conftest.py` importa de
-ahi. La direccion es esa porque `src` entra en el `pythonpath` y el directorio de `conftest` no, asi
-que `src/slice_runner/tests/` no puede consumir de `tests/` y al reves si. `BASE_BRANCH` se fija
-explicitamente (`git init -b`) porque `init.defaultBranch` es config de la maquina y el bloque de
-`diff-bundle` se cae en una que use `main`.
+Lo que comparten **los dos** arboles de test vive en `src/slice_runner/tests/git_repo.py`: la clase
+`Git`, con la rama base, el helper de `git` y el repo recien inicializado, que `tests/conftest.py`
+importa de ahi. La direccion es esa porque `src` entra en el `pythonpath` y el directorio de
+`conftest` no, asi que `src/slice_runner/tests/` no puede consumir de `tests/` y al reves si.
+`Git.BASE_BRANCH` se fija explicitamente (`git init -b`) porque `init.defaultBranch` es config de la
+maquina y el bloque de `diff-bundle` se cae en una que use `main`.
+
+**Los objetos de dominio de un test los construye un Object Mother**, no el propio test:
+`src/slice_runner/tests/mothers/` (`FindingMother`, `VerdictMother`, `VerificationRequestMother`,
+`JudgeVerdictMother`, `HarnessEnvelopeMother`, `RepoMother`). Un mother da defaults sensatos y deja
+que cada test nombre **solo** lo que su caso cambia, que es lo que hace legible el assert; sin ellos
+el mismo diccionario de hallazgo se copiaba en dos ficheros de test con valores distintos y ninguno
+decia por que. Los dobles de puerto viven en `src/slice_runner/tests/doubles.py` y la lectura de un
+`argv` en `src/slice_runner/tests/argv.py`: tampoco se reescriben por fichero.
 
 `tests/test_skill_contracts.py` comprueba ademas que **toda ruta de este repo citada en los `.md`
 existe**, en `test_every_repo_path_cited_in_the_docs_still_exists`. Aqui no se enlaza con markdown:
@@ -135,8 +143,11 @@ ficheros no se escanean, cada uno por lo que **es**:
 
 Targets sueltos: `make test`, `make check-types`, `make check-style`, `make check-format`,
 `make fix-linting`. El toolchain lo gestiona `uv` (grupo `dev` de `pyproject.toml`), asi que no
-hay que instalar nada a mano: `uv run` lo resuelve la primera vez. `python3 -m pytest` tambien
-funciona si tienes pytest global, pero `make check` es la vara completa. Para acortar el feedback
+hay que instalar nada a mano: `uv run` lo resuelve la primera vez. **Lanzalo siempre con `uv`**: el
+programa de `src/` depende de `pydantic` (unica dependencia de ejecucion del repo), asi que un
+`python3 -m pytest` con el interprete del sistema pasa o falla segun lo que tengas instalado, y eso
+no es una vara. Los `.py` de `skills/` siguen siendo stdlib puro a proposito, porque los invoca la
+skill con el `python3` de la maquina y ahi no hay `uv` que resuelva nada. Para acortar el feedback
 loop en una sesion con agente, `make test PYTEST_ARGS="--nf -x --tb=short --disable-warnings
 --color=no --no-header"`.
 
@@ -161,13 +172,21 @@ desviacion declarada (`S`, ver abajo). Lo que hay que saber antes de escribir un
   veredicto del juez (`PASA`/`FALLA`, `alta`/`media`/`baja`) y las claves de su JSON (`regla`,
   `evidencia`...), porque los fija la rubrica de `agents/slice-verifier.md`, los valida
   `skills/slice-runner/scripts/controles.py` y traducirlos rompe el contrato en vez de renombrar
-  una variable. **Clave del contrato no es nombre de campo**: los campos del dataclass van en
-  ingles y la traduccion vive en un unico mapeo (`FINDING_CONTRACT_KEYS`), que es tambien de donde
-  sale el `--json-schema` y lo que el test de contrato compara contra la rubrica -asi el contrato
-  se lee en un sitio en vez de estar repartido por cada `to_dict` y cada `from_dict`-. Esto ya
-  estaba dicho en `docs/design-notes.md` y aun asi
+  una variable. **Clave del contrato no es nombre de campo**: los campos van en ingles y la
+  traduccion vive en el `alias` de cada campo del modelo de frontera (`FindingPayload`), que es
+  tambien de donde sale el `--json-schema` y lo que el test de contrato compara contra la rubrica
+  -asi el contrato se lee en un sitio en vez de estar repartido por cada `to_dict` y cada
+  `from_dict`-. Esto ya estaba dicho en `docs/design-notes.md` y aun asi
   `src/slice_runner/` nacio entero en castellano: una convencion escrita donde nadie la carga antes
   de escribir no mide nada, por eso vive aqui.
+- **Ninguna funcion suelta a nivel de modulo: toda funcion cuelga de una clase.** Metodo,
+  `@classmethod` o `@staticmethod`, incluido el `main` de un ejecutable (`Cli.main`, que
+  `__main__.py` invoca). Lo que antes era una funcion privada de modulo mas un puñado de constantes
+  sueltas es casi siempre una clase esperando a nacer, y ponerle nombre es lo que dice **de quien**
+  es esa logica: `verifier_argv` + `_prompt` + `_readable_dirs` + dos constantes de modulo se leen
+  como cinco cosas independientes, y son una sola (`JudgeInvocation`). No es cosmetico: mientras
+  fueron funciones sueltas nadie noto que a la invocacion le faltaba el `--add-dir` sin el que el
+  juez no ve el diff.
 - **Los dataclasses son `frozen=True, kw_only=True, slots=True`.** Sin excepciones: si algo se
   construia por partes y luego se mutaba, se construye una vez al final o se usa
   `dataclasses.replace`. Es lo que hizo falta en `parse_body` y en `comprueba_higiene_pr`.
@@ -181,9 +200,25 @@ desviacion declarada (`S`, ver abajo). Lo que hay que saber antes de escribir un
   que ni el formato del issue ni el JSON de salida cambian, pero las comparaciones y los `choices`
   de cada CLI salen de un solo sitio. En `argparse`, `choices=[str(x) for x in Enum]`: con
   `list(Enum)` el mensaje de error muestra el `repr` del miembro.
-- **Lo que llega de fuera se valida al entrar.** El payload de `deploy_core` y las filas del log de
-  `metrics` se convierten a dataclass en un `from_dict`/`from_row` que rechaza clave desconocida y
-  tipo equivocado. Nada de `cast`: un `cast` no comprueba, solo calla a mypy.
+- **Lo que llega de fuera se valida al entrar, y en las fronteras el schema es Pydantic.** Los dos
+  payloads que cruzan la frontera del programa -el veredicto del juez y el sobre del harness- son
+  `BaseModel` en `src/slice_runner/infrastructure/payloads.py`, con `extra="forbid"` (una clave que
+  no conocemos es un rechazo, no un campo ignorado) y `alias` por campo. De ahi salen **las tres
+  cosas a la vez**: el `--json-schema` que se le manda al juez, la validacion de lo que devuelve y
+  el JSON que emite la CLI; antes eran tres copias cosidas a mano y el test de contrato existia
+  para que no divergieran. **El dominio no lleva Pydantic**: sigue siendo dataclasses, y la
+  conversion vive en el `of()`/`to_domain()` del payload.
+  - `strict=True` **por campo** donde la coercion es peligrosa (`linea`, `is_error`), no a nivel de
+    modelo: en modo estricto un `StrEnum` deja de aceptar su propia cadena y un modelo anidado deja
+    de aceptar un `dict`, con lo que no se podria parsear el JSON del juez. Y sin el estricto en
+    `is_error`, Pydantic convierte `"no"` en `False` -o sea, el harness declarando un fallo y
+    nosotros leyendo que no lo hubo-.
+  - El schema se emite **plano**: `JsonSchema.flat` resuelve los `$ref` y borra los `title`, porque
+    la forma plana es la unica que se ha medido de verdad contra `claude -p` y los `title` solo
+    gastan tokens del prompt.
+- Los payloads de `deploy_core` y las filas del log de `metrics` siguen siendo dataclasses con su
+  `from_dict`/`from_row` a mano: son scripts stdlib, sin `uv`, y meterles una dependencia no vale la
+  pena. Nada de `cast` en ninguno de los dos estilos: un `cast` no comprueba, solo calla a mypy.
 
 **Las dos primeras reglas son nuevas y los scripts viejos no las cumplen todavia**: los `.py` de
 `skills/` estan en castellano y llenos de docstrings -y una de esas docstrings,

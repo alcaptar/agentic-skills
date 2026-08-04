@@ -25,9 +25,9 @@ import controles
 import issue_body
 import metrics
 from slice_runner.domain import verdict
-from slice_runner.domain.diff import SliceDiff
-from slice_runner.domain.verification import VerificationRequest
-from slice_runner.infrastructure import verifier
+from slice_runner.infrastructure.payloads import FindingPayload
+from slice_runner.infrastructure.verifier import JudgeInvocation
+from slice_runner.tests.mothers.verification_mother import VerificationRequestMother
 
 _ROOT = Path(__file__).resolve().parents[1]
 _RUNNER = _ROOT / "skills" / "slice-runner" / "SKILL.md"
@@ -146,11 +146,7 @@ def test_verifier_verdict_schema_is_identical_in_the_agent_and_in_the_runner() -
     )
 
 
-_A_VERIFICATION_REQUEST = VerificationRequest(
-    repo="/repos/project",
-    instructions="You are the adversarial verifier.",
-    diff=SliceDiff(slice_diff=Path("/bundle/slice.diff"), files=Path("/bundle/files.txt"), n_files=1),
-)
+_A_VERIFICATION_REQUEST = VerificationRequestMother.with_the_bundle_in(Path("/bundle"))
 
 
 def test_tools_the_program_grants_the_judge_are_the_ones_his_prompt_declares() -> None:
@@ -169,7 +165,7 @@ def test_tools_the_program_grants_the_judge_are_the_ones_his_prompt_declares() -
     assert len(listed) == 1, f"expected exactly one `tools:` line in the header of {_rel(_VERIFIER)}"
     declared = {tool.strip() for tool in listed[0].split(",")}
 
-    argv = verifier.verifier_argv(_A_VERIFICATION_REQUEST)
+    argv = JudgeInvocation(request=_A_VERIFICATION_REQUEST).argv
     granted = set(argv[argv.index("--tools") + 1].split(","))
 
     assert declared == granted, (
@@ -216,15 +212,15 @@ def _documented_finding() -> dict[str, object]:
 def test_the_finding_keys_in_the_rubric_are_the_ones_the_program_maps_its_fields_to() -> None:
     """The rubric states the finding's keys; the program's fields reach them through one mapping.
 
-    A key documented but not mapped is dropped on the way in -- silently, because the JSON schema
-    the program sends is built from that same mapping, so the judge is never even asked for it. The
-    reverse makes the program demand a key the rubric never told the judge to emit.
+    A key documented but not aliased is dropped on the way in -- silently, because the JSON schema
+    the program sends is generated from those same aliases, so the judge is never even asked for it.
+    The reverse makes the program demand a key the rubric never told the judge to emit.
     """
     documented = set(_documented_finding())
 
-    mapped = set(verdict.FINDING_CONTRACT_KEYS.values())
+    mapped = FindingPayload.contract_keys()
     assert documented == mapped, (
-        f"the finding in {_rel(_VERIFIER)} and slice_runner's `FINDING_CONTRACT_KEYS` disagree: "
+        f"the finding in {_rel(_VERIFIER)} and the aliases of slice_runner's `FindingPayload` disagree: "
         f"only in the rubric {sorted(documented - mapped)}, only in the program {sorted(mapped - documented)}"
     )
 
