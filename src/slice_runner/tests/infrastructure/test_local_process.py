@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from slice_runner.infrastructure.process import LocalProcess, ProcessNotRunnableError
+from slice_runner.infrastructure.local_process import LocalProcess
+from slice_runner.infrastructure.process import ProcessNotRunnableError
 
 
 @pytest.mark.integration

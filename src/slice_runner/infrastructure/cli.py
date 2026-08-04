@@ -4,37 +4,25 @@ import argparse
 import json
 import sys
 import tempfile
-from enum import IntEnum
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from slice_runner.application.verify_slice import VerifySlice, VerifySliceParams
-from slice_runner.domain.diff import DiffNotBundlableError, UnresolvableRepoOrBaseError
-from slice_runner.domain.verdict import InvalidVerdictError, Ruling
-from slice_runner.infrastructure.diff import GitDiffBundler
-from slice_runner.infrastructure.payloads import VerdictPayload
-from slice_runner.infrastructure.process import LocalProcess, ProcessNotRunnableError
-from slice_runner.infrastructure.prompt import AgentPrompt
-from slice_runner.infrastructure.verifier import ClaudeVerifier
+from slice_runner.application.actions.verify_slice import VerifySlice, VerifySliceParams
+from slice_runner.domain.exceptions import (
+    DiffNotBundlableError,
+    InvalidVerdictError,
+    UnresolvableRepoOrBaseError,
+)
+from slice_runner.infrastructure.agent_prompt import AgentPrompt
+from slice_runner.infrastructure.claude_verifier import ClaudeVerifier
+from slice_runner.infrastructure.exit_code import ExitCode
+from slice_runner.infrastructure.git_diff_bundler import GitDiffBundler
+from slice_runner.infrastructure.local_process import LocalProcess
+from slice_runner.infrastructure.process import ProcessNotRunnableError
+from slice_runner.infrastructure.verdict_payload import VerdictPayload
 
 if TYPE_CHECKING:
     from slice_runner.infrastructure.process import Process
-
-
-class ExitCode(IntEnum):
-    PASS = 0
-    FAIL = 1
-    NO_USABLE_VERDICT = 2
-    NO_DIFF = 3
-    USAGE_ERROR = 4
-
-    @classmethod
-    def of(cls, ruling: Ruling) -> ExitCode:
-        match ruling:
-            case Ruling.PASS:
-                return cls.PASS
-            case Ruling.FAIL:
-                return cls.FAIL
 
 
 class Cli:

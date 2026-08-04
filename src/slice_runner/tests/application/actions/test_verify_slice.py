@@ -5,9 +5,10 @@ from unittest.mock import Mock, create_autospec
 
 import pytest
 
-from slice_runner.application.verify_slice import VerifySlice
-from slice_runner.domain.diff import DiffBundler, DiffNotBundlableError
-from slice_runner.domain.verification import Verifier
+from slice_runner.application.actions.verify_slice import VerifySlice
+from slice_runner.domain.diff_bundler import DiffBundler
+from slice_runner.domain.exceptions import DiffNotBundlableError
+from slice_runner.domain.verifier import Verifier
 from slice_runner.tests.mothers.verdict_mother import VerdictMother
 from slice_runner.tests.mothers.verification_mother import (
     SliceDiffMother,

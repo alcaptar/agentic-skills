@@ -71,6 +71,18 @@ extend-safe-fixes = ["TC001", "TC002", "TC003", "TC004", "UP037"]
 # arriba -relativo a la raiz- no los alcanza y necesitan su propia linea.
 "src/slice_runner/tests/*" = ["PLR0913", "PLR2004"]
 
+[tool.ruff.lint.flake8-type-checking]
+# Pydantic resuelve las anotaciones de campo **en runtime** al crear el modelo, asi que un tipo que
+# `TC002` mueva a `if TYPE_CHECKING:` deja el modelo "not fully defined" y revienta en la primera
+# validacion, no al importar. Declarar las bases evaluadas en runtime es lo que impide ese autofix.
+# Paso de verdad al partir `payloads.py` en un modulo por concepto: mientras `Ruling` y `Severity`
+# compartian el import con `Finding` y `Verdict` -que si se usan en runtime- ruff no tenia nada que
+# mover; con un import por simbolo, los vio como solo-tipos y los movio.
+runtime-evaluated-base-classes = [
+    "pydantic.BaseModel",
+    "slice_runner.infrastructure.contract_model.ContractModel",
+]
+
 [tool.ruff.lint.isort]
 # Los scripts se importan por nombre (via `pythonpath` de pytest), asi que isort no puede
 # deducir que son first-party y los mezclaria con las dependencias de terceros. Declararlos

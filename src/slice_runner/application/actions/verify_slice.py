@@ -3,12 +3,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from slice_runner.domain.verification import VerificationRequest
+from slice_runner.domain.verification_request import VerificationRequest
 
 if TYPE_CHECKING:
-    from slice_runner.domain.diff import DiffBundler
+    from slice_runner.domain.diff_bundler import DiffBundler
     from slice_runner.domain.verdict import Verdict
-    from slice_runner.domain.verification import Verifier
+    from slice_runner.domain.verifier import Verifier
 
 
 @dataclass(frozen=True, kw_only=True, slots=True)

@@ -1,35 +1,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from enum import StrEnum
+from typing import TYPE_CHECKING
 
-
-class Ruling(StrEnum):
-    PASS = "PASA"
-    FAIL = "FALLA"
-
-
-class Severity(StrEnum):
-    HIGH = "alta"
-    MEDIUM = "media"
-    LOW = "baja"
-
-
-@dataclass(frozen=True, kw_only=True, slots=True)
-class Finding:
-    rule: str
-    path: str
-    severity: Severity
-    evidence: str
-    detail: str
-    line: int | None = None
+if TYPE_CHECKING:
+    from slice_runner.domain.finding import Finding
+    from slice_runner.domain.ruling import Ruling
 
 
 @dataclass(frozen=True, kw_only=True, slots=True)
 class Verdict:
     ruling: Ruling
     findings: tuple[Finding, ...] = field(default_factory=tuple)
-
-
-class InvalidVerdictError(ValueError):
-    pass

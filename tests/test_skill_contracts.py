@@ -24,9 +24,10 @@ from pathlib import Path
 import controles
 import issue_body
 import metrics
-from slice_runner.domain import verdict
-from slice_runner.infrastructure.payloads import FindingPayload
-from slice_runner.infrastructure.verifier import JudgeInvocation
+from slice_runner.domain.ruling import Ruling
+from slice_runner.domain.severity import Severity
+from slice_runner.infrastructure.judge_invocation import JudgeInvocation
+from slice_runner.infrastructure.verdict_payload import FindingPayload
 from slice_runner.tests.mothers.verification_mother import VerificationRequestMother
 
 _ROOT = Path(__file__).resolve().parents[1]
@@ -235,8 +236,8 @@ def test_the_verdicts_and_severities_in_the_rubric_are_the_ones_the_program_acce
     schema = _sole_json_block(_VERIFIER)
     assert isinstance(schema, dict)
 
-    assert {v.strip() for v in str(schema["veredicto"]).split("|")} == set(verdict.Ruling)
-    assert {s.strip() for s in str(_documented_finding()["severidad"]).split("|")} == set(verdict.Severity)
+    assert {v.strip() for v in str(schema["veredicto"]).split("|")} == set(Ruling)
+    assert {s.strip() for s in str(_documented_finding()["severidad"]).split("|")} == set(Severity)
 
 
 _CRITERION_ANCHOR = "declarar la degradacion en el artefacto"

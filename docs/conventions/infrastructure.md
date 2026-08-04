@@ -7,9 +7,10 @@ subproceso, un `git` o un sistema de ficheros al otro lado.
 
 Sin excepcion, y sin `cast`: un `cast` no comprueba, solo calla a `mypy`.
 
-- **En la frontera del programa, el esquema es Pydantic.** Los payloads que cruzan la frontera -el
-  veredicto del juez y el sobre del harness- son `BaseModel` en
-  `src/slice_runner/infrastructure/payloads.py`.
+- **En la frontera del programa, el esquema es Pydantic.** Los payloads que cruzan la frontera son
+  `BaseModel`, uno por concepto: `verdict_payload.py` (el contrato con el juez), `harness_output.py`
+  (el sobre del harness) y `contract_model.py` (la base comun: `extra="forbid"`, la traduccion del
+  `ValidationError` y el volcado al contrato).
 - **En los scripts de `skills/`, dataclass con `from_dict`/`from_row` a mano**, que rechaza clave
   desconocida y tipo equivocado. Son stdlib puro (ver `docs/conventions/architecture.md`), asi que no
   hay Pydantic que usar.
@@ -48,10 +49,18 @@ Si la respuesta es "ninguna que importe", laxo vale.
 medida de verdad** contra un `claude -p` real, y los `title` solo gastan tokens del prompt. Hay un test
 que falla si vuelve a colarse una referencia.
 
+### Cuidado con `TC002` y las anotaciones de Pydantic
+
+Pydantic resuelve las anotaciones de campo **en runtime** al crear el modelo. Un tipo que `ruff` mueva
+a `if TYPE_CHECKING:` deja el modelo *not fully defined* y **revienta en la primera validacion, no al
+importar**: un smoke que solo importe el modulo lo da por bueno. Lo evita
+`runtime-evaluated-base-classes` en `pyproject.toml`, no la disciplina de quien escribe.
+
 ## Adaptadores
 
-- Implementan un puerto y nada mas. El nombre lleva la tecnologia: `GitDiffBundler`, `ClaudeVerifier`,
-  `LocalProcess`.
+- Implementan un puerto y nada mas. **El modulo se llama como la implementacion**, no como el puerto:
+  `git_diff_bundler.py`, `claude_verifier.py`, `local_process.py`. Asi el par puerto/adaptador se lee
+  en el nombre y caben dos implementaciones sin renombrar nada.
 - **Se reutiliza `skills/slice-runner/scripts/controles.py` por importacion** donde ya resuelve el
   problema (materializar el diff, validar la coherencia del veredicto). Duplicar esa logica crearia una
   segunda copia de una regla cuya fuente unica esta declarada.

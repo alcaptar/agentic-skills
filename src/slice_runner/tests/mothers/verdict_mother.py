@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-from slice_runner.domain.verdict import Finding, Ruling, Severity, Verdict
+from slice_runner.domain.finding import Finding
+from slice_runner.domain.ruling import Ruling
+from slice_runner.domain.severity import Severity
+from slice_runner.domain.verdict import Verdict
 
 
 class FindingMother:

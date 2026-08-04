@@ -4,7 +4,7 @@ Los casos de uso. Orquestan; la logica vive en el dominio y la entrada/salida de
 
 ## Forma de un caso de uso
 
-- Un modulo por caso de uso, en `application/`, con el nombre del caso de uso en snake_case.
+- Un modulo por caso de uso, en `application/actions/`, con el nombre del caso de uso en snake_case.
 - La clase **sin coletilla**: `VerifySlice`, no `VerifySliceUseCase` ni `VerifySliceService`.
 - Metodo principal `execute(params: <Name>Params) -> <Result>`.
 - `<Name>Params` -y `<Name>Result` si devuelve datos- son dataclasses frozen **en el mismo modulo**.
@@ -29,12 +29,14 @@ class VerifySlice:
   el entrypoint.
 - **No decide politica de reintentos ni de presupuesto** mientras eso siga viviendo en la skill.
 
-## Direccion a seguir
+## Escrituras y lecturas
 
-Cuando aparezca la primera **lectura** (leer el estado de un issue, por ejemplo), separar
-`application/actions/` (escrituras) de `application/queries/` (lecturas), con la carpeta como
-discriminador y sin sufijo en el nombre de la clase. Es la convencion de la casa
-(`mo.arcen-pi`). Hoy hay un solo caso de uso y la carpeta seria estructura sin sujeto.
+**La carpeta es el discriminador**, no un sufijo en el nombre de la clase: `application/actions/` para
+lo que muta estado, `application/queries/` para lo que solo lee. Si un caso de uso muta y ademas
+devuelve datos, es una action.
+
+Hoy solo existe `actions/`, porque no hay ninguna lectura todavia. `queries/` se crea con la primera,
+no antes.
 
 ## Antipatrones
 

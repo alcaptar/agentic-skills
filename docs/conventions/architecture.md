@@ -18,24 +18,32 @@ dependencia ahi es un fallo en la maquina de otra persona.
 
 ```
 src/slice_runner/
-  domain/                 value objects, puertos (ABC), excepciones del dominio
-  application/            casos de uso
-  infrastructure/         adaptadores, modelos de frontera, entrypoints
-  tests/                  co-localizados, espejando las capas
+  domain/
+    {value_object}.py     un value object por modulo (finding, verdict, slice_diff...)
+    {enum}.py             un vocabulario cerrado por modulo (ruling, severity)
+    {puerto}.py           un puerto por fichero (diff_bundler, verifier)
+    exceptions.py         todas las excepciones del dominio
+  application/
+    actions/{name}.py     casos de uso que mutan estado
+  infrastructure/
+    {impl}_{puerto}.py    el adaptador se llama como su implementacion
+    {payload}.py          un modelo de frontera por concepto
+    cli.py                entrypoint
+  tests/                  co-localizados, espejando las capas de arriba
     mothers/              Object Mothers
     payloads/             payloads reales grabados
   py.typed
   __main__.py
 ```
 
-- **Los tests del programa viven dentro del paquete**, no en `tests/`. El reparto de los dos arboles
-  esta en `docs/conventions/testing.md`.
+- **Un concepto por modulo**: un value object, un enum, un puerto o un adaptador por fichero. Las
+  excepciones del dominio son la excepcion a la regla y viven juntas en `domain/exceptions.py`, porque
+  se leen como un catalogo y quien las captura suele querer ver la jerarquia de una vez.
+- **Los tests del programa viven dentro del paquete**, no en `tests/`, y **espejan esta estructura**:
+  un fichero de test por modulo de produccion. El reparto de los dos arboles esta en
+  `docs/conventions/testing.md`.
 - El flujo de dependencias va hacia dentro: `infrastructure` conoce `application` y `domain`,
   `application` conoce `domain`, y `domain` no conoce a nadie.
-- Un fichero por concepto. **Direccion a seguir cuando el dominio crezca**: un puerto por fichero y
-  un value object por modulo, con las excepciones en `domain/exceptions.py`. Hoy `domain/diff.py`
-  agrupa el value object, el puerto y sus excepciones porque hay tres value objects y dos puertos en
-  total; separarlos ahora seria estructura sin sujeto.
 
 ## Herramientas
 

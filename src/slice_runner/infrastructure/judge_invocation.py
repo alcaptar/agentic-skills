@@ -4,13 +4,10 @@ import json
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar
 
-from slice_runner.domain.verification import Verifier
-from slice_runner.infrastructure.payloads import HarnessOutput, VerdictPayload
+from slice_runner.infrastructure.verdict_payload import VerdictPayload
 
 if TYPE_CHECKING:
-    from slice_runner.domain.verdict import Verdict
-    from slice_runner.domain.verification import VerificationRequest
-    from slice_runner.infrastructure.process import Process
+    from slice_runner.domain.verification_request import VerificationRequest
 
 
 @dataclass(frozen=True, kw_only=True, slots=True)
@@ -56,15 +53,3 @@ class JudgeInvocation:
         directories = [str(self.request.diff.slice_diff.parent), self.request.repo]
 
         return [argument for directory in directories for argument in ("--add-dir", directory)]
-
-
-class ClaudeVerifier(Verifier):
-    def __init__(self, *, process: Process) -> None:
-        self._process = process
-
-    def verify(self, request: VerificationRequest) -> Verdict:
-        invocation = JudgeInvocation(request=request)
-        output = self._process.run(invocation.argv, stdin=invocation.prompt)
-        envelope = HarnessOutput.from_process(output)
-
-        return VerdictPayload.from_dict(envelope.structured_output).to_domain()

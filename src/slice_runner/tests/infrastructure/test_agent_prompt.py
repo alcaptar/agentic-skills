@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from slice_runner.infrastructure.prompt import AgentPrompt
+from slice_runner.infrastructure.agent_prompt import AgentPrompt
 
 if TYPE_CHECKING:
     from pathlib import Path

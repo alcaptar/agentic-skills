@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, ClassVar
 
-from slice_runner.application.verify_slice import VerifySliceParams
-from slice_runner.domain.diff import SliceDiff
-from slice_runner.domain.verification import VerificationRequest
+from slice_runner.application.actions.verify_slice import VerifySliceParams
+from slice_runner.domain.slice_diff import SliceDiff
+from slice_runner.domain.verification_request import VerificationRequest
 
 if TYPE_CHECKING:
     from pathlib import Path

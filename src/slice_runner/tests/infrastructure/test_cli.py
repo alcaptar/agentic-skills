@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import json
+import shutil
 from pathlib import Path
 
 import pytest
 
-from slice_runner.infrastructure.cli import Cli, ExitCode
+from slice_runner.infrastructure.cli import Cli
+from slice_runner.infrastructure.exit_code import ExitCode
 from slice_runner.tests.doubles import RecordedProcess, UnrunnableProcess
 from slice_runner.tests.git_repo import Git
 from slice_runner.tests.mothers.judge_output_mother import HarnessEnvelopeMother, JudgeVerdictMother
@@ -122,6 +124,36 @@ class TestTheBundleTheJudgeReads:
         assert len(pointers) == 1
 
         return Path(pointers[0]).read_text(encoding="utf-8")
+
+
+@pytest.mark.integration
+class TestTheEntrypoint:
+    @pytest.fixture(autouse=True)
+    def judge_out_of_reach(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        toolbox = tmp_path / "only-git"
+        toolbox.mkdir()
+        (toolbox / "git").symlink_to(shutil.which("git") or "/usr/bin/git")
+        monkeypatch.setenv("PATH", str(toolbox))
+
+    def test_main_wires_the_parsed_arguments_into_the_run(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        repo = RepoMother.with_nothing_staged(tmp_path)
+
+        code = Cli.main(["verify", "--repo", str(repo), "--base", Git.BASE_BRANCH])
+
+        assert code == ExitCode.NO_DIFF
+        assert "staged" in capsys.readouterr().err
+
+    def test_main_reports_the_base_it_was_given_and_not_a_guessed_one(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        repo = RepoMother.with_the_slice_staged(tmp_path)
+
+        code = Cli.main(["verify", "--repo", str(repo), "--base", "a-base-that-is-not-there"])
+
+        assert code == ExitCode.USAGE_ERROR
+        assert "a-base-that-is-not-there" in capsys.readouterr().err
 
 
 class TestTheDocumentedCommand:

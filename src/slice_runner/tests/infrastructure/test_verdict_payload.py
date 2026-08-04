@@ -5,19 +5,18 @@ from dataclasses import fields
 
 import pytest
 
-from slice_runner.domain.verdict import Finding, InvalidVerdictError, Ruling, Severity
-from slice_runner.infrastructure.payloads import FindingPayload, HarnessOutput, VerdictPayload
-from slice_runner.infrastructure.process import ProcessOutput
-from slice_runner.tests.mothers.judge_output_mother import HarnessEnvelopeMother, JudgeVerdictMother
+from slice_runner.domain.exceptions import InvalidVerdictError
+from slice_runner.domain.finding import Finding
+from slice_runner.domain.ruling import Ruling
+from slice_runner.domain.severity import Severity
+from slice_runner.infrastructure.verdict_payload import FindingPayload, VerdictPayload
+from slice_runner.tests.mothers.judge_output_mother import JudgeVerdictMother
 from slice_runner.tests.mothers.verdict_mother import FindingMother, VerdictMother
 
 
 class TestTheContractVocabulary:
-    def test_every_field_of_a_finding_has_a_contract_key_so_that_none_is_dropped_on_the_way_out(self) -> None:
+    def test_every_field_of_a_finding_has_a_payload_field_so_that_none_is_dropped_on_the_way_out(self) -> None:
         assert {declared.name for declared in fields(Finding)} == set(FindingPayload.model_fields)
-
-    def test_the_contract_keys_are_the_ones_the_rubric_is_written_in_not_the_names_of_the_domain(self) -> None:
-        assert FindingPayload.contract_keys() == {"regla", "path", "severidad", "evidencia", "detalle", "linea"}
 
 
 class TestWhatTheProgramEmits:
@@ -118,7 +117,7 @@ class TestWhatTheJudgeIsAllowedToReturn:
     def test_a_finding_named_with_the_fields_of_the_domain_is_rejected_because_the_contract_is_the_rubric(self) -> None:
         in_english: dict[str, object] = {"rule": "boundaries", "path": "src/x.py", "severity": "alta"}
 
-        with pytest.raises(InvalidVerdictError, match="rule"):
+        with pytest.raises(InvalidVerdictError, match=r"`hallazgos\.0\.rule` extra inputs are not permitted"):
             VerdictPayload.from_dict(JudgeVerdictMother.failing(in_english))
 
     def test_a_severity_outside_the_rubric_is_rejected_saying_which_one_it_was(self) -> None:
@@ -141,39 +140,3 @@ class TestWhatTheJudgeIsAllowedToReturn:
 
         with pytest.raises(InvalidVerdictError, match="detalle"):
             VerdictPayload.from_dict(JudgeVerdictMother.failing(incomplete))
-
-
-class TestTheEnvelopeOfTheHarness:
-    def test_a_key_we_do_not_know_is_rejected_instead_of_ignored(self) -> None:
-        with pytest.raises(InvalidVerdictError, match="campo_nuevo_del_harness"):
-            HarnessOutput.from_dict(HarnessEnvelopeMother.plus(campo_nuevo_del_harness=1))
-
-    def test_a_wrong_type_is_rejected(self) -> None:
-        with pytest.raises(InvalidVerdictError, match=r"`is_error`.*valid boolean"):
-            HarnessOutput.from_dict(HarnessEnvelopeMother.plus(is_error="no"))
-
-    def test_one_without_structured_output_is_rejected_instead_of_falling_back_to_result(self) -> None:
-        with pytest.raises(InvalidVerdictError, match="structured_output"):
-            HarnessOutput.from_dict(HarnessEnvelopeMother.without("structured_output"))
-
-    def test_a_call_the_harness_declares_failed_is_rejected(self) -> None:
-        output = self._output_carrying(HarnessEnvelopeMother.plus(is_error=True))
-
-        with pytest.raises(InvalidVerdictError, match="marked the call as failed"):
-            HarnessOutput.from_process(output)
-
-    def test_output_that_is_not_json_is_rejected_with_what_the_process_left_on_stderr(self) -> None:
-        output = ProcessOutput(code=1, stdout="", stderr="error: unknown option '--tools'")
-
-        with pytest.raises(InvalidVerdictError, match="unknown option"):
-            HarnessOutput.from_process(output)
-
-    def test_output_that_is_json_but_not_an_object_is_rejected(self) -> None:
-        output = ProcessOutput(code=0, stdout="[]", stderr="")
-
-        with pytest.raises(InvalidVerdictError, match="has to be an object"):
-            HarnessOutput.from_process(output)
-
-    @staticmethod
-    def _output_carrying(envelope: dict[str, object]) -> ProcessOutput:
-        return ProcessOutput(code=0, stdout=json.dumps(envelope), stderr="")

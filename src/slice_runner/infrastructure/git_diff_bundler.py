@@ -4,13 +4,9 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from controles import MotivoSinBundle, escribe_diff_bundle
-from slice_runner.domain.diff import (
-    DiffBundler,
-    DiffNotBundlableError,
-    EmptyIndexError,
-    SliceDiff,
-    UnresolvableRepoOrBaseError,
-)
+from slice_runner.domain.diff_bundler import DiffBundler
+from slice_runner.domain.exceptions import DiffNotBundlableError, EmptyIndexError, UnresolvableRepoOrBaseError
+from slice_runner.domain.slice_diff import SliceDiff
 
 if TYPE_CHECKING:
     from controles import ResultadoBundle
