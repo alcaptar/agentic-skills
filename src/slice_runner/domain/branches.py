@@ -1,0 +1,8 @@
+from __future__ import annotations
+
+from abc import ABC, abstractmethod
+
+
+class Branches(ABC):
+    @abstractmethod
+    def exists(self, *, worktree: str, name: str) -> bool: ...

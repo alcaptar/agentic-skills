@@ -26,6 +26,7 @@ src/slice_runner/
     exceptions.py         las excepciones del dominio
   application/
     actions/{name}.py     casos de uso que mutan estado
+    queries/{name}.py     casos de uso de solo lectura, con un puerto detras
   infrastructure/
     {impl}_{puerto}.py    el adaptador se llama como su implementacion
     {payload}.py          un modelo de frontera por concepto

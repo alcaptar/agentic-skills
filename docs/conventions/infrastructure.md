@@ -113,6 +113,11 @@ importar**: un smoke que solo importe el modulo lo da por bueno. Lo evita
   programa diciendo la verdad sobre lo que el programa manda.
 - Un codigo de salida distinto de cero **es un dato**, no una excepcion: se lanza el proceso con
   `check=False` y el adaptador interpreta, porque el motivo esta en `stderr` y una excepcion lo borra.
+- **`GhForum` reutiliza `GhCommandFailedError` de `run_repository.py`** para un exit distinto de cero de
+  `gh pr list`, en vez de declarar su propia excepcion: es el mismo fallo -un comando de `gh` que sale
+  mal- y vive donde lo necesito el primer adaptador que lo tuvo. Su casa natural es un modulo de
+  frontera de `gh` compartido, y se hara cuando exista un tercer adaptador de `gh`; hasta entonces, el
+  acoplamiento declarado sale mas barato que una tercera copia de la misma excepcion.
 
 ## Entrypoints
 

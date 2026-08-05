@@ -41,6 +41,10 @@ class UnreadableIssueError(ValueError):
     pass
 
 
+class UnreadableForumError(ValueError):
+    pass
+
+
 class EmptyIssueBodyError(UnreadableIssueError):
     pass
 

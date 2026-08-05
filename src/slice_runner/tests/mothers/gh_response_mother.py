@@ -23,3 +23,11 @@ class GhResponseMother:
             raise TypeError("the recorded children payload is not an array")
 
         return data
+
+    @classmethod
+    def pull_request_of_branch(cls) -> list[dict[str, object]]:
+        data = json.loads((cls._DIRECTORY / "pull-request-of-branch.json").read_text(encoding="utf-8"))
+        if not isinstance(data, list):
+            raise TypeError("the recorded pull request payload is not an array")
+
+        return data
