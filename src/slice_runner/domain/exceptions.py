@@ -35,3 +35,19 @@ class EmptyIndexError(DiffNotReadableError):
 
 class UnresolvableRepoOrBaseError(DiffNotReadableError):
     pass
+
+
+class UnreadableIssueError(ValueError):
+    pass
+
+
+class EmptyIssueBodyError(UnreadableIssueError):
+    pass
+
+
+class MalformedConventionLineError(UnreadableIssueError):
+    pass
+
+
+class LaggingSearchIndexError(ValueError):
+    pass

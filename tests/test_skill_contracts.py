@@ -28,8 +28,11 @@ import controles
 import issue_body
 import metrics
 from slice_runner.domain.budgets import Budgets
+from slice_runner.domain.issue_label import IssueLabel
 from slice_runner.domain.ruling import Ruling
+from slice_runner.domain.run_state import RunState
 from slice_runner.domain.severity import Severity
+from slice_runner.domain.step import Step
 from slice_runner.infrastructure.exit_code import ExitCode
 from slice_runner.infrastructure.local_skill_library import LocalSkillLibrary
 from slice_runner.infrastructure.slice_verifier_judge import SliceVerifierJudge
@@ -89,6 +92,35 @@ def test_blocked_reasons_written_by_the_runner_are_the_ones_the_parser_knows() -
         f"only in the skill {sorted(written - set(issue_body.MotivoBloqueada))}, "
         f"only in the parser {sorted(set(issue_body.MotivoBloqueada) - written)}"
     )
+
+
+def test_every_runstate_closure_the_translator_is_asked_about_returns_a_label_or_none_only_for_merged() -> None:
+    """The translator from `RunState` to a GitHub label pays the debt `domain.md` declared.
+
+    `RunState` duplicates, in English, what `issue_body.Estado`/`MotivoBloqueada` already say in
+    Spanish, and nothing compared the two sides until the translator that writes to a subissue
+    existed. `MERGED` is the one closure with no label on purpose -- GitHub closes the issue itself
+    when the pull request merges -- so it is the sole `None` this loop may see; any other closure
+    coming back empty is a step the translator forgot to project.
+    """
+    for state in RunState:
+        if state is RunState.OPEN:
+            continue
+        label = IssueLabel.of(state=state, step=Step.IMPLEMENT)
+        if state is RunState.MERGED:
+            assert label is None, "MERGED closes the issue on GitHub's side and must carry no label"
+        else:
+            assert label in set(IssueLabel), f"{state} projects to {label!r}, which is not a label the vocabulary knows"
+
+
+def test_no_label_in_the_vocabulary_lacks_a_source_in_the_translator_or_the_entry_point_a_person_writes() -> None:
+    """`PENDING` is the one label the translator never produces: a person writes it by hand when
+    they create a subissue (`CLAUDE.md`'s slice). Every other member has to come out of some
+    `(RunState, Step)` pair the translator projects, or it is dead vocabulary nobody ever writes.
+    """
+    produced = {IssueLabel.of(state=state, step=step) for state in RunState for step in Step} - {None}
+
+    assert set(IssueLabel) - produced == {IssueLabel.PENDING}
 
 
 def test_ci_states_branched_on_by_step_9_are_the_ones_the_script_emits() -> None:

@@ -54,11 +54,15 @@ ingles- de lo que ya dicen `Estado`/`MotivoBloqueada` en `skills/slice-runner/sc
 `Veredicto` en `skills/slice-runner/scripts/metrics.py`. Es la misma decision que el resto del programa
 -**no importa nada de `skills/`**, ver `docs/conventions/infrastructure.md`- y el mismo motivo: el flujo
 viejo esta condenado, sus scripts son stdlib puro con otra vara, y acoplarse a ellos para ahorrar la
-duplicacion sale mas caro que la duplicacion. Lo que **falta** y es deuda declarada, no olvido: nada
-compara hoy los dos lados, porque la traduccion (`blocked-ci-red` -> `bloqueada: ci-roja`) es trabajo de
-la frontera y **no existe frontera todavia** -la escribe la slice que mueve el estado del run a
-subissues-. El contrato se mide **cuando exista el traductor**, que es donde el test tiene sujeto; hasta
-entonces ningun cierre real sale mal porque nadie escribe el estado desde el programa.
+duplicacion sale mas caro que la duplicacion. El traductor es `IssueLabel.of(state, step)`
+(`domain/issue_label.py`): un `match` exhaustivo sobre el par que proyecta cada cierre de `RunState` a la
+etiqueta de GitHub que escribe la frontera (`infrastructure/run_repository.py`), total o explicito -un
+par sin regla no cae en una rama generica, rompe en `mypy` en cuanto se anade un cierre o un paso sin
+proyectarlo-. El contrato ya esta medido, no pendiente: `tests/test_skill_contracts.py` comprueba que
+todo cierre de `RunState` distinto de `MERGED` (que no lleva etiqueta porque cierra GitHub el issue solo,
+via `Closes` de la pull request) proyecta a una de las ocho etiquetas del vocabulario, y que ninguna
+etiqueta del vocabulario carece de fuente -sale de una proyeccion del traductor, o es `estado:pendiente`,
+la unica que escribe una persona a mano al crear la subissue-.
 
 Dos decisiones mas de `StateMachine` que no son deriva, y estan aqui para que no se "arreglen" hacia el
 lado facil:
