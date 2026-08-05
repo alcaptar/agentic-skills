@@ -48,7 +48,19 @@ class RunRepository:
     def read_children(self, *, repo: str, parent: int, expected: int) -> tuple[SubIssue, ...]:
         search = f"parent-issue:{repo}#{parent}"
         output = self._run(
-            ["gh", "issue", "list", "--repo", repo, "--search", search, "--json", "number,title,body,labels"]
+            [
+                "gh",
+                "issue",
+                "list",
+                "--repo",
+                repo,
+                "--search",
+                search,
+                "--state",
+                "all",
+                "--json",
+                "number,title,body,labels,state",
+            ]
         )
         items = self._decoded_array(output)
         children = tuple(self._sub_issue_from(GhSubIssuePayload.from_dict(item)) for item in items)
@@ -155,6 +167,7 @@ class RunRepository:
             number=payload.number,
             slice_id=cls._slice_id_of(payload.title),
             title=payload.title,
+            state=payload.state,
             repo=parsed.repo,
             run=parsed.run,
             label=cls._label_of(payload.labels),

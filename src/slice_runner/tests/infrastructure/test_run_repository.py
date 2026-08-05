@@ -14,6 +14,7 @@ from slice_runner.domain.exceptions import (
     UnreadableRunError,
 )
 from slice_runner.domain.issue_label import IssueLabel
+from slice_runner.domain.issue_state import IssueState
 from slice_runner.domain.source import Source, SourceKind
 from slice_runner.infrastructure.process import ProcessOutput
 from slice_runner.infrastructure.run_repository import GhCommandFailedError, RunRepository
@@ -152,12 +153,25 @@ class TestReadingTheChildren:
         argv = Argv(process.calls[0].argv)
         assert process.calls[0].argv[:3] == ["gh", "issue", "list"]
         assert argv.value_of("--search") == f"parent-issue:{_REPO}#43"
-        assert argv.value_of("--json") == "number,title,body,labels"
+        assert argv.value_of("--state") == "all"
+        assert argv.value_of("--json") == "number,title,body,labels,state"
 
     def test_ordering_is_by_the_slice_number_in_the_title_not_by_the_order_the_search_returned(self) -> None:
         out_of_order = [
-            {"number": 1, "title": "slice-02 (b): later slice, first in the response", "body": "", "labels": []},
-            {"number": 2, "title": "slice-01 (a): earlier slice, last in the response", "body": "", "labels": []},
+            {
+                "number": 1,
+                "title": "slice-02 (b): later slice, first in the response",
+                "body": "",
+                "labels": [],
+                "state": "OPEN",
+            },
+            {
+                "number": 2,
+                "title": "slice-01 (a): earlier slice, last in the response",
+                "body": "",
+                "labels": [],
+                "state": "OPEN",
+            },
         ]
 
         children = RunRepository(process=self._process(children=out_of_order)).read_children(
@@ -192,6 +206,13 @@ class TestReadingTheChildren:
         assert by_slice["slice-01"].label is IssueLabel.IN_PROGRESS
         assert by_slice["slice-02"].label is IssueLabel.PENDING
 
+    def test_the_gh_issue_state_becomes_the_subissue_state(self) -> None:
+        children = RunRepository(process=self._process()).read_children(repo=_REPO, parent=43, expected=2)
+
+        by_slice = {child.slice_id: child for child in children}
+        assert by_slice["slice-01"].state is IssueState.CLOSED
+        assert by_slice["slice-02"].state is IssueState.OPEN
+
     def test_a_search_that_returns_fewer_subissues_than_the_graph_knows_about_raises_instead_of_deciding_short(
         self,
     ) -> None:
@@ -199,7 +220,7 @@ class TestReadingTheChildren:
             RunRepository(process=self._process()).read_children(repo=_REPO, parent=43, expected=3)
 
     def test_a_subissue_title_with_no_slice_identifier_is_rejected_instead_of_sorted_arbitrarily(self) -> None:
-        malformed = [{"number": 1, "title": "an issue with no slice id", "body": "", "labels": []}]
+        malformed = [{"number": 1, "title": "an issue with no slice id", "body": "", "labels": [], "state": "OPEN"}]
 
         with pytest.raises(UnreadableIssueError, match="slice-NN"):
             RunRepository(process=self._process(children=malformed)).read_children(repo=_REPO, parent=43, expected=1)
@@ -211,6 +232,7 @@ class TestReadingTheChildren:
                 "title": "slice-01 (x): y",
                 "body": "INTENCION: z\n\n<!-- slice-runner:estado\n{not json}\n-->\n",
                 "labels": [],
+                "state": "OPEN",
             }
         ]
 
