@@ -2,10 +2,19 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
+from unittest.mock import Mock, create_autospec
 
 from slice_runner.infrastructure.judge_invocation import JudgeInvocation
 from slice_runner.infrastructure.local_process import LocalProcess
 from slice_runner.infrastructure.process import Process, ProcessNotRunnableError, ProcessOutput
+
+
+class ProcessDoubles:
+    @staticmethod
+    def exiting(*, code: int = 0, stdout: str = "", stderr: str = "") -> Mock:
+        process: Mock = create_autospec(Process, spec_set=True, instance=True)
+        process.run.return_value = ProcessOutput(code=code, stdout=stdout, stderr=stderr)
+        return process
 
 
 class RecordedProcess(Process):
