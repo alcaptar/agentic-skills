@@ -82,6 +82,9 @@ class RunRepository:
 
         self._run(["gh", "issue", "edit", str(issue), "--repo", repo, "--body-file", "-"], stdin=updated)
 
+    def write_understanding(self, *, repo: str, issue: int, understanding: str) -> None:
+        self._run(["gh", "issue", "comment", str(issue), "--repo", repo, "--body-file", "-"], stdin=understanding)
+
     def write_label(self, *, repo: str, issue: int, remove: IssueLabel, add: IssueLabel) -> None:
         argv = [
             "gh",
@@ -95,6 +98,26 @@ class RunRepository:
             "--remove-label",
             remove.value,
         ]
+        self._edit_with_label_fallback(argv, repo=repo, issue=issue, add=add)
+
+    def pause_for_alignment(self, *, repo: str, issue: int, remove: IssueLabel) -> None:
+        argv = [
+            "gh",
+            "issue",
+            "edit",
+            str(issue),
+            "--repo",
+            repo,
+            "--add-label",
+            IssueLabel.AWAITING_ALIGNMENT.value,
+            "--remove-label",
+            remove.value,
+            "--add-assignee",
+            "@me",
+        ]
+        self._edit_with_label_fallback(argv, repo=repo, issue=issue, add=IssueLabel.AWAITING_ALIGNMENT)
+
+    def _edit_with_label_fallback(self, argv: list[str], *, repo: str, issue: int, add: IssueLabel) -> None:
         output = self._process.run(argv, stdin="")
         if output.code == 0:
             return
