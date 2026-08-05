@@ -6,3 +6,6 @@ from abc import ABC, abstractmethod
 class Forum(ABC):
     @abstractmethod
     def open_pull_request(self, *, repo: str, branch: str) -> int | None: ...
+
+    @abstractmethod
+    def create_pull_request(self, *, repo: str, branch: str, base: str, title: str, body: str) -> int: ...

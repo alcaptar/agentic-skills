@@ -14,6 +14,9 @@ from slice_runner.tests.mothers.gh_response_mother import GhResponseMother
 
 _REPO = "alcaptar/agentic-skills"
 _BRANCH = "slice/05-prechecks-deterministas"
+_BASE = "master"
+_TITLE = "feat(entrega-de-la-slice): commitear solo lo juzgado y abrir la pull request"
+_BODY = "## Intencion\nsin esto el programa verifica y no entrega\n\nCloses #46\n"
 
 
 class TestGhForum:
@@ -57,3 +60,48 @@ class TestGhForum:
 
         with pytest.raises(UnreadableForumError):
             GhForum(process=process).open_pull_request(repo=_REPO, branch=_BRANCH)
+
+
+class TestGhForumOpeningTheSlicePullRequest:
+    @staticmethod
+    def _created(*, url: str = "https://github.com/alcaptar/agentic-skills/pull/48") -> ScriptedProcess:
+        return ScriptedProcess(ProcessOutput(code=0, stdout=f"{url}\n", stderr=""))
+
+    def _create(self, process: ScriptedProcess) -> int:
+        return GhForum(process=process).create_pull_request(
+            repo=_REPO, branch=_BRANCH, base=_BASE, title=_TITLE, body=_BODY
+        )
+
+    def test_it_asks_gh_for_a_draft_of_this_branch_against_this_base(self) -> None:
+        process = self._created()
+
+        self._create(process)
+
+        argv = Argv(process.calls[0].argv)
+        assert process.calls[0].argv[:3] == ["gh", "pr", "create"]
+        assert argv.value_of("--repo") == _REPO
+        assert argv.value_of("--base") == _BASE
+        assert argv.value_of("--head") == _BRANCH
+        assert argv.value_of("--title") == _TITLE
+        assert argv.contains("--draft")
+
+    def test_the_body_travels_by_stdin_so_no_shell_has_to_survive_its_markdown(self) -> None:
+        process = self._created()
+
+        self._create(process)
+
+        assert Argv(process.calls[0].argv).value_of("--body-file") == "-"
+        assert process.calls[0].stdin == _BODY
+
+    def test_the_number_of_the_pull_request_is_read_from_the_url_gh_printed(self) -> None:
+        assert self._create(self._created()) == 48
+
+    def test_a_stdout_that_is_not_a_pull_request_url_is_rejected_instead_of_read_as_a_number(self) -> None:
+        with pytest.raises(UnreadableForumError, match="not-a-url"):
+            self._create(self._created(url="not-a-url"))
+
+    def test_a_non_zero_exit_raises_with_the_stderr_it_carried(self) -> None:
+        process = ScriptedProcess(ProcessOutput(code=1, stdout="", stderr="a pull request already exists"))
+
+        with pytest.raises(GhCommandFailedError, match="already exists"):
+            self._create(process)

@@ -15,9 +15,9 @@ Pydantic.
 ## Vocabulario cerrado
 
 **`StrEnum`**, no tuplas de `str` (`Estado`, `MotivoBloqueada`, `EstadoCI`, `Severidad`, `Veredicto`,
-`Modo`, `Ruling`, `Severity`...). Los miembros se serializan como su cadena, asi que ni el formato del
-issue ni el JSON de salida cambian, pero las comparaciones y los `choices` de cada interfaz de linea
-de comandos salen de un solo sitio.
+`Modo`, `Ruling`, `Severity`, `HygieneBreach`, `ProtectedBranch`...). Los miembros se serializan como su
+cadena, asi que ni el formato del issue ni el JSON de salida cambian, pero las comparaciones y los
+`choices` de cada interfaz de linea de comandos salen de un solo sitio.
 
 - Nombre del miembro en mayusculas; valor en minusculas, **salvo que el valor sea dato de un
   contrato** que lo fije de otra forma (`Ruling.PASS = "PASA"`).
@@ -26,6 +26,11 @@ de comandos salen de un solo sitio.
 - Codigos de salida de un ejecutable: `IntEnum`, y el mapeo desde el vocabulario del dominio con un
   `match` exhaustivo, para que anadir un miembro rompa en `mypy` en vez de caer en silencio en la
   rama generica.
+- **La pertenencia se pregunta contra los valores, no con `in`.** `ProtectedBranch.protects(name)`
+  compara contra el `value` de cada miembro: en Python 3.11 -el minimo que declara
+  `docs/conventions/architecture.md`- un `name in cls` con una cadena que no es miembro lanza
+  `TypeError`, y la guarda que impide commitear en `master` no puede romper por la forma de preguntar
+  justo cuando la rama es una cualquiera.
 
 ## Puertos
 
@@ -66,6 +71,25 @@ manual-. Hay dos etiquetas de fuente manual: `estado:pendiente`, que escribe una
 la subissue, y `estado:esperando-alineacion`, que escribe `RunRepository.pause_for_alignment` antes de que
 exista ningun `Run` -la pausa de alineacion ocurre fuera de cualquier `(state, step)` que `IssueLabel.of`
 pueda conocer, asi que no hay cierre del que proyectarla-.
+
+**La higiene del indice es politica, y sus prefijos prohibidos son una duplicacion declarada mas.**
+`StagedHygiene.of(staged=..., declared=...)` (`domain/staged_hygiene.py`) devuelve las ofensas
+-`HygieneOffence`, con el path y su `HygieneBreach`- de lo que hay en el indice frente a lo que el
+implementador declaro, y la tupla vacia es el indice limpio. Tres decisiones que no son deriva:
+
+- **Un artefacto prohibido lo es aunque este declarado.** `StagedHygiene.FORBIDDEN_PREFIXES` es un
+  backstop, no una regla mas del allow-list: si lo pudiera levantar quien declara las rutas, no
+  protegeria de nada.
+- **Fail-closed sin rama especial.** Con `declared` vacio todo lo staged sale `NOT_DECLARED`, que es lo
+  que cae solo de la regla general. Y **"nada staged" no es asunto de esta politica**: eso ya lo dice
+  `EmptyIndexError` cuando se va a leer el diff, y reimplementarlo aqui seria un segundo sitio donde
+  decidir lo mismo.
+- **Los prefijos duplican a proposito los de `skills/slice-runner/scripts/controles.py`**, por el mismo
+  motivo que `RunState` duplica a `Estado`: el programa no importa nada de `skills/` (ver
+  `docs/conventions/infrastructure.md`), el flujo viejo esta condenado, y acoplarse a el para ahorrar la
+  duplicacion sale mas caro que la duplicacion. La copia esta **medida**, no pendiente:
+  `tests/test_skill_contracts.py` compara los dos conjuntos, asi que anadir un prefijo en un solo lado
+  pone `make check` en rojo.
 
 Dos decisiones mas de `StateMachine` que no son deriva, y estan aqui para que no se "arreglen" hacia el
 lado facil:

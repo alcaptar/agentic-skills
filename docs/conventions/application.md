@@ -48,7 +48,9 @@ del juez **viajen juntos** y su coherencia se pueda comprobar en un sitio.
 
 **La carpeta es el discriminador**, no un sufijo en el nombre de la clase: `application/actions/` para
 lo que muta estado, `application/queries/` para lo que solo lee. Si un caso de uso muta y ademas
-devuelve datos, es una action.
+devuelve datos, es una action: `DeliverSlice` (`application/actions/deliver_slice.py`) commitea, pushea y
+abre la pull request, y **devuelve su numero**, y sigue siendo una action porque lo que la clasifica es
+que muta, no que conteste.
 
 `queries/` ya tiene su primera lectura: `RunPrechecks` (`application/queries/run_prechecks.py`), que le
 pregunta a los puertos `Branches` y `Forum` si la rama o la pull request de la slice ya existen antes de
