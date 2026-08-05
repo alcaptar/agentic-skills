@@ -113,14 +113,19 @@ def test_every_runstate_closure_the_translator_is_asked_about_returns_a_label_or
             assert label in set(IssueLabel), f"{state} projects to {label!r}, which is not a label the vocabulary knows"
 
 
-def test_no_label_in_the_vocabulary_lacks_a_source_in_the_translator_or_the_entry_point_a_person_writes() -> None:
-    """`PENDING` is the one label the translator never produces: a person writes it by hand when
-    they create a subissue (`CLAUDE.md`'s slice). Every other member has to come out of some
-    `(RunState, Step)` pair the translator projects, or it is dead vocabulary nobody ever writes.
+def test_no_label_in_the_vocabulary_lacks_a_source_in_the_translator_or_a_manual_entry_point() -> None:
+    """A manual-source label is not "a person writes it": it is any label that something other
+    than `IssueLabel.of` writes, because it happens outside the `(RunState, Step)` pair the
+    translator knows about. `PENDING` is written by a person when they create a subissue
+    (`CLAUDE.md`'s slice). `AWAITING_ALIGNMENT` is written by `RunRepository.pause_for_alignment`
+    before any `Run` exists, so there is no closure yet for the translator to project it from.
+    Every other member has to come out of some `(RunState, Step)` pair the translator projects, or
+    it is dead vocabulary nobody ever writes.
     """
+    manual_source = {IssueLabel.PENDING, IssueLabel.AWAITING_ALIGNMENT}
     produced = {IssueLabel.of(state=state, step=step) for state in RunState for step in Step} - {None}
 
-    assert set(IssueLabel) - produced == {IssueLabel.PENDING}
+    assert set(IssueLabel) - produced == manual_source
 
 
 def test_ci_states_branched_on_by_step_9_are_the_ones_the_script_emits() -> None:

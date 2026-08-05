@@ -388,6 +388,77 @@ class TestWritingTheMacroStateLabel:
         assert len(process.calls) == 1
 
 
+class TestWritingTheUnderstanding:
+    def test_the_call_is_a_comment_carrying_the_understanding_as_stdin(self) -> None:
+        process = ScriptedProcess(ProcessOutput(code=0, stdout="", stderr=""))
+
+        RunRepository(process=process).write_understanding(
+            repo=_REPO, issue=45, understanding="lo que el agente entendio de la slice"
+        )
+
+        assert process.calls[0].argv == ["gh", "issue", "comment", "45", "--repo", _REPO, "--body-file", "-"]
+        assert process.calls[0].stdin == "lo que el agente entendio de la slice"
+
+    def test_a_non_zero_exit_raises_with_the_stderr_it_carried(self) -> None:
+        process = ScriptedProcess(ProcessOutput(code=1, stdout="", stderr="HTTP 422: Unprocessable Entity"))
+
+        with pytest.raises(GhCommandFailedError, match="HTTP 422"):
+            RunRepository(process=process).write_understanding(repo=_REPO, issue=45, understanding="x")
+
+
+class TestPausingForAlignment:
+    def test_a_single_call_adds_the_pause_label_removes_the_prior_one_and_assigns_the_agent(self) -> None:
+        process = ScriptedProcess(ProcessOutput(code=0, stdout="", stderr=""))
+
+        RunRepository(process=process).pause_for_alignment(repo=_REPO, issue=45, remove=IssueLabel.IN_PROGRESS)
+
+        assert len(process.calls) == 1
+        argv = Argv(process.calls[0].argv)
+        assert argv.value_of("--add-label") == "estado:esperando-alineacion"
+        assert argv.value_of("--remove-label") == "estado:en-curso"
+        assert argv.value_of("--add-assignee") == "@me"
+
+    @pytest.mark.parametrize("remove", [IssueLabel.PENDING, IssueLabel.IN_PROGRESS, IssueLabel.BLOCKED_CI_RED])
+    def test_no_value_of_remove_ever_changes_the_label_that_gets_added(self, remove: IssueLabel) -> None:
+        process = ScriptedProcess(ProcessOutput(code=0, stdout="", stderr=""))
+
+        RunRepository(process=process).pause_for_alignment(repo=_REPO, issue=45, remove=remove)
+
+        assert Argv(process.calls[0].argv).value_of("--add-label") == "estado:esperando-alineacion"
+
+    def test_a_pause_label_missing_on_the_repo_is_created_once_and_the_edit_is_retried(self) -> None:
+        process = ScriptedProcess(
+            ProcessOutput(code=1, stdout="", stderr="'estado:esperando-alineacion' not found"),
+            ProcessOutput(code=0, stdout="", stderr=""),
+            ProcessOutput(code=0, stdout="", stderr=""),
+        )
+
+        RunRepository(process=process).pause_for_alignment(repo=_REPO, issue=45, remove=IssueLabel.IN_PROGRESS)
+
+        assert len(process.calls) == 3
+        assert process.calls[1].argv[:3] == ["gh", "label", "create"]
+        assert process.calls[1].argv[3] == "estado:esperando-alineacion"
+        assert process.calls[2].argv == process.calls[0].argv
+
+    def test_a_second_failure_after_creating_the_label_still_raises(self) -> None:
+        process = ScriptedProcess(
+            ProcessOutput(code=1, stdout="", stderr="'estado:esperando-alineacion' not found"),
+            ProcessOutput(code=0, stdout="", stderr=""),
+            ProcessOutput(code=1, stdout="", stderr="rate limited"),
+        )
+
+        with pytest.raises(GhCommandFailedError):
+            RunRepository(process=process).pause_for_alignment(repo=_REPO, issue=45, remove=IssueLabel.IN_PROGRESS)
+
+    def test_a_failure_unrelated_to_a_missing_label_raises_without_trying_to_create_one(self) -> None:
+        process = ScriptedProcess(ProcessOutput(code=1, stdout="", stderr="authentication required"))
+
+        with pytest.raises(GhCommandFailedError):
+            RunRepository(process=process).pause_for_alignment(repo=_REPO, issue=45, remove=IssueLabel.IN_PROGRESS)
+
+        assert len(process.calls) == 1
+
+
 class TestGhFailuresAreInterpretedNotSwallowed:
     def test_a_non_zero_exit_reading_the_parent_raises_with_the_stderr_it_carried(self) -> None:
         process = ScriptedProcess(ProcessOutput(code=1, stdout="", stderr="HTTP 404: Not Found"))

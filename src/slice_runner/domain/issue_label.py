@@ -8,6 +8,7 @@ from slice_runner.domain.step import Step
 
 class IssueLabel(StrEnum):
     PENDING = "estado:pendiente"
+    AWAITING_ALIGNMENT = "estado:esperando-alineacion"
     IN_PROGRESS = "estado:en-curso"
     AWAITING_MERGE = "estado:esperando-merge"
     BLOCKED_CONTROLS = "bloqueada:controles"
