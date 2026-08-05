@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass, field
 
 from slice_runner.infrastructure.judge_invocation import JudgeInvocation
 from slice_runner.infrastructure.local_process import LocalProcess
@@ -34,6 +35,23 @@ class UnrunnableJudge(Process):
             return self._real.run(argv, stdin=stdin, cwd=cwd)
 
         raise ProcessNotRunnableError(f"{argv[0]}: no such executable")
+
+
+@dataclass(frozen=True, kw_only=True, slots=True)
+class RecordedCall:
+    argv: list[str] = field(default_factory=list)
+    stdin: str = ""
+
+
+class ScriptedProcess(Process):
+    def __init__(self, *outputs: ProcessOutput) -> None:
+        self._outputs = list(outputs)
+        self.calls: list[RecordedCall] = []
+
+    def run(self, argv: list[str], *, stdin: str = "", cwd: str | None = None) -> ProcessOutput:
+        self.calls.append(RecordedCall(argv=list(argv), stdin=stdin))
+
+        return self._outputs.pop(0)
 
 
 class RealExceptTheJudge(Process):

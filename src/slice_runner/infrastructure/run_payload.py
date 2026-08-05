@@ -4,6 +4,7 @@ from typing import Annotated, Self
 
 from pydantic import Field
 
+from slice_runner.domain.exceptions import UnreadableRunError
 from slice_runner.domain.run import Run
 from slice_runner.domain.step import Step
 from slice_runner.infrastructure.contract_model import ContractModel
@@ -18,6 +19,10 @@ class RunPayload(ContractModel):
     ci_retries: Spent = 0
     indeterminate_ticks: Spent = 0
     verify_discards: Spent = 0
+
+    @classmethod
+    def from_dict(cls, data: dict[str, object]) -> Self:
+        return cls._validated(data, "the execution state block is not one this program can read", UnreadableRunError)
 
     @classmethod
     def from_domain(cls, run: Run) -> Self:
