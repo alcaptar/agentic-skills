@@ -18,6 +18,7 @@ from slice_runner.domain.state_machine import StateMachine
 from slice_runner.infrastructure.claude_verifier import ClaudeVerifier
 from slice_runner.infrastructure.exit_code import ExitCode
 from slice_runner.infrastructure.git_diff_reader import GitDiffReader
+from slice_runner.infrastructure.local_corpus import LocalCorpus
 from slice_runner.infrastructure.local_process import LocalProcess
 from slice_runner.infrastructure.local_skill_library import LocalSkillLibrary
 from slice_runner.infrastructure.process import ProcessNotRunnableError
@@ -41,7 +42,9 @@ class Cli:
 
         match Subcommand(arguments.command):
             case Subcommand.VERIFY:
-                return cls(process=LocalProcess()).verify(repo=arguments.repo, base=arguments.base)
+                return cls(process=LocalProcess()).verify(
+                    repo=arguments.repo, base=arguments.base, slice_id=arguments.slice_id
+                )
             case Subcommand.EXPLAIN:
                 return cls.explain(request=sys.stdin.read())
 
@@ -56,6 +59,9 @@ class Cli:
         verify = subcommands.add_parser(Subcommand.VERIFY, help="judge the index of a slice against its base")
         verify.add_argument("--repo", required=True, help="path of the slice's repo")
         verify.add_argument("--base", required=True, help="base branch the diff is taken against")
+        verify.add_argument(
+            "--slice", dest="slice_id", required=True, help="identifier of the slice the verdict belongs to"
+        )
 
         subcommands.add_parser(
             Subcommand.EXPLAIN, help="say what comes after the run and the outcome read on standard input"
@@ -75,9 +81,9 @@ class Cli:
 
         return ExitCode.OK
 
-    def verify(self, *, repo: str, base: str) -> int:
+    def verify(self, *, repo: str, base: str, slice_id: str) -> int:
         try:
-            verification = self._action().execute(self._params(repo=repo, base=base))
+            verification = self._action().execute(self._params(repo=repo, base=base, slice_id=slice_id))
         except UnresolvableRepoOrBaseError as error:
             return self._reported(f"the repo or the base requested do not resolve: {error}", ExitCode.USAGE_ERROR)
         except DiffNotReadableError as error:
@@ -101,6 +107,7 @@ class Cli:
             verifier=ClaudeVerifier(process=self._process),
             judge=SliceVerifierJudge.adversarial(),
             skills=LocalSkillLibrary(),
+            corpus=LocalCorpus(),
         )
 
     @staticmethod
@@ -115,8 +122,8 @@ class Cli:
         )
 
     @staticmethod
-    def _params(*, repo: str, base: str) -> VerifySliceParams:
-        return VerifySliceParams(repo=repo, base=base)
+    def _params(*, repo: str, base: str, slice_id: str) -> VerifySliceParams:
+        return VerifySliceParams(repo=repo, base=base, slice_id=slice_id)
 
     @staticmethod
     def _reported(reason: str, code: ExitCode) -> ExitCode:

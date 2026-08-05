@@ -23,3 +23,6 @@ class Verdict:
                 f"a {Ruling.PASS} with {len(blocking)} finding(s) of severity {Severity.HIGH} contradicts the "
                 f"rubric: one high-severity finding means {Ruling.FAIL}"
             )
+
+    def count_of(self, severity: Severity) -> int:
+        return sum(1 for finding in self.findings if finding.severity is severity)

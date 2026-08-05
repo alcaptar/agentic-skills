@@ -9,7 +9,7 @@
 # proyecto, y `python -m` solo mira el directorio actual, asi que la ruta de importacion se pone a mano.
 # Solo `src`: el programa es autocontenido y no importa nada de `skills/`.
 #
-#     PYTHONPATH=src uv run python -m slice_runner verify --repo . --base master
+#     PYTHONPATH=src uv run python -m slice_runner verify --repo . --base master --slice slice-01
 #
 # La config replica la que el repo ya exige a su propia fixture de smoke
 # (`smoke/fixture/pyproject.toml`): misma vara para el harness que para lo que valida.

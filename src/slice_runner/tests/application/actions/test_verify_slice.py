@@ -7,6 +7,7 @@ from unittest.mock import Mock, create_autospec
 import pytest
 
 from slice_runner.application.actions.verify_slice import VerifySlice
+from slice_runner.domain.corpus import Corpus
 from slice_runner.domain.diff_reader import DiffReader
 from slice_runner.domain.exceptions import DiffNotReadableError
 from slice_runner.domain.skill_library import SkillLibrary
@@ -16,6 +17,7 @@ from slice_runner.tests.mothers.verdict_mother import VerdictMother
 from slice_runner.tests.mothers.verification_mother import JudgeMother, SliceDiffMother, VerifySliceParamsMother
 
 if TYPE_CHECKING:
+    from slice_runner.domain.corpus_entry import CorpusEntry
     from slice_runner.domain.judge import Judge
     from slice_runner.domain.slice_under_review import SliceUnderReview
 
@@ -50,8 +52,18 @@ class TestVerifySlice:
         return JudgeMother.adversarial()
 
     @pytest.fixture
-    def action(self, reader: Mock, verifier: Mock, judge: Judge, skills: Mock) -> VerifySlice:
-        return VerifySlice(reader=reader, verifier=verifier, judge=judge, skills=skills)
+    def corpus(self) -> Mock:
+        corpus: Mock = create_autospec(Corpus, spec_set=True, instance=True)
+        return corpus
+
+    @pytest.fixture
+    def action(self, reader: Mock, verifier: Mock, judge: Judge, skills: Mock, corpus: Mock) -> VerifySlice:
+        return VerifySlice(reader=reader, verifier=verifier, judge=judge, skills=skills, corpus=corpus)
+
+    @staticmethod
+    def _recorded(corpus: Mock) -> CorpusEntry:
+        entry: CorpusEntry = corpus.record.call_args.args[0]
+        return entry
 
     @staticmethod
     def _judged_by(verifier: Mock) -> Judge:
@@ -112,6 +124,28 @@ class TestVerifySlice:
         verifier.verify.return_value = expected
 
         assert action.execute(_PARAMS) is expected
+
+    def test_every_verification_hands_the_corpus_the_pair_it_just_produced_under_the_slice_that_was_asked_for(
+        self, action: VerifySlice, corpus: Mock
+    ) -> None:
+        action.execute(_PARAMS)
+
+        recorded = self._recorded(corpus)
+        assert (recorded.slice_id, recorded.diff, recorded.verdict) == (
+            _PARAMS.slice_id,
+            _DIFF,
+            VerdictMother.passing(),
+        )
+
+    def test_a_vetoed_verification_is_recorded_too_because_the_corpus_is_not_only_the_clean_pairs(
+        self, action: VerifySlice, corpus: Mock, verifier: Mock
+    ) -> None:
+        vetoed = VerdictMother.failing()
+        verifier.verify.return_value = Verification(verdict=vetoed)
+
+        action.execute(_PARAMS)
+
+        assert self._recorded(corpus).verdict == vetoed
 
     def test_with_no_diff_to_read_the_judge_is_not_invoked_at_all(
         self, action: VerifySlice, reader: Mock, verifier: Mock

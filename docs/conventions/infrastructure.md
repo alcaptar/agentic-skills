@@ -111,6 +111,27 @@ importar**: un smoke que solo importe el modulo lo da por bueno. Lo evita
   metodologia. `agents/slice-implementer.md` es del **flujo viejo** y se queda congelado igual que
   `agents/slice-verifier.md`: el programa no lo lee. Son dos copias del brief a proposito, con la del
   programa diciendo la verdad sobre lo que el programa manda.
+- **`LocalCorpus` y `LocalSkillLibrary` resuelven cada uno la raiz de configuracion de la herramienta**
+  (`CLAUDE_CONFIG_DIR` o `~/.claude` expandido), en vez de compartir un objeto que la diga. Es una
+  duplicacion declarada de cuatro lineas: lo que comparten no es una regla del programa sino **la
+  convencion de Claude Code sobre donde vive su configuracion**, y cada adaptador cuelga de ahi una cosa
+  distinta -uno lee los dos arboles de la vara, el otro anexa el par (diff, veredicto) de cada
+  verificacion a `slice-runner/corpus/verdicts.jsonl`-. Su casa natural es un objeto propio de esa
+  convencion, y se hara cuando exista un tercer adaptador que la necesite; hasta entonces, extraerla
+  obligaria a renombrar la constante por la que **todos** los tests que ejecutan una verificacion
+  mantienen la suite fuera del home real, que es mas superficie tocada que la duplicacion que ahorra.
+- **`LocalCorpus.record` escribe a disco sin red, y un `OSError` suyo sale del programa sin mapear.** La
+  recogida del corpus (`src/slice_runner/infrastructure/local_corpus.py`) ocurre en el camino feliz y
+  **despues** de que exista el veredicto, asi que un sistema de ficheros que no deje anexar tira una
+  verificacion ya pagada -el juez ya corrio- y el proceso sale por la excepcion con `1`, que es
+  precisamente el codigo que el contrato reserva para el veto: quien invoca no puede distinguir "el juez
+  veta" de "no se pudo escribir el corpus". Se acepta porque la alternativa hoy es peor: **decidir aqui
+  que hacer con el fallo de escritura seria inventar una politica que ningun criterio pidio**, y un
+  adaptador que decide politica es antipatron declarado de esta misma capa. El precedente vivo es
+  `LocalControlRunner.run` (`src/slice_runner/infrastructure/local_control_runner.py`), que escribe su log
+  igual de desprotegido. Cuando se cierre, se cierra **decidiendo la politica** -si el corpus es
+  best-effort, si su fallo es un cierre propio del run, y con que codigo de salida se distingue-, no
+  capturando el `OSError` a escondidas dentro del adaptador.
 - Un codigo de salida distinto de cero **es un dato**, no una excepcion: se lanza el proceso con
   `check=False` y el adaptador interpreta, porque el motivo esta en `stderr` y una excepcion lo borra.
 - **`GhForum` reutiliza `GhCommandFailedError` de `run_repository.py`** para un exit distinto de cero de

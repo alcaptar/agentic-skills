@@ -14,11 +14,14 @@ Los casos de uso. Orquestan; la logica vive en el dominio y la entrada/salida de
 
 ```python
 class VerifySlice:
-    def __init__(self, *, reader: DiffReader, verifier: Verifier, judge: Judge, skills: SkillLibrary) -> None:
+    def __init__(
+        self, *, reader: DiffReader, verifier: Verifier, judge: Judge, skills: SkillLibrary, corpus: Corpus
+    ) -> None:
         self._reader = reader
         self._verifier = verifier
         self._judge = judge
         self._skills = skills
+        self._corpus = corpus
 
     def execute(self, params: VerifySliceParams) -> Verification:
         ...

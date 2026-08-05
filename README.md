@@ -172,12 +172,16 @@ la **misma** conversacion. Usalo para una tanda corta de slices, no para una fea
 La verificacion de una slice no la orquesta la skill: la ejecuta un programa, que se puede lanzar solo.
 
 ```bash
-PYTHONPATH=src uv run python -m slice_runner verify --repo . --base master
+PYTHONPATH=src uv run python -m slice_runner verify --repo . --base master --slice slice-01
 ```
 
 Juzga **lo que hay staged** contra el branch-point de la base -que es lo que sera el commit-, emite el
 veredicto como JSON por salida estandar y **cualquier motivo por el que no haya veredicto** por salida de
-error, nunca mezclados. El codigo de salida es el contrato con quien lo invoca:
+error, nunca mezclados. Ademas escribe: cada verificacion anexa una linea a
+`~/.claude/slice-runner/corpus/verdicts.jsonl` -o al equivalente bajo `CLAUDE_CONFIG_DIR`- con el
+identificador de la slice, el diff juzgado, el veredicto entero y su conteo por severidad. Es un registro
+append-only, y vive **fuera del repo** para que ningun `git add` de la slice se lo lleve a la pull request.
+El codigo de salida es el contrato con quien lo invoca:
 
 | | Que significa |
 |---|---|
