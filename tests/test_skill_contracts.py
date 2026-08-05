@@ -27,6 +27,7 @@ import pytest
 import controles
 import issue_body
 import metrics
+from slice_runner.domain.budgets import Budgets
 from slice_runner.domain.ruling import Ruling
 from slice_runner.domain.severity import Severity
 from slice_runner.infrastructure.exit_code import ExitCode
@@ -36,6 +37,7 @@ from slice_runner.infrastructure.verdict_payload import FindingPayload
 
 _ROOT = Path(__file__).resolve().parents[1]
 _RUNNER = _ROOT / "skills" / "slice-runner" / "SKILL.md"
+_CONTROLES = _ROOT / "skills" / "slice-runner" / "scripts" / "controles.py"
 _DEPLOY_WATCH = _ROOT / "skills" / "deploy-watch" / "SKILL.md"
 _VERIFIER = _ROOT / "agents" / "slice-verifier.md"
 
@@ -107,6 +109,45 @@ def test_ci_states_branched_on_by_step_9_are_the_ones_the_script_emits() -> None
         f"{_rel(_RUNNER)} step 9 and controles.EstadoCI disagree on the CI states: "
         f"only in the skill {sorted(branched - set(controles.EstadoCI))}, "
         f"only in the script {sorted(set(controles.EstadoCI) - branched)}"
+    )
+
+
+_GRACE_WINDOW_IS_WRITTEN_IN = (
+    _RUNNER,
+    _CONTROLES,
+    _ROOT / "skills" / "slice-runner" / "references" / "por-que.md",
+    _ROOT / "docs" / "design-notes.md",
+    _ROOT / "README.md",
+)
+
+
+def _grace_window(text: str) -> tuple[int, int]:
+    """The two numbers of the grace window as some surface writes them: ticks and seconds."""
+    ticks = re.search(r"(\d+)\s+ticks\s+indeterminados", text)
+    assert ticks, "the grace window is stated without how many ticks it takes"
+    seconds = re.search(r"(\d+)\s+s\s+o\s+mas\s+entre\s+tick\s+y\s+tick", text)
+    assert seconds, "the grace window is stated without how long a tick waits"
+
+    return int(ticks.group(1)), int(seconds.group(1))
+
+
+def test_the_grace_window_is_the_same_number_wherever_it_is_written() -> None:
+    """`CLAUDE.md` calls this a declared duplicate, and until now nothing measured it.
+
+    The number lived in two places on purpose -- step 9 of the runner, which counts the ticks, and
+    the docstring of `ci-status`, which explains why its exit code 4 is one of them -- but it was
+    written in five, and the state machine makes it six, because it is the machine that now decides
+    when the window is spent. Copies of a policy number with no test is how a run closes
+    `bloqueada: ci-indeterminada` after one tick while the prose still promises three. Every surface
+    that states the number is in here: a copy left out is measured by nothing, which is the state
+    this test exists to end.
+    """
+    budgets = Budgets()
+    written = {_rel(path): _grace_window(_read(path)) for path in _GRACE_WINDOW_IS_WRITTEN_IN}
+
+    assert set(written.values()) == {(budgets.indeterminate_ticks, budgets.seconds_between_ticks)}, (
+        f"the grace window of {type(budgets).__name__} is "
+        f"{(budgets.indeterminate_ticks, budgets.seconds_between_ticks)} and the prose writes {written}"
     )
 
 

@@ -146,7 +146,7 @@ veinte segundos despues, `verde` con el check `check` en `pass`. En la **#20**, 
 O sea que cerrar en el tick 1 registra como no medible una slice sana, y con el orquestador fuera de la
 sesion de la persona no queda nadie mirando que lo compense.
 
-De ahi la ventana de gracia con el numero escrito -3 ticks consecutivos, 30 s o mas entre tick y tick-:
+De ahi la ventana de gracia con el numero escrito -3 ticks indeterminados consecutivos, 30 s o mas entre tick y tick-:
 deja pasar el caso de la #31 (resuelto en el tick 2) y sigue cerrando el de la #20 en el tick 3. En
 ticks queda expresado el mecanismo que ya tiene el paso, pero el numero solo no basta: sin separacion
 minima, tres ticks seguidos son tres segundos y la ventana no cubre nada. Dejarlo en "usa tu criterio"

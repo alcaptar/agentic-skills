@@ -4,8 +4,6 @@ from typing import TYPE_CHECKING, Self
 
 from pydantic import BaseModel, ConfigDict, ValidationError
 
-from slice_runner.domain.exceptions import InvalidVerdictError
-
 if TYPE_CHECKING:
     from pydantic_core import ErrorDetails
 
@@ -14,11 +12,11 @@ class ContractModel(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, populate_by_name=False)
 
     @classmethod
-    def _validated(cls, data: dict[str, object], where: str) -> Self:
+    def _validated(cls, data: dict[str, object], where: str, rejection: type[ValueError]) -> Self:
         try:
             return cls.model_validate(data)
         except ValidationError as error:
-            raise InvalidVerdictError(f"{where}: {cls._readable(error)}") from error
+            raise rejection(f"{where}: {cls._readable(error)}") from error
 
     @classmethod
     def _readable(cls, error: ValidationError) -> str:

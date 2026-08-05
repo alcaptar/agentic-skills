@@ -5,6 +5,14 @@ class InvalidVerdictError(ValueError):
     pass
 
 
+class ImpossibleTransitionError(ValueError):
+    pass
+
+
+class UnreadableRunError(ValueError):
+    pass
+
+
 class DiffNotReadableError(ValueError):
     pass
 

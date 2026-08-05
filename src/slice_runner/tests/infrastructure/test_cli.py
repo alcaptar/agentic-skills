@@ -1,11 +1,16 @@
 from __future__ import annotations
 
+import io
 import json
 import shutil
+import sys
 from typing import TYPE_CHECKING
 
 import pytest
 
+from slice_runner.domain.outcome import Outcome
+from slice_runner.domain.run_state import RunState
+from slice_runner.domain.step import Step
 from slice_runner.infrastructure.cli import Cli
 from slice_runner.infrastructure.exit_code import ExitCode
 from slice_runner.infrastructure.local_skill_library import LocalSkillLibrary
@@ -14,9 +19,55 @@ from slice_runner.tests.doubles import RealExceptTheJudge, UnrunnableJudge
 from slice_runner.tests.git_repo import Git
 from slice_runner.tests.mothers.judge_output_mother import HarnessEnvelopeMother, JudgeVerdictMother
 from slice_runner.tests.mothers.repo_mother import RepoMother
+from slice_runner.tests.mothers.transition_request_mother import TransitionRequestMother
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+_TABLE: list[tuple[Step, Outcome, dict[str, int], tuple[Step, RunState, int]]] = [
+    (Step.IMPLEMENT, Outcome.DONE, {}, (Step.RUN_CONTROLS, RunState.OPEN, 0)),
+    (Step.IMPLEMENT, Outcome.OVER_BUDGET, {}, (Step.IMPLEMENT, RunState.ABORTED_BUDGET, 0)),
+    (Step.RUN_CONTROLS, Outcome.DONE, {}, (Step.VERIFY, RunState.OPEN, 0)),
+    (Step.RUN_CONTROLS, Outcome.FAILED, {}, (Step.IMPLEMENT, RunState.OPEN, 0)),
+    (Step.RUN_CONTROLS, Outcome.FAILED, {"control_retries": 1}, (Step.IMPLEMENT, RunState.OPEN, 0)),
+    (Step.RUN_CONTROLS, Outcome.FAILED, {"control_retries": 2}, (Step.RUN_CONTROLS, RunState.BLOCKED_CONTROLS, 0)),
+    (Step.RUN_CONTROLS, Outcome.OVER_BUDGET, {}, (Step.RUN_CONTROLS, RunState.ABORTED_BUDGET, 0)),
+    (Step.VERIFY, Outcome.DONE, {}, (Step.OPEN_PULL_REQUEST, RunState.OPEN, 0)),
+    (Step.VERIFY, Outcome.DISCARDED, {}, (Step.VERIFY, RunState.OPEN, 0)),
+    (Step.VERIFY, Outcome.CORRECTIONS_ORDERED, {}, (Step.IMPLEMENT, RunState.OPEN, 0)),
+    (
+        Step.VERIFY,
+        Outcome.CORRECTIONS_ORDERED,
+        {"verify_retries": 2},
+        (Step.OPEN_PULL_REQUEST, RunState.OPEN, 0),
+    ),
+    (Step.VERIFY, Outcome.FAILED, {}, (Step.IMPLEMENT, RunState.OPEN, 0)),
+    (Step.VERIFY, Outcome.FAILED, {"verify_retries": 1}, (Step.IMPLEMENT, RunState.OPEN, 0)),
+    (Step.VERIFY, Outcome.FAILED, {"verify_retries": 2}, (Step.VERIFY, RunState.BLOCKED_VERIFY, 0)),
+    (Step.VERIFY, Outcome.OVER_BUDGET, {}, (Step.VERIFY, RunState.ABORTED_BUDGET, 0)),
+    (Step.OPEN_PULL_REQUEST, Outcome.DONE, {}, (Step.AWAIT_CI, RunState.OPEN, 0)),
+    (Step.OPEN_PULL_REQUEST, Outcome.OVER_BUDGET, {}, (Step.OPEN_PULL_REQUEST, RunState.ABORTED_BUDGET, 0)),
+    (Step.AWAIT_CI, Outcome.DONE, {}, (Step.AWAIT_MERGE, RunState.OPEN, 0)),
+    (Step.AWAIT_CI, Outcome.PENDING, {}, (Step.AWAIT_CI, RunState.OPEN, 30)),
+    (Step.AWAIT_CI, Outcome.INDETERMINATE, {}, (Step.AWAIT_CI, RunState.OPEN, 30)),
+    (Step.AWAIT_CI, Outcome.INDETERMINATE, {"indeterminate_ticks": 1}, (Step.AWAIT_CI, RunState.OPEN, 30)),
+    (
+        Step.AWAIT_CI,
+        Outcome.INDETERMINATE,
+        {"indeterminate_ticks": 2},
+        (Step.AWAIT_CI, RunState.BLOCKED_CI_INDETERMINATE, 0),
+    ),
+    (Step.AWAIT_CI, Outcome.FAILED, {}, (Step.IMPLEMENT, RunState.OPEN, 0)),
+    (Step.AWAIT_CI, Outcome.FAILED, {"ci_retries": 1}, (Step.AWAIT_CI, RunState.BLOCKED_CI_RED, 0)),
+    (Step.AWAIT_CI, Outcome.OVER_BUDGET, {}, (Step.AWAIT_CI, RunState.ABORTED_BUDGET, 0)),
+    (Step.AWAIT_MERGE, Outcome.DONE, {}, (Step.AWAIT_MERGE, RunState.MERGED, 0)),
+    (Step.AWAIT_MERGE, Outcome.PENDING, {}, (Step.AWAIT_MERGE, RunState.OPEN, 30)),
+    (Step.AWAIT_MERGE, Outcome.OVER_BUDGET, {}, (Step.AWAIT_MERGE, RunState.ABORTED_BUDGET, 0)),
+]
+
+_IMPOSSIBLE: list[tuple[Step, Outcome]] = sorted(
+    {(step, outcome) for step in Step for outcome in Outcome} - {(step, outcome) for step, outcome, *_ in _TABLE},
+)
 
 
 class BlindToTheToolboxOfThisMachine:
@@ -35,7 +86,7 @@ class TestTheExitCodeOfTheVerdict(BlindToTheToolboxOfThisMachine):
 
         code = Cli(process=process).verify(repo=str(repo), base=Git.BASE_BRANCH)
 
-        assert code == ExitCode.PASS
+        assert code == ExitCode.OK
         assert json.loads(capsys.readouterr().out) == {"veredicto": "PASA", "hallazgos": []}
 
     def test_a_fail_exits_with_one_and_emits_every_finding_whoever_retries_the_slice_needs(
@@ -46,7 +97,7 @@ class TestTheExitCodeOfTheVerdict(BlindToTheToolboxOfThisMachine):
 
         code = Cli(process=process).verify(repo=str(repo), base=Git.BASE_BRANCH)
 
-        assert code == ExitCode.FAIL
+        assert code == ExitCode.VETOED
         emitted = json.loads(capsys.readouterr().out)
         assert emitted["veredicto"] == "FALLA"
         assert [finding["severidad"] for finding in emitted["hallazgos"]] == ["alta", "alta", "media", "media"]
@@ -151,7 +202,7 @@ class TestWhatTheJudgeWasDeniedReading(BlindToTheToolboxOfThisMachine):
         code = Cli(process=process).verify(repo=str(repo), base=Git.BASE_BRANCH)
 
         output = capsys.readouterr()
-        assert code == ExitCode.PASS
+        assert code == ExitCode.OK
         assert HarnessEnvelopeMother.DENIED_READ in output.err
         assert json.loads(output.out) == {"veredicto": "PASA", "hallazgos": []}
 
@@ -225,6 +276,136 @@ class TestTheEntrypoint(BlindToTheToolboxOfThisMachine):
         assert "a-base-that-is-not-there" in capsys.readouterr().err
 
 
+class TestTheTransitionOfEveryPair:
+    @pytest.mark.parametrize(("step", "outcome", "spent", "expected"), _TABLE)
+    def test_every_pair_of_step_and_outcome_has_one_answer_and_this_is_it(
+        self,
+        step: Step,
+        outcome: Outcome,
+        spent: dict[str, int],
+        expected: tuple[Step, RunState, int],
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        code = Cli.explain(request=TransitionRequestMother.asking(step, outcome, **spent))
+
+        assert code == ExitCode.OK
+        emitted = json.loads(capsys.readouterr().out)
+        assert (emitted["run"]["step"], emitted["state"], emitted["wait_seconds"]) == expected
+
+    def test_the_whole_run_travels_in_the_transition_so_nobody_downstream_recounts_it(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        asked = TransitionRequestMother.asking(Step.RUN_CONTROLS, Outcome.FAILED, verify_discards=1)
+
+        Cli.explain(request=asked)
+
+        assert json.loads(capsys.readouterr().out) == {
+            "run": {
+                "step": "implement",
+                "control_retries": 1,
+                "verify_retries": 0,
+                "ci_retries": 0,
+                "indeterminate_ticks": 0,
+                "verify_discards": 1,
+            },
+            "state": "open",
+            "wait_seconds": 0,
+        }
+
+
+class TestWhatEachBudgetPays:
+    def test_a_red_control_spends_a_retry_of_its_own_and_not_one_of_the_judge(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        Cli.explain(request=TransitionRequestMother.asking(Step.RUN_CONTROLS, Outcome.FAILED))
+
+        spent = json.loads(capsys.readouterr().out)["run"]
+        assert (spent["control_retries"], spent["verify_retries"]) == (1, 0)
+
+    def test_a_veto_spends_a_retry_of_the_judge_and_not_one_of_the_controls(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        Cli.explain(request=TransitionRequestMother.asking(Step.VERIFY, Outcome.FAILED))
+
+        spent = json.loads(capsys.readouterr().out)["run"]
+        assert (spent["verify_retries"], spent["control_retries"]) == (1, 0)
+
+    def test_a_discarded_verdict_is_counted_apart_because_the_code_was_never_touched(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        Cli.explain(request=TransitionRequestMother.asking(Step.VERIFY, Outcome.DISCARDED, verify_retries=2))
+
+        emitted = json.loads(capsys.readouterr().out)
+        assert emitted["state"] == RunState.OPEN
+        assert (emitted["run"]["verify_discards"], emitted["run"]["verify_retries"]) == (1, 2)
+
+    def test_a_round_of_corrections_spends_the_same_budget_as_a_veto_and_not_one_of_its_own(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        asked = TransitionRequestMother.asking(Step.VERIFY, Outcome.CORRECTIONS_ORDERED, verify_retries=1)
+
+        Cli.explain(request=asked)
+
+        assert json.loads(capsys.readouterr().out)["run"]["verify_retries"] == 2
+
+    def test_the_last_corrections_become_debt_instead_of_blocking_a_slice_the_judge_did_not_veto(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        asked = TransitionRequestMother.asking(Step.VERIFY, Outcome.CORRECTIONS_ORDERED, verify_retries=2)
+
+        Cli.explain(request=asked)
+
+        emitted = json.loads(capsys.readouterr().out)
+        assert (emitted["run"]["step"], emitted["state"]) == (Step.OPEN_PULL_REQUEST, RunState.OPEN)
+
+    def test_an_answer_from_the_ci_clears_the_ticks_that_had_none_because_the_window_wants_them_consecutive(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        asked = TransitionRequestMother.asking(Step.AWAIT_CI, Outcome.PENDING, indeterminate_ticks=2)
+
+        Cli.explain(request=asked)
+
+        assert json.loads(capsys.readouterr().out)["run"]["indeterminate_ticks"] == 0
+
+
+class TestWhenThereIsNoTransitionToExplain:
+    @pytest.mark.parametrize(("step", "outcome"), _IMPOSSIBLE)
+    def test_a_pair_the_prose_never_describes_is_refused_instead_of_taking_a_generic_branch(
+        self, step: Step, outcome: Outcome, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        code = Cli.explain(request=TransitionRequestMother.asking(step, outcome))
+
+        assert code == ExitCode.USAGE_ERROR
+        output = capsys.readouterr()
+        assert output.out == ""
+        assert f"`{step}`" in output.err
+        assert f"`{outcome}`" in output.err
+
+    def test_a_run_that_is_not_json_is_refused_because_a_guessed_one_advances_the_wrong_slice(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        code = Cli.explain(request=TransitionRequestMother.not_even_json())
+
+        assert code == ExitCode.USAGE_ERROR
+        assert capsys.readouterr().out == ""
+
+    def test_a_step_nobody_declared_is_refused_instead_of_defaulting_to_the_first_one(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        code = Cli.explain(request=TransitionRequestMother.with_a_step_nobody_declared())
+
+        assert code == ExitCode.USAGE_ERROR
+        assert "deploy" in capsys.readouterr().err
+
+    def test_a_counter_that_arrives_as_text_is_refused_because_it_decides_when_a_budget_runs_out(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        code = Cli.explain(request=TransitionRequestMother.with_a_counter_that_arrives_as_text())
+
+        assert code == ExitCode.USAGE_ERROR
+        assert "control_retries" in capsys.readouterr().err
+
+
 class TestTheDocumentedCommand:
     def test_it_parses_with_the_repo_and_the_base(self) -> None:
         arguments = Cli.parser().parse_args(["verify", "--repo", "/repos/project", "--base", "master"])
@@ -238,3 +419,14 @@ class TestTheDocumentedCommand:
             Cli.parser().parse_args(["verify", "--repo", "/repos/project"])
 
         assert "the following arguments are required: --base" in capsys.readouterr().err
+
+    def test_explain_takes_the_run_on_standard_input_and_not_as_a_flag(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        asked = TransitionRequestMother.asking(Step.IMPLEMENT, Outcome.DONE)
+        monkeypatch.setattr(sys, "stdin", io.StringIO(asked))
+
+        code = Cli.main(["explain"])
+
+        assert code == ExitCode.OK
+        assert json.loads(capsys.readouterr().out)["run"]["step"] == Step.RUN_CONTROLS

@@ -49,6 +49,24 @@ Si la respuesta es "ninguna que importe", laxo vale.
 medida de verdad** contra un `claude -p` real, y los `title` solo gastan tokens del prompt. Hay un test
 que falla si vuelve a colarse una referencia.
 
+### El `alias` traduce; cuando no hay nada que traducir, no se escribe
+
+`VerdictPayload` lleva `alias` en cada campo porque el contrato del juez esta en castellano y el codigo
+en ingles. El contrato de `explain` (`RunPayload`, `TransitionPayload`) **lo fijamos nosotros y esta en
+ingles**, asi que la clave del contrato ya es el nombre del campo y un `alias` identico solo seria ruido
+que hay que mantener en dos sitios. `by_alias=True` cae en el nombre del campo cuando no hay alias, con
+lo que el esquema, la validacion y la salida siguen saliendo de un solo sitio, que es lo que la regla
+protege.
+
+### Un campo que se llama como un builtin rompe las anotaciones de la clase
+
+Pydantic evalua las anotaciones **con el namespace de la clase**, asi que en un modelo con un campo
+`type: object = None` -y `HarnessOutput` tiene uno, porque el sobre del harness trae esa clave- una
+anotacion `ClassVar[type[ValueError]]` explota al importar el modulo con `'NoneType' object is not
+subscriptable`: el `type` que resuelve es el campo, no el builtin. Por eso la excepcion con la que cada
+modelo rechaza lo que no valida **entra como argumento de `_validated`** y no como `ClassVar` de la clase.
+Ni el `strict` ni el `from __future__ import annotations` cambian nada aqui.
+
 ### Cuidado con `TC002` y las anotaciones de Pydantic
 
 Pydantic resuelve las anotaciones de campo **en runtime** al crear el modelo. Un tipo que `ruff` mueva

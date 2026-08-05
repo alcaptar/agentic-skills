@@ -6,11 +6,15 @@ import sys
 from typing import TYPE_CHECKING
 
 from slice_runner.application.actions.verify_slice import VerifySlice, VerifySliceParams
+from slice_runner.domain.budgets import Budgets
 from slice_runner.domain.exceptions import (
     DiffNotReadableError,
+    ImpossibleTransitionError,
     InvalidVerdictError,
+    UnreadableRunError,
     UnresolvableRepoOrBaseError,
 )
+from slice_runner.domain.state_machine import StateMachine
 from slice_runner.infrastructure.claude_verifier import ClaudeVerifier
 from slice_runner.infrastructure.exit_code import ExitCode
 from slice_runner.infrastructure.git_diff_reader import GitDiffReader
@@ -18,6 +22,9 @@ from slice_runner.infrastructure.local_process import LocalProcess
 from slice_runner.infrastructure.local_skill_library import LocalSkillLibrary
 from slice_runner.infrastructure.process import ProcessNotRunnableError
 from slice_runner.infrastructure.slice_verifier_judge import SliceVerifierJudge
+from slice_runner.infrastructure.subcommand import Subcommand
+from slice_runner.infrastructure.transition_payload import TransitionPayload
+from slice_runner.infrastructure.transition_request_payload import TransitionRequestPayload
 from slice_runner.infrastructure.verdict_payload import VerdictPayload
 
 if TYPE_CHECKING:
@@ -32,7 +39,11 @@ class Cli:
     def main(cls, argv: list[str] | None = None) -> int:
         arguments = cls.parser().parse_args(argv)
 
-        return cls(process=LocalProcess()).verify(repo=arguments.repo, base=arguments.base)
+        match Subcommand(arguments.command):
+            case Subcommand.VERIFY:
+                return cls(process=LocalProcess()).verify(repo=arguments.repo, base=arguments.base)
+            case Subcommand.EXPLAIN:
+                return cls.explain(request=sys.stdin.read())
 
     @classmethod
     def parser(cls) -> argparse.ArgumentParser:
@@ -42,11 +53,27 @@ class Cli:
         )
         subcommands = parser.add_subparsers(dest="command", required=True)
 
-        verify = subcommands.add_parser("verify", help="judge the index of a slice against its base")
+        verify = subcommands.add_parser(Subcommand.VERIFY, help="judge the index of a slice against its base")
         verify.add_argument("--repo", required=True, help="path of the slice's repo")
         verify.add_argument("--base", required=True, help="base branch the diff is taken against")
 
+        subcommands.add_parser(
+            Subcommand.EXPLAIN, help="say what comes after the run and the outcome read on standard input"
+        )
+
         return parser
+
+    @classmethod
+    def explain(cls, *, request: str) -> int:
+        try:
+            asked = TransitionRequestPayload.read(request)
+            transition = StateMachine(budgets=Budgets()).after(asked.run.to_domain(), asked.outcome)
+        except (ImpossibleTransitionError, UnreadableRunError) as error:
+            return cls._reported(f"there is no transition to explain: {error}", ExitCode.USAGE_ERROR)
+
+        print(json.dumps(TransitionPayload.from_domain(transition).to_contract(), ensure_ascii=False))
+
+        return ExitCode.OK
 
     def verify(self, *, repo: str, base: str) -> int:
         try:

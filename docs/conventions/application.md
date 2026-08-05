@@ -35,7 +35,11 @@ del juez **viajen juntos** y su coherencia se pueda comprobar en un sitio.
 - **No traduce a formatos externos.** Devuelve objetos del dominio; quien serializa es la frontera.
 - **No captura excepciones para convertirlas en codigos de salida.** Las propaga tipadas y las mapea
   el entrypoint.
-- **No decide politica de reintentos ni de presupuesto** mientras eso siga viviendo en la skill.
+- **No decide politica de reintentos ni de presupuesto.** Eso es una politica del dominio
+  (`StateMachine`, con sus `Budgets` inyectados: ver `docs/conventions/domain.md`); quien conduce el run
+  le pregunta y ejecuta lo que conteste, sin llevar contadores propios: los que gasta viajan en el `Run`
+  de la transicion. `reintentos_implement` del registro durable **no** es un contador mas que nadie
+  lleve: es la suma de los tres reintentos, porque esas son las unicas vueltas al paso de implementar.
 
 ## Escrituras y lecturas
 
@@ -45,6 +49,12 @@ devuelve datos, es una action.
 
 Hoy solo existe `actions/`, porque no hay ninguna lectura todavia. `queries/` se crea con la primera,
 no antes.
+
+**Interrogar una politica del dominio no es una query.** El subcomando `explain` le pregunta a
+`StateMachine` desde el entrypoint, sin pasar por `application/`, y es deliberado: la politica no tiene
+puertos que orquestar, asi que un caso de uso que solo reenviase la llamada seria la indireccion que
+rechaza el parrafo anterior. `queries/` llega con la primera lectura que **necesite un puerto** -leer el
+estado del run del foro, p. ej.-, no con la primera pregunta que se le haga al dominio.
 
 ## Antipatrones
 
