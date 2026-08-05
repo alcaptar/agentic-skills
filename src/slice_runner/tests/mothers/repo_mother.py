@@ -22,6 +22,13 @@ class RepoMother:
         return repo
 
     @staticmethod
+    def with_the_slice_committed(root: Path) -> Path:
+        repo = RepoMother.with_the_slice_staged(root)
+        Git.run(repo, "commit", "-m", "slice")
+
+        return repo
+
+    @staticmethod
     def with_nothing_staged(root: Path) -> Path:
         repo = RepoMother.with_the_slice_staged(root)
         Git.run(repo, "reset", "--hard")

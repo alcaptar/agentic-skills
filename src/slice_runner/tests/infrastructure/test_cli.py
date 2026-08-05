@@ -24,6 +24,8 @@ from slice_runner.tests.mothers.transition_request_mother import TransitionReque
 if TYPE_CHECKING:
     from pathlib import Path
 
+_SLICE = "slice-01"
+
 _TABLE: list[tuple[Step, Outcome, dict[str, int], tuple[Step, RunState, int]]] = [
     (Step.IMPLEMENT, Outcome.DONE, {}, (Step.RUN_CONTROLS, RunState.OPEN, 0)),
     (Step.IMPLEMENT, Outcome.OVER_BUDGET, {}, (Step.IMPLEMENT, RunState.ABORTED_BUDGET, 0)),
@@ -84,7 +86,7 @@ class TestTheExitCodeOfTheVerdict(BlindToTheToolboxOfThisMachine):
         repo = RepoMother.with_the_slice_staged(tmp_path)
         process = RealExceptTheJudge(HarnessEnvelopeMother.carrying(JudgeVerdictMother.passing()))
 
-        code = Cli(process=process).verify(repo=str(repo), base=Git.BASE_BRANCH)
+        code = Cli(process=process).verify(repo=str(repo), base=Git.BASE_BRANCH, slice_id=_SLICE)
 
         assert code == ExitCode.OK
         assert json.loads(capsys.readouterr().out) == {"veredicto": "PASA", "hallazgos": []}
@@ -95,7 +97,7 @@ class TestTheExitCodeOfTheVerdict(BlindToTheToolboxOfThisMachine):
         repo = RepoMother.with_the_slice_staged(tmp_path)
         process = RealExceptTheJudge(HarnessEnvelopeMother.recorded())
 
-        code = Cli(process=process).verify(repo=str(repo), base=Git.BASE_BRANCH)
+        code = Cli(process=process).verify(repo=str(repo), base=Git.BASE_BRANCH, slice_id=_SLICE)
 
         assert code == ExitCode.VETOED
         emitted = json.loads(capsys.readouterr().out)
@@ -112,7 +114,7 @@ class TestWhenThereIsNoVerdictToTrust(BlindToTheToolboxOfThisMachine):
         incoherent = JudgeVerdictMother.passing_with(JudgeVerdictMother.high_severity_finding(path="mod.py"))
         process = RealExceptTheJudge(HarnessEnvelopeMother.carrying(incoherent))
 
-        code = Cli(process=process).verify(repo=str(repo), base=Git.BASE_BRANCH)
+        code = Cli(process=process).verify(repo=str(repo), base=Git.BASE_BRANCH, slice_id=_SLICE)
 
         assert code == ExitCode.NO_USABLE_VERDICT
         output = capsys.readouterr()
@@ -124,7 +126,7 @@ class TestWhenThereIsNoVerdictToTrust(BlindToTheToolboxOfThisMachine):
     ) -> None:
         repo = RepoMother.with_the_slice_staged(tmp_path)
 
-        code = Cli(process=UnrunnableJudge()).verify(repo=str(repo), base=Git.BASE_BRANCH)
+        code = Cli(process=UnrunnableJudge()).verify(repo=str(repo), base=Git.BASE_BRANCH, slice_id=_SLICE)
 
         assert code == ExitCode.NO_USABLE_VERDICT
         output = capsys.readouterr()
@@ -143,7 +145,7 @@ class TestWhenThereIsNothingToJudge(BlindToTheToolboxOfThisMachine):
     ) -> None:
         repo = RepoMother.with_nothing_staged(tmp_path)
 
-        code = Cli(process=process).verify(repo=str(repo), base=Git.BASE_BRANCH)
+        code = Cli(process=process).verify(repo=str(repo), base=Git.BASE_BRANCH, slice_id=_SLICE)
 
         assert code == ExitCode.NO_DIFF
         assert process.calls == 0
@@ -154,7 +156,7 @@ class TestWhenThereIsNothingToJudge(BlindToTheToolboxOfThisMachine):
     ) -> None:
         repo = RepoMother.with_the_slice_staged(tmp_path)
 
-        code = Cli(process=process).verify(repo=str(repo), base="does-not-exist")
+        code = Cli(process=process).verify(repo=str(repo), base="does-not-exist", slice_id=_SLICE)
 
         assert code == ExitCode.USAGE_ERROR
         assert process.calls == 0
@@ -163,7 +165,9 @@ class TestWhenThereIsNothingToJudge(BlindToTheToolboxOfThisMachine):
     def test_a_repo_that_does_not_resolve_exits_with_four_without_blaming_the_base(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str], process: RealExceptTheJudge
     ) -> None:
-        code = Cli(process=process).verify(repo=str(RepoMother.outside_git(tmp_path)), base=Git.BASE_BRANCH)
+        code = Cli(process=process).verify(
+            repo=str(RepoMother.outside_git(tmp_path)), base=Git.BASE_BRANCH, slice_id=_SLICE
+        )
 
         assert code == ExitCode.USAGE_ERROR
         assert process.calls == 0
@@ -176,7 +180,7 @@ class TestTheDiffTheJudgeReads(BlindToTheToolboxOfThisMachine):
         repo = RepoMother.with_the_slice_staged(tmp_path)
         process = RealExceptTheJudge(HarnessEnvelopeMother.recorded())
 
-        Cli(process=process).verify(repo=str(repo), base=Git.BASE_BRANCH)
+        Cli(process=process).verify(repo=str(repo), base=Git.BASE_BRANCH, slice_id=_SLICE)
 
         assert "+    return 2" in process.stdin
 
@@ -186,7 +190,7 @@ class TestTheDiffTheJudgeReads(BlindToTheToolboxOfThisMachine):
         repo = RepoMother.with_the_slice_staged(tmp_path)
         process = RealExceptTheJudge(HarnessEnvelopeMother.recorded())
 
-        Cli(process=process).verify(repo=str(repo), base=Git.BASE_BRANCH)
+        Cli(process=process).verify(repo=str(repo), base=Git.BASE_BRANCH, slice_id=_SLICE)
 
         assert "slice.diff" not in process.stdin
 
@@ -199,7 +203,7 @@ class TestWhatTheJudgeWasDeniedReading(BlindToTheToolboxOfThisMachine):
         repo = RepoMother.with_the_slice_staged(tmp_path)
         process = RealExceptTheJudge(HarnessEnvelopeMother.denying_a_read())
 
-        code = Cli(process=process).verify(repo=str(repo), base=Git.BASE_BRANCH)
+        code = Cli(process=process).verify(repo=str(repo), base=Git.BASE_BRANCH, slice_id=_SLICE)
 
         output = capsys.readouterr()
         assert code == ExitCode.OK
@@ -212,7 +216,7 @@ class TestWhatTheJudgeWasDeniedReading(BlindToTheToolboxOfThisMachine):
         repo = RepoMother.with_the_slice_staged(tmp_path)
         process = RealExceptTheJudge(HarnessEnvelopeMother.carrying(JudgeVerdictMother.passing()))
 
-        Cli(process=process).verify(repo=str(repo), base=Git.BASE_BRANCH)
+        Cli(process=process).verify(repo=str(repo), base=Git.BASE_BRANCH, slice_id=_SLICE)
 
         assert capsys.readouterr().err == ""
 
@@ -228,7 +232,7 @@ class TestWhatTheJudgeMayRead:
         repo = RepoMother.with_the_slice_staged(tmp_path)
         process = RealExceptTheJudge(HarnessEnvelopeMother.recorded())
 
-        Cli(process=process).verify(repo=str(repo), base=Git.BASE_BRANCH)
+        Cli(process=process).verify(repo=str(repo), base=Git.BASE_BRANCH, slice_id=_SLICE)
 
         assert Argv(process.argv).values_of("--add-dir") == [str(repo), str(toolbox / "skills")]
 
@@ -241,7 +245,7 @@ class TestWhatTheJudgeMayRead:
         repo = RepoMother.with_the_slice_staged(tmp_path)
         process = RealExceptTheJudge(HarnessEnvelopeMother.recorded())
 
-        Cli(process=process).verify(repo=str(repo), base=Git.BASE_BRANCH)
+        Cli(process=process).verify(repo=str(repo), base=Git.BASE_BRANCH, slice_id=_SLICE)
 
         assert str(toolbox / "skills") in process.stdin
 
@@ -260,7 +264,7 @@ class TestTheEntrypoint(BlindToTheToolboxOfThisMachine):
     ) -> None:
         repo = RepoMother.with_nothing_staged(tmp_path)
 
-        code = Cli.main(["verify", "--repo", str(repo), "--base", Git.BASE_BRANCH])
+        code = Cli.main(["verify", "--repo", str(repo), "--base", Git.BASE_BRANCH, "--slice", _SLICE])
 
         assert code == ExitCode.NO_DIFF
         assert "staged" in capsys.readouterr().err
@@ -270,7 +274,7 @@ class TestTheEntrypoint(BlindToTheToolboxOfThisMachine):
     ) -> None:
         repo = RepoMother.with_the_slice_staged(tmp_path)
 
-        code = Cli.main(["verify", "--repo", str(repo), "--base", "a-base-that-is-not-there"])
+        code = Cli.main(["verify", "--repo", str(repo), "--base", "a-base-that-is-not-there", "--slice", _SLICE])
 
         assert code == ExitCode.USAGE_ERROR
         assert "a-base-that-is-not-there" in capsys.readouterr().err
@@ -407,18 +411,28 @@ class TestWhenThereIsNoTransitionToExplain:
 
 
 class TestTheDocumentedCommand:
-    def test_it_parses_with_the_repo_and_the_base(self) -> None:
-        arguments = Cli.parser().parse_args(["verify", "--repo", "/repos/project", "--base", "master"])
+    def test_it_parses_with_the_repo_the_base_and_the_slice(self) -> None:
+        arguments = Cli.parser().parse_args(
+            ["verify", "--repo", "/repos/project", "--base", "master", "--slice", _SLICE]
+        )
 
-        assert (arguments.repo, arguments.base) == ("/repos/project", "master")
+        assert (arguments.repo, arguments.base, arguments.slice_id) == ("/repos/project", "master", _SLICE)
 
     def test_the_base_has_no_default_value_because_a_guessed_one_diffs_the_wrong_range(
         self, capsys: pytest.CaptureFixture[str]
     ) -> None:
         with pytest.raises(SystemExit):
-            Cli.parser().parse_args(["verify", "--repo", "/repos/project"])
+            Cli.parser().parse_args(["verify", "--repo", "/repos/project", "--slice", _SLICE])
 
         assert "the following arguments are required: --base" in capsys.readouterr().err
+
+    def test_the_slice_has_no_default_value_because_a_guessed_one_files_the_pair_under_the_wrong_slice(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        with pytest.raises(SystemExit):
+            Cli.parser().parse_args(["verify", "--repo", "/repos/project", "--base", "master"])
+
+        assert "the following arguments are required: --slice" in capsys.readouterr().err
 
     def test_explain_takes_the_run_on_standard_input_and_not_as_a_flag(
         self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]

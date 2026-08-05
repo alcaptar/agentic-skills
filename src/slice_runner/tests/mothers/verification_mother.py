@@ -27,10 +27,11 @@ class SliceDiffMother:
 
 class VerifySliceParamsMother:
     BASE: ClassVar[str] = "master"
+    SLICE_ID: ClassVar[str] = "slice-03"
 
     @classmethod
     def against_the_base(cls) -> VerifySliceParams:
-        return VerifySliceParams(repo=SliceUnderReviewMother.REPO, base=cls.BASE)
+        return VerifySliceParams(repo=SliceUnderReviewMother.REPO, base=cls.BASE, slice_id=cls.SLICE_ID)
 
 
 class SliceUnderReviewMother:
