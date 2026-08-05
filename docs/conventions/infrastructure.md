@@ -118,6 +118,38 @@ importar**: un smoke que solo importe el modulo lo da por bueno. Lo evita
   mal- y vive donde lo necesito el primer adaptador que lo tuvo. Su casa natural es un modulo de
   frontera de `gh` compartido, y se hara cuando exista un tercer adaptador de `gh`; hasta entonces, el
   acoplamiento declarado sale mas barato que una tercera copia de la misma excepcion.
+- **`GitWorkspace` reutiliza `GitCommandFailedError` de `git_branches.py`** por el mismo argumento y con
+  la misma fecha de caducidad: es el mismo fallo -un comando de `git` que sale mal, con el motivo en su
+  `stderr`- y vive donde lo necesito el primer adaptador de `git` que lo tuvo. La unica diferencia es que
+  `GitWorkspace` cae al `stdout` cuando el `stderr` viene vacio, porque `git commit` sin nada staged
+  explica el motivo por `stdout` y una excepcion sin motivo obliga a reproducirlo a mano.
+- **El cuerpo de la pull request duplica a proposito el formato del paso 8 de
+  `skills/slice-runner/SKILL.md`.** `PullRequestBody` (`infrastructure/pull_request_body.py`) compone los
+  mismos encabezados y en el mismo orden, y es la misma duplicacion declarada que la de la rubrica del juez
+  y la del brief del implementador, por el mismo motivo -el flujo viejo esta condenado y el programa no lee
+  sus `.md`-. Los encabezados se quedan en castellano: son **contenido del artefacto que lee una persona**,
+  en el idioma del issue, no identificadores. Y `gh pr create` va siempre con `--draft`, porque el merge lo
+  decide una persona (ver `CLAUDE.md`).
+
+  **Diverge del paso 8 en tres cosas, y las tres son deliberadas.** Al contrario que la duplicacion de los
+  prefijos prohibidos -que `tests/test_skill_contracts.py` mide-, **esta no tiene test de contrato**: no hay
+  vocabulario que extraer de un cuerpo en prosa, asi que estos tres parrafos son lo unico que la sostiene y
+  hay que moverlos a mano cuando se mueva el paso 8.
+
+  1. **Cierra con `Closes #<N>` donde el paso 8 pone `Part of #<N>`.** En el formato nuevo hay **una
+     subissue por slice**, asi que la pull request de la slice si cierra su issue; en el viejo el issue es
+     la feature entera y cerrarlo con una slice seria mentir.
+  2. **No sabe expresar la forma cross-repo `Part of <org>/<repo-del-issue>#<N>`**, porque `subissue: int`
+     es un numero suelto. Consecuencia: una slice con `REPO:` a otro repo referenciaria ese numero **en el
+     repo de la pull request**, que no es donde vive la subissue. No es un olvido: quien conoce el repo del
+     issue y el de la slice es quien conduce el run (la slice-09), y que la referencia se componga ahi es
+     mas barato que darle a este modelo una opinion sobre repos. Pero **el conductor solo no basta**: con un
+     `subissue: int` no hay forma de pasarle una referencia entera, asi que cerrar esta divergencia toca las
+     dos piezas -el campo de este modelo y quien lo rellena-. Hasta que eso pase, el programa solo entrega
+     correctamente slices que viven en el repo de su issue.
+  3. **El encabezado de la intencion es fijo**, y el paso 8 obliga a `## Intencion (inferida del issue, no
+     declarada)` cuando la intencion no venia declarada. Quien sabe si venia declarada es, otra vez, quien
+     leyo el issue -no este modelo-, asi que el interruptor entra con el conductor.
 
 ## Entrypoints
 

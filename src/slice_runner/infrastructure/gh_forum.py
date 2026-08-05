@@ -28,6 +28,37 @@ class GhForum(Forum):
 
         return GhPullRequestPayload.from_dict(items[0]).number
 
+    def create_pull_request(self, *, repo: str, branch: str, base: str, title: str, body: str) -> int:
+        argv = [
+            "gh",
+            "pr",
+            "create",
+            "--repo",
+            repo,
+            "--draft",
+            "--base",
+            base,
+            "--head",
+            branch,
+            "--title",
+            title,
+            "--body-file",
+            "-",
+        ]
+        output = self._process.run(argv, stdin=body)
+        if output.code != 0:
+            raise GhCommandFailedError(f"{' '.join(argv)}: {output.stderr.strip()}")
+
+        return self._number_of(output.stdout)
+
+    @staticmethod
+    def _number_of(stdout: str) -> int:
+        url = stdout.strip()
+        try:
+            return int(url.rsplit("/", maxsplit=1)[-1])
+        except ValueError as error:
+            raise UnreadableForumError(f"gh did not print the url of the pull request it created: {url!r}") from error
+
     @staticmethod
     def _decoded_array(stdout: str) -> list[dict[str, object]]:
         try:

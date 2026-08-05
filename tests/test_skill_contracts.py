@@ -32,6 +32,7 @@ from slice_runner.domain.issue_label import IssueLabel
 from slice_runner.domain.ruling import Ruling
 from slice_runner.domain.run_state import RunState
 from slice_runner.domain.severity import Severity
+from slice_runner.domain.staged_hygiene import StagedHygiene
 from slice_runner.domain.step import Step
 from slice_runner.infrastructure.exit_code import ExitCode
 from slice_runner.infrastructure.local_skill_library import LocalSkillLibrary
@@ -185,6 +186,25 @@ def test_the_grace_window_is_the_same_number_wherever_it_is_written() -> None:
     assert set(written.values()) == {(budgets.indeterminate_ticks, budgets.seconds_between_ticks)}, (
         f"the grace window of {type(budgets).__name__} is "
         f"{(budgets.indeterminate_ticks, budgets.seconds_between_ticks)} and the prose writes {written}"
+    )
+
+
+def test_the_forbidden_artifacts_are_the_same_ones_in_the_script_and_in_the_program() -> None:
+    """The hygiene backstop is written twice on purpose, and until now nothing measured it.
+
+    `controles.FORBIDDEN_PREFIXES` is what the old flow's `pr-hygiene` control enforces, and
+    `StagedHygiene.FORBIDDEN_PREFIXES` is what the program enforces when it stages. The program
+    imports nothing from `skills/` -- the argument is in `docs/conventions/infrastructure.md` --
+    so the duplication is the decision. What is not allowed is one copy gaining a prefix the
+    other does not: the same artifact would then enter the pull request or not depending on who
+    opened it.
+    """
+    script = set(controles.FORBIDDEN_PREFIXES)
+    program = set(StagedHygiene.FORBIDDEN_PREFIXES)
+
+    assert script == program, (
+        "controles.FORBIDDEN_PREFIXES y StagedHygiene.FORBIDDEN_PREFIXES no prohiben lo mismo: "
+        f"solo en el script {sorted(script - program)}, solo en el programa {sorted(program - script)}"
     )
 
 

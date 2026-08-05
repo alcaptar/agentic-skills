@@ -37,6 +37,18 @@ class UnresolvableRepoOrBaseError(DiffNotReadableError):
     pass
 
 
+class DirtyIndexError(ValueError):
+    pass
+
+
+class ProtectedBranchError(ValueError):
+    pass
+
+
+class BranchMismatchError(ValueError):
+    pass
+
+
 class UnreadableIssueError(ValueError):
     pass
 

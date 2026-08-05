@@ -117,6 +117,7 @@ contratos que hoy estan escritos dos veces:
 - las claves del hallazgo en la rubrica vs los `alias` de `FindingPayload`
 - los veredictos y las severidades de la rubrica vs los que el programa acepta
 - el criterio de degradacion sin subagentes, duplicado a proposito en `slice-runner` y `deploy-watch`
+- los prefijos de artefacto prohibido de `controles.py` vs los de `StagedHygiene` en el programa
 
 Cada test **extrae** el vocabulario de ambos lados y los compara, asi que reescribir las dos copias a la
 vez pasa y tocar solo una falla. Si editas una skill y `make check` se pone rojo ahi, es que has movido

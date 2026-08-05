@@ -95,8 +95,11 @@ Estos no son convenciones de codigo: son las invariantes del pipeline, y valen e
   `SENAL:`. Si un issue viejo no la trae, la PR la reconstruye y **declara que la infirio**.
 - **La PR solo lleva el codigo de la slice**: el commit stagea unicamente los ficheros de codigo/test
   de la slice (`git add` explicito, nunca `-A`/`.`); planes y design-docs jamas entran en la PR (la spec
-  vive en el issue). Conventional commits con el `name` de la slice como scope (`feat(name): ...`); la
-  PR referencia el issue con `Part of #N`.
+  vive en el issue). Conventional commits con el `name` de la slice como scope (`feat(name): ...`). Como
+  referencia la PR a su issue depende del flujo: **`Part of #N`** en el viejo, donde el issue es la feature
+  entera y una PR es una slice de ella, y **`Closes #<subissue>`** en el formato nuevo, donde cada slice
+  tiene su propia subissue y al mergear la cierra GitHub sola (por eso `RunState.MERGED` no lleva etiqueta:
+  ver `docs/conventions/domain.md`).
 - **Cada slice tiene nombre**: `name` kebab-case en la spec; alimenta rama (`slice/NN-name`) y scope de
   commit de forma determinista. La skill `slice-spec` produce specs bien formadas.
 - **Los controles los declara el issue**: la seccion `## Controles` (pares `nombre: comando`, por repo)
