@@ -122,9 +122,13 @@ agentes se cachea al primer load de la sesion, al contrario que las skills. Si e
 en curso sigue usando la version vieja**. Para probarlo hace falta sesion nueva; si no, el smoke valida
 la definicion equivocada en silencio.
 
-Los dos son la mitad de "el que implementa no verifica", asi que la metodologia del implementador vive
-en su system prompt y **no** se relata desde `slice-runner`: el orquestador solo le pasa los datos del
-run. Si anades una regla de como implementar, va en el agente; si es un dato del run, va en el paso 5.
+Los dos son la mitad de "el que implementa no verifica", y hoy conviven dos flujos con esa misma
+regla resuelta en sitios distintos. En el flujo viejo (el agente), la metodologia del implementador
+vive en su system prompt y **no** se relata desde `slice-runner`. En el flujo nuevo (el programa), la
+posee `src/slice_runner/infrastructure/slice_implementer_brief.py`: es lo que el programa le manda a
+`claude -p`, igual que la rubrica del juez vive en `slice_verifier_judge.py` (ver
+`docs/conventions/infrastructure.md`). Si anades una regla de como implementar, va en el agente o en
+el brief segun el flujo que toques; si es un dato del run, va en el paso 5.
 
 ## Como se mide un cambio
 

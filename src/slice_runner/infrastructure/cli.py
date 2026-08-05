@@ -10,7 +10,7 @@ from slice_runner.domain.budgets import Budgets
 from slice_runner.domain.exceptions import (
     DiffNotReadableError,
     ImpossibleTransitionError,
-    InvalidVerdictError,
+    InvalidHarnessOutputError,
     UnreadableRunError,
     UnresolvableRepoOrBaseError,
 )
@@ -82,7 +82,7 @@ class Cli:
             return self._reported(f"the repo or the base requested do not resolve: {error}", ExitCode.USAGE_ERROR)
         except DiffNotReadableError as error:
             return self._reported(f"there is no diff to verify: {error}", ExitCode.NO_DIFF)
-        except InvalidVerdictError as error:
+        except InvalidHarnessOutputError as error:
             return self._reported(f"the judge left no usable verdict: {error}", ExitCode.NO_USABLE_VERDICT)
         except ProcessNotRunnableError as error:
             return self._reported(

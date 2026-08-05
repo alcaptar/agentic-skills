@@ -1,7 +1,19 @@
 from __future__ import annotations
 
 
-class InvalidVerdictError(ValueError):
+class InvalidHarnessOutputError(ValueError):
+    pass
+
+
+class InvalidVerdictError(InvalidHarnessOutputError):
+    pass
+
+
+class InvalidImplementationReportError(ValueError):
+    pass
+
+
+class PermissionDeniedError(ValueError):
     pass
 
 

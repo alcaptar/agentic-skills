@@ -13,11 +13,13 @@ class RecordedProcess(Process):
         self._code = code
         self.argv: list[str] = []
         self.stdin = ""
+        self.cwd: str | None = None
         self.calls = 0
 
-    def run(self, argv: list[str], *, stdin: str) -> ProcessOutput:
+    def run(self, argv: list[str], *, stdin: str, cwd: str | None = None) -> ProcessOutput:
         self.argv = argv
         self.stdin = stdin
+        self.cwd = cwd
         self.calls += 1
 
         return ProcessOutput(code=self._code, stdout=json.dumps(self._output), stderr="")
@@ -27,9 +29,9 @@ class UnrunnableJudge(Process):
     def __init__(self) -> None:
         self._real = LocalProcess()
 
-    def run(self, argv: list[str], *, stdin: str) -> ProcessOutput:
+    def run(self, argv: list[str], *, stdin: str, cwd: str | None = None) -> ProcessOutput:
         if argv[0] != JudgeInvocation.EXECUTABLE:
-            return self._real.run(argv, stdin=stdin)
+            return self._real.run(argv, stdin=stdin, cwd=cwd)
 
         raise ProcessNotRunnableError(f"{argv[0]}: no such executable")
 
@@ -42,9 +44,9 @@ class RealExceptTheJudge(Process):
         self.stdin = ""
         self.calls = 0
 
-    def run(self, argv: list[str], *, stdin: str) -> ProcessOutput:
+    def run(self, argv: list[str], *, stdin: str, cwd: str | None = None) -> ProcessOutput:
         if argv[0] != JudgeInvocation.EXECUTABLE:
-            return self._real.run(argv, stdin=stdin)
+            return self._real.run(argv, stdin=stdin, cwd=cwd)
 
         self.argv = argv
         self.stdin = stdin

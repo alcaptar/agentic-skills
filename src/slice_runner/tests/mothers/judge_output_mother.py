@@ -30,7 +30,8 @@ class JudgeVerdictMother:
 
 
 class HarnessEnvelopeMother:
-    RECORDED: ClassVar[tuple[str, ...]] = ("full-recipe", "unbounded-tools")
+    JUDGE_RECORDED: ClassVar[tuple[str, ...]] = ("full-recipe", "unbounded-tools")
+    ALL_RECORDED: ClassVar[tuple[str, ...]] = (*JUDGE_RECORDED, "implementer-two-paths")
 
     DENIED_READ: ClassVar[str] = (
         "/Users/someone/.claude/plugins/cache/skills/backend-engineering/2.0.2/skills/"
@@ -69,5 +70,11 @@ class HarnessEnvelopeMother:
     @classmethod
     def denying_a_read(cls, verdict: dict[str, object] | None = None) -> dict[str, object]:
         return cls.carrying(verdict or JudgeVerdictMother.passing()) | {
+            "permission_denials": [dict(denial) for denial in cls.DENIALS_AS_THE_HARNESS_SENDS_THEM]
+        }
+
+    @classmethod
+    def denying_a_read_over(cls, recorded: str) -> dict[str, object]:
+        return cls.recorded(recorded) | {
             "permission_denials": [dict(denial) for denial in cls.DENIALS_AS_THE_HARNESS_SENDS_THEM]
         }

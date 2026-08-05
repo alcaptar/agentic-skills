@@ -105,6 +105,12 @@ importar**: un smoke que solo importe el modulo lo da por bueno. Lo evita
   aplicacion tenga opinion sobre el transporte. `agents/slice-verifier.md` es del **flujo viejo** y se
   queda congelado: el programa no lo lee. Son dos copias de la rubrica a proposito, con la del programa
   diciendo la verdad sobre lo que el programa manda.
+- **La metodologia del implementador tiene la misma duplicacion declarada, por el mismo motivo.**
+  `SliceImplementerBrief` (`src/slice_runner/infrastructure/slice_implementer_brief.py`) es lo que el
+  programa le manda a `claude -p` por su entrada estandar, con su propio `TOOLS` y su propio texto de
+  metodologia. `agents/slice-implementer.md` es del **flujo viejo** y se queda congelado igual que
+  `agents/slice-verifier.md`: el programa no lo lee. Son dos copias del brief a proposito, con la del
+  programa diciendo la verdad sobre lo que el programa manda.
 - Un codigo de salida distinto de cero **es un dato**, no una excepcion: se lanza el proceso con
   `check=False` y el adaptador interpreta, porque el motivo esta en `stderr` y una excepcion lo borra.
 
