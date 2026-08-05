@@ -11,9 +11,9 @@ import pytest
 from slice_runner.domain.outcome import Outcome
 from slice_runner.domain.run_state import RunState
 from slice_runner.domain.step import Step
+from slice_runner.infrastructure.claude_config import ClaudeConfig
 from slice_runner.infrastructure.cli import Cli
 from slice_runner.infrastructure.exit_code import ExitCode
-from slice_runner.infrastructure.local_skill_library import LocalSkillLibrary
 from slice_runner.tests.argv import Argv
 from slice_runner.tests.doubles import RealExceptTheJudge, UnrunnableJudge
 from slice_runner.tests.git_repo import Git
@@ -75,7 +75,7 @@ _IMPOSSIBLE: list[tuple[Step, Outcome]] = sorted(
 class BlindToTheToolboxOfThisMachine:
     @pytest.fixture(autouse=True)
     def toolbox_out_of_reach(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv(LocalSkillLibrary.CONFIG_VARIABLE, str(tmp_path / "no-toolbox"))
+        monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path / "no-toolbox"))
 
 
 @pytest.mark.integration
@@ -228,7 +228,7 @@ class TestWhatTheJudgeMayRead:
     ) -> None:
         toolbox = tmp_path / "toolbox"
         (toolbox / "skills").mkdir(parents=True)
-        monkeypatch.setenv(LocalSkillLibrary.CONFIG_VARIABLE, str(toolbox))
+        monkeypatch.setenv(ClaudeConfig.VARIABLE, str(toolbox))
         repo = RepoMother.with_the_slice_staged(tmp_path)
         process = RealExceptTheJudge(HarnessEnvelopeMother.recorded())
 
@@ -241,7 +241,7 @@ class TestWhatTheJudgeMayRead:
     ) -> None:
         toolbox = tmp_path / "toolbox"
         (toolbox / "skills").mkdir(parents=True)
-        monkeypatch.setenv(LocalSkillLibrary.CONFIG_VARIABLE, str(toolbox))
+        monkeypatch.setenv(ClaudeConfig.VARIABLE, str(toolbox))
         repo = RepoMother.with_the_slice_staged(tmp_path)
         process = RealExceptTheJudge(HarnessEnvelopeMother.recorded())
 

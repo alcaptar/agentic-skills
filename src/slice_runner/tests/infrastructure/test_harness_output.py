@@ -7,6 +7,7 @@ import pytest
 from slice_runner.domain.exceptions import InvalidHarnessOutputError
 from slice_runner.infrastructure.harness_output import HarnessOutput
 from slice_runner.infrastructure.process import ProcessOutput
+from slice_runner.tests.mothers.harness_spend_mother import HarnessSpendMother
 from slice_runner.tests.mothers.judge_output_mother import HarnessEnvelopeMother
 
 
@@ -31,12 +32,55 @@ class TestTheEnvelopeWeKnow:
             HarnessOutput.from_dict(HarnessEnvelopeMother.without("structured_output"))
 
 
+class TestWhatTheHarnessMeasured:
+    @pytest.mark.parametrize("recorded", HarnessEnvelopeMother.ALL_RECORDED)
+    def test_every_recorded_call_brings_the_three_numbers_the_durable_log_records(self, recorded: str) -> None:
+        spend = HarnessOutput.from_dict(HarnessEnvelopeMother.recorded(recorded)).to_domain()
+
+        assert spend.measured
+        assert (spend.cost_usd > 0, spend.turns > 0, spend.duration_ms > 0) == (True, True, True)
+
+    def test_the_recorded_call_of_the_implementer_arrives_with_its_own_figures(self) -> None:
+        spend = HarnessOutput.from_dict(HarnessEnvelopeMother.recorded("implementer-two-paths")).to_domain()
+
+        assert (spend.cost_usd, spend.turns, spend.duration_ms) == (0.3433209, 9, 36315)
+
+    def test_one_call_is_one_call_so_a_sum_of_two_can_be_told_apart_from_a_single_one(self) -> None:
+        spend = HarnessOutput.from_dict(HarnessEnvelopeMother.recorded()).to_domain()
+
+        assert spend.calls == 1
+
+    def test_an_envelope_without_the_duration_is_rejected_instead_of_recorded_as_zero_time(self) -> None:
+        with pytest.raises(InvalidHarnessOutputError, match="duration_ms"):
+            HarnessOutput.from_dict(HarnessEnvelopeMother.without("duration_ms"))
+
+    def test_a_duration_that_is_not_a_number_is_rejected_because_the_log_takes_no_estimates(self) -> None:
+        with pytest.raises(InvalidHarnessOutputError, match="duration_ms"):
+            HarnessOutput.from_dict(HarnessEnvelopeMother.plus(duration_ms="a while"))
+
+
 class TestWhatTheProcessLeftBehind:
     def test_a_call_the_harness_declares_failed_is_rejected(self) -> None:
         output = self._carrying(HarnessEnvelopeMother.plus(is_error=True))
 
         with pytest.raises(InvalidHarnessOutputError, match="marked the call as failed"):
             HarnessOutput.from_process(output)
+
+    def test_a_failed_call_still_reports_what_it_spent_because_it_was_paid_for_all_the_same(self) -> None:
+        output = self._carrying(HarnessEnvelopeMother.plus(is_error=True))
+
+        with pytest.raises(InvalidHarnessOutputError) as rejection:
+            HarnessOutput.from_process(output)
+
+        assert rejection.value.spend == HarnessSpendMother.of_the_judge_call()
+
+    def test_output_that_never_parsed_carries_no_spend_because_nothing_got_measured(self) -> None:
+        output = ProcessOutput(code=1, stdout="", stderr="error: unknown option '--tools'")
+
+        with pytest.raises(InvalidHarnessOutputError) as rejection:
+            HarnessOutput.from_process(output)
+
+        assert rejection.value.spend is None
 
     def test_output_that_is_not_json_is_rejected_with_what_the_process_left_on_stderr(self) -> None:
         output = ProcessOutput(code=1, stdout="", stderr="error: unknown option '--tools'")

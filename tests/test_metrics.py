@@ -6,13 +6,13 @@ import argparse
 import json
 from typing import TYPE_CHECKING, Any
 
+import pytest
+
 import metrics
-from metrics import Ci, Fila, Hallazgos, Registro, Veredicto
+from metrics import CausaDescarte, Ci, Fila, Hallazgos, Registro, Veredicto
 
 if TYPE_CHECKING:
     from pathlib import Path
-
-    import pytest
 
 
 def _fila(**kw: Any) -> Fila:
@@ -33,6 +33,10 @@ def _fila(**kw: Any) -> Fila:
         "descartes_verify": 0.0,
         "duracion_s": 100.0,
         "coste_tokens": None,
+        "coste_usd": None,
+        "turnos": None,
+        "duracion_ms": None,
+        "descartes_verify_causa": None,
     }
     return Fila(**{**base, **kw})
 
@@ -60,6 +64,32 @@ def _row(**kw: Any) -> dict[str, Any]:
 def _escribe_log(path: Path, rows: list[dict[str, object]]) -> None:
     """Un log JSON por lineas ya escrito, para partir de historico en vez de de `record`."""
     path.write_text("\n".join(json.dumps(r) for r in rows) + "\n", encoding="utf-8")
+
+
+def _record(path: Path, *extra: str) -> list[str]:
+    """El argv minimo de `record` sobre un log de usar y tirar, mas lo que anada cada test."""
+    return [
+        "record",
+        "--repo",
+        "r",
+        "--slice",
+        "slice-01",
+        "--name",
+        "x",
+        "--veredicto",
+        "PASA",
+        "--ci",
+        "green",
+        "--path",
+        str(path),
+        *extra,
+    ]
+
+
+def _escrita(path: Path) -> dict[str, Any]:
+    """La unica fila que `record` acaba de anexar, tal cual quedo en el log."""
+    fila: dict[str, Any] = json.loads(path.read_text(encoding="utf-8").splitlines()[0])
+    return fila
 
 
 def test_aggregate_primer_intento_excluye_abort() -> None:
@@ -375,3 +405,229 @@ def test_cli_acepta_y_persiste_los_dos_campos(tmp_path: Path, capsys: pytest.Cap
     out = capsys.readouterr().out
     assert "reintentos verify" in out
     assert "contrato del juez roto" in out
+
+
+def test_el_gasto_del_harness_se_escribe_como_un_grupo_anidado(tmp_path: Path) -> None:
+    """Los tres numeros salen de la misma suma del JSON del harness, asi que viajan juntos.
+
+    Sueltos, la fila no diria de cuantas llamadas es cada uno; agrupados, `harness` significa
+    "esto es lo que midio el harness" y se distingue de los campos que estima quien invoca.
+    """
+    path = tmp_path / "m.jsonl"
+
+    assert metrics.main(_record(path, "--coste-usd", "0.42", "--turnos", "14", "--duracion-ms", "65652")) == 0
+
+    assert _escrita(path)["harness"] == {"coste_usd": 0.42, "turnos": 14, "duracion_ms": 65652}
+
+
+def test_sin_datos_del_harness_no_se_escribe_la_clave(tmp_path: Path) -> None:
+    """Ningun numero se estima: un cero o un `null` no se distinguen de "no lo he medido"."""
+    path = tmp_path / "m.jsonl"
+
+    assert metrics.main(_record(path)) == 0
+
+    assert "harness" not in _escrita(path)
+
+
+def test_pasar_un_dato_del_harness_y_no_los_otros_dos_es_error_de_uso(tmp_path: Path) -> None:
+    """Media suma es un dato que nadie puede interpretar, y no se puede completar inventandolo."""
+    path = tmp_path / "m.jsonl"
+
+    with pytest.raises(SystemExit) as salida:
+        metrics.main(_record(path, "--coste-usd", "0.42"))
+
+    assert salida.value.code == 2
+    assert not path.exists()
+
+
+def test_la_causa_del_descarte_viaja_junto_a_su_contador(tmp_path: Path) -> None:
+    """El contador dice cuantas veces, la causa dice de que clase de fallo se esta hablando.
+
+    Un juez que contesta su JSON con un veredicto que se contradice y una llamada que ni llego a
+    devolver el sobre son cosas distintas, y sin la causa el agregado no puede separarlas.
+    """
+    path = tmp_path / "m.jsonl"
+
+    assert metrics.main(_record(path, "--descartes-verify", "2", "--descartes-verify-causa", "llamada-fallida")) == 0
+
+    fila = _escrita(path)
+    assert (fila["descartes_verify"], fila["descartes_verify_causa"]) == (2, "llamada-fallida")
+
+
+def test_una_causa_sin_descartes_es_error_de_uso(tmp_path: Path) -> None:
+    """No hay descarte al que atribuirla, asi que la fila mentiria sobre lo que paso."""
+    path = tmp_path / "m.jsonl"
+
+    with pytest.raises(SystemExit) as salida:
+        metrics.main(_record(path, "--descartes-verify-causa", "veredicto-incoherente"))
+
+    assert salida.value.code == 2
+    assert not path.exists()
+
+
+def test_los_descartes_sin_causa_se_siguen_aceptando(tmp_path: Path) -> None:
+    """El flujo viejo no sabe la causa y el historico no la trae: exigirla romperia el registro."""
+    path = tmp_path / "m.jsonl"
+
+    assert metrics.main(_record(path, "--descartes-verify", "1")) == 0
+
+    fila = _escrita(path)
+    assert fila["descartes_verify"] == 1
+    assert "descartes_verify_causa" not in fila
+
+
+def test_una_causa_que_no_esta_en_el_vocabulario_no_se_registra(tmp_path: Path) -> None:
+    """El vocabulario es cerrado: una tercera causa inventada haria incomparable el reparto."""
+    path = tmp_path / "m.jsonl"
+
+    with pytest.raises(SystemExit) as salida:
+        metrics.main(_record(path, "--descartes-verify", "1", "--descartes-verify-causa", "se-aburrio"))
+
+    assert salida.value.code == 2
+    assert not path.exists()
+
+
+def test_el_report_promedia_el_coste_en_dolares_de_las_filas_que_lo_traen() -> None:
+    """Mismo trato que el coste en tokens: media y numero de muestras, nunca cero por defecto.
+
+    Promediar contando las filas sin dato como cero hundiria la media justo cuando se empieza a
+    medir, que es cuando la cifra se usa para decidir si subir de nivel.
+    """
+    filas = [_fila(coste_usd=0.20), _fila(coste_usd=0.40), _fila()]
+
+    agg = metrics._aggregate(filas)
+
+    assert (agg.coste_usd_media, agg.coste_usd_muestras) == (0.3, 2)
+
+
+def test_el_report_promedia_los_turnos_y_la_duracion_igual_que_el_coste() -> None:
+    """Los tres numeros del grupo se agregan, no solo el coste: si no, dos se escriben para nadie.
+
+    Mismo trato exacto: media de las filas que lo traen y cuantas eran, sin contar como cero las
+    que no lo traen.
+    """
+    filas = [_fila(turnos=9.0, duracion_ms=36315.0), _fila(turnos=5.0, duracion_ms=29337.0), _fila()]
+
+    agg = metrics._aggregate(filas)
+
+    assert (agg.turnos_media, agg.turnos_muestras) == (7.0, 2)
+    assert (agg.duracion_ms_media, agg.duracion_ms_muestras) == (32826.0, 2)
+
+
+def test_sin_ninguna_fila_del_harness_las_tres_medidas_son_sin_datos() -> None:
+    """`None` y `0.0` no son lo mismo: uno dice "no medido" y el otro "salio gratis en cero turnos"."""
+    agg = metrics._aggregate([_fila()])
+
+    assert (agg.coste_usd_media, agg.turnos_media, agg.duracion_ms_media) == (None, None, None)
+    assert (agg.coste_usd_muestras, agg.turnos_muestras, agg.duracion_ms_muestras) == (0, 0, 0)
+
+
+def test_una_fila_sin_el_grupo_del_harness_se_agrega_sin_error() -> None:
+    """Hay historico escrito antes de que el grupo existiera: leerlo no puede petar ni inventar."""
+    vieja = _row()
+
+    fila = Fila.from_row(vieja)
+
+    assert (fila.coste_usd, fila.turnos, fila.duracion_ms) == (None, None, None)
+    assert fila.descartes_verify_causa is None
+
+
+def test_los_tres_numeros_del_harness_salen_del_grupo_anidado() -> None:
+    """La compatibilidad historica vive en un solo sitio, y el grupo se lee ahi como los demas.
+
+    Los tres, no solo el coste: escribir un numero que el agregado no lee es escribirlo para nadie.
+    """
+    fila = Fila.from_row(_row(harness={"coste_usd": 0.42, "turnos": 14, "duracion_ms": 65652}))
+
+    assert (fila.coste_usd, fila.turnos, fila.duracion_ms) == (0.42, 14.0, 65652.0)
+
+
+def test_un_grupo_del_harness_a_medias_no_completa_los_que_falten_con_ceros() -> None:
+    """El escritor no puede emitirlo asi, pero el lector es tolerante y no puede inventar.
+
+    Cero turnos medidos y turnos no medidos no son lo mismo, y confundirlos hundiria la media.
+    """
+    fila = Fila.from_row(_row(harness={"coste_usd": 0.42}))
+
+    assert (fila.coste_usd, fila.turnos, fila.duracion_ms) == (0.42, None, None)
+
+
+def test_el_reparto_de_descartes_por_causa_solo_cuenta_las_filas_que_la_declaran() -> None:
+    """Un campo que se escribe y nadie agrega no sirve para decidir; repartir a ojo, tampoco.
+
+    Las filas con descartes pero sin causa -el flujo viejo y el historico- no entran en ninguna de
+    las dos, en vez de imputarse a la mas comun.
+    """
+    filas = [
+        _fila(descartes_verify=1.0, descartes_verify_causa=CausaDescarte.LLAMADA_FALLIDA),
+        _fila(descartes_verify=1.0, descartes_verify_causa=CausaDescarte.VEREDICTO_INCOHERENTE),
+        _fila(descartes_verify=3.0, descartes_verify_causa=CausaDescarte.VEREDICTO_INCOHERENTE),
+        _fila(descartes_verify=1.0),
+    ]
+
+    agg = metrics._aggregate(filas)
+
+    assert agg.to_dict()["descartes_por_causa"] == {"veredicto-incoherente": 2, "llamada-fallida": 1}
+    assert agg.descartes_verify_pct == 100.0
+
+
+def test_una_causa_que_el_log_no_reconoce_se_lee_como_ausente_en_vez_de_reventar() -> None:
+    """El log es durable: una fila rara no puede tumbar el agregado de todo el historico legible.
+
+    Mismo criterio que saltarse una linea corrupta en `_load`.
+    """
+    fila = Fila.from_row(_row(descartes_verify=1, descartes_verify_causa="se-aburrio"))
+
+    assert fila.descartes_verify_causa is None
+
+
+def test_el_coste_en_dolares_y_el_reparto_de_causas_llegan_al_report(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """El cableado de `report`, que es lo que de verdad lanza una persona.
+
+    Si los numeros nuevos se quedan en `_aggregate` y no salen por stdout, el dato existe y nadie
+    puede leerlo, que para decidir es lo mismo que no tenerlo.
+    """
+    log = tmp_path / "m.jsonl"
+    _escribe_log(
+        log,
+        [
+            {
+                "repo": "r",
+                "veredicto": "PASA",
+                "ci": "green",
+                "descartes_verify": 1,
+                "descartes_verify_causa": "llamada-fallida",
+                "harness": {"coste_usd": 0.5, "turnos": 14, "duracion_ms": 65652},
+            }
+        ],
+    )
+
+    assert metrics.main(["report", "--repo", "r", "--path", str(log), "--json"]) == 0
+
+    data = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
+    assert (data["coste_usd_media"], data["coste_usd_muestras"]) == (0.5, 1)
+    assert (data["turnos_media"], data["turnos_muestras"]) == (14.0, 1)
+    assert (data["duracion_ms_media"], data["duracion_ms_muestras"]) == (65652.0, 1)
+    assert data["descartes_por_causa"] == {"veredicto-incoherente": 0, "llamada-fallida": 1}
+
+    assert metrics.main(["report", "--repo", "r", "--path", str(log)]) == 0
+    salida = capsys.readouterr().out
+    assert "coste $" in salida
+    assert "turnos del harness" in salida
+    assert "duracion del harness" in salida
+
+
+def test_las_medidas_del_harness_que_ninguna_fila_trae_se_reportan_como_sin_datos(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Una media de `0.0` donde no hay medicion se lee como un dato, y decidir con ella es peor que no tenerla."""
+    log = tmp_path / "m.jsonl"
+    _escribe_log(log, [{"repo": "r", "veredicto": "PASA", "ci": "green"}])
+
+    assert metrics.main(["report", "--repo", "r", "--path", str(log)]) == 0
+
+    for linea in capsys.readouterr().out.splitlines():
+        if linea.startswith(("  coste $", "  turnos del harness", "  duracion del harness")):
+            assert "sin datos" in linea

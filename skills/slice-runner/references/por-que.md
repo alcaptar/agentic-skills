@@ -248,8 +248,12 @@ que esa linea sigue asi.
 
 `metrics.py report [--repo <repo>]` agrega: tasa de FALLA del verificador, tasa de bloqueo por
 controles, % de slices al primer intento, media de reintentos (implement, controles y CI por separado),
-tasa de CI roja y duracion media. Es el instrumento para el "confianza en el loop" del mapa de madurez.
-El coste en tokens no se mide aqui (sale de OTel de Claude Code).
+tasa de CI roja, duracion media, el reparto de los descartes del verificador por causa
+(`veredicto-incoherente` / `llamada-fallida`) y las tres medidas que trae el JSON del harness -coste en
+dolares, turnos y duracion en milisegundos-, cada una con su numero de muestras y con "sin datos" cuando
+ninguna fila la trae. Es el instrumento para el "confianza en el loop" del mapa de madurez. El coste en
+**tokens** sigue sin medirse aqui (sale de OTel de Claude Code); el coste en **dolares** si se mide,
+porque lo trae el sobre del harness.
 
 El **veto del juez** (`FALLA`) y el **bloqueo por controles** (`bloqueada-controles`) se registran
 aparte a proposito: uno es un rechazo semantico y el otro un fallo mecanico, y confundirlos deja

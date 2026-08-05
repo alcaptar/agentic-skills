@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from slice_runner.infrastructure.claude_config import ClaudeConfig
 from slice_runner.infrastructure.local_skill_library import LocalSkillLibrary
 
 if TYPE_CHECKING:
@@ -16,7 +17,7 @@ class TestWhereTheYardstickLives:
     ) -> None:
         for tree in ("skills", "plugins"):
             (tmp_path / tree).mkdir()
-        monkeypatch.setenv(LocalSkillLibrary.CONFIG_VARIABLE, str(tmp_path))
+        monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
 
         assert LocalSkillLibrary().directories() == (tmp_path / "skills", tmp_path / "plugins")
 
@@ -25,7 +26,7 @@ class TestWhereTheYardstickLives:
     ) -> None:
         versioned = tmp_path / "plugins" / "cache" / "skills" / "backend-engineering" / "2.0.2"
         versioned.mkdir(parents=True)
-        monkeypatch.setenv(LocalSkillLibrary.CONFIG_VARIABLE, str(tmp_path))
+        monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
 
         granted = LocalSkillLibrary().directories()
 
@@ -36,7 +37,7 @@ class TestWhereTheYardstickLives:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         (tmp_path / "skills").mkdir()
-        monkeypatch.setenv(LocalSkillLibrary.CONFIG_VARIABLE, str(tmp_path))
+        monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
 
         assert LocalSkillLibrary().directories() == (tmp_path / "skills",)
 
@@ -44,21 +45,21 @@ class TestWhereTheYardstickLives:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         (tmp_path / "skills").write_text("not a directory", encoding="utf-8")
-        monkeypatch.setenv(LocalSkillLibrary.CONFIG_VARIABLE, str(tmp_path))
+        monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
 
         assert LocalSkillLibrary().directories() == ()
 
     def test_a_machine_with_no_toolbox_at_all_grants_nothing_instead_of_failing(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setenv(LocalSkillLibrary.CONFIG_VARIABLE, str(tmp_path / "nowhere"))
+        monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path / "nowhere"))
 
         assert LocalSkillLibrary().directories() == ()
 
     def test_without_the_variable_it_falls_back_to_the_home_of_the_tool_and_expands_it(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.delenv(LocalSkillLibrary.CONFIG_VARIABLE, raising=False)
+        monkeypatch.delenv(ClaudeConfig.VARIABLE, raising=False)
         monkeypatch.setenv("HOME", str(tmp_path))
         (tmp_path / ".claude" / "skills").mkdir(parents=True)
 
@@ -67,7 +68,7 @@ class TestWhereTheYardstickLives:
     def test_an_empty_variable_is_treated_as_absent_and_not_as_the_current_directory(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setenv(LocalSkillLibrary.CONFIG_VARIABLE, "")
+        monkeypatch.setenv(ClaudeConfig.VARIABLE, "")
         monkeypatch.setenv("HOME", str(tmp_path))
         (tmp_path / ".claude" / "plugins").mkdir(parents=True)
 

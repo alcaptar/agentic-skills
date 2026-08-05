@@ -22,8 +22,11 @@ class ClaudeVerifier(Verifier):
         invocation = JudgeInvocation(judge=judge, review=review)
         output = self._process.run(invocation.argv, stdin=invocation.text)
         envelope = HarnessOutput.from_process(output)
+        with envelope.measuring():
+            verdict = VerdictPayload.from_dict(envelope.structured_output).to_domain()
 
         return Verification(
-            verdict=VerdictPayload.from_dict(envelope.structured_output).to_domain(),
+            verdict=verdict,
+            spend=envelope.to_domain(),
             denied_reads=tuple(denial.denied_action for denial in envelope.permission_denials),
         )

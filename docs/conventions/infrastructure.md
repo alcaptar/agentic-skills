@@ -111,15 +111,16 @@ importar**: un smoke que solo importe el modulo lo da por bueno. Lo evita
   metodologia. `agents/slice-implementer.md` es del **flujo viejo** y se queda congelado igual que
   `agents/slice-verifier.md`: el programa no lo lee. Son dos copias del brief a proposito, con la del
   programa diciendo la verdad sobre lo que el programa manda.
-- **`LocalCorpus` y `LocalSkillLibrary` resuelven cada uno la raiz de configuracion de la herramienta**
-  (`CLAUDE_CONFIG_DIR` o `~/.claude` expandido), en vez de compartir un objeto que la diga. Es una
-  duplicacion declarada de cuatro lineas: lo que comparten no es una regla del programa sino **la
-  convencion de Claude Code sobre donde vive su configuracion**, y cada adaptador cuelga de ahi una cosa
-  distinta -uno lee los dos arboles de la vara, el otro anexa el par (diff, veredicto) de cada
-  verificacion a `slice-runner/corpus/verdicts.jsonl`-. Su casa natural es un objeto propio de esa
-  convencion, y se hara cuando exista un tercer adaptador que la necesite; hasta entonces, extraerla
-  obligaria a renombrar la constante por la que **todos** los tests que ejecutan una verificacion
-  mantienen la suite fuera del home real, que es mas superficie tocada que la duplicacion que ahorra.
+- **La raiz de configuracion de la herramienta la resuelve `ClaudeConfig`** (`CLAUDE_CONFIG_DIR`, o
+  `~/.claude` expandido, con la variable vacia tratada como ausente). La comparten `LocalSkillLibrary`
+  -que lee los dos arboles de la vara- y `MetricsInvocation` -que resuelve la ruta del script del
+  registro durable-, porque lo que comparten no es una regla del programa sino **la convencion de Claude
+  Code sobre donde vive su configuracion**: de ahi que viva en un objeto propio y no colgada de uno de
+  los dos adaptadores. Se extrajo al aparecer el tercer consumidor, que es la condicion que la
+  duplicacion anterior se habia puesto a si misma. **`LocalCorpus` se queda con su copia**, y eso es
+  deuda declarada y abierta, no precedente: migrarla obliga a renombrar la constante por la que **todos**
+  los tests que ejecutan una verificacion mantienen la suite fuera del home real, que es mas superficie
+  tocada de la que ha pedido ninguna slice; se hace entera cuando se toque ese adaptador, no a medias.
 - **`LocalCorpus.record` escribe a disco sin red, y un `OSError` suyo sale del programa sin mapear.** La
   recogida del corpus (`src/slice_runner/infrastructure/local_corpus.py`) ocurre en el camino feliz y
   **despues** de que exista el veredicto, asi que un sistema de ficheros que no deje anexar tira una
@@ -132,6 +133,31 @@ importar**: un smoke que solo importe el modulo lo da por bueno. Lo evita
   igual de desprotegido. Cuando se cierre, se cierra **decidiendo la politica** -si el corpus es
   best-effort, si su fallo es un cierre propio del run, y con que codigo de salida se distingue-, no
   capturando el `OSError` a escondidas dentro del adaptador.
+- **El registro durable lo escribe `metrics.py` como subproceso, y su vocabulario esta duplicado a
+  proposito.** `MetricsScriptLog` implementa el puerto `MetricsLog` invocando el script por el puerto
+  `Process`, no importandolo: el programa no importa nada de `skills/` (arriba), y ademas el formato del
+  log -que sobrevive a los runs y tiene historico escrito- sigue teniendo **un solo escritor**.
+  Consecuencia aceptada: los tres vocabularios del cierre existen dos veces -en ingles dentro del programa
+  (`RunState`, `DiscardCause`) y con las palabras del log en la frontera (`DurableVerdict`, `DurableCi`,
+  `DurableDiscardCause`, en `metrics_invocation.py`)-, con un `match`
+  exhaustivo entre las dos, como `IssueLabel.of`: un cierre nuevo rompe en `mypy` en vez de caer en una
+  rama generica, y un run que **no** ha cerrado lanza `RunNotClosedError` en vez de escribir una fila. La
+  duplicacion la **mide** `tests/test_skill_contracts.py`, que compara los tres conjuntos y ademas pasa el
+  argv que construye el programa por el `argparse` del script: un flag renombrado solo se veria al cerrar
+  una slice, que es justo el momento en que un fallo pierde la fila.
+- **El programa no escribe ningun numero que no venga del harness.** Del sobre salen coste en dolares,
+  turnos y duracion, sumados por slice; `--duracion-s` (reloj de pared) y `--coste-tokens` **no se pasan**,
+  porque aqui nadie los mide y no hay puerto de reloj. De ahi que el gasto sea un value object que
+  distingue "todavia no se ha medido nada" de "cero medido" (`HarnessSpend.measured`): con nada medido, los
+  tres flags no viajan y el script no escribe la clave. Y **todas** las llamadas cuentan, tambien las que
+  acaban en excepcion -si no, una fila con tres descartes escribiria un coste sistematicamente por debajo-:
+  una vez parseado el sobre, `HarnessOutput.measuring()` cuelga el gasto de la llamada de cualquier
+  `MeasuredCallError` que salga del bloque (veredicto incoherente, `is_error`, permiso denegado, informe
+  invalido), y solo esa capa puede hacerlo porque es la unica que ve el sobre. Si el sobre **no** llego a
+  parsearse no hay nada que colgar y la excepcion sale con `spend` en `None`: eso es "no medido", no un cero.
+- **La ruta del script sale de `CLAUDE_CONFIG_DIR`, no del repo** (`ClaudeConfig`, el objeto del
+  bullet de arriba): la slice puede vivir en otro repo, donde no hay `skills/` del que colgar una ruta
+  relativa.
 - Un codigo de salida distinto de cero **es un dato**, no una excepcion: se lanza el proceso con
   `check=False` y el adaptador interpreta, porque el motivo esta en `stderr` y una excepcion lo borra.
 - **`GhForum` reutiliza `GhCommandFailedError` de `run_repository.py`** para un exit distinto de cero de
