@@ -79,7 +79,7 @@ class TestRunPrechecks:
 
         assert query.execute(params) is PrecheckOutcome.CLEAR
 
-    def test_the_exemption_line_counts_as_declared_controls_not_as_missing(self, query: RunPrechecks) -> None:
+    def test_a_declared_exemption_is_clear_even_though_it_carries_no_command_to_run(self, query: RunPrechecks) -> None:
         params = self._params(subissue=SubIssueMother.pending(), parent=ParentIssueMother.with_exempt_controls())
 
         assert query.execute(params) is PrecheckOutcome.CLEAR
