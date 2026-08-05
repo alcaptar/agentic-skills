@@ -9,7 +9,7 @@ class PermissionDenial(ContractModel):
     tool_input: dict[str, object]
 
     @property
-    def denied_read(self) -> str:
+    def denied_action(self) -> str:
         target = self.tool_input.get("file_path") or self.tool_input.get("path")
 
         return f"{self.tool_name} {target}" if isinstance(target, str) else self.tool_name

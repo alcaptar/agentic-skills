@@ -25,5 +25,5 @@ class ClaudeVerifier(Verifier):
 
         return Verification(
             verdict=VerdictPayload.from_dict(envelope.structured_output).to_domain(),
-            denied_reads=tuple(denial.denied_read for denial in envelope.permission_denials),
+            denied_reads=tuple(denial.denied_action for denial in envelope.permission_denials),
         )

@@ -13,7 +13,7 @@ _JUDGE = JudgeMother.adversarial()
 
 
 class TestTheVerdictOfARecordedCall:
-    @pytest.mark.parametrize("recorded", HarnessEnvelopeMother.RECORDED)
+    @pytest.mark.parametrize("recorded", HarnessEnvelopeMother.JUDGE_RECORDED)
     def test_the_envelope_of_both_real_calls_is_read_whole_from_structured_output(self, recorded: str) -> None:
         process = RecordedProcess(HarnessEnvelopeMother.recorded(recorded))
 

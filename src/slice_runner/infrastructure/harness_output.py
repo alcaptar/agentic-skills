@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Self
 
 from pydantic import Field
 
-from slice_runner.domain.exceptions import InvalidVerdictError
+from slice_runner.domain.exceptions import InvalidHarnessOutputError
 from slice_runner.infrastructure.contract_model import ContractModel
 from slice_runner.infrastructure.permission_denial import PermissionDenial
 
@@ -23,7 +23,7 @@ class HarnessOutput(ContractModel):
     fast_mode_disabled_reason: object = None
     fast_mode_state: object = None
     model_usage: object = Field(alias="modelUsage", default=None)
-    num_turns: object = None
+    num_turns: int
     permission_denials: tuple[PermissionDenial, ...] = ()
     result: object = None
     session_id: object = None
@@ -31,7 +31,7 @@ class HarnessOutput(ContractModel):
     subtype: object = None
     terminal_reason: object = None
     time_to_request_ms: object = None
-    total_cost_usd: object = None
+    total_cost_usd: float
     ttft_ms: object = None
     ttft_stream_ms: object = None
     type: object = None
@@ -42,24 +42,24 @@ class HarnessOutput(ContractModel):
     def from_process(cls, output: ProcessOutput) -> Self:
         envelope = cls.from_dict(cls._decoded(output))
         if envelope.is_error:
-            raise InvalidVerdictError("the harness marked the call as failed (`is_error`)")
+            raise InvalidHarnessOutputError("the harness marked the call as failed (`is_error`)")
 
         return envelope
 
     @classmethod
     def from_dict(cls, data: dict[str, object]) -> Self:
-        return cls._validated(data, "the harness envelope is not the one we know", InvalidVerdictError)
+        return cls._validated(data, "the harness envelope is not the one we know", InvalidHarnessOutputError)
 
     @classmethod
     def _decoded(cls, output: ProcessOutput) -> dict[str, object]:
         try:
             data = json.loads(output.stdout)
         except json.JSONDecodeError as error:
-            raise InvalidVerdictError(
+            raise InvalidHarnessOutputError(
                 f"the harness returned no JSON (code {output.code}): {cls._excerpt(output)}"
             ) from error
         if not isinstance(data, dict):
-            raise InvalidVerdictError(f"the harness envelope has to be an object, not {type(data).__name__}")
+            raise InvalidHarnessOutputError(f"the harness envelope has to be an object, not {type(data).__name__}")
 
         return data
 
