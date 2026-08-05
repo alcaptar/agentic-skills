@@ -48,7 +48,7 @@ class HarnessOutput(ContractModel):
 
     @classmethod
     def from_dict(cls, data: dict[str, object]) -> Self:
-        return cls._validated(data, "the harness envelope is not the one we know")
+        return cls._validated(data, "the harness envelope is not the one we know", InvalidVerdictError)
 
     @classmethod
     def _decoded(cls, output: ProcessOutput) -> dict[str, object]:

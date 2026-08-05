@@ -4,6 +4,7 @@ from typing import Self
 
 from pydantic import Field
 
+from slice_runner.domain.exceptions import InvalidVerdictError
 from slice_runner.domain.finding import Finding
 from slice_runner.domain.ruling import Ruling
 from slice_runner.domain.severity import Severity
@@ -58,7 +59,7 @@ class VerdictPayload(ContractModel):
 
     @classmethod
     def from_dict(cls, data: dict[str, object]) -> Self:
-        return cls._validated(data, "the judge did not emit the verdict of the rubric")
+        return cls._validated(data, "the judge did not emit the verdict of the rubric", InvalidVerdictError)
 
     @classmethod
     def from_domain(cls, verdict: Verdict) -> Self:

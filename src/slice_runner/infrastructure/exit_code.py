@@ -6,8 +6,8 @@ from slice_runner.domain.ruling import Ruling
 
 
 class ExitCode(IntEnum):
-    PASS = 0
-    FAIL = 1
+    OK = 0
+    VETOED = 1
     NO_USABLE_VERDICT = 2
     NO_DIFF = 3
     USAGE_ERROR = 4
@@ -16,6 +16,6 @@ class ExitCode(IntEnum):
     def of(cls, ruling: Ruling) -> ExitCode:
         match ruling:
             case Ruling.PASS:
-                return cls.PASS
+                return cls.OK
             case Ruling.FAIL:
-                return cls.FAIL
+                return cls.VETOED

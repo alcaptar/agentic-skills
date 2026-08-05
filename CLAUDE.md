@@ -48,8 +48,9 @@ siquiera como "ejemplo del repo":
 
 - `skills/slice-runner/scripts/` y `skills/deploy-watch/scripts/` — en castellano y llenos de
   docstrings. Y una de esas docstrings, la de `skills/slice-runner/scripts/controles.py`, es una de las
-  dos copias declaradas del numero de la ventana de gracia de la integracion continua, asi que borrarla
-  a ciegas tira un contrato.
+  copias en prosa del numero de la ventana de gracia de la integracion continua -el numero vive en
+  `src/slice_runner/domain/budgets.py` y las cinco copias escritas las compara
+  `tests/test_skill_contracts.py`-, asi que borrarla a ciegas tira un contrato.
 - `tests/` — todavia function-based y en castellano.
 
 `src/slice_runner/` es el primero que cumple las convenciones enteras: **ese es el ejemplo**. La

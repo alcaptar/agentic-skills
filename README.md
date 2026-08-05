@@ -110,7 +110,7 @@ son los unicos puntos donde para y decides tu.
 | `skills/slice-runner/scripts/metrics.py` | Registro durable | Telemetria del loop (veredicto, reintentos de controles / de verificacion / de integracion continua, descartes del juez) en `~/.claude/slice-runner/metrics.jsonl`, fuera del repo. Sirve para decidir cuando subir de nivel de autonomia. |
 | `skills/deploy-watch/scripts/deploy_core.py` | Nucleo puro | La decision go/no-go: umbrales relativos a baseline, confirmacion sostenida, scorecard, veredicto. La toma el codigo, no la impresion del agente. |
 | `skills/deploy-watch/references/monitoring.md`, `skills/slice-spec/references/slicing.md`, `skills/slice-spec/references/observabilidad.md` | Documentos de referencia | Conocimiento cargado bajo demanda: que senales mirar y como leerlas, como trocear, y como decidir la observabilidad de una slice. |
-| `src/slice_runner/` | Programa orquestador | El trozo del pipeline que ya **no** es un agente: hoy solo `verify`, que calcula el diff de la slice, se lo pasa **dentro del prompt** al juez -invocado como una llamada sin estado, `claude -p` con el esquema del veredicto- y emite el veredicto por salida estandar con su codigo de salida (tabla en "El paso que ya es un programa"). Capas separadas (`domain/`, `application/`, `infrastructure/`) y tests co-localizados. El *por que* de esta forma esta en `docs/superpowers/specs/2026-07-31-orquestador-como-programa-design.md`. |
+| `src/slice_runner/` | Programa orquestador | El trozo del pipeline que ya **no** es un agente: `verify`, que calcula el diff de la slice, se lo pasa **dentro del prompt** al juez -invocado como una llamada sin estado, `claude -p` con el esquema del veredicto- y emite el veredicto por salida estandar con su codigo de salida (tabla en "El paso que ya es un programa"); y `explain`, que contesta que paso viene despues de un resultado y cuando se agota un presupuesto, sin montar un run. Capas separadas (`domain/`, `application/`, `infrastructure/`) y tests co-localizados. El *por que* de esta forma esta en `docs/superpowers/specs/2026-07-31-orquestador-como-programa-design.md`. |
 | `docs/` | Memoria del proyecto | `conventions/` (la vara de cada capa, cargada a demanda: la tabla de enrutado esta en `CLAUDE.md`), `design-notes.md` (cada decision y su porque, para no re-derivarlo), `research-agent-loops.md` (research citado), `maturity-map.md` (donde encaja el pipeline), `12-factor.md` (auditoria contra los 12 factores + el spike que mide si `claude -p` sirve de agente sin estado), `docs/superpowers/specs/` (un design-doc por cambio). |
 | `tests/` | Unit tests offline | La logica pura se cubre en **dos arboles**: aqui la de los scripts -cuerpo del issue, controles, metricas, nucleo del deploy- y los **contratos duplicados a proposito** entre skills; en `src/slice_runner/tests/`, co-localizada dentro del paquete, la de `src/slice_runner/`. |
 | `smoke/` | Smoke test real | Lo que los unit tests no pueden cubrir: la entrada/salida real contra `gh` y la integracion continua de GitHub Actions, con una fixture autocontenida y las recetas para provocar cada camino de fallo. Ver `smoke/README.md`. |
@@ -181,15 +181,38 @@ error, nunca mezclados. El codigo de salida es el contrato con quien lo invoca:
 
 | | Que significa |
 |---|---|
-| `0` | PASA: ningun hallazgo de severidad alta |
+| `0` | El comando contesto lo que se le pidio: en `verify`, PASA sin ningun hallazgo de severidad alta |
 | `1` | FALLA: el juez veta la slice |
 | `2` | No hay veredicto de fiar: un proceso del run no se pudo lanzar, o el juez devolvio un veredicto incoherente |
 | `3` | No hay nada que juzgar: el indice esta vacio (¿falto el `git add`?) |
-| `4` | El repo o la base no resuelven |
+| `4` | Error de uso: el repo o la base no resuelven, o el estado que se quiere explicar no se puede leer |
 
 `1` es un veredicto y `2` no lo es: esa es la distincion que hace el codigo de salida y que un booleano
 perderia. `PYTHONPATH=src` hace falta porque el proyecto **no se instala** (el motivo esta en
 `pyproject.toml`).
+
+### La secuencia y los presupuestos, interrogables sin montar un run
+
+Que viene despues de cada paso, y cuando se agota un presupuesto, tampoco lo decide un modelo leyendo
+prosa: es una funcion pura del dominio (`StateMachine`). Se le puede preguntar de una en una, con el
+estado del run por entrada estandar:
+
+```bash
+echo '{"run": {"step": "run-controls", "control_retries": 2}, "outcome": "failed"}' \
+  | PYTHONPATH=src uv run python -m slice_runner explain
+```
+
+```json
+{"run": {"step": "run-controls", "control_retries": 2, "verify_retries": 0, "ci_retries": 0,
+ "indeterminate_ticks": 0, "verify_discards": 0}, "state": "blocked-controls", "wait_seconds": 0}
+```
+
+La respuesta trae **el run entero** (con los contadores ya gastados), el estado en el que queda -`open`
+mientras siga vivo, y si no, el cierre concreto- y **cuantos segundos hay que esperar** antes del
+proximo tick, para que el numero de la ventana de gracia no lo decida quien tickea. Los presupuestos son
+dos reintentos de controles, dos de verificacion, uno de integracion continua roja, y 3 ticks
+indeterminados consecutivos con 30 s o mas entre tick y tick. Un par (paso, resultado) que la secuencia
+no describe **no cae en una rama generica**: sale por `4`.
 
 ## Ejemplo: una feature de punta a punta
 

@@ -20,8 +20,9 @@ dependencia ahi es un fallo en la maquina de otra persona.
 src/slice_runner/
   domain/
     {value_object}.py     un value object por modulo (finding, verdict, judge, slice_diff...)
-    {enum}.py             un vocabulario cerrado por modulo (ruling, severity)
+    {enum}.py             un vocabulario cerrado por modulo (ruling, severity, step, outcome)
     {puerto}.py           un puerto por fichero (diff_reader, verifier, skill_library)
+    {politica}.py         logica pura con su configuracion inyectada (state_machine)
     exceptions.py         las excepciones del dominio
   application/
     actions/{name}.py     casos de uso que mutan estado
@@ -37,7 +38,8 @@ src/slice_runner/
   __main__.py
 ```
 
-- **Un concepto por modulo**: un value object, un enum, un puerto o un adaptador por fichero. Las
+- **Un concepto por modulo**: un value object, un enum, un puerto, una politica o un adaptador por
+  fichero. Las
   excepciones del dominio son la excepcion a la regla y viven juntas en `domain/exceptions.py`, porque
   se leen como un catalogo y quien las captura suele querer ver la jerarquia de una vez.
 - **Un puerto que solo consume la infraestructura vive con su adaptador**, no en `domain/`. Es el caso
