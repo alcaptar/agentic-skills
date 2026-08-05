@@ -23,7 +23,7 @@ class Prechecks:
             return PrecheckOutcome.BRANCH_ALREADY_EXISTS
         if not parent.sources:
             return PrecheckOutcome.MISSING_SOURCES
-        if not parent.controls:
+        if not parent.controls.declared:
             return PrecheckOutcome.MISSING_CONTROLS
 
         return PrecheckOutcome.CLEAR

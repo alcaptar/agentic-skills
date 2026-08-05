@@ -36,14 +36,20 @@ from slice_runner.domain.staged_hygiene import StagedHygiene
 from slice_runner.domain.step import Step
 from slice_runner.infrastructure.exit_code import ExitCode
 from slice_runner.infrastructure.local_skill_library import LocalSkillLibrary
+from slice_runner.infrastructure.parent_body import ParentBody
+from slice_runner.infrastructure.process import ProcessOutput
+from slice_runner.infrastructure.run_repository import RunRepository
 from slice_runner.infrastructure.slice_verifier_judge import SliceVerifierJudge
+from slice_runner.infrastructure.subissue_body import SubissueBody
 from slice_runner.infrastructure.verdict_payload import FindingPayload
+from slice_runner.tests.doubles import ScriptedProcess
 
 _ROOT = Path(__file__).resolve().parents[1]
 _RUNNER = _ROOT / "skills" / "slice-runner" / "SKILL.md"
 _CONTROLES = _ROOT / "skills" / "slice-runner" / "scripts" / "controles.py"
 _DEPLOY_WATCH = _ROOT / "skills" / "deploy-watch" / "SKILL.md"
 _VERIFIER = _ROOT / "agents" / "slice-verifier.md"
+_SPEC = _ROOT / "skills" / "slice-spec" / "SKILL.md"
 
 
 _PROGRAM_JUDGE = SliceVerifierJudge.adversarial()
@@ -127,6 +133,257 @@ def test_no_label_in_the_vocabulary_lacks_a_source_in_the_translator_or_a_manual
     produced = {IssueLabel.of(state=state, step=step) for state in RunState for step in Step} - {None}
 
     assert set(IssueLabel) - produced == manual_source
+
+
+_PARENT_EXAMPLE = "### El issue padre"
+_SUBISSUE_EXAMPLE = "### Una subissue por slice"
+_HARD_RULES = "### Reglas duras"
+_AUTHORING_STEPS = "## Steps — modo autoria (por defecto)"
+_VALIDATE = "## Steps — modo `validate`"
+
+_SUBISSUE_TITLE = re.compile(r"`(slice-\d+ \([^`)]+\): [^`]+)`")
+_KEBAB_TITLE = re.compile(r"^slice-\d\d \((?:[a-z]+: )?[a-z0-9]+(?:-[a-z0-9]+)*\): \S")
+_MACRO_LABEL = re.compile(r"`((?:estado|bloqueada|abortada):[a-z-]+)`")
+_LABELLED_LINE_WRITTEN = re.compile(r"^([A-Z]{4,})\s*:", re.MULTILINE)
+_LABELLED_LINE_NAMED = re.compile(r"`([A-Z]{4,})\s*:")
+_CONFIRMATION_ANCHORS = ("spec completa", "espera confirmacion")
+"""Short anchors for the gate criterion, which has no second surface to compare against.
+
+`slice-spec` creates issues in someone else's repository, so the gate -- print everything and wait --
+is the whole safety of the step. Nothing else in the tree states it, so this is a claim about the
+prose rather than a comparison; reword the sentence and the anchors move with it.
+"""
+
+_VALIDATE_ANCHORS = (
+    "la regla que incumple y su ubicacion",
+    "issue padre",
+    "slice-NN (#numero)",
+    "en el titulo, en la etiqueta o en el cuerpo",
+)
+"""Same kind of claim as `_CONFIRMATION_ANCHORS`, for the other half of what `validate` owes.
+
+Checking the new shape is measured by comparing vocabularies; *reporting* each deviation with its rule
+and its location is prose, and there is no second surface to compare it against -- the location is only
+useful to the person reading the report. It is not decoration either: with the spec split across a
+parent and twelve subissues, a deviation without its location is one the person has to go and find.
+Nothing else in the tree states it, so the anchors travel with the sentence.
+"""
+
+_SUBISSUE_LINES = frozenset({"REPO", "INTENCION", "ACEPTACION", "SENAL"})
+"""The four labelled lines a subissue body carries, written down instead of derived from the example.
+
+Only one of them has a consumer in the program: `REPO:`, which `SubissueBody` reads, and which the test
+above measures against it. Nothing in production reads `INTENCION:`, `ACEPTACION:` or `SENAL:` yet --
+they travel as prose to the implementer and to `deploy-watch` -- so there is no second surface to
+compare the set against, and deriving it from the very example under test approves whatever the example
+happens to say: drop `SENAL:` from the three regions at once and all three sets still match. So the set
+is an external claim about the prose, with its reason next to it, like `_CONFIRMATION_ANCHORS`.
+"""
+
+
+def _without_fences(markdown: str) -> str:
+    return re.sub(r"^```.*?^```\n", "", markdown, flags=re.DOTALL | re.MULTILINE)
+
+
+def _spec_example(heading: str) -> str:
+    """The fenced example a section of `slice-spec` carries, taken from the file, not restated here.
+
+    Read from the raw text on purpose: the parent's example contains `##` lines of its own, so
+    cutting the section by headings first would truncate it at the format it is documenting.
+    """
+    text = _read(_SPEC)
+    at = text.find(f"\n{heading}\n")
+    assert at != -1, f"cannot find `{heading}` in {_rel(_SPEC)}"
+
+    block = re.search(r"```markdown\n(.*?)^```", text[at:], re.DOTALL | re.MULTILINE)
+    assert block, f"`{heading}` in {_rel(_SPEC)} carries no fenced example"
+
+    return block.group(1)
+
+
+def _spec_prose(heading: str) -> str:
+    """The prose of a section, fenced examples removed, so a rule is read from the rule."""
+    stripped = _without_fences(_read(_SPEC))
+    at = stripped.find(f"\n{heading}\n")
+    assert at != -1, f"cannot find `{heading}` in {_rel(_SPEC)}"
+
+    body = stripped[at + len(heading) + 2 :]
+    end = re.search(r"^#{2,4} ", body, re.MULTILINE)
+
+    return body[: end.start()] if end else body
+
+
+def test_the_parent_issue_slice_spec_documents_is_one_the_program_reads_whole() -> None:
+    """The parent carries the intention, the yardstick and the commands, and `ParentBody` is what reads it.
+
+    The example in the skill is what a model imitates, so it is the real contract: a heading renamed on
+    one side alone gives a parent the program parses as empty, and `Prechecks` then refuses to run a
+    perfectly written spec -- or, worse, runs it with no yardstick. Parsing the documented example is
+    the only way to measure that the two sides still agree.
+    """
+    parsed = ParentBody.parse(_spec_example(_PARENT_EXAMPLE), repo=None)
+
+    assert parsed.intention, "the documented parent carries no `## Intencion` the program can read"
+    assert parsed.sources, "the documented parent carries no source the program can read"
+    assert parsed.controls.commands, "the documented parent carries no control command the program can read"
+
+
+def test_the_exemption_line_slice_spec_documents_is_read_as_an_exemption_and_never_as_a_command() -> None:
+    """`- ninguno: <motivo>` declares that a repo has no controls; it is not a control called `ninguno`.
+
+    It used to come out of the parser as `ControlCommand(name="ninguno", command=<the reason>)`, which
+    means whoever runs the controls would hand a sentence of Spanish prose to a shell. Empty and exempt
+    still are not the same thing: with no controls and no exemption the prechecks fail closed, and a
+    declared exemption is treated as an exempt layer with nothing to run. The target repo comes out of
+    the subissue example, so this also pins that a slice with `REPO:` has the subsection of its repo.
+    """
+    target = SubissueBody.parse(_spec_example(_SUBISSUE_EXAMPLE)).repo
+    assert target, "the documented subissue carries no `REPO:`, so there is no target repo to filter by"
+
+    controls = ParentBody.parse(_spec_example(_PARENT_EXAMPLE), repo=target).controls
+
+    assert controls.declared, f"the documented parent declares nothing for {target}, which fails closed"
+    assert controls.exemption_reason, f"the exemption the parent documents for {target} carries no reason"
+    assert controls.commands == (), (
+        f"the exemption line documented for {target} came back as {controls.commands}: a reason for "
+        f"having no controls has become a command someone would try to execute"
+    )
+
+
+def _documented_subissue_title() -> str:
+    titles: list[str] = _SUBISSUE_TITLE.findall(_spec_prose(_SUBISSUE_EXAMPLE))
+    assert len(titles) == 1, f"expected exactly one subissue title under `{_SUBISSUE_EXAMPLE}`, found {titles}"
+
+    return titles[0]
+
+
+def test_the_subissue_slice_spec_documents_is_read_by_the_program_as_the_slice_it_names() -> None:
+    """Title, label and body of the documented subissue, read by the program that consumes them.
+
+    The identifier in the title is what orders the slices -- `RunRepository` sorts by it and rejects a
+    title without it -- and the name is what derives the branch and the commit scope, so it has to be
+    kebab-case. The macro state arrives as a label, not as a marker in the text. And the execution state
+    block is absent: it belongs to the machine, so a documented body that already carried one would have
+    the skill writing a run that never happened.
+    """
+    title = _documented_subissue_title()
+    label = {"id": "LA_kwDOThEBoM8AAAACu6gVcw", "name": IssueLabel.PENDING.value, "description": "", "color": "5319e7"}
+    recorded = [
+        {
+            "number": 44,
+            "title": title,
+            "body": _spec_example(_SUBISSUE_EXAMPLE),
+            "labels": [label],
+            "state": "OPEN",
+        }
+    ]
+    process = ScriptedProcess(ProcessOutput(code=0, stdout=json.dumps(recorded), stderr=""))
+
+    children = RunRepository(process=process).read_children(repo="alcaptar/agentic-skills", parent=43, expected=1)
+
+    assert _KEBAB_TITLE.match(title), f"the documented title {title!r} does not carry `slice-NN (name-kebab):`"
+    assert children[0].slice_id == title.split(" ", 1)[0]
+    assert children[0].repo, "the documented subissue carries no target repo the program can read"
+    assert children[0].label is IssueLabel.PENDING
+    assert children[0].run is None, (
+        "the documented subissue body already carries an execution state block, which is the machine's"
+    )
+
+
+def test_the_labelled_lines_of_a_subissue_are_the_same_in_the_example_the_rules_and_the_validate_checklist() -> None:
+    """Three surfaces of one contract, all inside `slice-spec`: what it shows, demands and checks.
+
+    The example is what a model copies, the rules are what it is told, and `validate` is what catches a
+    spec that does not comply. A label added to the rules but not to the example is written by nobody; a
+    label in the example that `validate` does not know is one whose absence is approved as valid, which
+    is the failure mode that makes the mode worthless. The set the three are held to is
+    `_SUBISSUE_LINES` and not the example itself: derived from the example, the three could agree on
+    dropping one and nothing would notice.
+    """
+    written = set(_LABELLED_LINE_WRITTEN.findall(_spec_example(_SUBISSUE_EXAMPLE)))
+    assert written == _SUBISSUE_LINES, (
+        f"the example under `{_SUBISSUE_EXAMPLE}` writes {sorted(written)}, and a subissue body carries "
+        f"{sorted(_SUBISSUE_LINES)}: the intention, the criteria, the signal and the target repo"
+    )
+
+    demanded = set(_LABELLED_LINE_NAMED.findall(_spec_prose(_HARD_RULES)))
+    checked = set(_LABELLED_LINE_NAMED.findall(_spec_prose(_VALIDATE)))
+
+    assert demanded == written, (
+        f"the example and the hard rules of {_rel(_SPEC)} disagree on the lines of a subissue: "
+        f"only in the rules {sorted(demanded - written)}, only in the example {sorted(written - demanded)}"
+    )
+    assert checked == written, (
+        f"the example and the validate checklist of {_rel(_SPEC)} disagree on the lines of a subissue: "
+        f"only in validate {sorted(checked - written)}, only in the example {sorted(written - checked)}"
+    )
+
+
+def test_the_macro_state_slice_spec_writes_is_a_label_of_the_vocabulary_and_never_a_marker_in_the_text() -> None:
+    """The state moved out of the prose and into a GitHub label, and both halves need measuring.
+
+    A label the skill invents is one nothing reads -- `RunRepository` only recognises members of
+    `IssueLabel` and returns `None` for anything else, so an invented one reads as "no state at all".
+    The markers are the other half: as long as the checkbox and the `[estado]` marker survive anywhere
+    in the skill, a model has two ways to write the state and only one of them is read.
+    """
+    documented = set(_MACRO_LABEL.findall(_read(_SPEC)))
+    assert documented, f"{_rel(_SPEC)} names no macro state label at all"
+
+    unknown = sorted(documented - set(IssueLabel))
+    assert not unknown, f"{_rel(_SPEC)} names {unknown}, which `IssueLabel` does not know and nothing reads"
+    assert IssueLabel.PENDING.value in documented, (
+        f"{_rel(_SPEC)} no longer names {IssueLabel.PENDING.value}, the state every slice starts in"
+    )
+
+    text = _read(_SPEC)
+    leftovers = [marker for marker in ("- [ ]", "- [x]", "[pendiente]", "[en-curso]") if marker in text]
+    assert not leftovers, (
+        f"{_rel(_SPEC)} still writes {leftovers}: the state of a slice is a label, and a marker in the "
+        f"text is a second place to write it that nothing reads"
+    )
+
+
+def test_the_step_that_creates_the_issues_shows_the_whole_spec_and_waits_before_creating_anything() -> None:
+    """Creating the tree is the one irreversible thing this skill does, and it does it in someone's repo.
+
+    A parent plus one subissue per slice, each with `--parent` -- that flag is what makes them children,
+    and the program finds them with `parent-issue:<repo>#<n>`, so a subissue created without it is
+    invisible to the run -- and with `--label`, because the state is a label from the moment it is
+    created. Before any of that, the whole spec goes to the terminal and the step waits: there is no
+    other artifact to review, since the spec no longer exists as a file anybody can read.
+    """
+    steps = re.split(r"^(?=\d+[a-z]?\.\s)", _spec_prose(_AUTHORING_STEPS), flags=re.MULTILINE)
+    creating = [step for step in steps if "gh issue create" in step]
+    assert len(creating) == 1, f"expected exactly one step of {_rel(_SPEC)} to create issues, found {len(creating)}"
+
+    step = creating[0]
+    for flag in ("--parent", "--label"):
+        assert flag in step, f"the creating step of {_rel(_SPEC)} does not pass {flag}"
+
+    missing = [anchor for anchor in _CONFIRMATION_ANCHORS if anchor not in step]
+    assert not missing, (
+        f"the creating step of {_rel(_SPEC)} no longer states {missing}: nothing else in the tree says "
+        f"that the spec is shown whole and confirmed before anything is created"
+    )
+
+
+def test_the_validate_mode_reports_every_deviation_with_its_rule_and_where_it_lives() -> None:
+    """The other half of what `validate` owes, and the one that only exists as prose.
+
+    Checking the new shape is measured by comparing vocabularies; reporting is not, and a mode that
+    finds a deviation and does not say where it is leaves the person searching a parent plus one
+    subissue per slice. The locations are the artifacts themselves -- the parent's body, or a subissue
+    named by its identifier and number, and within it the title, the label or the body -- so this is a
+    claim about the paragraph, whitespace normalised so rewrapping a line is free.
+    """
+    prose = " ".join(_spec_prose(_VALIDATE).split())
+
+    missing = [anchor for anchor in _VALIDATE_ANCHORS if anchor not in prose]
+    assert not missing, (
+        f"the `validate` mode of {_rel(_SPEC)} no longer states {missing}: a deviation reported without "
+        f"its rule and its location is one the person has to go and find"
+    )
 
 
 def test_ci_states_branched_on_by_step_9_are_the_ones_the_script_emits() -> None:

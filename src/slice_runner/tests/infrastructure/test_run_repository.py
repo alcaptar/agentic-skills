@@ -6,6 +6,7 @@ import re
 import pytest
 
 from slice_runner.domain.control_command import ControlCommand
+from slice_runner.domain.controls import Controls
 from slice_runner.domain.exceptions import (
     EmptyIssueBodyError,
     LaggingSearchIndexError,
@@ -81,16 +82,19 @@ class TestReadingTheParent:
     def test_controls_are_filtered_by_repo_the_same_way_sources_are(self) -> None:
         parent = RunRepository(process=self._process()).read_parent(repo=_REPO, issue=43, slice_repo=None)
 
-        assert parent.controls == (
-            ControlCommand(name="lint", command="make linting"),
-            ControlCommand(name="tests", command="make test"),
+        assert parent.controls == Controls(
+            commands=(
+                ControlCommand(name="lint", command="make linting"),
+                ControlCommand(name="tests", command="make test"),
+            ),
+            exemption_reason=None,
         )
 
-    def test_the_exemption_line_of_another_repo_is_still_a_control_command_once_filtered_to_it(self) -> None:
+    def test_the_exemption_line_is_read_as_a_declared_exemption_and_never_as_a_command_to_run(self) -> None:
         parent = RunRepository(process=self._process()).read_parent(repo=_REPO, issue=43, slice_repo=_OTHER_REPO)
 
-        assert parent.controls == (
-            ControlCommand(name="ninguno", command="la integracion continua solo publica en master"),
+        assert parent.controls == Controls(
+            commands=(), exemption_reason="la integracion continua solo publica en master"
         )
 
     def test_the_subissue_count_is_the_graphs_witness_not_something_counted_here(self) -> None:
@@ -135,7 +139,24 @@ class TestReadingTheParent:
 
         parent = RunRepository(process=process).read_parent(repo=_REPO, issue=43, slice_repo=_OTHER_REPO)
 
-        assert parent.controls == (ControlCommand(name="ninguno", command="solo publica en master"),)
+        assert parent.controls == Controls(commands=(), exemption_reason="solo publica en master")
+
+    def test_a_repo_with_no_controls_of_its_own_reads_as_undeclared_and_not_as_exempt(self) -> None:
+        body = "## Fuentes de convencion\n- doc: CLAUDE.md\n## Controles\n- lint: make linting\n"
+        process = self._process_with_body(body)
+
+        parent = RunRepository(process=process).read_parent(repo=_REPO, issue=43, slice_repo=_OTHER_REPO)
+
+        assert parent.controls == Controls(commands=(), exemption_reason=None)
+
+    def test_a_repo_that_declares_the_exemption_next_to_real_controls_is_rejected_instead_of_running_one_of_them(
+        self,
+    ) -> None:
+        body = "## Controles\n- ninguno: solo publica en master\n- lint: make linting\n"
+        process = self._process_with_body(body)
+
+        with pytest.raises(MalformedConventionLineError, match="ninguno"):
+            RunRepository(process=process).read_parent(repo=_REPO, issue=43, slice_repo=None)
 
 
 class TestReadingTheChildren:

@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import replace
 
 from slice_runner.domain.control_command import ControlCommand
+from slice_runner.domain.controls import Controls
 from slice_runner.domain.parent_issue import ParentIssue
 from slice_runner.domain.source import Source, SourceKind
 
@@ -13,7 +14,7 @@ class ParentIssueMother:
         return ParentIssue(
             intention="hoy nada evita reimplementar una slice ya entregada",
             sources=(Source(kind=SourceKind.DOC, path="CLAUDE.md"),),
-            controls=(ControlCommand(name="lint", command="make linting"),),
+            controls=Controls(commands=(ControlCommand(name="lint", command="make linting"),), exemption_reason=None),
             subissue_count=1,
         )
 
@@ -23,11 +24,13 @@ class ParentIssueMother:
 
     @staticmethod
     def without_controls() -> ParentIssue:
-        return replace(ParentIssueMother.with_sources_and_controls(), controls=())
+        return replace(
+            ParentIssueMother.with_sources_and_controls(), controls=Controls(commands=(), exemption_reason=None)
+        )
 
     @staticmethod
     def with_exempt_controls() -> ParentIssue:
         return replace(
             ParentIssueMother.with_sources_and_controls(),
-            controls=(ControlCommand(name="ninguno", command="la integracion continua solo publica en master"),),
+            controls=Controls(commands=(), exemption_reason="la integracion continua solo publica en master"),
         )
