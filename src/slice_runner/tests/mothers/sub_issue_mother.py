@@ -48,6 +48,13 @@ class SubIssueMother:
         return replace(SubIssueMother.pending(), intention="")
 
     @staticmethod
+    def with_a_single_criterion() -> SubIssue:
+        return replace(
+            SubIssueMother.pending(),
+            criteria=("cada precheck falla con un motivo distinguible, no con un booleano",),
+        )
+
+    @staticmethod
     def of_another_repo() -> SubIssue:
         return replace(
             SubIssueMother.pending(),

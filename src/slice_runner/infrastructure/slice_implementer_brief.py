@@ -53,7 +53,9 @@ esperado -> GREEN minimo -> REFACTOR), incluida su referencia `writing-good-test
 
 Tu respuesta final es el objeto del esquema que se te ha mandado, y nada mas: `paths` es la lista
 de rutas que creaste o modificaste, cada una con su `kind` (`production` o `test`), y `left_out` es
-una frase con lo que no pudiste hacer -o que no quedo nada fuera-.
+la lista de lo que no pudiste hacer -un elemento por cosa dejada fuera, o una lista vacia si no
+quedo nada fuera-. Cada elemento entra en la pull request como deuda aceptada, asi que se escribe
+como una frase que alguien pueda leer sin el contexto de esta conversacion.
 """
 
 

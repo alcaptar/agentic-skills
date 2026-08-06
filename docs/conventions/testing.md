@@ -71,6 +71,21 @@ con valores distintos y ninguno decia por que.
 Los metodos son **escenarios con nombre** (`without_line`, `passing`, `high_severity_finding`), no un
 `create(...)` con todo por defecto: asi el test dice de que caso va sin leer los argumentos.
 
+## Payloads grabados
+
+`src/slice_runner/tests/payloads/` son sobres de llamadas **reales** a `claude -p` y a `gh`, guardados tal
+como llegaron, y los carga `HarnessEnvelopeMother`. Es lo que hace que el test de frontera mida la carga
+literal en vez de un modelo nuestro de ella, y de ahi salen datos que nadie escribiria a mano: las claves de
+`usage`, el coste que cita `docs/conventions/domain.md`, un `permission_denials` vacio.
+
+**Cuando cambia el contrato del contenido, se reescribe a mano el campo afectado -en `structured_output` y
+en su copia dentro de `result`, que el harness escribe dos veces- en vez de regrabar el sobre.** Es
+divergencia declarada de "grabados", y el motivo es que no hay nada que grabar: ninguna llamada vieja puede
+traer el campo con la forma nueva, y regrabar arrastraria de paso el resto del sobre -el coste entre ellos-,
+que es justo lo que otros tests fijan. Lo hizo la slice-09 con `left_out`, de frase a lista. Lo que **no**
+autoriza es tocar el sobre: si lo que cambia es una clave del harness, hay que regrabar, porque ahi la forma
+real es lo unico que se esta midiendo.
+
 ## Dobles
 
 - **`create_autospec(X, spec_set=True, instance=True)`** para puertos sin estado.

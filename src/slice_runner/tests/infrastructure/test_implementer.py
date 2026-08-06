@@ -59,7 +59,7 @@ class TestHowTheImplementerIsInvoked:
                     },
                     "type": "array",
                 },
-                "left_out": {"type": "string"},
+                "left_out": {"items": {"type": "string"}, "type": "array"},
             },
             "required": ["paths", "left_out"],
             "type": "object",
@@ -148,12 +148,29 @@ class TestTheReportOfARecordedCall:
             ("test_hello.py", PathKind.TEST),
         ]
 
-    def test_what_was_left_out_travels_whole(self) -> None:
+    def test_a_report_with_nothing_left_out_carries_an_empty_tuple(self) -> None:
         process = RecordedProcess(HarnessEnvelopeMother.recorded(_RECORDED))
 
         report = ClaudeImplementer(process=process).implement(AssignmentMother.of_the_first_round())
 
-        assert report.left_out == "Nada; python3 -m pytest estaba disponible y el test paso correctamente."
+        assert report.left_out == ()
+
+    def test_what_was_left_out_travels_whole_one_entry_per_thing(self) -> None:
+        left_out: dict[str, object] = {
+            "paths": [{"path": "hello.py", "kind": "production"}, {"path": "test_hello.py", "kind": "test"}],
+            "left_out": [
+                "el cableado del subcomando de metrics queda para otra slice",
+                "no se anadio retry al cliente de gh",
+            ],
+        }
+        process = RecordedProcess(HarnessEnvelopeMother.carrying(left_out, recorded=_RECORDED))
+
+        report = ClaudeImplementer(process=process).implement(AssignmentMother.of_the_first_round())
+
+        assert report.left_out == (
+            "el cableado del subcomando de metrics queda para otra slice",
+            "no se anadio retry al cliente de gh",
+        )
 
     def test_what_the_harness_spent_on_the_call_travels_with_the_report(self) -> None:
         process = RecordedProcess(HarnessEnvelopeMother.recorded(_RECORDED))
@@ -205,7 +222,7 @@ class TestWhatTheImplementerIsAllowedToReturn:
     def test_a_path_kind_outside_the_vocabulary_is_rejected_saying_which_one_it_was(self) -> None:
         invented_kind: dict[str, object] = {
             "paths": [{"path": "hello.py", "kind": "documentation"}],
-            "left_out": "nothing",
+            "left_out": [],
         }
         process = RecordedProcess(HarnessEnvelopeMother.carrying(invented_kind, recorded=_RECORDED))
 

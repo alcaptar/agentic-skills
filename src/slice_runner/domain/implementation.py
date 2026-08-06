@@ -11,5 +11,5 @@ if TYPE_CHECKING:
 @dataclass(frozen=True, kw_only=True, slots=True)
 class Implementation:
     paths: tuple[ReportedPath, ...]
-    left_out: str
+    left_out: tuple[str, ...]
     spend: HarnessSpend

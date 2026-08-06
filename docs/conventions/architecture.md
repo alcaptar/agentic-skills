@@ -34,7 +34,7 @@ src/slice_runner/
     cli.py                entrypoint
   tests/                  co-localizados, espejando las capas de arriba
     mothers/              Object Mothers
-    payloads/             payloads reales grabados
+    payloads/             sobres reales grabados (su regla, en docs/conventions/testing.md)
   py.typed
   __main__.py
 ```

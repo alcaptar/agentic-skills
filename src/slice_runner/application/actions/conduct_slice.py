@@ -78,6 +78,7 @@ class ConductSliceProgress:
     run: Run
     label: IssueLabel | None
     paths: tuple[ReportedPath, ...] = field(default=())
+    debt: tuple[str, ...] = field(default=())
     findings: tuple[Finding, ...] = field(default=())
     spends: tuple[HarnessSpend, ...] = field(default=())
     control_logs: tuple[Path, ...] = field(default=())
@@ -248,7 +249,12 @@ class ConductSlice:
             )
         )
 
-        implemented = replace(progress, paths=implementation.paths, spends=(*progress.spends, implementation.spend))
+        implemented = replace(
+            progress,
+            paths=implementation.paths,
+            debt=implementation.left_out,
+            spends=(*progress.spends, implementation.spend),
+        )
 
         return self._within_budget(SteppedSlice(progress=implemented, outcome=Outcome.DONE), call=implementation.spend)
 
@@ -325,7 +331,7 @@ class ConductSlice:
                 branch=progress.subissue.branch,
                 base=progress.params.base,
                 title=self._pull_request.title(progress.subissue),
-                body=self._pull_request.body(progress.subissue),
+                body=self._pull_request.body(progress.subissue, debt=progress.debt),
             )
         )
 
