@@ -8,11 +8,15 @@ from slice_runner.domain.checklist_entry import ChecklistEntry
 from slice_runner.domain.judge import Judge
 from slice_runner.domain.slice_diff import SliceDiff
 from slice_runner.domain.slice_under_review import SliceUnderReview
+from slice_runner.domain.verification import Verification
+from slice_runner.tests.mothers.harness_spend_mother import HarnessSpendMother
 from slice_runner.tests.mothers.parent_issue_mother import ParentIssueMother
 from slice_runner.tests.mothers.sub_issue_mother import SubIssueMother
+from slice_runner.tests.mothers.verdict_mother import VerdictMother
 
 if TYPE_CHECKING:
     from slice_runner.domain.source import Source
+    from slice_runner.domain.verdict import Verdict
 
 
 class SliceDiffMother:
@@ -94,3 +98,23 @@ class JudgeMother:
     @classmethod
     def reading_the_repo_and_its_yardstick(cls) -> Judge:
         return cls.adversarial().also_reading(Path(SliceUnderReviewMother.REPO), cls.YARDSTICK)
+
+
+class VerificationMother:
+    DENIED_READ: ClassVar[str] = "Read /toolbox/skills/x.md"
+
+    @staticmethod
+    def passing() -> Verification:
+        return Verification(verdict=VerdictMother.passing(), spend=HarnessSpendMother.of_the_judge_call())
+
+    @staticmethod
+    def vetoing(verdict: Verdict) -> Verification:
+        return Verification(verdict=verdict, spend=HarnessSpendMother.of_the_judge_call())
+
+    @classmethod
+    def failing_after_a_denied_read(cls) -> Verification:
+        return Verification(
+            verdict=VerdictMother.failing(),
+            spend=HarnessSpendMother.of_the_judge_call(),
+            denied_reads=(cls.DENIED_READ,),
+        )

@@ -1,7 +1,16 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
 
-class InvalidHarnessOutputError(ValueError):
+if TYPE_CHECKING:
+    from slice_runner.domain.harness_spend import HarnessSpend
+
+
+class MeasuredCallError(ValueError):
+    spend: HarnessSpend | None = None
+
+
+class InvalidHarnessOutputError(MeasuredCallError):
     pass
 
 
@@ -9,15 +18,19 @@ class InvalidVerdictError(InvalidHarnessOutputError):
     pass
 
 
-class InvalidImplementationReportError(ValueError):
+class InvalidImplementationReportError(MeasuredCallError):
     pass
 
 
-class PermissionDeniedError(ValueError):
+class PermissionDeniedError(MeasuredCallError):
     pass
 
 
 class ImpossibleTransitionError(ValueError):
+    pass
+
+
+class RunNotClosedError(ValueError):
     pass
 
 

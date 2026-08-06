@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import pytest
 
+from slice_runner.domain.exceptions import InvalidVerdictError
 from slice_runner.domain.ruling import Ruling
 from slice_runner.infrastructure.claude_verifier import ClaudeVerifier
 from slice_runner.infrastructure.judge_invocation import JudgeInvocation
 from slice_runner.tests.doubles import RecordedProcess
+from slice_runner.tests.mothers.harness_spend_mother import HarnessSpendMother
 from slice_runner.tests.mothers.judge_output_mother import HarnessEnvelopeMother, JudgeVerdictMother
 from slice_runner.tests.mothers.verification_mother import JudgeMother, SliceUnderReviewMother
 
@@ -51,6 +53,26 @@ class TestHowTheJudgeIsCalled:
         ClaudeVerifier(process=process).verify(JudgeMother.adversarial(), SliceUnderReviewMother.of_the_slice())
 
         assert process.calls == 1
+
+
+class TestWhatTheJudgeCallCost:
+    def test_the_spend_of_the_call_comes_back_with_the_verdict_because_the_judge_is_not_free(self) -> None:
+        process = RecordedProcess(HarnessEnvelopeMother.recorded())
+
+        verification = ClaudeVerifier(process=process).verify(_JUDGE, SliceUnderReviewMother.of_the_slice())
+
+        assert verification.spend == HarnessSpendMother.of_the_judge_call()
+
+
+class TestWhenTheJudgeAnswersSomethingIncoherent:
+    def test_the_spend_survives_the_rejection_so_the_discarded_call_still_counts(self) -> None:
+        incoherent = JudgeVerdictMother.passing_with(JudgeVerdictMother.high_severity_finding())
+        process = RecordedProcess(HarnessEnvelopeMother.carrying(incoherent))
+
+        with pytest.raises(InvalidVerdictError) as rejection:
+            ClaudeVerifier(process=process).verify(_JUDGE, SliceUnderReviewMother.of_the_slice())
+
+        assert rejection.value.spend == HarnessSpendMother.of_the_judge_call()
 
 
 class TestWhatTheHarnessDeniedTheJudge:
