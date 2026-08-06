@@ -38,6 +38,7 @@ if TYPE_CHECKING:
     from slice_runner.domain.ci import Ci
     from slice_runner.domain.clock import Clock
     from slice_runner.domain.control_runner import ControlRunner
+    from slice_runner.domain.deploy_watch import DeployWatch
     from slice_runner.domain.finding import Finding
     from slice_runner.domain.forum import Forum
     from slice_runner.domain.metrics_log import MetricsLog
@@ -129,6 +130,7 @@ class ConductSlicePorts:
     metrics: MetricsLog
     understanding: UnderstandingWriter
     pull_request: PullRequestWriter
+    deploy_watch: DeployWatch
 
 
 class ConductSlice:
@@ -155,6 +157,7 @@ class ConductSlice:
         self._metrics = ports.metrics
         self._understanding = ports.understanding
         self._pull_request = ports.pull_request
+        self._deploy_watch = ports.deploy_watch
         self._machine = machine
         self._budgets = budgets
 
@@ -392,6 +395,10 @@ class ConductSlice:
                 discard_cause=progress.discard_cause,
             )
         )
+        if state is RunState.MERGED and not progress.subissue.signal_is_exempt:
+            self._deploy_watch.watch(
+                worktree=progress.params.worktree, repo=progress.params.repo, signal=progress.subissue.signal
+            )
 
         return self._ending(progress, Halt.RUN_CLOSED, state=state)
 
