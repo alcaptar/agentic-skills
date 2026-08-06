@@ -170,12 +170,16 @@ la **misma** conversacion. Usalo para una tanda corta de slices, no para una fea
 ### El paso que ya es un programa
 
 Conducir una slice ya no lo orquesta la skill: lo ejecuta un programa instalable, que se puede lanzar
-solo. `run` conduce la siguiente slice del issue de punta a punta -alinear, implementar, controlar,
-verificar, abrir la pull request, esperar a la integracion continua- y para donde diga el estado; el
-estado vive en la subissue, asi que una invocacion interrumpida se retoma reinvocando.
+solo. `run` conduce la siguiente slice ejecutable del issue de punta a punta -alinear, implementar,
+controlar, verificar, abrir la pull request, esperar a la integracion continua- y para donde diga el
+estado; el estado vive en la subissue, asi que una invocacion interrumpida se retoma reinvocando. Con
+`--slice` se nombra la slice concreta a conducir en vez de dejar que el programa elija la siguiente,
+lo que permite repartir el trabajo entre varios worktrees; pedir una que no existe en el issue o que no
+es ejecutable falla en cerrado, sin tocar nada.
 
 ```bash
 uv run slice-runner run 38 --repo alcaptar/agentic-skills --base master
+uv run slice-runner run 38 --repo alcaptar/agentic-skills --base master --slice slice-01
 uv run slice-runner verify --repo . --base master --slice slice-01
 ```
 

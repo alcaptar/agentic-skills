@@ -17,6 +17,7 @@ if TYPE_CHECKING:
 class SelectSliceParams:
     repo: str
     issue: int
+    slice_id: str | None = None
 
 
 @dataclass(frozen=True, kw_only=True, slots=True)
@@ -35,18 +36,37 @@ class SelectSlice:
         children = self._repository.read_children(
             repo=params.repo, parent=params.issue, expected=overview.subissue_count
         )
-        chosen = SliceQueue.next_in_line(children)
-        if chosen is None:
-            raise NoSliceLeftError(
-                f"none of the {len(children)} slice(s) of issue {params.issue} can be run: "
-                f"every one is closed, blocked or aborted"
-            )
+        chosen = self._chosen(children, params)
 
         return SelectSliceResult(
             subissue=chosen,
             parent=self._yardstick_of(chosen, overview=overview, params=params),
             checklist=tuple(ChecklistEntry.of(child) for child in children),
         )
+
+    @staticmethod
+    def _chosen(children: tuple[SubIssue, ...], params: SelectSliceParams) -> SubIssue:
+        if params.slice_id is None:
+            next_in_line = SliceQueue.next_in_line(children)
+            if next_in_line is None:
+                raise NoSliceLeftError(
+                    f"none of the {len(children)} slice(s) of issue {params.issue} can be run: "
+                    f"every one is closed, blocked or aborted"
+                )
+
+            return next_in_line
+
+        named = SliceQueue.find(children, params.slice_id)
+        if named is None:
+            raise NoSliceLeftError(
+                f"slice {params.slice_id} does not exist among the {len(children)} slice(s) of issue {params.issue}"
+            )
+        if not SliceQueue.runnable(named):
+            raise NoSliceLeftError(
+                f"slice {params.slice_id} of issue {params.issue} cannot be run: it is closed, blocked or aborted"
+            )
+
+        return named
 
     def _yardstick_of(self, chosen: SubIssue, *, overview: ParentIssue, params: SelectSliceParams) -> ParentIssue:
         if chosen.repo is None:

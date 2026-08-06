@@ -90,11 +90,14 @@ class Cli:
                 return cls.explain(request=sys.stdin.read())
             case Subcommand.RUN:
                 return cls(process=LocalProcess()).run(
-                    repo=arguments.repo,
-                    issue=arguments.issue,
-                    worktree=arguments.worktree,
-                    base=arguments.base,
-                    logs=arguments.logs,
+                    ConductSliceParams(
+                        repo=arguments.repo,
+                        issue=arguments.issue,
+                        worktree=arguments.worktree,
+                        base=arguments.base,
+                        logs=arguments.logs,
+                        slice_id=arguments.slice_id,
+                    )
                 )
 
     @classmethod
@@ -123,6 +126,12 @@ class Cli:
         run.add_argument("--base", required=True, help="branch the diff is taken against and the pull request targets")
         run.add_argument(
             "--logs", type=Path, default=cls.LOGS, help="directory where the log of each control is written"
+        )
+        run.add_argument(
+            "--slice",
+            dest="slice_id",
+            default=None,
+            help="identifier of the one slice to conduct, e.g. `slice-01`; without it, the next runnable one is chosen",
         )
 
         return parser
@@ -159,13 +168,11 @@ class Cli:
 
         return ExitCode.of(verification.verdict.ruling)
 
-    def run(self, *, repo: str, issue: int, worktree: str, base: str, logs: Path) -> int:
-        logs.mkdir(parents=True, exist_ok=True)
+    def run(self, params: ConductSliceParams) -> int:
+        params.logs.mkdir(parents=True, exist_ok=True)
 
         try:
-            conducted = self._conductor().execute(
-                ConductSliceParams(repo=repo, issue=issue, worktree=worktree, base=base, logs=logs)
-            )
+            conducted = self._conductor().execute(params)
         except NoSliceLeftError as error:
             return self._reported(f"there is no slice left to run: {error}", ExitCode.NO_SLICE_LEFT)
         except (

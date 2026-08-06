@@ -136,3 +136,41 @@ class TestSelectSlice:
 
         repository.read_parent.assert_called_once_with(repo=_REPO, issue=_ISSUE, slice_repo=None)
         assert chosen.parent == ParentIssueMother.of_two_slices()
+
+
+class TestSelectingTheSliceNamedByTheCaller:
+    @pytest.fixture
+    def repository(self) -> Mock:
+        repository: Mock = create_autospec(RunRepository, spec_set=True, instance=True)
+        repository.read_parent.side_effect = [
+            ParentIssueMother.of_two_slices(),
+            ParentIssueMother.with_exempt_controls(),
+        ]
+        repository.read_children.return_value = (SubIssueMother.pending(), SubIssueMother.of_another_repo())
+        return repository
+
+    @pytest.fixture
+    def query(self, repository: Mock) -> SelectSlice:
+        return SelectSlice(repository=repository)
+
+    def test_naming_a_slice_picks_it_instead_of_the_first_one_that_is_runnable(self, query: SelectSlice) -> None:
+        params = SelectSliceParams(repo=_REPO, issue=_ISSUE, slice_id=SubIssueMother.of_another_repo().slice_id)
+
+        assert query.execute(params).subissue == SubIssueMother.of_another_repo()
+
+    def test_a_slice_id_absent_from_every_child_raises_instead_of_falling_back_to_the_next_in_line(
+        self, query: SelectSlice
+    ) -> None:
+        params = SelectSliceParams(repo=_REPO, issue=_ISSUE, slice_id="slice-99")
+
+        with pytest.raises(NoSliceLeftError, match="slice-99"):
+            query.execute(params)
+
+    def test_a_slice_id_that_exists_but_is_closed_raises_instead_of_being_run_anyway(
+        self, query: SelectSlice, repository: Mock
+    ) -> None:
+        repository.read_children.return_value = (SubIssueMother.closed(), SubIssueMother.of_another_repo())
+        params = SelectSliceParams(repo=_REPO, issue=_ISSUE, slice_id=SubIssueMother.closed().slice_id)
+
+        with pytest.raises(NoSliceLeftError, match=SubIssueMother.closed().slice_id):
+            query.execute(params)

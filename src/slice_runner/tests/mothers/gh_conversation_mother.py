@@ -39,11 +39,22 @@ class GhConversationMother:
     BRANCH: ClassVar[str] = "slice/05-prechecks-deterministas"
     PULL_REQUEST: ClassVar[int] = 61
     CONTROL: ClassVar[str] = "make linting"
+    OTHER_SUBISSUE: ClassVar[int] = 46
+    OTHER_SLICE: ClassVar[str] = "slice-06"
+    OTHER_NAME: ClassVar[str] = "pausa-de-alineacion"
+    OTHER_SUMMARY: ClassVar[str] = "el entendimiento se escribe siempre"
+    OTHER_BRANCH: ClassVar[str] = "slice/06-pausa-de-alineacion"
 
     @classmethod
     def parent_of_one_slice(cls) -> str:
         return json.dumps(
             {"body": _PARENT_BODY, "subIssuesSummary": {"completed": 0, "percentCompleted": 0, "total": 1}}
+        )
+
+    @classmethod
+    def parent_of_two_slices(cls) -> str:
+        return json.dumps(
+            {"body": _PARENT_BODY, "subIssuesSummary": {"completed": 0, "percentCompleted": 0, "total": 2}}
         )
 
     @classmethod
@@ -63,6 +74,32 @@ class GhConversationMother:
     @classmethod
     def the_slice_already_closed(cls) -> str:
         return cls._children(body=_SUBISSUE_PROSE, label=IssueLabel.PENDING, state=IssueState.CLOSED)
+
+    @classmethod
+    def two_slices_resumed_at(cls, run: Run, *, second_label: IssueLabel = IssueLabel.IN_PROGRESS) -> str:
+        body = f"{_SUBISSUE_PROSE}\n{cls._state_block(run)}\n"
+        return json.dumps(
+            [
+                cls._entry(
+                    number=cls.SUBISSUE,
+                    slice_id=cls.SLICE,
+                    name=cls.NAME,
+                    summary=cls.SUMMARY,
+                    body=body,
+                    label=IssueLabel.IN_PROGRESS,
+                    state=IssueState.OPEN,
+                ),
+                cls._entry(
+                    number=cls.OTHER_SUBISSUE,
+                    slice_id=cls.OTHER_SLICE,
+                    name=cls.OTHER_NAME,
+                    summary=cls.OTHER_SUMMARY,
+                    body=body,
+                    label=second_label,
+                    state=IssueState.OPEN,
+                ),
+            ]
+        )
 
     @classmethod
     def a_title_that_names_no_slice(cls) -> str:
@@ -110,17 +147,29 @@ class GhConversationMother:
     def _children(cls, *, body: str, label: IssueLabel, state: IssueState) -> str:
         return json.dumps(
             [
-                {
-                    "number": cls.SUBISSUE,
-                    "title": f"{cls.SLICE} ({cls.NAME}): {cls.SUMMARY}",
-                    "body": body,
-                    "labels": [
-                        {"id": "LA_kwDOThEBoM8AAAACu6gVcw", "name": label.value, "description": "", "color": "1d76db"}
-                    ],
-                    "state": state.value,
-                }
+                cls._entry(
+                    number=cls.SUBISSUE,
+                    slice_id=cls.SLICE,
+                    name=cls.NAME,
+                    summary=cls.SUMMARY,
+                    body=body,
+                    label=label,
+                    state=state,
+                )
             ]
         )
+
+    @staticmethod
+    def _entry(
+        *, number: int, slice_id: str, name: str, summary: str, body: str, label: IssueLabel, state: IssueState
+    ) -> dict[str, object]:
+        return {
+            "number": number,
+            "title": f"{slice_id} ({name}): {summary}",
+            "body": body,
+            "labels": [{"id": "LA_kwDOThEBoM8AAAACu6gVcw", "name": label.value, "description": "", "color": "1d76db"}],
+            "state": state.value,
+        }
 
     @staticmethod
     def _state_block(run: Run) -> str:
