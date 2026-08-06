@@ -30,6 +30,7 @@ if TYPE_CHECKING:
     from unittest.mock import Mock
 
     from slice_runner.domain.closed_slice import ClosedSlice
+    from slice_runner.domain.sub_issue import SubIssue
 
 _SUBISSUE = SubIssueMother.pending().number
 _BRANCH = "slice/05-prechecks-deterministas"
@@ -261,6 +262,44 @@ class TestConductSliceOnTheHappyPath:
         closed: ClosedSlice = metrics.record.call_args.args[0]
 
         return closed
+
+
+class TestConductSliceChainingDeployWatchAfterAMerge:
+    @staticmethod
+    def _conductor(*, subissue: SubIssue) -> Conductor:
+        return Conductor(chosen=SelectSliceResultMother.resumed_at(RunMother.awaiting_merge(), subissue=subissue))
+
+    def test_a_merge_with_a_signal_declared_chains_deploy_watch_with_that_signal_and_the_repo_of_the_issue(
+        self,
+    ) -> None:
+        subissue = SubIssueMother.declaring_a_signal()
+        conductor = self._conductor(subissue=subissue)
+
+        conductor.conduct()
+
+        conductor.deploy_watch.watch.assert_called_once_with(
+            worktree=Conductor.WORKTREE, repo=Conductor.REPO, signal=subissue.signal
+        )
+
+    def test_a_merge_whose_signal_is_exempt_chains_nothing(self) -> None:
+        conductor = self._conductor(subissue=SubIssueMother.pending())
+
+        conductor.conduct()
+
+        assert conductor.deploy_watch.watch.call_count == 0
+
+    def test_a_close_that_does_not_merge_the_slice_chains_nothing_even_with_a_signal_declared(self) -> None:
+        conductor = Conductor(
+            chosen=SelectSliceResultMother.resumed_at(
+                RunMother.judging(), subissue=SubIssueMother.declaring_a_signal()
+            ),
+            budgets=Budgets(verify_retries=0),
+        )
+        conductor.verify.execute.return_value = VerificationMother.vetoing(VerdictMother.failing())
+
+        conductor.conduct()
+
+        assert conductor.deploy_watch.watch.call_count == 0
 
 
 class TestConductSliceWhenTheControlsComeBackRed:

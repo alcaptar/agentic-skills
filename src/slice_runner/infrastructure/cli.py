@@ -37,6 +37,7 @@ from slice_runner.domain.exceptions import (
     UnresolvableRepoOrBaseError,
 )
 from slice_runner.domain.state_machine import StateMachine
+from slice_runner.infrastructure.claude_deploy_watch import ClaudeDeployWatch
 from slice_runner.infrastructure.claude_implementer import ClaudeImplementer
 from slice_runner.infrastructure.claude_verifier import ClaudeVerifier
 from slice_runner.infrastructure.conducted_slice_payload import ConductedSlicePayload
@@ -222,6 +223,7 @@ class Cli:
                 metrics=MetricsScriptLog(process=self._process),
                 understanding=UnderstandingComment(),
                 pull_request=SlicePullRequest(),
+                deploy_watch=ClaudeDeployWatch(process=self._process),
             ),
             machine=StateMachine(budgets=budgets),
             budgets=budgets,

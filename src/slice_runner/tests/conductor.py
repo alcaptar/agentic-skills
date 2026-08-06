@@ -22,6 +22,7 @@ from slice_runner.domain.ci import Ci
 from slice_runner.domain.ci_status import CiStatus
 from slice_runner.domain.clock import Clock
 from slice_runner.domain.control_runner import ControlRunner
+from slice_runner.domain.deploy_watch import DeployWatch
 from slice_runner.domain.forum import Forum
 from slice_runner.domain.metrics_log import MetricsLog
 from slice_runner.domain.precheck_outcome import PrecheckOutcome
@@ -75,6 +76,7 @@ class Conductor:
         self.pull_request: Mock = create_autospec(PullRequestWriter, spec_set=True, instance=True)
         self.pull_request.title.return_value = self.TITLE
         self.pull_request.body.return_value = self.BODY
+        self.deploy_watch: Mock = create_autospec(DeployWatch, spec_set=True, instance=True)
 
     def conduct(self) -> ConductSliceResult:
         return self._action().execute(
@@ -101,6 +103,7 @@ class Conductor:
                 metrics=self.metrics,
                 understanding=self.understanding,
                 pull_request=self.pull_request,
+                deploy_watch=self.deploy_watch,
             ),
             machine=StateMachine(budgets=self.budgets),
             budgets=self.budgets,

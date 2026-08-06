@@ -198,8 +198,12 @@ importar**: un smoke que solo importe el modulo lo da por bueno. Lo evita
   **Deuda vecina, del mismo formato durable: un merge entre invocaciones deja el run sin cerrar.** Si la
   persona mergea la pull request cuando no hay ninguna invocacion corriendo, el `Closes #N` de la pull
   request cierra la subissue, `SliceQueue` deja de considerarla ejecutable y el run **nunca llega a
-  cerrarse** ni escribe su fila durable. Detectar el merge de un run que GitHub ya cerro es el trabajo de
-  la slice-17 (`encadenar-deploy-watch`), asi que aqui se declara y no se construye.
+  cerrarse** ni escribe su fila durable. La slice-17 (`encadenar-deploy-watch`) encadeno `deploy-watch`
+  solo en el camino en que el propio run detecta el merge mientras esta corriendo (`_closing`, alcanzable
+  unicamente desde `_conducting`); ese camino no llega a este escenario, porque `Prechecks.of_the_subissue`
+  corta antes con `PrecheckOutcome.SUBISSUE_ALREADY_CLOSED` en cuanto `subissue.state is IssueState.CLOSED`.
+  Detectar el merge de un run que GitHub ya cerro entre invocaciones sigue sin construirse: se declara y no
+  se construye.
 - **La ruta del script sale de `CLAUDE_CONFIG_DIR`, no del repo** (`ClaudeConfig`, el objeto del
   bullet de arriba): la slice puede vivir en otro repo, donde no hay `skills/` del que colgar una ruta
   relativa.

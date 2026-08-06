@@ -58,3 +58,7 @@ class SubIssueMother:
             title="slice-06 (pausa-de-alineacion): el entendimiento se escribe siempre",
             repo=SubIssueMother.OTHER_REPO,
         )
+
+    @staticmethod
+    def declaring_a_signal() -> SubIssue:
+        return replace(SubIssueMother.pending(), signal="tasa de error 5xx de shop-web en produccion")

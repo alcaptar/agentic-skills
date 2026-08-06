@@ -27,3 +27,7 @@ class SubIssue:
     @property
     def branch(self) -> str:
         return f"slice/{self.slice_id.removeprefix('slice-')}-{self.name}"
+
+    @property
+    def signal_is_exempt(self) -> bool:
+        return self.signal.strip().lower().startswith("exenta")
