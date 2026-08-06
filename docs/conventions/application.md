@@ -37,7 +37,7 @@ del juez **viajen juntos** y su coherencia se pueda comprobar en un sitio.
 
 `ConductSlice` (`application/actions/conduct_slice.py`) **no** lista sus dependencias sueltas: las recibe
 en dos dataclasses frozen del propio modulo, `ConductSliceUseCases` (los seis casos de uso) y
-`ConductSlicePorts` (los nueve puertos), mas `machine` y `budgets` sueltos. Sigue entrando todo por
+`ConductSlicePorts` (los once puertos), mas `machine` y `budgets` sueltos. Sigue entrando todo por
 constructor y todo por nombre; lo que cambia es que llegan en dos paquetes.
 
 El motivo es que quince parametros disparan `PLR0913` de `ruff`, y las dos salidas que **no** valen son

@@ -11,6 +11,8 @@ from slice_runner.application.queries.run_prechecks import RunPrechecksParams
 from slice_runner.application.queries.select_slice import SelectSliceParams
 from slice_runner.domain.closed_slice import ClosedSlice
 from slice_runner.domain.discard_cause import DiscardCause
+from slice_runner.domain.event import Event
+from slice_runner.domain.event_status import EventStatus
 from slice_runner.domain.exceptions import DirtyIndexError, MeasuredCallError, NoPullRequestError
 from slice_runner.domain.halt import Halt
 from slice_runner.domain.harness_spend import HarnessSpend
@@ -39,6 +41,7 @@ if TYPE_CHECKING:
     from slice_runner.domain.clock import Clock
     from slice_runner.domain.control_runner import ControlRunner
     from slice_runner.domain.deploy_watch import DeployWatch
+    from slice_runner.domain.event_log import EventLog
     from slice_runner.domain.finding import Finding
     from slice_runner.domain.forum import Forum
     from slice_runner.domain.metrics_log import MetricsLog
@@ -133,6 +136,7 @@ class ConductSlicePorts:
     understanding: UnderstandingWriter
     pull_request: PullRequestWriter
     deploy_watch: DeployWatch
+    events: EventLog
 
 
 class ConductSlice:
@@ -160,6 +164,7 @@ class ConductSlice:
         self._understanding = ports.understanding
         self._pull_request = ports.pull_request
         self._deploy_watch = ports.deploy_watch
+        self._events = ports.events
         self._machine = machine
         self._budgets = budgets
 
@@ -216,6 +221,7 @@ class ConductSlice:
                 return self._ending(stepped.progress, stepped.halt)
             transition = self._machine.after(stepped.progress.run, stepped.outcome)
             progress = self._persisted(stepped.progress, transition)
+            self._reporting(progress, transition)
             if transition.state is not RunState.OPEN:
                 return self._closing(progress, transition.state)
             if transition.wait_seconds > 0:
@@ -380,6 +386,17 @@ class ConductSlice:
         )
 
         return replace(progress, run=transition.run, label=label)
+
+    def _reporting(self, progress: ConductSliceProgress, transition: Transition) -> None:
+        self._events.emit(
+            Event(
+                slice_id=progress.subissue.slice_id,
+                step=transition.run.step,
+                at=self._clock.now(),
+                spend=progress.spend,
+                status=EventStatus.of_the_transition(transition),
+            )
+        )
 
     def _writing(self, progress: ConductSliceProgress, *, run: Run) -> None:
         self._repository.write_run(repo=progress.params.repo, issue=progress.subissue.number, run=run)
