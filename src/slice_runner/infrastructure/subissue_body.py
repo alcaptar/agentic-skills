@@ -12,19 +12,31 @@ if TYPE_CHECKING:
     from slice_runner.domain.run import Run
 
 _REPO_LINE = re.compile(r"^REPO\s*:\s*(.+?)\s*$", re.IGNORECASE | re.MULTILINE)
+_INTENTION_LINE = re.compile(r"^INTENCION\s*:\s*(.+?)\s*$", re.IGNORECASE | re.MULTILINE)
+_CRITERION_LINE = re.compile(r"^ACEPTACION\s*:\s*(.+?)\s*$", re.IGNORECASE | re.MULTILINE)
+_SIGNAL_LINE = re.compile(r"^SENAL\s*:\s*(.+?)\s*$", re.IGNORECASE | re.MULTILINE)
 _STATE_BLOCK = re.compile(r"<!-- slice-runner:estado\n(.*?)\n-->", re.DOTALL)
 
 
 @dataclass(frozen=True, kw_only=True, slots=True)
 class ParsedSubissueBody:
     repo: str | None
+    intention: str
+    criteria: tuple[str, ...]
+    signal: str
     run: Run | None
 
 
 class SubissueBody:
     @classmethod
     def parse(cls, body: str) -> ParsedSubissueBody:
-        return ParsedSubissueBody(repo=cls._repo(body), run=cls._run(body))
+        return ParsedSubissueBody(
+            repo=cls._first(_REPO_LINE, body),
+            intention=cls._first(_INTENTION_LINE, body) or "",
+            criteria=tuple(_CRITERION_LINE.findall(body)),
+            signal=cls._first(_SIGNAL_LINE, body) or "",
+            run=cls._run(body),
+        )
 
     @classmethod
     def with_run(cls, body: str, run: Run) -> str:
@@ -40,8 +52,8 @@ class SubissueBody:
         return f"{prose}\n\n{block}\n"
 
     @staticmethod
-    def _repo(body: str) -> str | None:
-        found = _REPO_LINE.search(body)
+    def _first(line: re.Pattern[str], body: str) -> str | None:
+        found = line.search(body)
 
         return found.group(1) if found else None
 

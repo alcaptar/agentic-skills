@@ -61,14 +61,14 @@ ingles- de lo que ya dicen `Estado`/`MotivoBloqueada` en `skills/slice-runner/sc
 viejo esta condenado, sus scripts son stdlib puro con otra vara, y acoplarse a ellos para ahorrar la
 duplicacion sale mas caro que la duplicacion. El traductor es `IssueLabel.of(state, step)`
 (`domain/issue_label.py`): un `match` exhaustivo sobre el par que proyecta cada cierre de `RunState` a la
-etiqueta de GitHub que escribe la frontera (`infrastructure/run_repository.py`), total o explicito -un
+etiqueta de GitHub que escribe la frontera (`infrastructure/gh_run_repository.py`), total o explicito -un
 par sin regla no cae en una rama generica, rompe en `mypy` en cuanto se anade un cierre o un paso sin
 proyectarlo-. El contrato ya esta medido, no pendiente: `tests/test_skill_contracts.py` comprueba que
 todo cierre de `RunState` distinto de `MERGED` (que no lleva etiqueta porque cierra GitHub el issue solo,
 via `Closes` de la pull request) proyecta a una de las nueve etiquetas del vocabulario, y que ninguna
 etiqueta del vocabulario carece de fuente -sale de una proyeccion del traductor, o es una de fuente
 manual-. Hay dos etiquetas de fuente manual: `estado:pendiente`, que escribe una persona a mano al crear
-la subissue, y `estado:esperando-alineacion`, que escribe `RunRepository.pause_for_alignment` antes de que
+la subissue, y `estado:esperando-alineacion`, que escribe `GhRunRepository.pause_for_alignment` antes de que
 exista ningun `Run` -la pausa de alineacion ocurre fuera de cualquier `(state, step)` que `IssueLabel.of`
 pueda conocer, asi que no hay cierre del que proyectarla-.
 

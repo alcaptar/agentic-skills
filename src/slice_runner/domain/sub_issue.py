@@ -16,5 +16,8 @@ class SubIssue:
     title: str
     state: IssueState
     repo: str | None
+    intention: str
+    criteria: tuple[str, ...]
+    signal: str
     run: Run | None
     label: IssueLabel | None

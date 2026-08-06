@@ -1,12 +1,18 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar
 
 from slice_runner.application.actions.verify_slice import VerifySliceParams
+from slice_runner.domain.checklist_entry import ChecklistEntry
 from slice_runner.domain.judge import Judge
 from slice_runner.domain.slice_diff import SliceDiff
 from slice_runner.domain.slice_under_review import SliceUnderReview
+from slice_runner.tests.mothers.parent_issue_mother import ParentIssueMother
+from slice_runner.tests.mothers.sub_issue_mother import SubIssueMother
+
+if TYPE_CHECKING:
+    from slice_runner.domain.source import Source
 
 
 class SliceDiffMother:
@@ -27,21 +33,53 @@ class SliceDiffMother:
 
 class VerifySliceParamsMother:
     BASE: ClassVar[str] = "master"
-    SLICE_ID: ClassVar[str] = "slice-03"
 
     @classmethod
     def against_the_base(cls) -> VerifySliceParams:
-        return VerifySliceParams(repo=SliceUnderReviewMother.REPO, base=cls.BASE, slice_id=cls.SLICE_ID)
+        return VerifySliceParams(
+            repo=SliceUnderReviewMother.REPO,
+            base=cls.BASE,
+            slice_id=SliceUnderReviewMother.SLICE_ID,
+            signal=SliceUnderReviewMother.signal(),
+            criteria=SliceUnderReviewMother.criteria(),
+            sources=SliceUnderReviewMother.sources(),
+            checklist=SliceUnderReviewMother.checklist(),
+        )
 
 
 class SliceUnderReviewMother:
     REPO: ClassVar[str] = "/repos/project"
+    SLICE_ID: ClassVar[str] = "slice-05"
 
     @classmethod
     def of_the_slice(
         cls, *, repo: str | None = None, files: tuple[str, ...] | None = None, text: str | None = None
     ) -> SliceUnderReview:
-        return SliceUnderReview(repo=repo or cls.REPO, diff=SliceDiffMother.of_the_slice(files=files, text=text))
+        return SliceUnderReview(
+            slice_id=cls.SLICE_ID,
+            repo=repo or cls.REPO,
+            diff=SliceDiffMother.of_the_slice(files=files, text=text),
+            signal=cls.signal(),
+            criteria=cls.criteria(),
+            sources=cls.sources(),
+            checklist=cls.checklist(),
+        )
+
+    @staticmethod
+    def signal() -> str:
+        return SubIssueMother.pending().signal
+
+    @staticmethod
+    def criteria() -> tuple[str, ...]:
+        return SubIssueMother.pending().criteria
+
+    @staticmethod
+    def sources() -> tuple[Source, ...]:
+        return ParentIssueMother.with_sources_and_controls().sources
+
+    @staticmethod
+    def checklist() -> tuple[ChecklistEntry, ...]:
+        return (ChecklistEntry.of(SubIssueMother.closed()), ChecklistEntry.of(SubIssueMother.of_another_repo()))
 
 
 class JudgeMother:

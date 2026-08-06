@@ -17,8 +17,8 @@ from slice_runner.domain.exceptions import (
 from slice_runner.domain.issue_label import IssueLabel
 from slice_runner.domain.issue_state import IssueState
 from slice_runner.domain.source import Source, SourceKind
+from slice_runner.infrastructure.gh_run_repository import GhCommandFailedError, GhRunRepository
 from slice_runner.infrastructure.process import ProcessOutput
-from slice_runner.infrastructure.run_repository import GhCommandFailedError, RunRepository
 from slice_runner.tests.argv import Argv
 from slice_runner.tests.doubles import ScriptedProcess
 from slice_runner.tests.mothers.gh_response_mother import GhResponseMother
@@ -57,7 +57,7 @@ class TestReadingTheParent:
     def test_it_asks_gh_for_exactly_the_fields_it_reads(self) -> None:
         process = self._process()
 
-        RunRepository(process=process).read_parent(repo=_REPO, issue=43, slice_repo=None)
+        GhRunRepository(process=process).read_parent(repo=_REPO, issue=43, slice_repo=None)
 
         argv = Argv(process.calls[0].argv)
         assert process.calls[0].argv[:4] == ["gh", "issue", "view", "43"]
@@ -65,22 +65,22 @@ class TestReadingTheParent:
         assert argv.value_of("--json") == "body,subIssuesSummary"
 
     def test_the_intention_is_the_text_of_its_own_section(self) -> None:
-        parent = RunRepository(process=self._process()).read_parent(repo=_REPO, issue=43, slice_repo=None)
+        parent = GhRunRepository(process=self._process()).read_parent(repo=_REPO, issue=43, slice_repo=None)
 
         assert parent.intention == "Spike de medicion del formato de subissues. Este issue se borra al terminar."
 
     def test_sources_with_no_repo_line_belong_to_the_issue_own_repo(self) -> None:
-        parent = RunRepository(process=self._process()).read_parent(repo=_REPO, issue=43, slice_repo=None)
+        parent = GhRunRepository(process=self._process()).read_parent(repo=_REPO, issue=43, slice_repo=None)
 
         assert parent.sources == (Source(kind=SourceKind.DOC, path="CLAUDE.md"),)
 
     def test_sources_under_a_repo_subsection_only_surface_when_that_repo_is_asked_for(self) -> None:
-        parent = RunRepository(process=self._process()).read_parent(repo=_REPO, issue=43, slice_repo=_OTHER_REPO)
+        parent = GhRunRepository(process=self._process()).read_parent(repo=_REPO, issue=43, slice_repo=_OTHER_REPO)
 
         assert parent.sources == (Source(kind=SourceKind.DOC, path="templates/CLAUDE.md"),)
 
     def test_controls_are_filtered_by_repo_the_same_way_sources_are(self) -> None:
-        parent = RunRepository(process=self._process()).read_parent(repo=_REPO, issue=43, slice_repo=None)
+        parent = GhRunRepository(process=self._process()).read_parent(repo=_REPO, issue=43, slice_repo=None)
 
         assert parent.controls == Controls(
             commands=(
@@ -91,14 +91,14 @@ class TestReadingTheParent:
         )
 
     def test_the_exemption_line_is_read_as_a_declared_exemption_and_never_as_a_command_to_run(self) -> None:
-        parent = RunRepository(process=self._process()).read_parent(repo=_REPO, issue=43, slice_repo=_OTHER_REPO)
+        parent = GhRunRepository(process=self._process()).read_parent(repo=_REPO, issue=43, slice_repo=_OTHER_REPO)
 
         assert parent.controls == Controls(
             commands=(), exemption_reason="la integracion continua solo publica en master"
         )
 
     def test_the_subissue_count_is_the_graphs_witness_not_something_counted_here(self) -> None:
-        parent = RunRepository(process=self._process()).read_parent(repo=_REPO, issue=43, slice_repo=None)
+        parent = GhRunRepository(process=self._process()).read_parent(repo=_REPO, issue=43, slice_repo=None)
 
         assert parent.subissue_count == 2
 
@@ -113,20 +113,20 @@ class TestReadingTheParent:
         process = self._process_with_body(body)
 
         with pytest.raises(MalformedConventionLineError, match=re.escape("- CLAUDE.md")):
-            RunRepository(process=process).read_parent(repo=_REPO, issue=43, slice_repo=None)
+            GhRunRepository(process=process).read_parent(repo=_REPO, issue=43, slice_repo=None)
 
     def test_a_dash_line_under_controls_that_does_not_match_the_control_format_is_rejected_not_dropped(self) -> None:
         body = "## Controles\n- lint make linting\n"
         process = self._process_with_body(body)
 
         with pytest.raises(MalformedConventionLineError, match=re.escape("- lint make linting")):
-            RunRepository(process=process).read_parent(repo=_REPO, issue=43, slice_repo=None)
+            GhRunRepository(process=process).read_parent(repo=_REPO, issue=43, slice_repo=None)
 
     def test_a_blank_line_under_sources_does_not_raise(self) -> None:
         body = "## Fuentes de convencion\n- doc: CLAUDE.md\n\n\n## Controles\n- lint: make linting\n"
         process = self._process_with_body(body)
 
-        parent = RunRepository(process=process).read_parent(repo=_REPO, issue=43, slice_repo=None)
+        parent = GhRunRepository(process=process).read_parent(repo=_REPO, issue=43, slice_repo=None)
 
         assert parent.sources == (Source(kind=SourceKind.DOC, path="CLAUDE.md"),)
 
@@ -137,7 +137,7 @@ class TestReadingTheParent:
         )
         process = self._process_with_body(body)
 
-        parent = RunRepository(process=process).read_parent(repo=_REPO, issue=43, slice_repo=_OTHER_REPO)
+        parent = GhRunRepository(process=process).read_parent(repo=_REPO, issue=43, slice_repo=_OTHER_REPO)
 
         assert parent.controls == Controls(commands=(), exemption_reason="solo publica en master")
 
@@ -145,7 +145,7 @@ class TestReadingTheParent:
         body = "## Fuentes de convencion\n- doc: CLAUDE.md\n## Controles\n- lint: make linting\n"
         process = self._process_with_body(body)
 
-        parent = RunRepository(process=process).read_parent(repo=_REPO, issue=43, slice_repo=_OTHER_REPO)
+        parent = GhRunRepository(process=process).read_parent(repo=_REPO, issue=43, slice_repo=_OTHER_REPO)
 
         assert parent.controls == Controls(commands=(), exemption_reason=None)
 
@@ -156,7 +156,7 @@ class TestReadingTheParent:
         process = self._process_with_body(body)
 
         with pytest.raises(MalformedConventionLineError, match="ninguno"):
-            RunRepository(process=process).read_parent(repo=_REPO, issue=43, slice_repo=None)
+            GhRunRepository(process=process).read_parent(repo=_REPO, issue=43, slice_repo=None)
 
 
 class TestReadingTheChildren:
@@ -169,7 +169,7 @@ class TestReadingTheChildren:
     def test_it_searches_for_this_exact_parent_issue_and_asks_for_only_the_fields_it_reads(self) -> None:
         process = self._process()
 
-        RunRepository(process=process).read_children(repo=_REPO, parent=43, expected=2)
+        GhRunRepository(process=process).read_children(repo=_REPO, parent=43, expected=2)
 
         argv = Argv(process.calls[0].argv)
         assert process.calls[0].argv[:3] == ["gh", "issue", "list"]
@@ -195,40 +195,65 @@ class TestReadingTheChildren:
             },
         ]
 
-        children = RunRepository(process=self._process(children=out_of_order)).read_children(
+        children = GhRunRepository(process=self._process(children=out_of_order)).read_children(
             repo=_REPO, parent=43, expected=2
         )
 
         assert [child.slice_id for child in children] == ["slice-01", "slice-02"]
 
     def test_the_repo_line_of_the_body_becomes_the_subissue_repo(self) -> None:
-        children = RunRepository(process=self._process()).read_children(repo=_REPO, parent=43, expected=2)
+        children = GhRunRepository(process=self._process()).read_children(repo=_REPO, parent=43, expected=2)
 
         by_slice = {child.slice_id: child for child in children}
         assert by_slice["slice-01"].repo is None
         assert by_slice["slice-02"].repo == _OTHER_REPO
 
+    def test_every_acceptance_line_of_the_body_arrives_as_its_own_criterion_in_the_order_it_was_written(self) -> None:
+        children = GhRunRepository(process=self._process()).read_children(repo=_REPO, parent=43, expected=2)
+
+        by_slice = {child.slice_id: child for child in children}
+        assert by_slice["slice-01"].criteria == (
+            "el cuerpo se lee entero; los criterios llegan como lineas",
+            "el bloque de estado se puede reescribir sin tocar lo de arriba",
+        )
+
+    def test_the_intention_and_the_signal_of_the_slice_arrive_as_the_lines_that_declare_them(self) -> None:
+        children = GhRunRepository(process=self._process()).read_children(repo=_REPO, parent=43, expected=2)
+
+        by_slice = {child.slice_id: child for child in children}
+        assert by_slice["slice-01"].intention == "hoy no hay forma de medir el formato nuevo sin crearlo"
+        assert by_slice["slice-01"].signal == "exenta - spike de medicion"
+
+    def test_a_body_that_declares_none_of_them_reads_as_empty_instead_of_refusing_to_be_read(self) -> None:
+        bodiless = [{"number": 1, "title": "slice-01 (a): no prose at all", "body": "", "labels": [], "state": "OPEN"}]
+
+        children = GhRunRepository(process=self._process(children=bodiless)).read_children(
+            repo=_REPO, parent=43, expected=1
+        )
+
+        assert (children[0].intention, children[0].criteria, children[0].signal) == ("", (), "")
+
     def test_a_body_with_no_state_block_reads_as_no_run_yet(self) -> None:
-        children = RunRepository(process=self._process()).read_children(repo=_REPO, parent=43, expected=2)
+        children = GhRunRepository(process=self._process()).read_children(repo=_REPO, parent=43, expected=2)
 
         by_slice = {child.slice_id: child for child in children}
         assert by_slice["slice-02"].run is None
 
     def test_a_body_with_a_state_block_reads_the_run_it_holds(self) -> None:
-        children = RunRepository(process=self._process()).read_children(repo=_REPO, parent=43, expected=2)
+        children = GhRunRepository(process=self._process()).read_children(repo=_REPO, parent=43, expected=2)
 
         by_slice = {child.slice_id: child for child in children}
         assert by_slice["slice-01"].run == RunMother.awaiting_ci()
 
     def test_the_macro_state_label_present_on_the_issue_is_read_as_the_issue_label(self) -> None:
-        children = RunRepository(process=self._process()).read_children(repo=_REPO, parent=43, expected=2)
+        children = GhRunRepository(process=self._process()).read_children(repo=_REPO, parent=43, expected=2)
 
         by_slice = {child.slice_id: child for child in children}
         assert by_slice["slice-01"].label is IssueLabel.IN_PROGRESS
         assert by_slice["slice-02"].label is IssueLabel.PENDING
 
     def test_the_gh_issue_state_becomes_the_subissue_state(self) -> None:
-        children = RunRepository(process=self._process()).read_children(repo=_REPO, parent=43, expected=2)
+        children = GhRunRepository(process=self._process()).read_children(repo=_REPO, parent=43, expected=2)
 
         by_slice = {child.slice_id: child for child in children}
         assert by_slice["slice-01"].state is IssueState.CLOSED
@@ -238,13 +263,13 @@ class TestReadingTheChildren:
         self,
     ) -> None:
         with pytest.raises(LaggingSearchIndexError):
-            RunRepository(process=self._process()).read_children(repo=_REPO, parent=43, expected=3)
+            GhRunRepository(process=self._process()).read_children(repo=_REPO, parent=43, expected=3)
 
     def test_a_subissue_title_with_no_slice_identifier_is_rejected_instead_of_sorted_arbitrarily(self) -> None:
         malformed = [{"number": 1, "title": "an issue with no slice id", "body": "", "labels": [], "state": "OPEN"}]
 
         with pytest.raises(UnreadableIssueError, match="slice-NN"):
-            RunRepository(process=self._process(children=malformed)).read_children(repo=_REPO, parent=43, expected=1)
+            GhRunRepository(process=self._process(children=malformed)).read_children(repo=_REPO, parent=43, expected=1)
 
     def test_a_state_block_that_is_not_valid_json_is_rejected_as_unreadable(self) -> None:
         malformed = [
@@ -258,7 +283,7 @@ class TestReadingTheChildren:
         ]
 
         with pytest.raises(UnreadableRunError):
-            RunRepository(process=self._process(children=malformed)).read_children(repo=_REPO, parent=43, expected=1)
+            GhRunRepository(process=self._process(children=malformed)).read_children(repo=_REPO, parent=43, expected=1)
 
 
 class TestWritingTheExecutionStateBlock:
@@ -272,7 +297,7 @@ class TestWritingTheExecutionStateBlock:
     def test_a_body_with_no_block_yet_gets_one_appended_after_the_prose(self) -> None:
         process = self._process(body=_SUB2_BODY)
 
-        RunRepository(process=process).write_run(repo=_OTHER_REPO, issue=44, run=RunMother.implementing())
+        GhRunRepository(process=process).write_run(repo=_OTHER_REPO, issue=44, run=RunMother.implementing())
 
         assert process.calls[1].stdin == (
             "REPO: alcaptar/otro-repo\n"
@@ -289,7 +314,7 @@ class TestWritingTheExecutionStateBlock:
     def test_a_body_that_already_has_a_block_gets_only_the_block_replaced(self) -> None:
         process = self._process(body=_SUB1_BODY)
 
-        RunRepository(process=process).write_run(repo=_REPO, issue=45, run=RunMother.awaiting_merge())
+        GhRunRepository(process=process).write_run(repo=_REPO, issue=45, run=RunMother.awaiting_merge())
 
         assert process.calls[1].stdin == (
             "INTENCION: hoy no hay forma de medir el formato nuevo sin crearlo\n"
@@ -306,14 +331,14 @@ class TestWritingTheExecutionStateBlock:
     def test_writing_the_same_run_that_is_already_there_issues_no_edit_call(self) -> None:
         process = self._process(body=_SUB1_BODY)
 
-        RunRepository(process=process).write_run(repo=_REPO, issue=45, run=RunMother.awaiting_ci())
+        GhRunRepository(process=process).write_run(repo=_REPO, issue=45, run=RunMother.awaiting_ci())
 
         assert len(process.calls) == 1
 
     def test_reading_and_writing_only_ever_name_the_one_issue_being_updated(self) -> None:
         process = self._process(body=_SUB2_BODY)
 
-        RunRepository(process=process).write_run(repo=_OTHER_REPO, issue=44, run=RunMother.implementing())
+        GhRunRepository(process=process).write_run(repo=_OTHER_REPO, issue=44, run=RunMother.implementing())
 
         assert all("44" in call.argv for call in process.calls)
         assert all("45" not in call.argv for call in process.calls)
@@ -322,7 +347,7 @@ class TestWritingTheExecutionStateBlock:
         process = ScriptedProcess(ProcessOutput(code=0, stdout=json.dumps({"body": ""}), stderr=""))
 
         with pytest.raises(EmptyIssueBodyError):
-            RunRepository(process=process).write_run(repo=_REPO, issue=45, run=RunMother.awaiting_ci())
+            GhRunRepository(process=process).write_run(repo=_REPO, issue=45, run=RunMother.awaiting_ci())
 
         assert len(process.calls) == 1
 
@@ -331,7 +356,7 @@ class TestWritingTheMacroStateLabel:
     def test_a_normal_transition_is_a_single_call_that_both_adds_and_removes(self) -> None:
         process = ScriptedProcess(ProcessOutput(code=0, stdout="", stderr=""))
 
-        RunRepository(process=process).write_label(
+        GhRunRepository(process=process).write_label(
             repo=_REPO, issue=45, remove=IssueLabel.PENDING, add=IssueLabel.IN_PROGRESS
         )
 
@@ -343,7 +368,7 @@ class TestWritingTheMacroStateLabel:
     def test_the_only_issue_number_a_label_write_ever_names_is_the_one_being_transitioned(self) -> None:
         process = ScriptedProcess(ProcessOutput(code=0, stdout="", stderr=""))
 
-        RunRepository(process=process).write_label(
+        GhRunRepository(process=process).write_label(
             repo=_REPO, issue=45, remove=IssueLabel.PENDING, add=IssueLabel.IN_PROGRESS
         )
 
@@ -353,7 +378,7 @@ class TestWritingTheMacroStateLabel:
     def test_it_never_reads_or_writes_a_body_because_a_macro_transition_is_a_label_write_only(self) -> None:
         process = ScriptedProcess(ProcessOutput(code=0, stdout="", stderr=""))
 
-        RunRepository(process=process).write_label(
+        GhRunRepository(process=process).write_label(
             repo=_REPO, issue=45, remove=IssueLabel.PENDING, add=IssueLabel.IN_PROGRESS
         )
 
@@ -376,7 +401,7 @@ class TestWritingTheMacroStateLabel:
             ProcessOutput(code=0, stdout="", stderr=""),
         )
 
-        RunRepository(process=process).write_label(
+        GhRunRepository(process=process).write_label(
             repo=_REPO, issue=45, remove=IssueLabel.IN_PROGRESS, add=IssueLabel.BLOCKED_CI_RED
         )
 
@@ -394,7 +419,7 @@ class TestWritingTheMacroStateLabel:
         )
 
         with pytest.raises(GhCommandFailedError):
-            RunRepository(process=process).write_label(
+            GhRunRepository(process=process).write_label(
                 repo=_REPO, issue=45, remove=IssueLabel.IN_PROGRESS, add=IssueLabel.BLOCKED_CI_RED
             )
 
@@ -402,7 +427,7 @@ class TestWritingTheMacroStateLabel:
         process = ScriptedProcess(ProcessOutput(code=1, stdout="", stderr="authentication required"))
 
         with pytest.raises(GhCommandFailedError):
-            RunRepository(process=process).write_label(
+            GhRunRepository(process=process).write_label(
                 repo=_REPO, issue=45, remove=IssueLabel.IN_PROGRESS, add=IssueLabel.BLOCKED_CI_RED
             )
 
@@ -413,7 +438,7 @@ class TestWritingTheUnderstanding:
     def test_the_call_is_a_comment_carrying_the_understanding_as_stdin(self) -> None:
         process = ScriptedProcess(ProcessOutput(code=0, stdout="", stderr=""))
 
-        RunRepository(process=process).write_understanding(
+        GhRunRepository(process=process).write_understanding(
             repo=_REPO, issue=45, understanding="lo que el agente entendio de la slice"
         )
 
@@ -424,14 +449,14 @@ class TestWritingTheUnderstanding:
         process = ScriptedProcess(ProcessOutput(code=1, stdout="", stderr="HTTP 422: Unprocessable Entity"))
 
         with pytest.raises(GhCommandFailedError, match="HTTP 422"):
-            RunRepository(process=process).write_understanding(repo=_REPO, issue=45, understanding="x")
+            GhRunRepository(process=process).write_understanding(repo=_REPO, issue=45, understanding="x")
 
 
 class TestPausingForAlignment:
     def test_a_single_call_adds_the_pause_label_removes_the_prior_one_and_assigns_the_agent(self) -> None:
         process = ScriptedProcess(ProcessOutput(code=0, stdout="", stderr=""))
 
-        RunRepository(process=process).pause_for_alignment(repo=_REPO, issue=45, remove=IssueLabel.IN_PROGRESS)
+        GhRunRepository(process=process).pause_for_alignment(repo=_REPO, issue=45, remove=IssueLabel.IN_PROGRESS)
 
         assert len(process.calls) == 1
         argv = Argv(process.calls[0].argv)
@@ -443,7 +468,7 @@ class TestPausingForAlignment:
     def test_no_value_of_remove_ever_changes_the_label_that_gets_added(self, remove: IssueLabel) -> None:
         process = ScriptedProcess(ProcessOutput(code=0, stdout="", stderr=""))
 
-        RunRepository(process=process).pause_for_alignment(repo=_REPO, issue=45, remove=remove)
+        GhRunRepository(process=process).pause_for_alignment(repo=_REPO, issue=45, remove=remove)
 
         assert Argv(process.calls[0].argv).value_of("--add-label") == "estado:esperando-alineacion"
 
@@ -454,7 +479,7 @@ class TestPausingForAlignment:
             ProcessOutput(code=0, stdout="", stderr=""),
         )
 
-        RunRepository(process=process).pause_for_alignment(repo=_REPO, issue=45, remove=IssueLabel.IN_PROGRESS)
+        GhRunRepository(process=process).pause_for_alignment(repo=_REPO, issue=45, remove=IssueLabel.IN_PROGRESS)
 
         assert len(process.calls) == 3
         assert process.calls[1].argv[:3] == ["gh", "label", "create"]
@@ -469,13 +494,13 @@ class TestPausingForAlignment:
         )
 
         with pytest.raises(GhCommandFailedError):
-            RunRepository(process=process).pause_for_alignment(repo=_REPO, issue=45, remove=IssueLabel.IN_PROGRESS)
+            GhRunRepository(process=process).pause_for_alignment(repo=_REPO, issue=45, remove=IssueLabel.IN_PROGRESS)
 
     def test_a_failure_unrelated_to_a_missing_label_raises_without_trying_to_create_one(self) -> None:
         process = ScriptedProcess(ProcessOutput(code=1, stdout="", stderr="authentication required"))
 
         with pytest.raises(GhCommandFailedError):
-            RunRepository(process=process).pause_for_alignment(repo=_REPO, issue=45, remove=IssueLabel.IN_PROGRESS)
+            GhRunRepository(process=process).pause_for_alignment(repo=_REPO, issue=45, remove=IssueLabel.IN_PROGRESS)
 
         assert len(process.calls) == 1
 
@@ -485,10 +510,10 @@ class TestGhFailuresAreInterpretedNotSwallowed:
         process = ScriptedProcess(ProcessOutput(code=1, stdout="", stderr="HTTP 404: Not Found"))
 
         with pytest.raises(GhCommandFailedError, match="HTTP 404"):
-            RunRepository(process=process).read_parent(repo=_REPO, issue=999, slice_repo=None)
+            GhRunRepository(process=process).read_parent(repo=_REPO, issue=999, slice_repo=None)
 
     def test_a_response_that_is_not_json_is_rejected_instead_of_crashing_on_a_decode_error(self) -> None:
         process = ScriptedProcess(ProcessOutput(code=0, stdout="not json at all", stderr=""))
 
         with pytest.raises(UnreadableIssueError):
-            RunRepository(process=process).read_parent(repo=_REPO, issue=43, slice_repo=None)
+            GhRunRepository(process=process).read_parent(repo=_REPO, issue=43, slice_repo=None)

@@ -86,6 +86,30 @@ class TestWhatTravelsOnStandardInput:
         assert "src/tests/test_a.py" in text
         assert "(2)" in text
 
+    def test_it_carries_the_slice_it_judges_with_the_yardstick_the_closed_rubric_measures_it_against(self) -> None:
+        review = SliceUnderReviewMother.of_the_slice(files=("src/a.py",))
+
+        assert (
+            "## Datos del run\n"
+            "\n"
+            "- slice: slice-05\n"
+            "- ruta del repo: /repos/project\n"
+            "- senal: exenta - este repo no despliega\n"
+            "- criterios de aceptacion (2):\n"
+            "  - antes de tocar codigo comprueba que la subissue no este ya cerrada\n"
+            "  - cada precheck falla con un motivo distinguible, no con un booleano\n"
+            "- fuentes de convencion (1):\n"
+            "  - doc: CLAUDE.md\n"
+            "- checklist de slices del issue (2):\n"
+            "  - [CLOSED] slice-05 (prechecks-deterministas): comprobar antes de tocar codigo\n"
+            "  - [OPEN] slice-06 (pausa-de-alineacion): el entendimiento se escribe siempre\n"
+            "- ficheros que toca la slice (1):\n"
+            "  - src/a.py\n"
+            "- directorios que puedes leer (2):\n"
+            "  - /repos/project\n"
+            "  - /toolbox/skills\n"
+        ) in JudgeInvocation(judge=_JUDGE, review=review).text
+
     def test_what_the_judge_may_read_is_labelled_apart_from_the_files_of_the_slice(self) -> None:
         review = SliceUnderReviewMother.of_the_slice(files=("src/a.py",))
 

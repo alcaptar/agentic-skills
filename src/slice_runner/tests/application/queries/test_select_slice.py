@@ -1,0 +1,138 @@
+from __future__ import annotations
+
+from unittest.mock import Mock, create_autospec
+
+import pytest
+
+from slice_runner.application.queries.select_slice import SelectSlice, SelectSliceParams
+from slice_runner.domain.checklist_entry import ChecklistEntry
+from slice_runner.domain.exceptions import NoSliceLeftError
+from slice_runner.domain.issue_label import IssueLabel
+from slice_runner.domain.issue_state import IssueState
+from slice_runner.domain.run_repository import RunRepository
+from slice_runner.tests.mothers.parent_issue_mother import ParentIssueMother
+from slice_runner.tests.mothers.sub_issue_mother import SubIssueMother
+
+_REPO = "alcaptar/agentic-skills"
+_ISSUE = 38
+
+_PARAMS = SelectSliceParams(repo=_REPO, issue=_ISSUE)
+
+_CLOSURES_OF_A_PREVIOUS_RUN = (
+    IssueLabel.BLOCKED_CONTROLS,
+    IssueLabel.BLOCKED_VERIFY,
+    IssueLabel.BLOCKED_CI_RED,
+    IssueLabel.BLOCKED_CI_INDETERMINATE,
+    IssueLabel.ABORTED_BUDGET,
+)
+
+_A_PAUSE_THAT_ONLY_A_PERSON_LIFTS = (IssueLabel.AWAITING_ALIGNMENT,)
+
+_LABELS_THAT_DISQUALIFY_A_SLICE = (*_CLOSURES_OF_A_PREVIOUS_RUN, *_A_PAUSE_THAT_ONLY_A_PERSON_LIFTS)
+
+_LABELS_THAT_LEAVE_A_SLICE_RUNNABLE = tuple(
+    label for label in IssueLabel if label not in _LABELS_THAT_DISQUALIFY_A_SLICE
+)
+
+
+class TestSelectSlice:
+    @pytest.fixture
+    def repository(self) -> Mock:
+        repository: Mock = create_autospec(RunRepository, spec_set=True, instance=True)
+        repository.read_parent.side_effect = [
+            ParentIssueMother.of_two_slices(),
+            ParentIssueMother.with_exempt_controls(),
+        ]
+        repository.read_children.return_value = (SubIssueMother.closed(), SubIssueMother.of_another_repo())
+        return repository
+
+    @pytest.fixture
+    def query(self, repository: Mock) -> SelectSlice:
+        return SelectSlice(repository=repository)
+
+    def test_the_slice_to_run_is_the_first_one_that_is_not_closed(self, query: SelectSlice) -> None:
+        assert query.execute(_PARAMS).subissue == SubIssueMother.of_another_repo()
+
+    def test_the_children_are_asked_for_with_the_count_the_parent_declared_so_a_lagging_index_is_visible(
+        self, query: SelectSlice, repository: Mock
+    ) -> None:
+        query.execute(_PARAMS)
+
+        repository.read_children.assert_called_once_with(repo=_REPO, parent=_ISSUE, expected=2)
+
+    def test_the_parent_is_read_again_scoped_to_the_repo_where_the_chosen_slice_lives(
+        self, query: SelectSlice, repository: Mock
+    ) -> None:
+        query.execute(_PARAMS)
+
+        repository.read_parent.assert_called_with(repo=_REPO, issue=_ISSUE, slice_repo=SubIssueMother.OTHER_REPO)
+
+    def test_the_sources_and_controls_that_come_back_are_the_ones_of_the_scoped_read(self, query: SelectSlice) -> None:
+        assert query.execute(_PARAMS).parent == ParentIssueMother.with_exempt_controls()
+
+    def test_the_checklist_carries_every_slice_of_the_issue_and_not_only_the_chosen_one(
+        self, query: SelectSlice
+    ) -> None:
+        assert query.execute(_PARAMS).checklist == (
+            ChecklistEntry(title=SubIssueMother.closed().title, state=IssueState.CLOSED),
+            ChecklistEntry(title=SubIssueMother.of_another_repo().title, state=IssueState.OPEN),
+        )
+
+    def test_an_issue_with_every_slice_closed_raises_instead_of_handing_back_a_finished_one(
+        self, query: SelectSlice, repository: Mock
+    ) -> None:
+        repository.read_children.return_value = (SubIssueMother.closed(),)
+
+        with pytest.raises(NoSliceLeftError, match=str(_ISSUE)):
+            query.execute(_PARAMS)
+
+    def test_with_two_slices_runnable_the_one_that_comes_first_is_the_one_that_runs(
+        self, query: SelectSlice, repository: Mock
+    ) -> None:
+        repository.read_children.return_value = (SubIssueMother.pending(), SubIssueMother.of_another_repo())
+
+        assert query.execute(_PARAMS).subissue == SubIssueMother.pending()
+
+    def test_a_slice_a_previous_run_left_blocked_is_skipped_instead_of_chosen_again(
+        self, query: SelectSlice, repository: Mock
+    ) -> None:
+        repository.read_children.return_value = (
+            SubIssueMother.carrying(IssueLabel.BLOCKED_CI_RED),
+            SubIssueMother.of_another_repo(),
+        )
+
+        assert query.execute(_PARAMS).subissue == SubIssueMother.of_another_repo()
+
+    @pytest.mark.parametrize("label", _LABELS_THAT_DISQUALIFY_A_SLICE)
+    def test_a_slice_a_run_closed_or_left_waiting_on_a_person_is_never_picked_up_again_on_its_own(
+        self, query: SelectSlice, repository: Mock, label: IssueLabel
+    ) -> None:
+        repository.read_children.return_value = (SubIssueMother.carrying(label),)
+
+        with pytest.raises(NoSliceLeftError, match=str(_ISSUE)):
+            query.execute(_PARAMS)
+
+    @pytest.mark.parametrize("label", _LABELS_THAT_LEAVE_A_SLICE_RUNNABLE)
+    def test_every_other_label_of_the_vocabulary_leaves_the_slice_runnable_instead_of_falling_through(
+        self, query: SelectSlice, repository: Mock, label: IssueLabel
+    ) -> None:
+        repository.read_children.return_value = (SubIssueMother.carrying(label),)
+
+        assert query.execute(_PARAMS).subissue.label is label
+
+    def test_a_slice_that_carries_no_label_at_all_is_runnable_because_nothing_has_closed_it(
+        self, query: SelectSlice, repository: Mock
+    ) -> None:
+        repository.read_children.return_value = (SubIssueMother.unlabelled(),)
+
+        assert query.execute(_PARAMS).subissue == SubIssueMother.unlabelled()
+
+    def test_a_slice_that_lives_in_the_repo_of_its_issue_does_not_pay_a_second_read_of_the_parent(
+        self, query: SelectSlice, repository: Mock
+    ) -> None:
+        repository.read_children.return_value = (SubIssueMother.pending(),)
+
+        chosen = query.execute(_PARAMS)
+
+        repository.read_parent.assert_called_once_with(repo=_REPO, issue=_ISSUE, slice_repo=None)
+        assert chosen.parent == ParentIssueMother.of_two_slices()

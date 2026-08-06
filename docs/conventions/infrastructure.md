@@ -111,6 +111,31 @@ importar**: un smoke que solo importe el modulo lo da por bueno. Lo evita
   metodologia. `agents/slice-implementer.md` es del **flujo viejo** y se queda congelado igual que
   `agents/slice-verifier.md`: el programa no lo lee. Son dos copias del brief a proposito, con la del
   programa diciendo la verdad sobre lo que el programa manda.
+- **Lo que no cambia entre invocaciones es constante; los datos de la slice los compone la invocacion.**
+  `SliceImplementerBrief.TEXT` y la rubrica de `SliceVerifierJudge` son texto fijo, y `## Datos de la
+  slice` y `## Datos del run` los redactan `ImplementerInvocation` y `JudgeInvocation` a partir del
+  `Assignment` y del `SliceUnderReview` que reciben. **Aplicacion no compone texto de prompt**: pasa
+  objetos del dominio y es la frontera la que decide como se escriben, por el mismo motivo por el que el
+  texto fijo vive aqui. Y los dos prompts **cierran con el dato**, nunca con la metodologia: lo variable
+  al final es lo que evita que un delimitador tenga que sobrevivir a su propio contenido -en el juez, el
+  diff es literalmente lo ultimo del prompt-.
+
+  Las dos invocaciones llevan **su propio `_counted`** -el par "encabezado con cuantos son" mas una linea
+  por entrada- en vez de compartirlo. Es la misma decision que la de `LocalCorpus`/`LocalSkillLibrary` de
+  mas abajo, y por el mismo motivo: lo que comparten no es una regla del programa sino la forma de una
+  lista, cada prompt es un contrato con un agente distinto y **nada exige que se parezcan**, asi que
+  extraerlas hoy fijaria un parecido que no es invariante. Con un tercer prompt se extrae.
+
+  **Transitorio declarado: hoy el unico invocador del juez es `verify`, y pasa esos campos vacios.**
+  `Cli._params` construye el `VerifySliceParams` con `signal=""` y las tres tuplas a cero porque el
+  subcomando solo recibe repo, base e identificador por el `argv`; quien tiene el issue delante es el
+  conductor, que llega con la slice-16. La consecuencia es que un `verify` real emite hoy
+  `- criterios de aceptacion (0):`. Por eso la rubrica **describe la carga en vez de prometerla llena**:
+  dice que los campos viajan siempre, que pueden venir vacios y que un campo vacio es un insumo que no
+  ha llegado -que el juez reporta como falta de dato, no como item conforme-. Lo que **no** se hace es
+  volver a escribir que esos insumos no existen: la afirmacion falsa no es "puede venir vacio", es
+  "nunca llega". Y los campos entran **sin default** en `VerifySliceParams` a proposito, para que el
+  conductor rompa en `mypy` si se los deja en vez de heredar el vacio en silencio.
 - **`LocalCorpus` y `LocalSkillLibrary` resuelven cada uno la raiz de configuracion de la herramienta**
   (`CLAUDE_CONFIG_DIR` o `~/.claude` expandido), en vez de compartir un objeto que la diga. Es una
   duplicacion declarada de cuatro lineas: lo que comparten no es una regla del programa sino **la
@@ -134,7 +159,7 @@ importar**: un smoke que solo importe el modulo lo da por bueno. Lo evita
   capturando el `OSError` a escondidas dentro del adaptador.
 - Un codigo de salida distinto de cero **es un dato**, no una excepcion: se lanza el proceso con
   `check=False` y el adaptador interpreta, porque el motivo esta en `stderr` y una excepcion lo borra.
-- **`GhForum` reutiliza `GhCommandFailedError` de `run_repository.py`** para un exit distinto de cero de
+- **`GhForum` reutiliza `GhCommandFailedError` de `gh_run_repository.py`** para un exit distinto de cero de
   `gh pr list`, en vez de declarar su propia excepcion: es el mismo fallo -un comando de `gh` que sale
   mal- y vive donde lo necesito el primer adaptador que lo tuvo. Su casa natural es un modulo de
   frontera de `gh` compartido, y se hara cuando exista un tercer adaptador de `gh`; hasta entonces, el

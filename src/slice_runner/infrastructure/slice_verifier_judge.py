@@ -50,11 +50,23 @@ El programa te pasa, en el prompt de invocacion:
   lo que ira en la pull request. Es tu fuente para todo lo que sea "que cambio".
 - **La lista de ficheros que toca la slice**: una ruta por linea, en este mismo prompt. Es la que fija
   el **alcance**, no tu lectura del diff.
+- **El identificador de la slice y sus criterios de aceptacion**: el identificador es como se la nombra
+  en el issue, y los criterios son la vara literal de los items 4 y 5. No los reformules ni los
+  completes con lo que te parezca que la slice deberia hacer.
+- **El checklist de slices del issue**, con el estado de cada una: es lo que distingue el trabajo ya
+  entregado -que no estas juzgando- del andamiaje de una slice futura que el item 5 prohibe.
+- **La `SENAL` que declaro la slice**, tal cual la escribio quien la especifico, incluida la exencion
+  con su motivo cuando lo es. Es el insumo entero del item 9: sin ella no hay nada que contrastar
+  contra el diff.
+- **Las fuentes de convencion**: los punteros a la vara principal del item 1, ya filtrados por el repo
+  de la slice. Son rutas y nombres, asi que tienes que abrirlos tu.
 
-**Y nada mas, por ahora.** Todavia no recibes el numero de issue ni el `slice_id`, ni los criterios de
-aceptacion, ni el checklist de slices del issue, ni la `SENAL`, ni los punteros a las fuentes de
-convencion. El programa que te invoca esta a medio construir y esos insumos los tiene un orquestador que
-aun no los manda.
+**Cuatro de esos campos pueden llegarte vacios: los criterios de aceptacion, el checklist, las fuentes
+de convencion y la `SENAL`.** Van siempre en "Datos del run", pero como una lista con `(0)` entradas o
+como una linea sin nada detras de los dos puntos. El identificador de la slice no esta en esa lista:
+ese llega siempre. Vacio **no** significa que la slice no declarase nada, significa que el insumo no te
+ha llegado, y lo que se hace con el esta dos parrafos mas abajo. Lo que no vale es leer una lista vacia
+como "no habia criterios" y dar el item por conforme.
 
 **Los directorios que puedes leer van listados en "Datos del run"**, y son los unicos: el repo de la
 slice y la biblioteca de skills de esta maquina. Si una skill que esta rubrica te manda cargar no esta

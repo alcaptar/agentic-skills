@@ -4,17 +4,19 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from slice_runner.domain.checklist_entry import ChecklistEntry
-    from slice_runner.domain.slice_diff import SliceDiff
+    from slice_runner.domain.controls import Controls
+    from slice_runner.domain.finding import Finding
     from slice_runner.domain.source import Source
 
 
 @dataclass(frozen=True, kw_only=True, slots=True)
-class SliceUnderReview:
+class Assignment:
+    issue: int
     slice_id: str
     repo: str
-    diff: SliceDiff
-    signal: str
+    intention: str
     criteria: tuple[str, ...]
+    signal: str
     sources: tuple[Source, ...]
-    checklist: tuple[ChecklistEntry, ...]
+    controls: Controls
+    findings: tuple[Finding, ...] = ()
