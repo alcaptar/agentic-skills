@@ -59,6 +59,7 @@ class ConductSliceParams:
     worktree: str
     base: str
     logs: Path
+    slice_id: str | None = None
 
 
 @dataclass(frozen=True, kw_only=True, slots=True)
@@ -162,7 +163,7 @@ class ConductSlice:
         self._budgets = budgets
 
     def execute(self, params: ConductSliceParams) -> ConductSliceResult:
-        chosen = self._select.execute(SelectSliceParams(repo=params.repo, issue=params.issue))
+        chosen = self._select.execute(SelectSliceParams(repo=params.repo, issue=params.issue, slice_id=params.slice_id))
         progress = ConductSliceProgress(
             params=params,
             chosen=chosen,

@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 
 from slice_runner.domain.budgets import Budgets
+from slice_runner.domain.issue_label import IssueLabel
 from slice_runner.domain.outcome import Outcome
 from slice_runner.domain.run_state import RunState
 from slice_runner.domain.step import Step
@@ -516,6 +517,16 @@ class TestTheCommandThatConductsASlice:
         assert code == ExitCode.OK
         assert "--worktree" in capsys.readouterr().out
 
+    def test_the_slice_defaults_to_none_because_without_it_the_next_runnable_one_is_chosen(self) -> None:
+        arguments = Cli.parser().parse_args(self._complete())
+
+        assert arguments.slice_id is None
+
+    def test_the_slice_can_be_named_explicitly_to_conduct_that_one_instead_of_the_next_in_line(self) -> None:
+        arguments = Cli.parser().parse_args([*self._complete(), "--slice", _SLICE])
+
+        assert arguments.slice_id == _SLICE
+
 
 class TestConductingASliceAnEarlierInvocationLeftHalfDone:
     @staticmethod
@@ -572,6 +583,73 @@ class TestConductingASliceAnEarlierInvocationLeftHalfDone:
         self._invocation().conduct(logs=logs)
 
         assert logs.is_dir()
+
+
+class TestConductingTheSliceNamedByTheCaller:
+    @staticmethod
+    def _invocation() -> RunInvocation:
+        return RunInvocation(
+            children=GhConversationMother.two_slices_resumed_at(RunMother.awaiting_merge()),
+            parent=GhConversationMother.parent_of_two_slices(),
+            answers=(
+                Answer(
+                    to=("gh", "pr", "list", "--state", "all"),
+                    stdout=GhConversationMother.the_pull_request_of_the_branch(),
+                ),
+                Answer(to=("gh", "pr", "view"), stdout=GhConversationMother.a_merged_pull_request()),
+            ),
+        )
+
+    def test_the_slice_named_by_the_caller_is_conducted_instead_of_the_first_one_in_line(self, tmp_path: Path) -> None:
+        invocation = self._invocation()
+
+        invocation.conduct(logs=tmp_path / "logs", slice_id=GhConversationMother.OTHER_SLICE)
+
+        assert invocation.process.invoked("gh", "pr", "list", "--head", GhConversationMother.OTHER_BRANCH)
+        assert not invocation.process.invoked("gh", "pr", "list", "--head", GhConversationMother.BRANCH)
+
+    def test_without_the_slice_argument_the_first_one_in_line_is_still_chosen(self, tmp_path: Path) -> None:
+        invocation = self._invocation()
+
+        invocation.conduct(logs=tmp_path / "logs")
+
+        assert invocation.process.invoked("gh", "pr", "list", "--head", GhConversationMother.BRANCH)
+        assert not invocation.process.invoked("gh", "pr", "list", "--head", GhConversationMother.OTHER_BRANCH)
+
+
+class TestAskingForASliceThatCannotBeRun:
+    def test_a_slice_that_does_not_exist_among_the_issue_fails_closed_without_writing_anything(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        invocation = RunInvocation(
+            children=GhConversationMother.two_slices_resumed_at(RunMother.awaiting_merge()),
+            parent=GhConversationMother.parent_of_two_slices(),
+        )
+
+        code = invocation.conduct(logs=tmp_path / "logs", slice_id="slice-99")
+
+        assert code == ExitCode.NO_SLICE_LEFT
+        assert "slice-99" in capsys.readouterr().err
+        assert not invocation.process.invoked("gh", "issue", "edit")
+        assert not invocation.process.invoked("gh", "issue", "comment")
+        assert not invocation.process.invoked("gh", "pr", "list")
+
+    def test_a_slice_that_is_not_runnable_fails_closed_the_same_way_as_one_that_does_not_exist(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        invocation = RunInvocation(
+            children=GhConversationMother.two_slices_resumed_at(
+                RunMother.awaiting_merge(), second_label=IssueLabel.BLOCKED_VERIFY
+            ),
+            parent=GhConversationMother.parent_of_two_slices(),
+        )
+
+        code = invocation.conduct(logs=tmp_path / "logs", slice_id=GhConversationMother.OTHER_SLICE)
+
+        assert code == ExitCode.NO_SLICE_LEFT
+        assert GhConversationMother.OTHER_SLICE in capsys.readouterr().err
+        assert not invocation.process.invoked("gh", "issue", "edit")
+        assert not invocation.process.invoked("gh", "pr", "list")
 
 
 class TestWhenTheRunClosesWithoutBeingMerged:

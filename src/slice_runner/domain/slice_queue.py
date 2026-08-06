@@ -13,13 +13,21 @@ class SliceQueue:
     @classmethod
     def next_in_line(cls, children: tuple[SubIssue, ...]) -> SubIssue | None:
         for child in children:
-            if cls._runnable(child):
+            if cls.runnable(child):
                 return child
 
         return None
 
     @classmethod
-    def _runnable(cls, child: SubIssue) -> bool:
+    def find(cls, children: tuple[SubIssue, ...], slice_id: str) -> SubIssue | None:
+        for child in children:
+            if child.slice_id == slice_id:
+                return child
+
+        return None
+
+    @classmethod
+    def runnable(cls, child: SubIssue) -> bool:
         return child.state is IssueState.OPEN and not cls._disqualifying(child.label)
 
     @staticmethod

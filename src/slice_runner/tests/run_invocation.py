@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from slice_runner.application.actions.conduct_slice import ConductSliceParams
 from slice_runner.infrastructure.cli import Cli
 from slice_runner.infrastructure.metrics_invocation import MetricsInvocation
 from slice_runner.tests.doubles import Answer, AnsweringByArgv
@@ -12,12 +13,15 @@ if TYPE_CHECKING:
 
 
 class RunInvocation:
-    def __init__(self, *, children: str, answers: tuple[Answer, ...] = ()) -> None:
+    def __init__(
+        self,
+        *,
+        children: str,
+        answers: tuple[Answer, ...] = (),
+        parent: str = GhConversationMother.parent_of_one_slice(),
+    ) -> None:
         self.process = AnsweringByArgv(
-            Answer(
-                to=("gh", "issue", "view", "body,subIssuesSummary"),
-                stdout=GhConversationMother.parent_of_one_slice(),
-            ),
+            Answer(to=("gh", "issue", "view", "body,subIssuesSummary"), stdout=parent),
             Answer(to=("gh", "issue", "list"), stdout=children),
             *answers,
             Answer(to=("gh", "issue", "view", "body"), stdout=GhConversationMother.body_of_the_subissue()),
@@ -26,11 +30,14 @@ class RunInvocation:
             Answer(to=(MetricsInvocation.EXECUTABLE, "record")),
         )
 
-    def conduct(self, *, logs: Path, base: str = GhConversationMother.BASE) -> int:
+    def conduct(self, *, logs: Path, base: str = GhConversationMother.BASE, slice_id: str | None = None) -> int:
         return Cli(process=self.process).run(
-            repo=GhConversationMother.REPO,
-            issue=GhConversationMother.ISSUE,
-            worktree=GhConversationMother.WORKTREE,
-            base=base,
-            logs=logs,
+            ConductSliceParams(
+                repo=GhConversationMother.REPO,
+                issue=GhConversationMother.ISSUE,
+                worktree=GhConversationMother.WORKTREE,
+                base=base,
+                logs=logs,
+                slice_id=slice_id,
+            )
         )
