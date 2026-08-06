@@ -56,6 +56,7 @@ from slice_runner.infrastructure.metrics_script_log import MetricsNotRecordedErr
 from slice_runner.infrastructure.process import ProcessNotRunnableError
 from slice_runner.infrastructure.slice_pull_request import SlicePullRequest
 from slice_runner.infrastructure.slice_verifier_judge import SliceVerifierJudge
+from slice_runner.infrastructure.stderr_event_log import StderrEventLog
 from slice_runner.infrastructure.subcommand import Subcommand
 from slice_runner.infrastructure.system_clock import SystemClock
 from slice_runner.infrastructure.transition_payload import TransitionPayload
@@ -231,6 +232,7 @@ class Cli:
                 understanding=UnderstandingComment(),
                 pull_request=SlicePullRequest(),
                 deploy_watch=ClaudeDeployWatch(process=self._process),
+                events=StderrEventLog(),
             ),
             machine=StateMachine(budgets=budgets),
             budgets=budgets,

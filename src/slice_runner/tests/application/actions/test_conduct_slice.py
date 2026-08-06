@@ -7,8 +7,10 @@ import pytest
 from slice_runner.domain.budgets import Budgets
 from slice_runner.domain.ci_status import CiStatus
 from slice_runner.domain.discard_cause import DiscardCause
+from slice_runner.domain.event_status import EventStatus
 from slice_runner.domain.exceptions import DirtyIndexError, NoPullRequestError
 from slice_runner.domain.halt import Halt
+from slice_runner.domain.harness_spend import HarnessSpend
 from slice_runner.domain.issue_label import IssueLabel
 from slice_runner.domain.precheck_outcome import PrecheckOutcome
 from slice_runner.domain.pull_request_state import PullRequestState
@@ -262,6 +264,64 @@ class TestConductSliceOnTheHappyPath:
         closed: ClosedSlice = metrics.record.call_args.args[0]
 
         return closed
+
+
+class TestConductSliceReportingEvents:
+    @staticmethod
+    def _conductor(*, budgets: Budgets | None = None) -> Conductor:
+        return Conductor(chosen=SelectSliceResultMother.resumed_at(RunMother.implementing()), budgets=budgets)
+
+    def test_every_transition_reports_the_slice_the_step_it_lands_on_the_instant_and_the_spend_paid_so_far(
+        self,
+    ) -> None:
+        conductor = self._conductor()
+
+        conductor.conduct()
+
+        after_the_implementer = HarnessSpendMother.of_the_implementer_call()
+        after_the_judge = HarnessSpend.summing(
+            (HarnessSpendMother.of_the_implementer_call(), HarnessSpendMother.of_the_judge_call())
+        )
+        emitted = conductor.emitted_events
+        assert [(e.slice_id, e.step, e.at, e.spend) for e in emitted] == [
+            ("slice-05", Step.RUN_CONTROLS, Conductor.NOW, after_the_implementer),
+            ("slice-05", Step.VERIFY, Conductor.NOW, after_the_implementer),
+            ("slice-05", Step.OPEN_PULL_REQUEST, Conductor.NOW, after_the_judge),
+            ("slice-05", Step.AWAIT_CI, Conductor.NOW, after_the_judge),
+            ("slice-05", Step.AWAIT_MERGE, Conductor.NOW, after_the_judge),
+            ("slice-05", Step.AWAIT_MERGE, Conductor.NOW, after_the_judge),
+        ]
+
+    def test_the_happy_path_reports_advancing_for_every_step_until_the_run_closes_and_then_reports_closed(
+        self,
+    ) -> None:
+        conductor = self._conductor()
+
+        conductor.conduct()
+
+        emitted = conductor.emitted_events
+        assert [e.status for e in emitted] == [EventStatus.ADVANCING] * 5 + [EventStatus.CLOSED]
+
+    def test_a_pending_merge_reports_awaiting_a_person_because_the_merge_is_a_human_decision(self) -> None:
+        conductor = self._conductor(budgets=Budgets(total_wait_seconds=30))
+        conductor.forum.pull_request_state.return_value = PullRequestState.OPEN
+
+        conductor.conduct()
+
+        emitted = conductor.emitted_events
+        assert (emitted[-1].step, emitted[-1].status) == (Step.AWAIT_MERGE, EventStatus.AWAITING_PERSON)
+
+    def test_a_pending_ci_reports_waiting_because_no_person_is_deciding_anything_yet(self) -> None:
+        conductor = Conductor(
+            chosen=SelectSliceResultMother.resumed_at(RunMother.about_to_ask_the_ci()),
+            budgets=Budgets(total_wait_seconds=90),
+        )
+        conductor.ci.status.return_value = CiStatus.PENDING
+
+        conductor.conduct()
+
+        emitted = conductor.emitted_events
+        assert [e.status for e in emitted] == [EventStatus.WAITING] * 3
 
 
 class TestConductSliceChainingDeployWatchAfterAMerge:

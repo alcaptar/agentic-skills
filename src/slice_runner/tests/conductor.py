@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 from unittest.mock import Mock, create_autospec
@@ -23,6 +24,7 @@ from slice_runner.domain.ci_status import CiStatus
 from slice_runner.domain.clock import Clock
 from slice_runner.domain.control_runner import ControlRunner
 from slice_runner.domain.deploy_watch import DeployWatch
+from slice_runner.domain.event_log import EventLog
 from slice_runner.domain.forum import Forum
 from slice_runner.domain.metrics_log import MetricsLog
 from slice_runner.domain.precheck_outcome import PrecheckOutcome
@@ -38,6 +40,7 @@ from slice_runner.tests.mothers.verification_mother import VerificationMother
 if TYPE_CHECKING:
     from slice_runner.application.actions.conduct_slice import ConductSliceResult
     from slice_runner.application.queries.select_slice import SelectSliceResult
+    from slice_runner.domain.event import Event
 
 
 class Conductor:
@@ -50,6 +53,7 @@ class Conductor:
     TITLE: ClassVar[str] = "feat(prechecks-deterministas): comprobar antes de tocar codigo"
     BODY: ClassVar[str] = "## Intencion\nhoy nada evita reimplementar una slice ya entregada\n\nCloses #45"
     UNDERSTANDING: ClassVar[str] = "## Entendimiento de la slice\n\nslice-05 (prechecks-deterministas)\n"
+    NOW: ClassVar[datetime] = datetime(2024, 1, 1, tzinfo=UTC)
 
     def __init__(self, *, chosen: SelectSliceResult, budgets: Budgets | None = None) -> None:
         self.budgets = budgets or Budgets()
@@ -70,6 +74,7 @@ class Conductor:
         self.forum.open_pull_request.return_value = self.PULL_REQUEST
         self.forum.any_pull_request.return_value = self.PULL_REQUEST
         self.clock: Mock = create_autospec(Clock, spec_set=True, instance=True)
+        self.clock.now.return_value = self.NOW
         self.metrics: Mock = create_autospec(MetricsLog, spec_set=True, instance=True)
         self.understanding: Mock = create_autospec(UnderstandingWriter, spec_set=True, instance=True)
         self.understanding.write.return_value = self.UNDERSTANDING
@@ -77,6 +82,11 @@ class Conductor:
         self.pull_request.title.return_value = self.TITLE
         self.pull_request.body.return_value = self.BODY
         self.deploy_watch: Mock = create_autospec(DeployWatch, spec_set=True, instance=True)
+        self.events: Mock = create_autospec(EventLog, spec_set=True, instance=True)
+
+    @property
+    def emitted_events(self) -> list[Event]:
+        return [call.args[0] for call in self.events.emit.call_args_list]
 
     def conduct(self) -> ConductSliceResult:
         return self._action().execute(
@@ -104,6 +114,7 @@ class Conductor:
                 understanding=self.understanding,
                 pull_request=self.pull_request,
                 deploy_watch=self.deploy_watch,
+                events=self.events,
             ),
             machine=StateMachine(budgets=self.budgets),
             budgets=self.budgets,

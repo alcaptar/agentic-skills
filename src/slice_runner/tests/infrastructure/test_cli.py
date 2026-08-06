@@ -584,6 +584,16 @@ class TestConductingASliceAnEarlierInvocationLeftHalfDone:
 
         assert logs.is_dir()
 
+    def test_the_transition_that_closes_the_run_is_reported_on_standard_error_leaving_the_result_untouched(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        self._invocation().conduct(logs=tmp_path / "logs")
+
+        output = capsys.readouterr()
+        reported = json.loads(output.err)
+        assert (reported["step"], reported["status"]) == ("await-merge", "closed")
+        assert json.loads(output.out)["halt"] == "run-closed"
+
 
 class TestConductingTheSliceNamedByTheCaller:
     @staticmethod

@@ -177,7 +177,8 @@ importar**: un smoke que solo importe el modulo lo da por bueno. Lo evita
   una slice, que es justo el momento en que un fallo pierde la fila.
 - **El programa no escribe ningun numero que no venga del harness.** Del sobre salen coste en dolares,
   turnos y duracion, sumados por slice; `--duracion-s` (reloj de pared) y `--coste-tokens` **no se pasan**,
-  porque aqui nadie los mide y no hay puerto de reloj. De ahi que el gasto sea un value object que
+  porque no son dato del harness: hay puerto de reloj (`Clock.now`, que sella cada evento del run), pero lo
+  que ese reloj lee es del programa y no de lo que la llamada costo. De ahi que el gasto sea un value object que
   distingue "todavia no se ha medido nada" de "cero medido" (`HarnessSpend.measured`): con nada medido, los
   tres flags no viajan y el script no escribe la clave. Y **todas** las llamadas cuentan, tambien las que
   acaban en excepcion -si no, una fila con tres descartes escribiria un coste sistematicamente por debajo-:
@@ -292,7 +293,7 @@ importar**: un smoke que solo importe el modulo lo da por bueno. Lo evita
   declara como el ejecutable `slice-runner`.
 - **Es el unico sitio que monta el grafo de dependencias**: elige los adaptadores concretos y los
   inyecta. No hay contenedor de inyeccion: hay un adaptador por puerto, y la costura de test la da el
-  constructor. `Cli.run` monta el grafo entero del conductor -seis casos de uso y nueve puertos- sobre
+  constructor. `Cli.run` monta el grafo entero del conductor -seis casos de uso y once puertos- sobre
   **un solo** `Process`, que es tambien la unica costura que necesita su test: doblar ese puerto basta
   para conducir un run sin `gh`, sin `git` y sin harness, y lo que el run hizo o no hizo se lee en el
   `argv` que recibio.
