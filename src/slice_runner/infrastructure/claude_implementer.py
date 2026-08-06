@@ -28,7 +28,7 @@ class ClaudeImplementer(Implementer):
 
         return Implementation(
             paths=report.to_domain(),
-            left_out=report.left_out,
+            left_out=tuple(report.left_out),
             spend=envelope.to_domain(),
         )
 

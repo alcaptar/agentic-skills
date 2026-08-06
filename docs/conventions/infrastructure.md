@@ -251,10 +251,10 @@ importar**: un smoke que solo importe el modulo lo da por bueno. Lo evita
   en el idioma del issue, no identificadores. Y `gh pr create` va siempre con `--draft`, porque el merge lo
   decide una persona (ver `CLAUDE.md`).
 
-  **Diverge del paso 8 en tres cosas, y las tres son deliberadas.** Al contrario que la duplicacion de los
-  prefijos prohibidos -que `tests/test_skill_contracts.py` mide-, **esta no tiene test de contrato**: no hay
-  vocabulario que extraer de un cuerpo en prosa, asi que estos tres parrafos son lo unico que la sostiene y
-  hay que moverlos a mano cuando se mueva el paso 8.
+  **Diverge del paso 8 en cuatro cosas, y las cuatro son deliberadas.** Al contrario que la duplicacion de
+  los prefijos prohibidos -que `tests/test_skill_contracts.py` mide-, **esta no tiene test de contrato**: no
+  hay vocabulario que extraer de un cuerpo en prosa, asi que estos cuatro parrafos son lo unico que la
+  sostiene y hay que moverlos a mano cuando se mueva el paso 8.
 
   1. **Cierra con `Closes #<N>` donde el paso 8 pone `Part of #<N>`.** En el formato nuevo hay **una
      subissue por slice**, asi que la pull request de la slice si cierra su issue; en el viejo el issue es
@@ -267,15 +267,36 @@ importar**: un smoke que solo importe el modulo lo da por bueno. Lo evita
      `subissue: int` no hay forma de pasarle una referencia entera, asi que cerrar esta divergencia toca las
      dos piezas -el campo de este modelo y quien lo rellena-. Hasta que eso pase, el programa solo entrega
      correctamente slices que viven en el repo de su issue.
-  3. **La seccion de deuda no la rellena ningun camino, y el insumo que haria falta no existe todavia.**
-     `SlicePullRequest.body` pasa `debt=()` siempre, asi que `## Deuda aceptada` no se escribe nunca -la
-     seccion solo se emite si trae bullets, que es lo que el paso 8 pide-. Lo unico que el programa tiene
-     hoy sobre lo que se decidio **no** arreglar es `Implementation.left_out`, prosa libre del
-     implementador: convertirla en bullets seria adivinar donde corta una frase, y quedarse con los
-     hallazgos `media`/`baja` del veredicto seria escribir como aceptado lo que quiza si se corrigio en la
-     vuelta siguiente. Cerrarlo pide un insumo estructurado -que el informe del implementador declare su
-     deuda como lista, no como parrafo-, o sea tocar el contrato del brief; hasta entonces la huella de
-     esa decision es el issue y no la pull request.
+  3. **Confirma que los criterios se cumplieron en vez de reproducirlos**, donde el paso 8 pone `- <un
+     criterio por linea, con donde vive su test>`. `SlicePullRequest._criteria_confirmation` emite un solo
+     bullet -"los N criterios de aceptacion de la subissue #M quedan cumplidos, su detalle vive en el
+     issue", en singular cuando es uno-, y las dos mitades de lo que pedia el paso 8 caen cada una por su
+     motivo. **Reproducirlos** le da a quien revisa lo que ya sabe -los criterios los declara la subissue,
+     a un click del `Closes #<N>`- y le quita el sitio al *por que*, que es todo el trabajo de este cuerpo.
+     Y **donde vive su test** el programa no lo sabe: el informe del implementador trae rutas con su `kind`
+     (`ImplementationReportPayload`), no un mapa de criterio a test, asi que escribirlo seria inventarlo. En
+     el flujo viejo lo escribe una persona que acaba de escribir los tests y sabe cual cubre cual; el
+     programa **no** tiene ese dato y pedirselo al implementador es una slice que nadie ha pedido.
+  4. **Bajo `## Deuda aceptada` va lo que el implementador declaro haber dejado fuera**, donde el paso 8
+     pone `- <hallazgo no bloqueante que no se corrigio: regla + path, y por que se acepta>`. La rellena
+     `Implementation.left_out`, y el insumo que le faltaba ya es estructurado: el informe del implementador
+     declara su deuda como lista, no como parrafo (`ImplementationReportPayload.left_out`), asi que
+     `ConductSlice` la transporta sin adivinar donde corta una frase -`ConductSliceProgress.debt` sale de
+     esa lista tal cual, y `SlicePullRequest.body` la pasa a `PullRequestBody` en vez del `debt=()` fijo de
+     antes-. Una lista vacia sigue significando "nada quedo fuera", y la seccion se sigue emitiendo solo
+     cuando trae bullets, que es lo que el paso 8 si pide. Los hallazgos `media`/`baja` del veredicto **no**
+     entran: darlos por deuda aceptada seria mentir, porque un hallazgo puede haberse corregido en la vuelta
+     siguiente. Asi que el encabezado significa aqui otra cosa que en el paso 8, y esa es la consecuencia
+     aceptada: lo unico que el programa tiene estructurado sobre lo que se decidio no arreglar es la deuda
+     del implementador, y sumarle los hallazgos pediria saber cual sobrevivio a la ultima vuelta, que es
+     dato que nadie guarda.
+
+     **Y llega solo dentro de una invocacion, exactamente como el gasto y por el mismo motivo.**
+     `ConductSliceProgress.debt` nace vacio en cada `slice-runner run` y el `Run` persistido en la subissue
+     no lo lleva, asi que una invocacion que muera despues de implementar deja a la siguiente abriendo la
+     pull request con `debt=()`: sin `## Deuda aceptada` y sin decir que la hubo. Cerrarlo es meter la deuda
+     en el `Run` persistido -el mismo `SubissueBody` que el gasto-, o sea la deuda declarada de arriba, que
+     se hace entera y con su slice. Mientras tanto la huella de esa decision es el issue.
 
   **Lo que si esta construido es el interruptor de la intencion**, que aqui fue divergencia hasta que
   entro el conductor: `PullRequestBody` emite `## Intencion (inferida del issue, no declarada)` cuando la

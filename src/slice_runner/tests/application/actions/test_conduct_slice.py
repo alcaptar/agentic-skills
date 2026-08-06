@@ -200,6 +200,14 @@ class TestConductSliceOnTheHappyPath:
         )
         assert (delivered.title, delivered.body) == (Conductor.TITLE, Conductor.BODY)
 
+    def test_the_pull_request_body_is_asked_for_with_what_the_implementer_declared_left_out(self) -> None:
+        conductor = self._conductor()
+        conductor.implement.execute.return_value = ImplementationMother.with_debt()
+
+        conductor.conduct()
+
+        assert conductor.pull_request.body.call_args.kwargs["debt"] == ImplementationMother.with_debt().left_out
+
     def test_the_pull_request_it_just_opened_is_the_one_it_asks_the_ci_and_the_merge_about(self) -> None:
         conductor = self._conductor()
 

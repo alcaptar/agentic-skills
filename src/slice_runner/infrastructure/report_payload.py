@@ -19,7 +19,7 @@ class ReportedPathPayload(ContractModel):
 
 class ImplementationReportPayload(ContractModel):
     paths: list[ReportedPathPayload]
-    left_out: str
+    left_out: list[str]
 
     @classmethod
     def json_schema(cls) -> dict[str, object]:

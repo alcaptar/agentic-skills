@@ -10,6 +10,14 @@ class ImplementationMother:
     def of_two_paths() -> Implementation:
         return Implementation(
             paths=(ReportedPathMother.production_file(), ReportedPathMother.test_file()),
-            left_out="nothing was left out",
+            left_out=(),
+            spend=HarnessSpendMother.of_the_implementer_call(),
+        )
+
+    @staticmethod
+    def with_debt() -> Implementation:
+        return Implementation(
+            paths=(ReportedPathMother.production_file(), ReportedPathMother.test_file()),
+            left_out=("el cableado del subcomando queda para otra slice",),
             spend=HarnessSpendMother.of_the_implementer_call(),
         )

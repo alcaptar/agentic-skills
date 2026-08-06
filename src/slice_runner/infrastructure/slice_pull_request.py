@@ -12,14 +12,28 @@ if TYPE_CHECKING:
 class SlicePullRequest(PullRequestWriter):
     COMMIT_TYPE: ClassVar[str] = "feat"
 
+    _ONE_CRITERION: ClassVar[str] = (
+        "el criterio de aceptacion de la subissue #{subissue} queda cumplido, su detalle vive en el issue"
+    )
+    _MANY_CRITERIA: ClassVar[str] = (
+        "los {count} criterios de aceptacion de la subissue #{subissue} quedan cumplidos, su detalle vive en el issue"
+    )
+
     def title(self, subissue: SubIssue) -> str:
         return f"{self.COMMIT_TYPE}({subissue.name}): {subissue.summary}"
 
-    def body(self, subissue: SubIssue) -> str:
+    def body(self, subissue: SubIssue, *, debt: tuple[str, ...]) -> str:
         return PullRequestBody(
             intention=subissue.intention,
-            criteria=subissue.criteria,
-            debt=(),
+            criteria=self._criteria_confirmation(subissue),
+            debt=debt,
             signal=subissue.signal,
             subissue=subissue.number,
         ).rendered()
+
+    @classmethod
+    def _criteria_confirmation(cls, subissue: SubIssue) -> tuple[str, ...]:
+        count = len(subissue.criteria)
+        confirmation = cls._ONE_CRITERION if count == 1 else cls._MANY_CRITERIA
+
+        return (confirmation.format(count=count, subissue=subissue.number),)
