@@ -28,6 +28,7 @@ import controles
 import issue_body
 import metrics
 from slice_runner.domain.budgets import Budgets
+from slice_runner.domain.ci_status import CiStatus
 from slice_runner.domain.discard_cause import DiscardCause
 from slice_runner.domain.issue_label import IssueLabel
 from slice_runner.domain.ruling import Ruling
@@ -36,6 +37,7 @@ from slice_runner.domain.severity import Severity
 from slice_runner.domain.staged_hygiene import StagedHygiene
 from slice_runner.domain.step import Step
 from slice_runner.infrastructure.exit_code import ExitCode
+from slice_runner.infrastructure.gh_ci import GhCi
 from slice_runner.infrastructure.gh_run_repository import GhRunRepository
 from slice_runner.infrastructure.local_skill_library import LocalSkillLibrary
 from slice_runner.infrastructure.metrics_invocation import (
@@ -423,6 +425,66 @@ def test_ci_states_branched_on_by_step_9_are_the_ones_the_script_emits() -> None
         f"only in the skill {sorted(branched - set(controles.EstadoCI))}, "
         f"only in the script {sorted(set(controles.EstadoCI) - branched)}"
     )
+
+
+_CI_STATES_PAIRED = {
+    CiStatus.GREEN: controles.EstadoCI.VERDE,
+    CiStatus.RED: controles.EstadoCI.ROJO,
+    CiStatus.PENDING: controles.EstadoCI.PENDIENTE,
+    CiStatus.NO_CHECKS: controles.EstadoCI.SIN_CHECKS,
+    CiStatus.UNKNOWN: controles.EstadoCI.DESCONOCIDO,
+}
+"""The one thing about this duplicate that cannot be derived: which member means which.
+
+The program spells the states in English and the script in Spanish, so comparing the two sets of
+strings would put `green` against `verde` and fail on a contract in perfect health. What is written
+down here is the meaning, once, and both vocabularies are then held to it: a state added or dropped on
+one side alone breaks, and adding one to both costs declaring its pair, which is what a translated
+duplicate is worth.
+"""
+
+
+def test_the_ci_states_the_program_knows_are_the_ones_the_script_classifies() -> None:
+    """`CiStatus` is the third declared copy of a vocabulary of `skills/`, and nothing measured it.
+
+    `docs/conventions/domain.md` declares it beside `RunState` and `StagedHygiene.FORBIDDEN_PREFIXES`:
+    the program imports nothing from `skills/`, so the classifier of `gh pr checks` exists twice. The
+    other two copies are measured and this one was not. Each of the five is a branch the run takes with
+    its pull request already open -- `pendiente` waits, `rojo` closes blocked, and `desconocido` and
+    `sin-checks` are the two ways of not being able to affirm a green -- so a state present on one side
+    only is either a branch nothing produces or a result nobody has a rule for.
+    """
+    assert set(_CI_STATES_PAIRED) == set(CiStatus), (
+        f"CiStatus and the pairing it is held to disagree: "
+        f"only in the program {sorted(set(CiStatus) - set(_CI_STATES_PAIRED))}, "
+        f"only in the pairing {sorted(set(_CI_STATES_PAIRED) - set(CiStatus))}"
+    )
+    assert set(_CI_STATES_PAIRED.values()) == set(controles.EstadoCI), (
+        f"controles.EstadoCI and the pairing it is held to disagree: "
+        f"only in the script {sorted(set(controles.EstadoCI) - set(_CI_STATES_PAIRED.values()))}, "
+        f"only in the pairing {sorted(set(_CI_STATES_PAIRED.values()) - set(controles.EstadoCI))}"
+    )
+
+
+def test_the_ci_buckets_the_program_classifies_are_the_ones_the_script_classifies() -> None:
+    """The same duplicate one layer down, on strings neither side gets to choose.
+
+    Unlike the states, the buckets are `gh pr checks`'s own vocabulary, so both copies spell them
+    identically and the sets compare directly. They are what the fail-closed order is built on: a
+    bucket outside the known set is `desconocido` and never green, so one taught to a single copy would
+    make the same pull request green or not depending on which flow asked.
+    """
+    duplicated = {
+        "_CI_BUCKETS_ROJO": (GhCi.RED_BUCKETS, controles._CI_BUCKETS_ROJO),
+        "_CI_BUCKETS_OK": (GhCi.OK_BUCKETS, controles._CI_BUCKETS_OK),
+        "_CI_BUCKETS": (GhCi.KNOWN_BUCKETS, controles._CI_BUCKETS),
+    }
+
+    for named, (program, script) in duplicated.items():
+        assert program == script, (
+            f"GhCi and controles.{named} disagree on the buckets of `gh pr checks`: "
+            f"only in the program {sorted(program - script)}, only in the script {sorted(script - program)}"
+        )
 
 
 _GRACE_WINDOW_IS_WRITTEN_IN = (
@@ -960,28 +1022,53 @@ def test_every_repo_path_cited_in_the_docs_still_exists() -> None:
 
 _README = _ROOT / "README.md"
 
-_LAUNCH = re.compile(r"[^\n`|]*python -m slice_runner")
+_LAUNCH = re.compile(r"uv run ([\w.-]+)(?= (?:verify|explain|run)\b)")
+_CONSOLE_SCRIPT = re.compile(r"^\[project\.scripts\]\s*\n([\w-]+) *=", re.MULTILINE)
+_STALE_LAUNCH = re.compile(r"[^\n`|]*PYTHONPATH=src[^\n`|]*slice_runner[^\n`|]*")
+_LAUNCH_SOURCES = ["README.md", "pyproject.toml", *_tracked("docs/conventions/*.md")]
 
 
 @pytest.mark.integration
-def test_every_documented_way_to_launch_the_program_carries_the_import_path() -> None:
-    """`package = false` means the program is not installed, so `python -m` alone cannot find it.
+def test_every_documented_way_to_launch_the_program_names_the_installed_executable() -> None:
+    """The name of the executable is written in `[project.scripts]` and in every doc that says how to launch it.
 
-    The command is written in three places on purpose -- the README (how you run it), `pyproject.toml`
-    (why the path is needed) and `docs/conventions/architecture.md` (the table that tells the two kinds
-    of Python code apart) -- and one of them said `uv run python -m slice_runner` with no `PYTHONPATH`.
-    That does not fail with a hint: it fails with `No module named slice_runner`, and the reader has no
-    reason to doubt the yardstick. This is the one contract where a copy that does not run is worse than
-    no copy at all.
+    This used to measure something else: while `package = false` the program was not installed and a
+    plain `python -m` did not find it, so the contract was that every documented invocation carried
+    `PYTHONPATH=src`. The slice of the conductor installs the executable and that premise dies; what
+    still holds is the same failure mode with another face -- renaming the script of `[project.scripts]`
+    leaves the docs telling you to type a command that does not exist, and that fails with
+    `command not found`, with no hint that the wrong one is the doc and not the machine.
     """
-    missing: dict[str, list[str]] = {}
-    for source in ["README.md", "pyproject.toml", *_tracked("docs/conventions/*.md")]:
-        for invocation in _LAUNCH.findall(_read(_ROOT / source)):
-            if "PYTHONPATH=src" not in invocation:
-                missing.setdefault(source, []).append(invocation.strip())
+    declared = _CONSOLE_SCRIPT.search(_read(_ROOT / "pyproject.toml"))
+    assert declared, "pyproject.toml declares no executable in [project.scripts]"
 
-    assert not missing, "these documented invocations of the program cannot import it:\n" + "\n".join(
-        f"  {source}: {', '.join(found)}" for source, found in sorted(missing.items())
+    wrong: dict[str, list[str]] = {}
+    for source in _LAUNCH_SOURCES:
+        for named in _LAUNCH.findall(_read(_ROOT / source)):
+            if named != declared.group(1):
+                wrong.setdefault(source, []).append(named)
+
+    assert not wrong, (
+        f"these docs launch the program with a name [project.scripts] does not declare ({declared.group(1)}):\n"
+        + "\n".join(f"  {source}: {', '.join(found)}" for source, found in sorted(wrong.items()))
+    )
+
+
+@pytest.mark.integration
+def test_no_doc_still_tells_you_to_put_the_import_path_by_hand() -> None:
+    """The old form is no longer needed, and leaving it written is worse than documenting nothing.
+
+    Whoever copies it gets no error: they get an invocation that works by another road and the belief
+    that the package is still not installed, which is exactly what this slice has just changed.
+    """
+    stale = {
+        source: found
+        for source in _LAUNCH_SOURCES
+        if (found := [line.strip() for line in _STALE_LAUNCH.findall(_read(_ROOT / source))])
+    }
+
+    assert not stale, "these docs still tell you to put the import path by hand:\n" + "\n".join(
+        f"  {source}: {', '.join(found)}" for source, found in sorted(stale.items())
     )
 
 

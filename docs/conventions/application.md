@@ -33,6 +33,24 @@ class VerifySlice:
 indireccion: lo que se gana con el objeto es que la rubrica, las herramientas y los directorios legibles
 del juez **viajen juntos** y su coherencia se pueda comprobar en un sitio.
 
+## Desviacion declarada: el conductor agrupa sus dependencias
+
+`ConductSlice` (`application/actions/conduct_slice.py`) **no** lista sus dependencias sueltas: las recibe
+en dos dataclasses frozen del propio modulo, `ConductSliceUseCases` (los seis casos de uso) y
+`ConductSlicePorts` (los nueve puertos), mas `machine` y `budgets` sueltos. Sigue entrando todo por
+constructor y todo por nombre; lo que cambia es que llegan en dos paquetes.
+
+El motivo es que quince parametros disparan `PLR0913` de `ruff`, y las dos salidas que **no** valen son
+relajar la configuracion del linter -mover la vara para que pase el codigo- y partir el conductor en
+piezas que no existen por diseno sino por contar argumentos. Agrupar por rol -lo que orquesta y lo que
+hace entrada/salida- deja la firma legible y no esconde ninguna dependencia: siguen siendo tipos del
+dominio y de aplicacion, y la costura de test sigue siendo el constructor.
+
+**La linea, para que no se amplie por precedente:** esto es del **conductor**, que es la unica pieza que
+compone casi todos los puertos del programa. Una action normal sigue listando sus dependencias sueltas
+como el ejemplo de arriba, y un caso de uso que llegue a necesitar el agrupamiento esta diciendo que hace
+demasiado: la respuesta por defecto ahi es partirlo, no empaquetarle los argumentos.
+
 ## Lo que no hace
 
 - **No traduce a formatos externos.** Devuelve objetos del dominio; quien serializa es la frontera.
@@ -40,9 +58,16 @@ del juez **viajen juntos** y su coherencia se pueda comprobar en un sitio.
   el entrypoint.
 - **No decide politica de reintentos ni de presupuesto.** Eso es una politica del dominio
   (`StateMachine`, con sus `Budgets` inyectados: ver `docs/conventions/domain.md`); quien conduce el run
-  le pregunta y ejecuta lo que conteste, sin llevar contadores propios: los que gasta viajan en el `Run`
-  de la transicion. `reintentos_implement` del registro durable **no** es un contador mas que nadie
-  lleve: es la suma de los tres reintentos, porque esas son las unicas vueltas al paso de implementar.
+  le pregunta y ejecuta lo que conteste. **Los contadores que no lleva son los de reintento y los de
+  presupuesto de fase**: esos viajan en el `Run` de la transicion y el conductor ni los suma ni los
+  compara. `reintentos_implement` del registro durable **no** es un contador mas que nadie lleve: es la
+  suma de los tres reintentos, porque esas son las unicas vueltas al paso de implementar.
+
+  Lo que **si** acumula por invocacion son dos, y los dos estan declarados fuera de aqui:
+  `ConductSliceProgress.waited_seconds` -porque el tope de espera acota la invocacion y no el run
+  (`docs/conventions/domain.md`)- y `ConductSliceProgress.spends` -porque el gasto todavia no viaja en el
+  `Run` persistido, que es deuda declarada en `docs/conventions/infrastructure.md`-. Los dos se los pasa
+  a `Budgets` para que decida; seguir sin llevar el numero seria imposible, porque nadie mas los ve.
 
 ## Escrituras y lecturas
 

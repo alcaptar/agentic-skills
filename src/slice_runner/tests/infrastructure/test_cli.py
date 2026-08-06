@@ -4,27 +4,32 @@ import io
 import json
 import shutil
 import sys
-from typing import TYPE_CHECKING
+import tempfile
+from pathlib import Path
 
 import pytest
 
+from slice_runner.domain.budgets import Budgets
 from slice_runner.domain.outcome import Outcome
 from slice_runner.domain.run_state import RunState
 from slice_runner.domain.step import Step
 from slice_runner.infrastructure.claude_config import ClaudeConfig
 from slice_runner.infrastructure.cli import Cli
 from slice_runner.infrastructure.exit_code import ExitCode
+from slice_runner.infrastructure.implementer_invocation import ImplementerInvocation
+from slice_runner.infrastructure.judge_invocation import JudgeInvocation
 from slice_runner.tests.argv import Argv
-from slice_runner.tests.doubles import RealExceptTheJudge, UnrunnableJudge
+from slice_runner.tests.doubles import Answer, RealExceptTheJudge, UnrunnableJudge
 from slice_runner.tests.git_repo import Git
+from slice_runner.tests.mothers.gh_conversation_mother import GhConversationMother
 from slice_runner.tests.mothers.judge_output_mother import HarnessEnvelopeMother, JudgeVerdictMother
 from slice_runner.tests.mothers.repo_mother import RepoMother
+from slice_runner.tests.mothers.run_mother import RunMother
 from slice_runner.tests.mothers.transition_request_mother import TransitionRequestMother
-
-if TYPE_CHECKING:
-    from pathlib import Path
+from slice_runner.tests.run_invocation import RunInvocation
 
 _SLICE = "slice-01"
+_IMPLEMENTER_PAYLOAD = "implementer-two-paths"
 
 _TABLE: list[tuple[Step, Outcome, dict[str, int], tuple[Step, RunState, int]]] = [
     (Step.IMPLEMENT, Outcome.DONE, {}, (Step.RUN_CONTROLS, RunState.OPEN, 0)),
@@ -444,3 +449,373 @@ class TestTheDocumentedCommand:
 
         assert code == ExitCode.OK
         assert json.loads(capsys.readouterr().out)["run"]["step"] == Step.RUN_CONTROLS
+
+
+class TestTheCommandThatConductsASlice:
+    @staticmethod
+    def _complete() -> list[str]:
+        return [
+            "run",
+            str(GhConversationMother.ISSUE),
+            "--repo",
+            GhConversationMother.REPO,
+            "--base",
+            GhConversationMother.BASE,
+        ]
+
+    def test_it_parses_with_the_issue_as_a_positional_and_the_repo_of_the_issue_and_the_base_as_flags(self) -> None:
+        arguments = Cli.parser().parse_args(self._complete())
+
+        assert (arguments.issue, arguments.repo, arguments.base) == (
+            GhConversationMother.ISSUE,
+            GhConversationMother.REPO,
+            GhConversationMother.BASE,
+        )
+
+    def test_the_worktree_defaults_to_where_the_command_was_invoked_because_that_is_the_usual_case(self) -> None:
+        arguments = Cli.parser().parse_args(self._complete())
+
+        assert arguments.worktree == "."
+
+    def test_the_directory_of_the_control_logs_defaults_to_one_under_the_temporary_of_the_machine(self) -> None:
+        arguments = Cli.parser().parse_args(self._complete())
+
+        assert arguments.logs.parent == Path(tempfile.gettempdir())
+
+    def test_the_repo_of_the_issue_has_no_default_because_a_guessed_one_reads_another_issue(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        code = Cli.main(["run", str(GhConversationMother.ISSUE), "--base", GhConversationMother.BASE])
+
+        assert code == ExitCode.USAGE_ERROR
+        output = capsys.readouterr()
+        assert output.out == ""
+        assert "the following arguments are required: --repo" in output.err
+
+    def test_the_base_has_no_default_because_a_guessed_one_opens_the_pull_request_against_the_wrong_branch(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        code = Cli.main(["run", str(GhConversationMother.ISSUE), "--repo", GhConversationMother.REPO])
+
+        assert code == ExitCode.USAGE_ERROR
+        assert "the following arguments are required: --base" in capsys.readouterr().err
+
+    def test_the_issue_is_read_as_a_number_so_a_word_is_refused_instead_of_searched_for(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        code = Cli.main(["run", "the-loop", "--repo", GhConversationMother.REPO, "--base", GhConversationMother.BASE])
+
+        assert code == ExitCode.USAGE_ERROR
+        assert "the-loop" in capsys.readouterr().err
+
+    def test_asking_for_the_help_of_the_subcommand_is_not_a_usage_error(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        code = Cli.main(["run", "--help"])
+
+        assert code == ExitCode.OK
+        assert "--worktree" in capsys.readouterr().out
+
+
+class TestConductingASliceAnEarlierInvocationLeftHalfDone:
+    @staticmethod
+    def _invocation() -> RunInvocation:
+        return RunInvocation(
+            children=GhConversationMother.the_slice_resumed_at(RunMother.awaiting_merge()),
+            answers=(
+                Answer(
+                    to=("gh", "pr", "list", "--state", "all"),
+                    stdout=GhConversationMother.the_pull_request_of_the_branch(),
+                ),
+                Answer(to=("gh", "pr", "view"), stdout=GhConversationMother.a_merged_pull_request()),
+            ),
+        )
+
+    def test_it_neither_implements_nor_stages_nor_runs_a_control_because_the_state_says_that_is_done(
+        self, tmp_path: Path
+    ) -> None:
+        invocation = self._invocation()
+
+        invocation.conduct(logs=tmp_path / "logs")
+
+        assert not invocation.process.invoked(ImplementerInvocation.EXECUTABLE)
+        assert not invocation.process.invoked("git", "add")
+        assert not invocation.process.invoked("sh", "-c", GhConversationMother.CONTROL)
+
+    def test_it_asks_the_forum_for_the_merge_because_that_is_the_step_the_state_left_it_on(
+        self, tmp_path: Path
+    ) -> None:
+        invocation = self._invocation()
+
+        invocation.conduct(logs=tmp_path / "logs")
+
+        assert invocation.process.invoked("gh", "pr", "view", str(GhConversationMother.PULL_REQUEST))
+
+    def test_what_it_emits_is_the_halt_the_state_and_the_step_the_run_stopped_on(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        code = self._invocation().conduct(logs=tmp_path / "logs")
+
+        assert code == ExitCode.OK
+        assert json.loads(capsys.readouterr().out) == {
+            "halt": "run-closed",
+            "state": "merged",
+            "step": "await-merge",
+            "pull_request": GhConversationMother.PULL_REQUEST,
+        }
+
+    def test_the_directory_of_the_control_logs_is_made_because_a_control_writes_its_log_straight_into_it(
+        self, tmp_path: Path
+    ) -> None:
+        logs = tmp_path / "logs"
+
+        self._invocation().conduct(logs=logs)
+
+        assert logs.is_dir()
+
+
+class TestWhenTheRunClosesWithoutBeingMerged:
+    def test_a_ci_in_red_with_no_retry_left_exits_with_its_own_code_because_the_issue_has_to_be_looked_at(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        invocation = RunInvocation(
+            children=GhConversationMother.the_slice_resumed_at(RunMother.with_the_only_ci_retry_already_spent()),
+            answers=(
+                Answer(
+                    to=("gh", "pr", "list", "--state", "all"),
+                    stdout=GhConversationMother.the_pull_request_of_the_branch(),
+                ),
+                Answer(to=("gh", "pr", "checks"), stdout=GhConversationMother.checks_in_red()),
+            ),
+        )
+
+        code = invocation.conduct(logs=tmp_path / "logs")
+
+        assert code == ExitCode.RUN_UNMERGED
+        assert json.loads(capsys.readouterr().out) == {
+            "halt": "run-closed",
+            "state": "blocked-ci-red",
+            "step": "await-ci",
+            "pull_request": GhConversationMother.PULL_REQUEST,
+        }
+
+
+class TestTheRoundTripAfterARedCiThatStillHasARetryLeft(BlindToTheToolboxOfThisMachine):
+    @classmethod
+    def _invocation(cls) -> RunInvocation:
+        return RunInvocation(
+            children=GhConversationMother.the_slice_resumed_at(RunMother.about_to_ask_the_ci()),
+            answers=(
+                Answer(
+                    to=("gh", "pr", "list", "--state", "all"),
+                    stdout=GhConversationMother.the_pull_request_of_the_branch(),
+                ),
+                Answer(to=("gh", "pr", "list", "--state", "open"), stdout=GhConversationMother.the_open_pull_request()),
+                Answer(to=("gh", "pr", "checks"), stdout=GhConversationMother.checks_in_red()),
+                Answer(
+                    to=(ImplementerInvocation.EXECUTABLE, "bypassPermissions"),
+                    stdout=json.dumps(HarnessEnvelopeMother.recorded(_IMPLEMENTER_PAYLOAD)),
+                ),
+                Answer(to=("git", "add")),
+                Answer(to=("git", "diff", "--cached", "--name-only"), stdout=cls._what_the_implementer_left_staged()),
+                Answer(to=("sh", "-c", GhConversationMother.CONTROL)),
+                Answer(to=("git", "diff", "--cached"), stdout="diff --git a/hello.py b/hello.py\n"),
+                Answer(
+                    to=(JudgeInvocation.EXECUTABLE, "--add-dir"),
+                    stdout=json.dumps(HarnessEnvelopeMother.carrying(JudgeVerdictMother.passing())),
+                ),
+                Answer(to=("git", "symbolic-ref"), stdout=f"{GhConversationMother.BRANCH}\n"),
+                Answer(to=("git", "commit")),
+                Answer(to=("git", "push")),
+            ),
+        )
+
+    @staticmethod
+    def _what_the_implementer_left_staged() -> str:
+        return "hello.py\ntest_hello.py\n"
+
+    def test_the_slice_is_implemented_again_and_walks_the_whole_loop_back_to_the_ci(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        invocation = self._invocation()
+
+        code = invocation.conduct(logs=tmp_path / "logs")
+
+        assert invocation.process.invoked(ImplementerInvocation.EXECUTABLE, "bypassPermissions")
+        assert code == ExitCode.RUN_UNMERGED
+        assert json.loads(capsys.readouterr().out) == {
+            "halt": "run-closed",
+            "state": "blocked-ci-red",
+            "step": "await-ci",
+            "pull_request": GhConversationMother.PULL_REQUEST,
+        }
+
+    def test_the_code_written_to_fix_the_red_ci_is_committed_and_pushed_so_it_reaches_the_remote(
+        self, tmp_path: Path
+    ) -> None:
+        invocation = self._invocation()
+
+        invocation.conduct(logs=tmp_path / "logs")
+
+        assert invocation.process.invoked("git", "commit")
+        assert invocation.process.invoked("git", "push", GhConversationMother.BRANCH)
+
+    def test_the_branch_that_already_carries_its_pull_request_is_not_given_a_second_one(self, tmp_path: Path) -> None:
+        invocation = self._invocation()
+
+        invocation.conduct(logs=tmp_path / "logs")
+
+        assert invocation.process.invoked("gh", "pr", "list", "--state", "open")
+        assert not invocation.process.invoked("gh", "pr", "create")
+
+
+class TestWhenTheRunStaysOpen:
+    @staticmethod
+    def _never_run() -> RunInvocation:
+        return RunInvocation(
+            children=GhConversationMother.the_slice_never_run(),
+            answers=(
+                Answer(to=("git", "rev-parse"), code=1),
+                Answer(to=("git", "switch")),
+                Answer(to=("gh", "pr", "list"), stdout=GhConversationMother.no_open_pull_request()),
+            ),
+        )
+
+    def test_the_branch_of_the_slice_is_cut_in_the_worktree_from_the_base_the_invocation_named(
+        self, tmp_path: Path
+    ) -> None:
+        invocation = self._never_run()
+
+        invocation.conduct(logs=tmp_path / "logs")
+
+        assert invocation.process.ran(
+            "git",
+            "-C",
+            GhConversationMother.WORKTREE,
+            "switch",
+            "-c",
+            GhConversationMother.BRANCH,
+            GhConversationMother.BASE,
+        )
+
+    def test_a_slice_that_was_never_run_stops_at_the_alignment_a_person_has_to_answer(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        invocation = self._never_run()
+
+        code = invocation.conduct(logs=tmp_path / "logs")
+
+        assert code == ExitCode.AWAITING_ALIGNMENT
+        assert json.loads(capsys.readouterr().out) == {
+            "halt": "awaiting-alignment",
+            "state": "open",
+            "step": "implement",
+            "precheck": "clear",
+        }
+
+    def test_a_precheck_that_is_not_clear_exits_with_its_own_code_and_names_which_one_stopped_it(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        invocation = RunInvocation(
+            children=GhConversationMother.the_slice_never_run(),
+            answers=(
+                Answer(to=("git", "rev-parse"), code=1),
+                Answer(to=("gh", "pr", "list"), stdout=GhConversationMother.the_open_pull_request()),
+            ),
+        )
+
+        code = invocation.conduct(logs=tmp_path / "logs")
+
+        assert code == ExitCode.PRECHECKS_BLOCKED
+        assert json.loads(capsys.readouterr().out)["precheck"] == "pull-request-already-open"
+
+    def test_a_merge_that_never_arrives_spends_the_whole_wait_and_says_that_reinvoking_is_what_comes_next(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        slept: list[int] = []
+        monkeypatch.setattr("time.sleep", slept.append)
+        invocation = RunInvocation(
+            children=GhConversationMother.the_slice_resumed_at(RunMother.awaiting_merge()),
+            answers=(
+                Answer(
+                    to=("gh", "pr", "list", "--state", "all"),
+                    stdout=GhConversationMother.the_pull_request_of_the_branch(),
+                ),
+                Answer(to=("gh", "pr", "view"), stdout=GhConversationMother.a_pull_request_still_open()),
+            ),
+        )
+
+        code = invocation.conduct(logs=tmp_path / "logs")
+
+        assert code == ExitCode.WAIT_EXHAUSTED
+        assert sum(slept) == Budgets().total_wait_seconds
+        assert json.loads(capsys.readouterr().out)["halt"] == "wait-exhausted"
+
+    def test_a_pull_request_closed_without_merging_ends_the_invocation_with_its_own_code_and_no_waiting(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        slept: list[int] = []
+        monkeypatch.setattr("time.sleep", slept.append)
+        invocation = RunInvocation(
+            children=GhConversationMother.the_slice_resumed_at(RunMother.awaiting_merge()),
+            answers=(
+                Answer(
+                    to=("gh", "pr", "list", "--state", "all"),
+                    stdout=GhConversationMother.the_pull_request_of_the_branch(),
+                ),
+                Answer(to=("gh", "pr", "view"), stdout=GhConversationMother.a_pull_request_closed_without_merging()),
+            ),
+        )
+
+        code = invocation.conduct(logs=tmp_path / "logs")
+
+        assert code == ExitCode.PULL_REQUEST_CLOSED
+        assert slept == []
+        assert json.loads(capsys.readouterr().out) == {
+            "halt": "pull-request-closed",
+            "state": "open",
+            "step": "await-merge",
+            "pull_request": GhConversationMother.PULL_REQUEST,
+        }
+
+
+class TestWhenTheInvocationCannotBeConducted:
+    @staticmethod
+    def _reported(capsys: pytest.CaptureFixture[str]) -> str:
+        output = capsys.readouterr()
+        assert output.out == ""
+
+        return output.err
+
+    def test_an_issue_whose_slices_are_all_closed_exits_saying_there_is_nothing_left_to_run(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        invocation = RunInvocation(children=GhConversationMother.the_slice_already_closed())
+
+        code = invocation.conduct(logs=tmp_path / "logs")
+
+        assert code == ExitCode.NO_SLICE_LEFT
+        assert str(GhConversationMother.ISSUE) in self._reported(capsys)
+
+    def test_a_subissue_titled_as_no_slice_is_a_usage_error_and_not_a_run_that_went_wrong(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        invocation = RunInvocation(children=GhConversationMother.a_title_that_names_no_slice())
+
+        code = invocation.conduct(logs=tmp_path / "logs")
+
+        assert code == ExitCode.USAGE_ERROR
+        assert "slice-NN" in self._reported(capsys)
+
+    def test_a_gh_that_fails_mid_run_exits_with_the_code_of_an_interrupted_run_carrying_what_it_said(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        invocation = RunInvocation(
+            children=GhConversationMother.the_slice_resumed_at(RunMother.awaiting_merge()),
+            answers=(Answer(to=("gh", "pr", "list", "--state", "all"), code=1, stderr="gh: authentication required"),),
+        )
+
+        code = invocation.conduct(logs=tmp_path / "logs")
+
+        assert code == ExitCode.RUN_INTERRUPTED
+        assert "authentication required" in self._reported(capsys)

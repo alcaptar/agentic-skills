@@ -7,7 +7,7 @@ No es lo mismo y no se miden igual:
 | | `src/slice_runner/` | `skills/*/scripts/*.py` |
 |---|---|---|
 | Que es | El programa orquestador | Los scripts deterministas que invoca una skill |
-| Quien lo lanza | `PYTHONPATH=src uv run python -m slice_runner` | La skill, con el `python3` de la maquina |
+| Quien lo lanza | `uv run slice-runner` (el ejecutable que declara `[project.scripts]`) | La skill, con el `python3` de la maquina |
 | Dependencias | `pydantic`, y **nada de `skills/`** | **stdlib puro**, sin excepcion |
 | Convenciones | Las cumple entero | Deuda declarada (ver `CLAUDE.md`) |
 

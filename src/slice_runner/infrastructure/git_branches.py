@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 from slice_runner.domain.branches import Branches
 
 if TYPE_CHECKING:
-    from slice_runner.infrastructure.process import Process
+    from slice_runner.infrastructure.process import Process, ProcessOutput
 
 
 class GitCommandFailedError(OSError):
@@ -24,4 +24,14 @@ class GitBranches(Branches):
         if output.code == 1:
             return False
 
-        raise GitCommandFailedError(f"{' '.join(argv)}: {output.stderr.strip() or f'git exited {output.code}'}")
+        raise self._failure(argv, output)
+
+    def create(self, *, worktree: str, name: str, base: str) -> None:
+        argv = ["git", "-C", worktree, "switch", "-c", name, base]
+        output = self._process.run(argv, stdin="")
+        if output.code != 0:
+            raise self._failure(argv, output)
+
+    @staticmethod
+    def _failure(argv: list[str], output: ProcessOutput) -> GitCommandFailedError:
+        return GitCommandFailedError(f"{' '.join(argv)}: {output.stderr.strip() or f'git exited {output.code}'}")

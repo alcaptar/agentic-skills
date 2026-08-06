@@ -39,6 +39,10 @@ class DeliverSlice:
         self._workspace.commit(worktree=params.worktree, message=params.title)
         self._workspace.push(worktree=params.worktree, branch=params.branch)
 
+        already_open = self._forum.open_pull_request(repo=params.repo, branch=params.branch)
+        if already_open is not None:
+            return already_open
+
         return self._forum.create_pull_request(
             repo=params.repo, branch=params.branch, base=params.base, title=params.title, body=params.body
         )

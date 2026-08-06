@@ -126,6 +126,11 @@ class TestTheSliceDataThatTravelsWithTheBrief:
             "(detalle: the why lives in the pull request body)"
         )
 
+    def test_a_round_that_comes_back_from_red_controls_carries_the_path_of_the_log_and_never_its_output(self) -> None:
+        assert self._sent(AssignmentMother.of_a_round_after_red_controls()).endswith(
+            "- logs de los controles en rojo (1):\n  - /tmp/slice-runner/logs/lint.log"
+        )
+
     def test_a_repo_exempt_from_controls_carries_its_reason_and_no_command_to_run(self) -> None:
         assert "- controles del repo: ninguno - la integracion continua solo publica en master\n" in self._sent(
             AssignmentMother.of_a_repo_exempt_from_controls()

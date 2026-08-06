@@ -5,6 +5,7 @@ import json
 import pytest
 
 from slice_runner.domain.exceptions import UnreadableForumError
+from slice_runner.domain.pull_request_state import PullRequestState
 from slice_runner.infrastructure.gh_forum import GhForum
 from slice_runner.infrastructure.gh_run_repository import GhCommandFailedError
 from slice_runner.infrastructure.process import ProcessOutput
@@ -62,6 +63,37 @@ class TestGhForum:
             GhForum(process=process).open_pull_request(repo=_REPO, branch=_BRANCH)
 
 
+class TestGhForumLookingForThePullRequestOfAResumedRun:
+    def test_it_asks_gh_for_the_pull_requests_of_this_branch_in_every_state(self) -> None:
+        process = ScriptedProcess(ProcessOutput(code=0, stdout="[]", stderr=""))
+
+        GhForum(process=process).any_pull_request(repo=_REPO, branch=_BRANCH)
+
+        argv = Argv(process.calls[0].argv)
+        assert process.calls[0].argv[:3] == ["gh", "pr", "list"]
+        assert argv.value_of("--repo") == _REPO
+        assert argv.value_of("--head") == _BRANCH
+        assert argv.value_of("--state") == "all"
+        assert argv.value_of("--json") == "number"
+
+    def test_a_pull_request_already_merged_is_found_because_a_resumed_run_still_has_to_name_it(self) -> None:
+        recorded = GhResponseMother.pull_request_of_branch()
+        process = ScriptedProcess(ProcessOutput(code=0, stdout=json.dumps(recorded), stderr=""))
+
+        assert GhForum(process=process).any_pull_request(repo=_REPO, branch=_BRANCH) == 47
+
+    def test_a_branch_that_never_had_a_pull_request_reads_as_none_not_as_zero(self) -> None:
+        process = ScriptedProcess(ProcessOutput(code=0, stdout="[]", stderr=""))
+
+        assert GhForum(process=process).any_pull_request(repo=_REPO, branch=_BRANCH) is None
+
+    def test_a_non_zero_exit_raises_with_the_stderr_it_carried(self) -> None:
+        process = ScriptedProcess(ProcessOutput(code=1, stdout="", stderr="GraphQL: Could not resolve to a Repository"))
+
+        with pytest.raises(GhCommandFailedError, match="Could not resolve"):
+            GhForum(process=process).any_pull_request(repo=_REPO, branch=_BRANCH)
+
+
 class TestGhForumOpeningTheSlicePullRequest:
     @staticmethod
     def _created(*, url: str = "https://github.com/alcaptar/agentic-skills/pull/48") -> ScriptedProcess:
@@ -105,3 +137,58 @@ class TestGhForumOpeningTheSlicePullRequest:
 
         with pytest.raises(GhCommandFailedError, match="already exists"):
             self._create(process)
+
+
+class TestGhForumAskingWhatStateThePullRequestIsIn:
+    @staticmethod
+    def _answering(state: str) -> ScriptedProcess:
+        return ScriptedProcess(ProcessOutput(code=0, stdout=json.dumps({"state": state}), stderr=""))
+
+    def test_it_asks_gh_for_the_state_of_exactly_this_pull_request(self) -> None:
+        process = self._answering("MERGED")
+
+        GhForum(process=process).pull_request_state(repo=_REPO, number=60)
+
+        argv = Argv(process.calls[0].argv)
+        assert process.calls[0].argv[:4] == ["gh", "pr", "view", "60"]
+        assert argv.value_of("--repo") == _REPO
+        assert argv.value_of("--json") == "state"
+
+    def test_a_merged_pull_request_reads_as_merged(self) -> None:
+        state = GhForum(process=self._answering("MERGED")).pull_request_state(repo=_REPO, number=60)
+
+        assert state is PullRequestState.MERGED
+
+    def test_a_pull_request_closed_without_merging_is_told_apart_from_one_still_open(self) -> None:
+        state = GhForum(process=self._answering("CLOSED")).pull_request_state(repo=_REPO, number=60)
+
+        assert state is PullRequestState.CLOSED
+
+    def test_a_pull_request_still_open_reads_as_open(self) -> None:
+        state = GhForum(process=self._answering("OPEN")).pull_request_state(repo=_REPO, number=60)
+
+        assert state is PullRequestState.OPEN
+
+    def test_a_state_that_is_not_one_of_the_three_gh_returns_is_rejected_instead_of_read_as_unmerged(self) -> None:
+        with pytest.raises(UnreadableForumError):
+            GhForum(process=self._answering("DRAFT")).pull_request_state(repo=_REPO, number=60)
+
+    def test_a_non_zero_exit_raises_with_the_stderr_it_carried(self) -> None:
+        process = ScriptedProcess(ProcessOutput(code=1, stdout="", stderr="no pull requests found for branch"))
+
+        with pytest.raises(GhCommandFailedError, match="no pull requests found"):
+            GhForum(process=process).pull_request_state(repo=_REPO, number=60)
+
+    def test_a_response_with_a_key_we_did_not_ask_for_is_rejected_instead_of_read_around(self) -> None:
+        process = ScriptedProcess(
+            ProcessOutput(code=0, stdout=json.dumps({"state": "MERGED", "mergedAt": "2026-08-05"}), stderr="")
+        )
+
+        with pytest.raises(UnreadableForumError):
+            GhForum(process=process).pull_request_state(repo=_REPO, number=60)
+
+    def test_a_response_that_is_not_an_object_is_rejected_instead_of_crashing_on_an_attribute(self) -> None:
+        process = ScriptedProcess(ProcessOutput(code=0, stdout=json.dumps([{"state": "MERGED"}]), stderr=""))
+
+        with pytest.raises(UnreadableForumError):
+            GhForum(process=process).pull_request_state(repo=_REPO, number=60)

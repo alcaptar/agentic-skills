@@ -13,6 +13,8 @@ if TYPE_CHECKING:
 class SubIssue:
     number: int
     slice_id: str
+    name: str
+    summary: str
     title: str
     state: IssueState
     repo: str | None
@@ -21,3 +23,7 @@ class SubIssue:
     signal: str
     run: Run | None
     label: IssueLabel | None
+
+    @property
+    def branch(self) -> str:
+        return f"slice/{self.slice_id.removeprefix('slice-')}-{self.name}"

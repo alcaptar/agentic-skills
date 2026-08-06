@@ -61,6 +61,7 @@ class ImplementerInvocation:
                 ),
                 *self._controls,
                 *self._findings,
+                *self._control_logs,
             ]
         )
 
@@ -81,6 +82,14 @@ class ImplementerInvocation:
             return ["- hallazgos de la vuelta anterior: ninguno, esta es la primera"]
 
         return self._counted("hallazgos de la vuelta anterior", tuple(self._raised(finding) for finding in findings))
+
+    @property
+    def _control_logs(self) -> list[str]:
+        logs = self.assignment.control_logs
+        if not logs:
+            return []
+
+        return self._counted("logs de los controles en rojo", tuple(str(log) for log in logs))
 
     @staticmethod
     def _raised(finding: Finding) -> str:

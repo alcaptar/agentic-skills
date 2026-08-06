@@ -52,7 +52,8 @@ que falla si vuelve a colarse una referencia.
 ### El `alias` traduce; cuando no hay nada que traducir, no se escribe
 
 `VerdictPayload` lleva `alias` en cada campo porque el contrato del juez esta en castellano y el codigo
-en ingles. El contrato de `explain` (`RunPayload`, `TransitionPayload`) **lo fijamos nosotros y esta en
+en ingles. El contrato de `explain` (`RunPayload`, `TransitionPayload`) y el de `run`
+(`ConductedSlicePayload`) **los fijamos nosotros y estan en
 ingles**, asi que la clave del contrato ya es el nombre del campo y un `alias` identico solo seria ruido
 que hay que mantener en dos sitios. `by_alias=True` cae en el nombre del campo cuando no hay alias, con
 lo que el esquema, la validacion y la salida siguen saliendo de un solo sitio, que es lo que la regla
@@ -127,16 +128,19 @@ importar**: un smoke que solo importe el modulo lo da por bueno. Lo evita
   que extraerlas hoy fijaria un parecido que no es invariante. Con un tercer prompt se extrae, y esa
   condicion ya se ha cobrado una vez, asi que no es una promesa que nadie piense cumplir.
 
-  **Transitorio declarado: hoy el unico invocador del juez es `verify`, y pasa esos campos vacios.**
-  `Cli._params` construye el `VerifySliceParams` con `signal=""` y las tres tuplas a cero porque el
-  subcomando solo recibe repo, base e identificador por el `argv`; quien tiene el issue delante es el
-  conductor, que llega con la slice-16. La consecuencia es que un `verify` real emite hoy
-  `- criterios de aceptacion (0):`. Por eso la rubrica **describe la carga en vez de prometerla llena**:
-  dice que los campos viajan siempre, que pueden venir vacios y que un campo vacio es un insumo que no
-  ha llegado -que el juez reporta como falta de dato, no como item conforme-. Lo que **no** se hace es
-  volver a escribir que esos insumos no existen: la afirmacion falsa no es "puede venir vacio", es
-  "nunca llega". Y los campos entran **sin default** en `VerifySliceParams` a proposito, para que el
-  conductor rompa en `mypy` si se los deja en vez de heredar el vacio en silencio.
+  **Hay dos invocadores del juez y solo uno llena esos campos.** `ConductSlice._judging` los llena
+  enteros -senal, criterios y fuentes de la slice, y el checklist del issue-, porque el conductor tiene
+  el issue delante. `Cli._params`, el del subcomando `verify` suelto, construye el `VerifySliceParams`
+  con `signal=""` y las tres tuplas a cero porque por el `argv` solo recibe repo, base e identificador,
+  y ese sigue siendo un camino vivo -es como se juzga un diff a mano, sin montar un run-. La
+  consecuencia es que un `verify` suelto emite `- criterios de aceptacion (0):`, y **eso no es un
+  transitorio que caduque**: es lo que significa juzgar sin issue. Por eso la rubrica **describe la
+  carga en vez de prometerla llena**: dice que los campos viajan siempre, que pueden venir vacios y que
+  un campo vacio es un insumo que no ha llegado -que el juez reporta como falta de dato, no como item
+  conforme-. Lo que **no** se hace es volver a escribir que esos insumos no existen: la afirmacion falsa
+  no es "puede venir vacio", es "nunca llega". Y los campos entran **sin default** en
+  `VerifySliceParams` a proposito, que es lo que obligo al conductor a llenarlos en vez de heredar el
+  vacio en silencio.
 - **La raiz de configuracion de la herramienta la resuelve `ClaudeConfig`** (`CLAUDE_CONFIG_DIR`, o
   `~/.claude` expandido, con la variable vacia tratada como ausente). La comparten `LocalSkillLibrary`
   -que lee los dos arboles de la vara- y `MetricsInvocation` -que resuelve la ruta del script del
@@ -181,11 +185,50 @@ importar**: un smoke que solo importe el modulo lo da por bueno. Lo evita
   `MeasuredCallError` que salga del bloque (veredicto incoherente, `is_error`, permiso denegado, informe
   invalido), y solo esa capa puede hacerlo porque es la unica que ve el sobre. Si el sobre **no** llego a
   parsearse no hay nada que colgar y la excepcion sale con `spend` en `None`: eso es "no medido", no un cero.
+
+  **Ese invariante se cumple dentro de una invocacion, no entre invocaciones, y eso es deuda declarada.**
+  El gasto lo acumula `ConductSliceProgress.spends`, que nace vacio en cada `slice-runner run`, y el `Run`
+  persistido en la subissue **no lo lleva**. Consecuencia concreta: cualquier slice que haya necesitado
+  reinvocarse escribe una fila con el coste de la **ultima** invocacion solamente -y con cero si esa
+  invocacion no llamo al harness, como la que solo espera el merge-. Cerrarlo es meter el gasto en el `Run`
+  persistido, o sea **tocar el formato del estado durable** (`SubissueBody`), que lo leen tambien todas las
+  subissues ya abiertas: se hace entero y con su slice, no a medias. Mientras tanto, el presupuesto de
+  coste (`docs/conventions/domain.md`) acota **la invocacion**, que es donde el gasto si esta completo.
+
+  **Deuda vecina, del mismo formato durable: un merge entre invocaciones deja el run sin cerrar.** Si la
+  persona mergea la pull request cuando no hay ninguna invocacion corriendo, el `Closes #N` de la pull
+  request cierra la subissue, `SliceQueue` deja de considerarla ejecutable y el run **nunca llega a
+  cerrarse** ni escribe su fila durable. Detectar el merge de un run que GitHub ya cerro es el trabajo de
+  la slice-17 (`encadenar-deploy-watch`), asi que aqui se declara y no se construye.
 - **La ruta del script sale de `CLAUDE_CONFIG_DIR`, no del repo** (`ClaudeConfig`, el objeto del
   bullet de arriba): la slice puede vivir en otro repo, donde no hay `skills/` del que colgar una ruta
   relativa.
 - Un codigo de salida distinto de cero **es un dato**, no una excepcion: se lanza el proceso con
   `check=False` y el adaptador interpreta, porque el motivo esta en `stderr` y una excepcion lo borra.
+- **`GhCi` clasifica la respuesta de `gh pr checks`, y su clasificador es una copia declarada del de
+  `skills/slice-runner/scripts/controles.py`.** Tres decisiones que no son deriva, y estan escritas aqui para
+  que no se "arreglen" hacia el lado facil mas adelante:
+
+  1. **Se duplica el clasificador en vez de invocar el subcomando `ci-status` del script como subproceso.** El
+     programa no importa nada de `skills/` (arriba), y el precedente de lanzar un script por subproceso
+     -`MetricsScriptLog` con `metrics.py`- existe por un motivo que **aqui no aplica**: el registro durable
+     tiene historico escrito y necesita un solo escritor, asi que la copia seria un segundo escritor del mismo
+     fichero. Clasificar la respuesta de `gh` no escribe nada ni recuerda nada entre llamadas: es una funcion
+     pura, y de una funcion pura la copia solo puede divergir en la regla. Esa divergencia es la que mide
+     `tests/test_skill_contracts.py`, comparando los cinco estados y los tres conjuntos de `bucket`.
+  2. **El codigo de salida de `gh pr checks` no se usa: se clasifica el `stdout`.** `gh` sale distinto de cero
+     con checks en rojo, con checks pendientes y con una pull request que no existe, asi que el codigo no
+     distingue "rojo" de "todavia no" de "no consta". El bullet de arriba dice que un codigo distinto de cero
+     es un dato; aqui es un dato que **no dice nada**, y el unico que decide es la salida.
+  3. **Un `ValidationError` cae en `CiStatus.UNKNOWN` en vez de en una excepcion**, al contrario que la regla
+     general de la capa. Vale **porque el vocabulario del puerto ya tiene el miembro que significa "no se pudo
+     medir"**: lanzar seria inventar un segundo camino para lo que `UNKNOWN` ya dice, y quien conduce el run
+     tendria que traducirlo de vuelta a ese mismo miembro. Justo por eso **no es permiso general para tragarse
+     validaciones**: donde el vocabulario no cubra "no consta", un `ValidationError` se sigue traduciendo a la
+     excepcion del dominio. Y no relaja nada, porque `UNKNOWN` es fail-closed: una respuesta que no se lee -no
+     es JSON, no es un array, o trae una clave que no pedimos- es `UNKNOWN` y **jamas** "todavia no hay
+     checks", que es el fallo que colgo un smoke real durante cuatro minutos con la integracion continua ya
+     verde.
 - **`GhForum` reutiliza `GhCommandFailedError` de `gh_run_repository.py`** para un exit distinto de cero de
   `gh pr list`, en vez de declarar su propia excepcion: es el mismo fallo -un comando de `gh` que sale
   mal- y vive donde lo necesito el primer adaptador que lo tuvo. Su casa natural es un modulo de
@@ -220,20 +263,63 @@ importar**: un smoke que solo importe el modulo lo da por bueno. Lo evita
      `subissue: int` no hay forma de pasarle una referencia entera, asi que cerrar esta divergencia toca las
      dos piezas -el campo de este modelo y quien lo rellena-. Hasta que eso pase, el programa solo entrega
      correctamente slices que viven en el repo de su issue.
-  3. **El encabezado de la intencion es fijo**, y el paso 8 obliga a `## Intencion (inferida del issue, no
-     declarada)` cuando la intencion no venia declarada. Quien sabe si venia declarada es, otra vez, quien
-     leyo el issue -no este modelo-, asi que el interruptor entra con el conductor.
+  3. **La seccion de deuda no la rellena ningun camino, y el insumo que haria falta no existe todavia.**
+     `SlicePullRequest.body` pasa `debt=()` siempre, asi que `## Deuda aceptada` no se escribe nunca -la
+     seccion solo se emite si trae bullets, que es lo que el paso 8 pide-. Lo unico que el programa tiene
+     hoy sobre lo que se decidio **no** arreglar es `Implementation.left_out`, prosa libre del
+     implementador: convertirla en bullets seria adivinar donde corta una frase, y quedarse con los
+     hallazgos `media`/`baja` del veredicto seria escribir como aceptado lo que quiza si se corrigio en la
+     vuelta siguiente. Cerrarlo pide un insumo estructurado -que el informe del implementador declare su
+     deuda como lista, no como parrafo-, o sea tocar el contrato del brief; hasta entonces la huella de
+     esa decision es el issue y no la pull request.
+
+  **Lo que si esta construido es el interruptor de la intencion**, que aqui fue divergencia hasta que
+  entro el conductor: `PullRequestBody` emite `## Intencion (inferida del issue, no declarada)` cuando la
+  subissue no trae `INTENCION:` -que es como `SubissueBody` deja el campo, vacio- y el encabezado plano
+  cuando si la trae. La decision es del **formato**, y por eso vive en este modelo y no en quien conduce:
+  el dato -declarada o no- ya viaja dentro del `SubIssue` que le llega. Lo que el programa **no** hace es
+  inventarse la prosa que falta: con la intencion sin declarar, el encabezado lo dice y la seccion se
+  queda vacia, porque presentar como intencion algo que nadie escribio es justo lo que ese encabezado
+  existe para impedir.
 
 ## Entrypoints
 
-- Una clase (`Cli`), con `main` como `@classmethod`, que `__main__.py` invoca.
+- Una clase (`Cli`), con `main` como `@classmethod`, que `__main__.py` invoca y que `[project.scripts]`
+  declara como el ejecutable `slice-runner`.
 - **Es el unico sitio que monta el grafo de dependencias**: elige los adaptadores concretos y los
   inyecta. No hay contenedor de inyeccion: hay un adaptador por puerto, y la costura de test la da el
-  constructor.
+  constructor. `Cli.run` monta el grafo entero del conductor -seis casos de uso y nueve puertos- sobre
+  **un solo** `Process`, que es tambien la unica costura que necesita su test: doblar ese puerto basta
+  para conducir un run sin `gh`, sin `git` y sin harness, y lo que el run hizo o no hizo se lee en el
+  `argv` que recibio.
 - **Mapea las excepciones tipadas del dominio a codigos de salida**, con `IntEnum`. La respuesta va a
   `stderr` y el resultado a `stdout`, siempre separados: hay tests que comprueban que un fallo no
   escribe nada en `stdout`.
-- Los codigos de salida son contrato con quien invoca el programa: se documentan y no se reordenan.
+- Los codigos de salida son contrato con quien invoca el programa: **se documentan en la tabla del
+  `README.md`** -que un test de contrato compara con el `IntEnum`-, se anaden al final y no se
+  reordenan.
+- **Un codigo por decision de quien invoca, no uno por excepcion.** La vara para decidir si hace falta
+  uno nuevo es: ¿que hace distinto quien lo recibe? De ahi salen los seis de `run`: el run cerro
+  mergeado (`OK`, sigue la siguiente slice), cerro sin mergear (`RUN_UNMERGED`, hay que mirar el issue),
+  espera a una persona (`AWAITING_ALIGNMENT`, reinvocar no sirve), se agoto la espera con el run vivo
+  (`WAIT_EXHAUSTED`, reinvocar es justo lo que toca), los prechecks lo pararon (`PRECHECKS_BLOCKED`) y la
+  pull request se cerro sin mergear (`PULL_REQUEST_CLOSED`, reinvocar repetiria la espera entera: la
+  decision -reabrirla o dar la slice por muerta- es de una persona). Ese ultimo **no cierra el run**: es
+  la otra mitad de "el merge lo decide el usuario", asi que la invocacion termina y el run se queda
+  abierto y persistido en `await-merge`, sin `RunState` ni etiqueta propios.
+  Las excepciones se agrupan por la misma vara: todo lo que significa "el mundo fallo, el estado
+  persistido sigue bueno" cae en `RUN_INTERRUPTED` -`gh`, `git`, el foro ilegible, el registro durable-
+  y no en un codigo por clase de excepcion.
+- **La proyeccion del dominio al codigo de salida es un `match` exhaustivo sin rama generica**
+  (`ExitCode.of_the_halt`, como `ExitCode.of` y `IssueLabel.of`): un `Halt` o un `RunState` nuevo rompe
+  en `mypy` en vez de caer en un valor por omision. La unica rama que no se puede alcanzar -un cierre
+  con el estado en `open`- se agrupa con los cierres sin merge en vez de con el merge, que es el lado
+  fail-closed.
+- **Una invocacion que el parser rechaza sale con `USAGE_ERROR`, y `--help` con `OK`.** `argparse`
+  levanta `SystemExit(2)` para las dos cosas y ese `2` es el codigo que el contrato reserva para "no hay
+  veredicto de fiar", asi que un flag mal escrito le contaba a quien invoca que el juez no dejo veredicto.
+  `main` traduce ese `SystemExit` mirando su codigo, que es la unica forma de distinguir la ayuda del
+  error de uso sin reescribir `argparse`.
 
 ## Antipatrones
 

@@ -3,29 +3,63 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from typing import TYPE_CHECKING
+import tempfile
+from pathlib import Path
+from typing import TYPE_CHECKING, ClassVar
 
+from slice_runner.application.actions.conduct_slice import (
+    ConductSlice,
+    ConductSliceParams,
+    ConductSlicePorts,
+    ConductSliceUseCases,
+)
+from slice_runner.application.actions.deliver_slice import DeliverSlice
+from slice_runner.application.actions.implement_slice import ImplementSlice
+from slice_runner.application.actions.stage_slice import StageSlice
 from slice_runner.application.actions.verify_slice import VerifySlice, VerifySliceParams
+from slice_runner.application.queries.run_prechecks import RunPrechecks
+from slice_runner.application.queries.select_slice import SelectSlice
 from slice_runner.domain.budgets import Budgets
 from slice_runner.domain.exceptions import (
+    BranchMismatchError,
     DiffNotReadableError,
     ImpossibleTransitionError,
     InvalidHarnessOutputError,
+    LaggingSearchIndexError,
+    MeasuredCallError,
+    NoPullRequestError,
+    NoSliceLeftError,
+    ProtectedBranchError,
+    RunNotClosedError,
+    UnreadableForumError,
+    UnreadableIssueError,
     UnreadableRunError,
     UnresolvableRepoOrBaseError,
 )
 from slice_runner.domain.state_machine import StateMachine
+from slice_runner.infrastructure.claude_implementer import ClaudeImplementer
 from slice_runner.infrastructure.claude_verifier import ClaudeVerifier
+from slice_runner.infrastructure.conducted_slice_payload import ConductedSlicePayload
 from slice_runner.infrastructure.exit_code import ExitCode
+from slice_runner.infrastructure.gh_ci import GhCi
+from slice_runner.infrastructure.gh_forum import GhForum
+from slice_runner.infrastructure.gh_run_repository import GhCommandFailedError, GhRunRepository
+from slice_runner.infrastructure.git_branches import GitBranches, GitCommandFailedError
 from slice_runner.infrastructure.git_diff_reader import GitDiffReader
+from slice_runner.infrastructure.git_workspace import GitWorkspace
+from slice_runner.infrastructure.local_control_runner import LocalControlRunner
 from slice_runner.infrastructure.local_corpus import LocalCorpus
 from slice_runner.infrastructure.local_process import LocalProcess
 from slice_runner.infrastructure.local_skill_library import LocalSkillLibrary
+from slice_runner.infrastructure.metrics_script_log import MetricsNotRecordedError, MetricsScriptLog
 from slice_runner.infrastructure.process import ProcessNotRunnableError
+from slice_runner.infrastructure.slice_pull_request import SlicePullRequest
 from slice_runner.infrastructure.slice_verifier_judge import SliceVerifierJudge
 from slice_runner.infrastructure.subcommand import Subcommand
+from slice_runner.infrastructure.system_clock import SystemClock
 from slice_runner.infrastructure.transition_payload import TransitionPayload
 from slice_runner.infrastructure.transition_request_payload import TransitionRequestPayload
+from slice_runner.infrastructure.understanding_comment import UnderstandingComment
 from slice_runner.infrastructure.verdict_payload import VerdictPayload
 
 if TYPE_CHECKING:
@@ -33,12 +67,18 @@ if TYPE_CHECKING:
 
 
 class Cli:
+    PROGRAM: ClassVar[str] = "slice-runner"
+    LOGS: ClassVar[Path] = Path(tempfile.gettempdir()) / "slice-runner-logs"
+
     def __init__(self, *, process: Process) -> None:
         self._process = process
 
     @classmethod
     def main(cls, argv: list[str] | None = None) -> int:
-        arguments = cls.parser().parse_args(argv)
+        try:
+            arguments = cls.parser().parse_args(argv)
+        except SystemExit as refusal:
+            return ExitCode.USAGE_ERROR if refusal.code else ExitCode.OK
 
         match Subcommand(arguments.command):
             case Subcommand.VERIFY:
@@ -47,11 +87,19 @@ class Cli:
                 )
             case Subcommand.EXPLAIN:
                 return cls.explain(request=sys.stdin.read())
+            case Subcommand.RUN:
+                return cls(process=LocalProcess()).run(
+                    repo=arguments.repo,
+                    issue=arguments.issue,
+                    worktree=arguments.worktree,
+                    base=arguments.base,
+                    logs=arguments.logs,
+                )
 
     @classmethod
     def parser(cls) -> argparse.ArgumentParser:
         parser = argparse.ArgumentParser(
-            prog="python -m slice_runner",
+            prog=cls.PROGRAM,
             description="Slice orchestrator. See `docs/superpowers/specs/` for the design.",
         )
         subcommands = parser.add_subparsers(dest="command", required=True)
@@ -65,6 +113,15 @@ class Cli:
 
         subcommands.add_parser(
             Subcommand.EXPLAIN, help="say what comes after the run and the outcome read on standard input"
+        )
+
+        run = subcommands.add_parser(Subcommand.RUN, help="conduct the next slice of an issue until it has to stop")
+        run.add_argument("issue", type=int, help="number of the issue whose next slice is conducted")
+        run.add_argument("--repo", required=True, help="repo of the issue, as `<org>/<repo>`")
+        run.add_argument("--worktree", default=".", help="local path where the slice is implemented and measured")
+        run.add_argument("--base", required=True, help="branch the diff is taken against and the pull request targets")
+        run.add_argument(
+            "--logs", type=Path, default=cls.LOGS, help="directory where the log of each control is written"
         )
 
         return parser
@@ -100,6 +157,75 @@ class Cli:
         print(json.dumps(VerdictPayload.from_domain(verification.verdict).to_contract(), ensure_ascii=False))
 
         return ExitCode.of(verification.verdict.ruling)
+
+    def run(self, *, repo: str, issue: int, worktree: str, base: str, logs: Path) -> int:
+        logs.mkdir(parents=True, exist_ok=True)
+
+        try:
+            conducted = self._conductor().execute(
+                ConductSliceParams(repo=repo, issue=issue, worktree=worktree, base=base, logs=logs)
+            )
+        except NoSliceLeftError as error:
+            return self._reported(f"there is no slice left to run: {error}", ExitCode.NO_SLICE_LEFT)
+        except (
+            UnresolvableRepoOrBaseError,
+            UnreadableIssueError,
+            UnreadableRunError,
+            ImpossibleTransitionError,
+            ProtectedBranchError,
+            BranchMismatchError,
+        ) as error:
+            return self._reported(f"the run cannot be conducted as asked: {error}", ExitCode.USAGE_ERROR)
+        except DiffNotReadableError as error:
+            return self._reported(f"there is no diff to verify: {error}", ExitCode.NO_DIFF)
+        except MeasuredCallError as error:
+            return self._reported(f"the harness left nothing usable behind: {error}", ExitCode.NO_USABLE_VERDICT)
+        except (
+            UnreadableForumError,
+            LaggingSearchIndexError,
+            NoPullRequestError,
+            RunNotClosedError,
+            GhCommandFailedError,
+            GitCommandFailedError,
+            MetricsNotRecordedError,
+            ProcessNotRunnableError,
+        ) as error:
+            return self._reported(f"the run stopped before reaching a halt: {error}", ExitCode.RUN_INTERRUPTED)
+
+        print(json.dumps(ConductedSlicePayload.from_domain(conducted).to_contract(), ensure_ascii=False))
+
+        return ExitCode.of_the_halt(halt=conducted.halt, state=conducted.state)
+
+    def _conductor(self) -> ConductSlice:
+        budgets = Budgets()
+        repository = GhRunRepository(process=self._process)
+        branches = GitBranches(process=self._process)
+        forum = GhForum(process=self._process)
+        workspace = GitWorkspace(process=self._process)
+
+        return ConductSlice(
+            use_cases=ConductSliceUseCases(
+                select=SelectSlice(repository=repository),
+                prechecks=RunPrechecks(branches=branches, forum=forum),
+                implement=ImplementSlice(implementer=ClaudeImplementer(process=self._process)),
+                stage=StageSlice(workspace=workspace),
+                verify=self._action(),
+                deliver=DeliverSlice(workspace=workspace, forum=forum),
+            ),
+            ports=ConductSlicePorts(
+                repository=repository,
+                branches=branches,
+                controls=LocalControlRunner(process=self._process),
+                ci=GhCi(process=self._process),
+                forum=forum,
+                clock=SystemClock(),
+                metrics=MetricsScriptLog(process=self._process),
+                understanding=UnderstandingComment(),
+                pull_request=SlicePullRequest(),
+            ),
+            machine=StateMachine(budgets=budgets),
+            budgets=budgets,
+        )
 
     def _action(self) -> VerifySlice:
         return VerifySlice(

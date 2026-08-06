@@ -70,6 +70,10 @@ class UnreadableForumError(ValueError):
     pass
 
 
+class NoPullRequestError(ValueError):
+    pass
+
+
 class EmptyIssueBodyError(UnreadableIssueError):
     pass
 

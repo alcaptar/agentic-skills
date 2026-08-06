@@ -36,3 +36,52 @@ class TestGitBranches:
 
         with pytest.raises(GitCommandFailedError):
             GitBranches(process=LocalProcess()).exists(worktree=str(outside), name=Git.BASE_BRANCH)
+
+
+@pytest.mark.integration
+class TestGitBranchesCreatingTheBranchOfTheSlice:
+    _SLICE_BRANCH = "slice/16-el-loop-completo"
+
+    @staticmethod
+    def _repo_with_a_base_commit(tmp_path: Path) -> Path:
+        repo = Git.init_repo(tmp_path / "repo")
+        Git.run(repo, "commit", "--allow-empty", "-m", "base")
+
+        return repo
+
+    def test_the_branch_of_the_slice_exists_after_creating_it(self, tmp_path: Path) -> None:
+        repo = self._repo_with_a_base_commit(tmp_path)
+        branches = GitBranches(process=LocalProcess())
+
+        branches.create(worktree=str(repo), name=self._SLICE_BRANCH, base=Git.BASE_BRANCH)
+
+        assert branches.exists(worktree=str(repo), name=self._SLICE_BRANCH) is True
+
+    def test_the_worktree_ends_standing_on_the_branch_it_created(self, tmp_path: Path) -> None:
+        repo = self._repo_with_a_base_commit(tmp_path)
+
+        GitBranches(process=LocalProcess()).create(worktree=str(repo), name=self._SLICE_BRANCH, base=Git.BASE_BRANCH)
+
+        assert Git.run(repo, "rev-parse", "--abbrev-ref", "HEAD").strip() == self._SLICE_BRANCH
+
+    def test_the_branch_starts_at_the_base_it_was_given_and_not_at_wherever_the_worktree_stood(
+        self, tmp_path: Path
+    ) -> None:
+        repo = self._repo_with_a_base_commit(tmp_path)
+        Git.run(repo, "switch", "-c", "someone-elses-work")
+        Git.run(repo, "commit", "--allow-empty", "-m", "work of another branch")
+
+        GitBranches(process=LocalProcess()).create(worktree=str(repo), name=self._SLICE_BRANCH, base=Git.BASE_BRANCH)
+
+        assert Git.run(repo, "rev-parse", "HEAD").strip() == Git.run(repo, "rev-parse", Git.BASE_BRANCH).strip()
+
+    def test_a_branch_that_already_exists_raises_instead_of_silently_standing_on_the_old_one(
+        self, tmp_path: Path
+    ) -> None:
+        repo = self._repo_with_a_base_commit(tmp_path)
+        branches = GitBranches(process=LocalProcess())
+        branches.create(worktree=str(repo), name=self._SLICE_BRANCH, base=Git.BASE_BRANCH)
+        Git.run(repo, "switch", Git.BASE_BRANCH)
+
+        with pytest.raises(GitCommandFailedError, match=self._SLICE_BRANCH):
+            branches.create(worktree=str(repo), name=self._SLICE_BRANCH, base=Git.BASE_BRANCH)

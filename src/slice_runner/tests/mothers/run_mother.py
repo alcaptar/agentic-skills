@@ -10,8 +10,24 @@ class RunMother:
         return Run(step=Step.IMPLEMENT)
 
     @staticmethod
+    def running_the_controls() -> Run:
+        return Run(step=Step.RUN_CONTROLS)
+
+    @staticmethod
+    def judging() -> Run:
+        return Run(step=Step.VERIFY)
+
+    @staticmethod
+    def about_to_ask_the_ci() -> Run:
+        return Run(step=Step.AWAIT_CI)
+
+    @staticmethod
     def awaiting_ci() -> Run:
         return Run(step=Step.AWAIT_CI, control_retries=1, indeterminate_ticks=2)
+
+    @staticmethod
+    def with_the_only_ci_retry_already_spent() -> Run:
+        return Run(step=Step.AWAIT_CI, ci_retries=1)
 
     @staticmethod
     def awaiting_merge() -> Run:

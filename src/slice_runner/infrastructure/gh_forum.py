@@ -5,10 +5,11 @@ from typing import TYPE_CHECKING
 
 from slice_runner.domain.exceptions import UnreadableForumError
 from slice_runner.domain.forum import Forum
-from slice_runner.infrastructure.gh_pull_request_payload import GhPullRequestPayload
+from slice_runner.infrastructure.gh_pull_request_payload import GhPullRequestPayload, GhPullRequestStatePayload
 from slice_runner.infrastructure.gh_run_repository import GhCommandFailedError
 
 if TYPE_CHECKING:
+    from slice_runner.domain.pull_request_state import PullRequestState
     from slice_runner.infrastructure.process import Process
 
 
@@ -17,7 +18,13 @@ class GhForum(Forum):
         self._process = process
 
     def open_pull_request(self, *, repo: str, branch: str) -> int | None:
-        argv = ["gh", "pr", "list", "--repo", repo, "--head", branch, "--state", "open", "--json", "number"]
+        return self._listed(repo=repo, branch=branch, state="open")
+
+    def any_pull_request(self, *, repo: str, branch: str) -> int | None:
+        return self._listed(repo=repo, branch=branch, state="all")
+
+    def _listed(self, *, repo: str, branch: str, state: str) -> int | None:
+        argv = ["gh", "pr", "list", "--repo", repo, "--head", branch, "--state", state, "--json", "number"]
         output = self._process.run(argv, stdin="")
         if output.code != 0:
             raise GhCommandFailedError(f"{' '.join(argv)}: {output.stderr.strip()}")
@@ -51,6 +58,14 @@ class GhForum(Forum):
 
         return self._number_of(output.stdout)
 
+    def pull_request_state(self, *, repo: str, number: int) -> PullRequestState:
+        argv = ["gh", "pr", "view", str(number), "--repo", repo, "--json", "state"]
+        output = self._process.run(argv, stdin="")
+        if output.code != 0:
+            raise GhCommandFailedError(f"{' '.join(argv)}: {output.stderr.strip()}")
+
+        return GhPullRequestStatePayload.from_dict(self._decoded_object(output.stdout)).to_domain()
+
     @staticmethod
     def _number_of(stdout: str) -> int:
         url = stdout.strip()
@@ -59,13 +74,25 @@ class GhForum(Forum):
         except ValueError as error:
             raise UnreadableForumError(f"gh did not print the url of the pull request it created: {url!r}") from error
 
-    @staticmethod
-    def _decoded_array(stdout: str) -> list[dict[str, object]]:
-        try:
-            data = json.loads(stdout)
-        except json.JSONDecodeError as error:
-            raise UnreadableForumError(f"gh did not return JSON: {error}") from error
+    @classmethod
+    def _decoded_array(cls, stdout: str) -> list[dict[str, object]]:
+        data = cls._decoded(stdout)
         if not isinstance(data, list):
             raise UnreadableForumError(f"gh has to return an array, not {type(data).__name__}")
 
         return data
+
+    @classmethod
+    def _decoded_object(cls, stdout: str) -> dict[str, object]:
+        data = cls._decoded(stdout)
+        if not isinstance(data, dict):
+            raise UnreadableForumError(f"gh has to return an object, not {type(data).__name__}")
+
+        return data
+
+    @staticmethod
+    def _decoded(stdout: str) -> object:
+        try:
+            return json.loads(stdout)
+        except json.JSONDecodeError as error:
+            raise UnreadableForumError(f"gh did not return JSON: {error}") from error

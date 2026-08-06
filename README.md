@@ -169,10 +169,14 @@ la **misma** conversacion. Usalo para una tanda corta de slices, no para una fea
 
 ### El paso que ya es un programa
 
-La verificacion de una slice no la orquesta la skill: la ejecuta un programa, que se puede lanzar solo.
+Conducir una slice ya no lo orquesta la skill: lo ejecuta un programa instalable, que se puede lanzar
+solo. `run` conduce la siguiente slice del issue de punta a punta -alinear, implementar, controlar,
+verificar, abrir la pull request, esperar a la integracion continua- y para donde diga el estado; el
+estado vive en la subissue, asi que una invocacion interrumpida se retoma reinvocando.
 
 ```bash
-PYTHONPATH=src uv run python -m slice_runner verify --repo . --base master --slice slice-01
+uv run slice-runner run 38 --repo alcaptar/agentic-skills --base master
+uv run slice-runner verify --repo . --base master --slice slice-01
 ```
 
 Juzga **lo que hay staged** contra el branch-point de la base -que es lo que sera el commit-, emite el
@@ -185,15 +189,22 @@ El codigo de salida es el contrato con quien lo invoca:
 
 | | Que significa |
 |---|---|
-| `0` | El comando contesto lo que se le pidio: en `verify`, PASA sin ningun hallazgo de severidad alta |
+| `0` | El comando contesto lo que se le pidio: en `verify`, PASA sin ningun hallazgo de severidad alta; en `run`, la slice cerro mergeada |
 | `1` | FALLA: el juez veta la slice |
 | `2` | No hay veredicto de fiar: un proceso del run no se pudo lanzar, o el juez devolvio un veredicto incoherente |
 | `3` | No hay nada que juzgar: el indice esta vacio (¿falto el `git add`?) |
-| `4` | Error de uso: el repo o la base no resuelven, o el estado que se quiere explicar no se puede leer |
+| `4` | Error de uso: el repo o la base no resuelven, falta un argumento, o el issue o el estado que se quiere leer no se pueden leer |
+| `5` | `run`: la slice cerro **sin** mergear (controles, juez, integracion continua o presupuesto). Hay que mirar el issue; reinvocar sin tocar nada repite el cierre |
+| `6` | `run`: la slice espera a una persona (pausa de alineacion). Reinvocar no sirve hasta que alguien conteste |
+| `7` | `run`: se agoto la espera con el run todavia abierto. Reinvocar es exactamente lo que toca |
+| `8` | `run`: los prechecks pararon la invocacion antes de tocar codigo |
+| `9` | `run`: el issue no tiene ninguna slice ejecutable (todas cerradas, bloqueadas o abortadas) |
+| `10` | `run`: el run se interrumpio antes de llegar a una parada -`gh` o `git` fallaron, el foro contesto algo ilegible, el registro durable no se pudo escribir-. El estado persistido sigue siendo bueno |
+| `11` | `run`: la pull request de la slice se cerro **sin** mergear, asi que el merge que la invocacion esperaba ya no puede llegar. El run se queda abierto en su paso; lo decide una persona (reabrir la pull request, o cerrar la slice) |
 
 `1` es un veredicto y `2` no lo es: esa es la distincion que hace el codigo de salida y que un booleano
-perderia. `PYTHONPATH=src` hace falta porque el proyecto **no se instala** (el motivo esta en
-`pyproject.toml`).
+perderia. Del `5` al `10` la pregunta es otra -¿que hace quien invoca ahora?-, y por eso hay un codigo
+por decision y no uno por excepcion: `7` y `10` se reinvocan, `5`, `6` y `9` no.
 
 ### La secuencia y los presupuestos, interrogables sin montar un run
 
@@ -203,7 +214,7 @@ estado del run por entrada estandar:
 
 ```bash
 echo '{"run": {"step": "run-controls", "control_retries": 2}, "outcome": "failed"}' \
-  | PYTHONPATH=src uv run python -m slice_runner explain
+  | uv run slice-runner explain
 ```
 
 ```json
@@ -215,8 +226,12 @@ La respuesta trae **el run entero** (con los contadores ya gastados), el estado 
 mientras siga vivo, y si no, el cierre concreto- y **cuantos segundos hay que esperar** antes del
 proximo tick, para que el numero de la ventana de gracia no lo decida quien tickea. Los presupuestos son
 dos reintentos de controles, dos de verificacion, uno de integracion continua roja, y 3 ticks
-indeterminados consecutivos con 30 s o mas entre tick y tick. Un par (paso, resultado) que la secuencia
-no describe **no cae en una rama generica**: sale por `4`.
+indeterminados consecutivos con 30 s o mas entre tick y tick. Por encima de todos ellos hay dos topes que
+no cuentan intentos sino gasto: **25 $ de harness por slice**, que cierra el run como abortado y es el
+backstop del unico bucle sin cierre propio -el descarte de un veredicto incoherente, que no gasta reintento
+porque no se toco el codigo-, y **30 minutos de espera**, que terminan la invocacion dejando el run abierto
+donde estaba. El motivo de los dos numeros esta en `docs/conventions/domain.md`. Un par (paso, resultado)
+que la secuencia no describe **no cae en una rama generica**: sale por `4`.
 
 ## Ejemplo: una feature de punta a punta
 

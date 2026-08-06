@@ -81,6 +81,13 @@ Los metodos son **escenarios con nombre** (`without_line`, `passing`, `high_seve
   del diff y al juez, asi que `RealExceptTheJudge` y `UnrunnableJudge` lanzan `git` de verdad y solo
   interceptan al juez. Un doble que respondiera a cualquier `argv` con el sobre del juez haria que el
   lector leyese JSON donde espera un diff, y el test pasaria o fallaria por el motivo equivocado.
+- **El doble de una conversacion entera contesta por `argv`, no por orden.** `ScriptedProcess` devuelve
+  las salidas en el orden en que se le pasaron y sirve para **un** adaptador, donde el orden es parte de
+  lo que se mide. Un run completo pasa por `gh`, `git`, el harness y el script de metricas, y ahi el orden
+  es detalle de implementacion: `AnsweringByArgv` responde segun los tokens del `argv` y **lanza cuando
+  nadie escribio respuesta** para un comando. Eso es lo que convierte "no repite el trabajo ya hecho" en
+  algo comprobable: si el run implementase, el doble no tendria que contestar y el test se cae con el
+  comando delante, en vez de pasar por casualidad.
 - **Nada de mockear value objects**: se usan instancias reales.
 - El arrange **no se construye con la pieza bajo prueba**. El repo de un test de `GitDiffReader` se
   monta con `git` de verdad, no con el propio `GitDiffReader`.

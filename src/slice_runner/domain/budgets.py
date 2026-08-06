@@ -1,6 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from slice_runner.domain.harness_spend import HarnessSpend
 
 
 @dataclass(frozen=True, kw_only=True, slots=True)
@@ -10,3 +14,14 @@ class Budgets:
     ci_retries: int = 1
     indeterminate_ticks: int = 3
     seconds_between_ticks: int = 30
+    total_wait_seconds: int = 1800
+    slice_cost_usd: float = 25.0
+
+    def wait_exhausted(self, waited_seconds: int) -> bool:
+        return waited_seconds >= self.total_wait_seconds
+
+    def cost_exhausted(self, *, call: HarnessSpend | None, total: HarnessSpend) -> bool:
+        if call is None or not call.measured:
+            return True
+
+        return total.cost_usd >= self.slice_cost_usd
