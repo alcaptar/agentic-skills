@@ -47,6 +47,17 @@ class TestRunPrechecks:
 
         assert query.execute(params) is PrecheckOutcome.SUBISSUE_ALREADY_CLOSED
 
+    def test_a_slice_of_another_repo_is_refused_before_anything_measured_against_this_one_is_believed(
+        self, query: RunPrechecks, branches: Mock, forum: Mock
+    ) -> None:
+        branches.exists.return_value = True
+        forum.open_pull_request.return_value = 47
+        params = self._params(
+            subissue=SubIssueMother.of_another_repo(), parent=ParentIssueMother.with_sources_and_controls()
+        )
+
+        assert query.execute(params) is PrecheckOutcome.SLICE_IN_ANOTHER_REPO
+
     def test_an_open_pull_request_wins_over_an_existing_branch_because_it_is_the_more_informative_reason(
         self, query: RunPrechecks, branches: Mock, forum: Mock
     ) -> None:

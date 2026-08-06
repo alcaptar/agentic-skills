@@ -20,7 +20,7 @@ if TYPE_CHECKING:
     from slice_runner.infrastructure.gh_sub_issue_payload import GhLabelPayload
     from slice_runner.infrastructure.process import Process, ProcessOutput
 
-_SLICE_ID = re.compile(r"^(slice-\d+)")
+_SLICE_HEADING = re.compile(r"^(slice-\d+)\s*\(([^)]+)\)\s*:\s*(.+?)\s*$")
 _LABEL_MISSING = re.compile(r"'(.+?)' not found")
 _LABEL_COLOR = "5319e7"
 _LABEL_DESCRIPTION = "estado de una slice, escrito por slice-runner"
@@ -86,37 +86,25 @@ class GhRunRepository(RunRepository):
     def write_understanding(self, *, repo: str, issue: int, understanding: str) -> None:
         self._run(["gh", "issue", "comment", str(issue), "--repo", repo, "--body-file", "-"], stdin=understanding)
 
-    def write_label(self, *, repo: str, issue: int, remove: IssueLabel, add: IssueLabel) -> None:
-        argv = [
-            "gh",
-            "issue",
-            "edit",
-            str(issue),
-            "--repo",
-            repo,
-            "--add-label",
-            add.value,
-            "--remove-label",
-            remove.value,
-        ]
+    def write_label(self, *, repo: str, issue: int, remove: IssueLabel | None, add: IssueLabel) -> None:
+        argv = self._edit_of(repo=repo, issue=issue, add=add, remove=remove)
         self._edit_with_label_fallback(argv, repo=repo, issue=issue, add=add)
 
-    def pause_for_alignment(self, *, repo: str, issue: int, remove: IssueLabel) -> None:
+    def pause_for_alignment(self, *, repo: str, issue: int, remove: IssueLabel | None) -> None:
         argv = [
-            "gh",
-            "issue",
-            "edit",
-            str(issue),
-            "--repo",
-            repo,
-            "--add-label",
-            IssueLabel.AWAITING_ALIGNMENT.value,
-            "--remove-label",
-            remove.value,
+            *self._edit_of(repo=repo, issue=issue, add=IssueLabel.AWAITING_ALIGNMENT, remove=remove),
             "--add-assignee",
             "@me",
         ]
         self._edit_with_label_fallback(argv, repo=repo, issue=issue, add=IssueLabel.AWAITING_ALIGNMENT)
+
+    @staticmethod
+    def _edit_of(*, repo: str, issue: int, add: IssueLabel, remove: IssueLabel | None) -> list[str]:
+        argv = ["gh", "issue", "edit", str(issue), "--repo", repo, "--add-label", add.value]
+        if remove is None:
+            return argv
+
+        return [*argv, "--remove-label", remove.value]
 
     def _edit_with_label_fallback(self, argv: list[str], *, repo: str, issue: int, add: IssueLabel) -> None:
         output = self._process.run(argv, stdin="")
@@ -186,10 +174,13 @@ class GhRunRepository(RunRepository):
     @classmethod
     def _sub_issue_from(cls, payload: GhSubIssuePayload) -> SubIssue:
         parsed = SubissueBody.parse(payload.body)
+        heading = cls._heading_of(payload.title)
 
         return SubIssue(
             number=payload.number,
-            slice_id=cls._slice_id_of(payload.title),
+            slice_id=heading.group(1),
+            name=heading.group(2),
+            summary=heading.group(3),
             title=payload.title,
             state=payload.state,
             repo=parsed.repo,
@@ -201,12 +192,12 @@ class GhRunRepository(RunRepository):
         )
 
     @staticmethod
-    def _slice_id_of(title: str) -> str:
-        matched = _SLICE_ID.match(title)
+    def _heading_of(title: str) -> re.Match[str]:
+        matched = _SLICE_HEADING.match(title)
         if not matched:
-            raise UnreadableIssueError(f"the subissue title does not start with `slice-NN`: {title!r}")
+            raise UnreadableIssueError(f"the subissue title does not open with `slice-NN (name):`: {title!r}")
 
-        return matched.group(1)
+        return matched
 
     @staticmethod
     def _label_of(labels: list[GhLabelPayload]) -> IssueLabel | None:

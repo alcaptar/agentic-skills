@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from slice_runner.domain.controls import Controls
     from slice_runner.domain.finding import Finding
     from slice_runner.domain.source import Source
@@ -20,3 +22,4 @@ class Assignment:
     sources: tuple[Source, ...]
     controls: Controls
     findings: tuple[Finding, ...] = ()
+    control_logs: tuple[Path, ...] = ()

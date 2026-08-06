@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from functools import reduce
 from typing import TYPE_CHECKING
 
 from slice_runner.domain.harness_spend import HarnessSpend
@@ -27,7 +26,7 @@ class ClosedSlice:
 
     @property
     def spend(self) -> HarnessSpend:
-        return reduce(HarnessSpend.plus, self.spends, HarnessSpend.nothing())
+        return HarnessSpend.summing(self.spends)
 
     def count_findings(self, severity: Severity) -> int:
         return sum(1 for finding in self.findings if finding.severity is severity)

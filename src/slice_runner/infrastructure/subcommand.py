@@ -6,3 +6,4 @@ from enum import StrEnum
 class Subcommand(StrEnum):
     VERIFY = "verify"
     EXPLAIN = "explain"
+    RUN = "run"

@@ -1,18 +1,24 @@
-# Este repo no es un paquete: es la fuente de verdad de las skills, su codigo Python son los
-# scripts deterministas que las skills invocan (`controles.py`, `issue_body.py`,
-# `deploy_core.py`, `metrics.py`, `discover_conventions.py`, `discover_controles.py`), y desde
-# ahora tambien el programa orquestador de `src/slice_runner/`. El `[project]` existe para que `uv`
-# gestione el toolchain de calidad y la unica dependencia de ejecucion; `package = false` deja claro
-# que no se construye nada, y el ejecutable instalable no es de esta fase.
+# Este repo es la fuente de verdad de las skills, y ademas empaqueta **un solo** proyecto Python: el
+# programa orquestador de `src/slice_runner/`. Los `.py` de `skills/` NO se empaquetan -son scripts
+# deterministas que la skill invoca con el `python3` de la maquina (`controles.py`, `issue_body.py`,
+# `deploy_core.py`, `metrics.py`, `discover_conventions.py`, `discover_controles.py`)-, asi que
+# `packages` nombra solo `src/slice_runner` y nada mas entra en la rueda.
 #
-# Consecuencia de `package = false` que hay que saber para lanzar el programa: uv no instala el
-# proyecto, y `python -m` solo mira el directorio actual, asi que la ruta de importacion se pone a mano.
-# Solo `src`: el programa es autocontenido y no importa nada de `skills/`.
+# El proyecto se instala, y de ahi sale el ejecutable que conduce una slice de punta a punta:
 #
-#     PYTHONPATH=src uv run python -m slice_runner verify --repo . --base master --slice slice-01
+#     uv run slice-runner run 38 --repo alcaptar/agentic-skills --base master
+#     uv run slice-runner verify --repo . --base master --slice slice-01
+#
+# `uv run` sincroniza e instala el proyecto en el entorno antes de lanzarlo, asi que la ruta de
+# importacion ya no se pone a mano: el `PYTHONPATH=src` que hacia falta cuando esto no se construia
+# dejo de ser necesario. El `__main__.py` del paquete sigue existiendo y llama al mismo entrypoint.
 #
 # La config replica la que el repo ya exige a su propia fixture de smoke
 # (`smoke/fixture/pyproject.toml`): misma vara para el harness que para lo que valida.
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [project]
 name = "agentic-skills"
 version = "0.0.0"
@@ -21,8 +27,12 @@ requires-python = ">=3.11"
 # siendo stdlib puro porque los invoca la skill con el `python3` que haya en la maquina, sin `uv`.
 dependencies = ["pydantic>=2.7"]
 
-[tool.uv]
-package = false
+# El nombre del ejecutable es el del programa, no el del repo: quien lo invoca conduce slices.
+[project.scripts]
+slice-runner = "slice_runner.infrastructure.cli:Cli.main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/slice_runner"]
 
 [dependency-groups]
 dev = ["ruff>=0.6", "mypy>=1.10", "pytest>=8"]

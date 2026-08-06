@@ -9,7 +9,7 @@ resolution-markers = [
 [[package]]
 name = "agentic-skills"
 version = "0.0.0"
-source = { virtual = "." }
+source = { editable = "." }
 dependencies = [
     { name = "pydantic" },
 ]

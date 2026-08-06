@@ -26,6 +26,12 @@ cadena, asi que ni el formato del issue ni el JSON de salida cambian, pero las c
 - Codigos de salida de un ejecutable: `IntEnum`, y el mapeo desde el vocabulario del dominio con un
   `match` exhaustivo, para que anadir un miembro rompa en `mypy` en vez de caer en silencio en la
   rama generica.
+- **Un puerto contesta con el vocabulario, no con un `bool` derivado de el.** `Forum.pull_request_state`
+  devuelve `PullRequestState` (`merged`, `open`, `closed`) porque `gh pr view --json state` ya distingue
+  los tres. El `merged: bool` que hubo antes colapsaba "cerrada sin mergear" con "todavia abierta", que es
+  el mismo fallo que el `Optional[Enum]` del apartado de antipatrones: quien conducia el run tickeaba el
+  tope entero esperando un merge que ya no podia llegar, y cada reinvocacion repetia la espera. La
+  traduccion desde las cadenas de `gh` vive en la frontera (`docs/conventions/infrastructure.md`).
 - **La pertenencia se pregunta contra los valores, no con `in`.** `ProtectedBranch.protects(name)`
   compara contra el `value` de cada miembro: en Python 3.11 -el minimo que declara
   `docs/conventions/architecture.md`- un `name in cls` con una cadena que no es miembro lanza
@@ -72,6 +78,19 @@ la subissue, y `estado:esperando-alineacion`, que escribe `GhRunRepository.pause
 exista ningun `Run` -la pausa de alineacion ocurre fuera de cualquier `(state, step)` que `IssueLabel.of`
 pueda conocer, asi que no hay cierre del que proyectarla-.
 
+**`CiStatus` es la tercera copia declarada del mismo tipo.** `domain/ci_status.py` repite en ingles el
+vocabulario `EstadoCI` de `skills/slice-runner/scripts/controles.py` (`verde`, `rojo`, `pendiente`,
+`sin-checks`, `desconocido`), igual que `RunState` repite a `Estado` y que `StagedHygiene.FORBIDDEN_PREFIXES` repite
+sus prefijos, y por el mismo motivo: el programa **no importa nada de `skills/`**. Los dos traductores al
+vocabulario con el que se interroga a `StateMachine` viven del lado del destino, como `IssueLabel.of`:
+`Outcome.of_the_ci(status)` y `Outcome.of_the_verdict(verdict)`, los dos con `match` exhaustivo y sin rama
+generica, para que la regla no acabe siendo un `if` de quien conduce el run. Como las otras dos copias, esta
+**esta medida**: `tests/test_skill_contracts.py` empareja los cinco miembros de `CiStatus` con los cinco de
+`EstadoCI` **por significado y no por cadena** -uno esta en ingles y el otro en castellano, asi que comparar
+los valores pondria `green` frente a `verde` y fallaria con el contrato sano-, de modo que anadir o quitar un
+estado en un solo lado pone `make check` en rojo. El emparejamiento se escribe una vez en el propio test,
+porque es lo unico de esta duplicacion que no se puede derivar de ninguno de los dos lados.
+
 **La higiene del indice es politica, y sus prefijos prohibidos son una duplicacion declarada mas.**
 `StagedHygiene.of(staged=..., declared=...)` (`domain/staged_hygiene.py`) devuelve las ofensas
 -`HygieneOffence`, con el path y su `HygieneBreach`- de lo que hay en el indice frente a lo que el
@@ -91,8 +110,8 @@ implementador declaro, y la tupla vacia es el indice limpio. Tres decisiones que
   `tests/test_skill_contracts.py` compara los dos conjuntos, asi que anadir un prefijo en un solo lado
   pone `make check` en rojo.
 
-Dos decisiones mas de `StateMachine` que no son deriva, y estan aqui para que no se "arreglen" hacia el
-lado facil:
+Cuatro decisiones mas de `StateMachine` y de los `Budgets` que le entran no son deriva, y estan aqui para
+que no se "arreglen" hacia el lado facil:
 
 - **La separacion minima entre ticks es una sola, para los tres tipos de tick.** La prosa solo pone
   numero donde la cuenta es load-bearing -la ventana de gracia de la integracion continua-, y deja los
@@ -100,12 +119,44 @@ lado facil:
   numero que nadie ha medido; el que hay sale de un caso real medido en dos pull requests, asi que
   gobierna las tres esperas. Consecuencia aceptada: mover el de la ventana mueve tambien la cadencia con
   la que se sondea el merge.
-- **El descarte del juez -devolver algo que no es su veredicto- no tiene presupuesto propio, y por tanto
-  es el unico bucle de la tabla sin cierre propio.** Es fiel a la prosa: no gasta reintento porque **no
-  se ha tocado el codigo**, asi que no es un intento de la fase. Lo que cambia al pasar a programa es
-  quien lo acota: antes, la persona mirando; ahora, el presupuesto de coste, que **si** cierra
-  (`over-budget` -> `aborted-budget`). Ponerle aqui un numero seria inventar una politica que ninguna
-  medicion sostiene; lo que no vale es dejarlo sin declarar.
+- **El tope de espera de una invocacion son 30 minutos (`total_wait_seconds`), y acota la invocacion, no
+  el run.** La integracion continua de este repo esta medida entre 15 y 33 segundos sobre 25 runs, asi
+  que el numero no lo fija ella: lo fija el repo destino peor, y hay uno escrito -un `make test` de ~20
+  minutos, en `skills/slice-spec/SKILL.md`- que hay que despejar con margen. Por arriba lo acota la otra
+  espera: el merge es **una decision humana**, y 30 minutos es lo bastante corto para que agotarlos
+  termine la invocacion en vez de retener el proceso durante horas, que es lo que prescribe el paso 10 de
+  `skills/slice-runner/SKILL.md`. **Agotarlo no cierra el run**: lo deja abierto y persistido en su paso,
+  con `wait-exhausted` diciendo que reinvocar es justo lo que toca.
+- **El descarte del juez -devolver algo que no es su veredicto- no tiene presupuesto propio.** Es fiel a
+  la prosa: no gasta reintento porque **no se ha tocado el codigo**, asi que no es un intento de la fase.
+  Lo que cambia al pasar a programa es quien lo acota: antes, la persona mirando; ahora, el presupuesto de
+  coste del bullet siguiente, que **si** cierra (`over-budget` -> `aborted-budget`). Darle un contador
+  propio seria inventar una politica que ninguna medicion sostiene; dejarlo sin ningun cierre seria un
+  bucle que paga una llamada al harness por vuelta y no termina nunca.
+- **El coste de una slice son 25 dolares (`slice_cost_usd`), y es un backstop contra un bucle sin cierre,
+  no un valor de ajuste.** No hay todavia ningun coste real en dolares en el registro durable -`metrics.py
+  report` dice hoy "sin datos: ninguna fila trae medicion del harness"-, porque esta es la primera slice
+  que va a escribirlo. Lo unico medido hoy son las llamadas a `claude -p` grabadas en
+  `src/slice_runner/tests/payloads/`, cuya mayor es **0.343 $** (`implementer-two-paths.json`): 25 $ esta
+  dos ordenes de magnitud por encima de eso y muy por encima de cualquier slice plausible, que es
+  exactamente lo que se le pide a un backstop. **Se re-fija con dolares reales** en cuanto el registro
+  durable tenga muestras; ponerlo bajo para "ahorrar" no ahorra nada, convierte un backstop en un cierre
+  espurio -una slice sana cerrada a mitad, con su etiqueta y su fila de abortada-.
+
+  Y **un gasto no medido cuenta como agotado**, no como cero: `HarnessSpend` distingue "todavia no se ha
+  medido nada" de "cero medido" (`measured`), y lo que no se puede sumar no se puede acotar, asi que un
+  harness que jamas deja medicion -el sobre no llego a parsearse- cierra el run en vez de girar gratis
+  para siempre. Es la misma eleccion fail-closed que `CiStatus.UNKNOWN`: el precio del falso positivo es
+  una reinvocacion, y el del falso negativo es el bucle que este numero existe para cortar.
+
+  **La pregunta se hace por llamada, no por el agregado**, y esa firma es load-bearing:
+  `cost_exhausted(call=..., total=...)` mira primero si **esa** llamada dejo medicion y solo despues suma.
+  Preguntarselo al agregado tenia el agujero entero dentro: como una llamada sin medicion no anade nada a
+  la suma, bastaba **una** medicion previa en la invocacion -el `implement` del propio run- para que el
+  total quedase `measured` para siempre, y a partir de ahi cada llamada que muriera sin sobre parseable
+  dejaba el total congelado por debajo del limite. El descarte del juez vuelve al mismo paso con
+  `wait_seconds=0` y sin presupuesto propio, asi que eso era exactamente el bucle que paga una llamada al
+  harness por vuelta y no termina nunca.
 
 ## Excepciones
 

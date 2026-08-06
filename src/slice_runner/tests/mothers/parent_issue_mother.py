@@ -19,6 +19,19 @@ class ParentIssueMother:
         )
 
     @staticmethod
+    def with_two_controls() -> ParentIssue:
+        return replace(
+            ParentIssueMother.with_sources_and_controls(),
+            controls=Controls(
+                commands=(
+                    ControlCommand(name="lint", command="make linting"),
+                    ControlCommand(name="tests", command="make test"),
+                ),
+                exemption_reason=None,
+            ),
+        )
+
+    @staticmethod
     def of_two_slices() -> ParentIssue:
         return replace(ParentIssueMother.with_sources_and_controls(), subissue_count=2)
 

@@ -4,6 +4,7 @@ from dataclasses import replace
 from typing import ClassVar
 
 from slice_runner.domain.assignment import Assignment
+from slice_runner.tests.mothers.control_outcome_mother import ControlOutcomeMother
 from slice_runner.tests.mothers.parent_issue_mother import ParentIssueMother
 from slice_runner.tests.mothers.sub_issue_mother import SubIssueMother
 from slice_runner.tests.mothers.verdict_mother import FindingMother
@@ -31,6 +32,10 @@ class AssignmentMother:
     @classmethod
     def of_a_second_round(cls) -> Assignment:
         return replace(cls.of_the_first_round(), findings=(FindingMother.with_line(),))
+
+    @classmethod
+    def of_a_round_after_red_controls(cls) -> Assignment:
+        return replace(cls.of_the_first_round(), control_logs=(ControlOutcomeMother.LOG,))
 
     @classmethod
     def of_a_repo_exempt_from_controls(cls) -> Assignment:

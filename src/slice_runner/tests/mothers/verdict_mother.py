@@ -42,3 +42,7 @@ class VerdictMother:
     @staticmethod
     def failing(*findings: Finding) -> Verdict:
         return Verdict(ruling=Ruling.FAIL, findings=findings or (FindingMother.without_line(),))
+
+    @staticmethod
+    def passing_with(*findings: Finding) -> Verdict:
+        return Verdict(ruling=Ruling.PASS, findings=findings or (FindingMother.with_line(),))

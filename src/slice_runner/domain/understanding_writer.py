@@ -1,0 +1,13 @@
+from __future__ import annotations
+
+from abc import ABC, abstractmethod
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from slice_runner.domain.parent_issue import ParentIssue
+    from slice_runner.domain.sub_issue import SubIssue
+
+
+class UnderstandingWriter(ABC):
+    @abstractmethod
+    def write(self, *, subissue: SubIssue, parent: ParentIssue, repo: str) -> str: ...

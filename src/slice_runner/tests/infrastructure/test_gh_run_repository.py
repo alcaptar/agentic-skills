@@ -387,6 +387,34 @@ class TestWritingTheMacroStateLabel:
         assert "--body-file" not in process.calls[0].argv
         assert "view" not in process.calls[0].argv
 
+    def test_a_run_carrying_no_label_yet_is_edited_with_no_remove_flag_because_gh_refuses_an_absent_one(self) -> None:
+        process = ScriptedProcess(ProcessOutput(code=0, stdout="", stderr=""))
+
+        GhRunRepository(process=process).write_label(repo=_REPO, issue=45, remove=None, add=IssueLabel.IN_PROGRESS)
+
+        assert len(process.calls) == 1
+        assert Argv(process.calls[0].argv).value_of("--add-label") == "estado:en-curso"
+        assert "--remove-label" not in process.calls[0].argv
+
+    def test_asking_gh_to_remove_a_label_the_issue_never_carried_fails_and_creates_no_label(self) -> None:
+        process = ScriptedProcess(
+            ProcessOutput(
+                code=1,
+                stdout="",
+                stderr=(
+                    "failed to update https://github.com/alcaptar/agentic-skills/issues/45: "
+                    "'estado:pendiente' not found\nfailed to update 1 issue\n"
+                ),
+            )
+        )
+
+        with pytest.raises(GhCommandFailedError, match="estado:pendiente"):
+            GhRunRepository(process=process).write_label(
+                repo=_REPO, issue=45, remove=IssueLabel.PENDING, add=IssueLabel.IN_PROGRESS
+            )
+
+        assert len(process.calls) == 1
+
     def test_a_label_missing_on_the_repo_is_created_once_and_the_edit_is_retried(self) -> None:
         process = ScriptedProcess(
             ProcessOutput(
@@ -472,6 +500,17 @@ class TestPausingForAlignment:
 
         assert Argv(process.calls[0].argv).value_of("--add-label") == "estado:esperando-alineacion"
 
+    def test_a_subissue_carrying_no_label_is_paused_with_no_remove_flag_because_gh_refuses_an_absent_one(self) -> None:
+        process = ScriptedProcess(ProcessOutput(code=0, stdout="", stderr=""))
+
+        GhRunRepository(process=process).pause_for_alignment(repo=_REPO, issue=45, remove=None)
+
+        assert len(process.calls) == 1
+        argv = Argv(process.calls[0].argv)
+        assert argv.value_of("--add-label") == "estado:esperando-alineacion"
+        assert argv.value_of("--add-assignee") == "@me"
+        assert "--remove-label" not in process.calls[0].argv
+
     def test_a_pause_label_missing_on_the_repo_is_created_once_and_the_edit_is_retried(self) -> None:
         process = ScriptedProcess(
             ProcessOutput(code=1, stdout="", stderr="'estado:esperando-alineacion' not found"),
@@ -517,3 +556,35 @@ class TestGhFailuresAreInterpretedNotSwallowed:
 
         with pytest.raises(UnreadableIssueError):
             GhRunRepository(process=process).read_parent(repo=_REPO, issue=43, slice_repo=None)
+
+
+class TestReadingTheHeadingOfEachSubissue:
+    @staticmethod
+    def _process(*, children: list[dict[str, object]] | None = None) -> ScriptedProcess:
+        payload = children if children is not None else GhResponseMother.children_of_parent()
+
+        return ScriptedProcess(ProcessOutput(code=0, stdout=json.dumps(payload), stderr=""))
+
+    def test_the_name_in_parentheses_of_the_title_becomes_the_name_of_the_slice(self) -> None:
+        children = GhRunRepository(process=self._process()).read_children(repo=_REPO, parent=43, expected=2)
+
+        by_slice = {child.slice_id: child for child in children}
+        assert by_slice["slice-01"].name == "primera-de-prueba"
+        assert by_slice["slice-02"].name == "segunda-de-prueba"
+
+    def test_what_the_title_says_after_the_name_becomes_the_summary_of_the_slice(self) -> None:
+        children = GhRunRepository(process=self._process()).read_children(repo=_REPO, parent=43, expected=2)
+
+        by_slice = {child.slice_id: child for child in children}
+        assert by_slice["slice-01"].summary == "la que se creo despues"
+
+    def test_the_name_and_the_number_of_the_slice_are_the_branch_the_run_will_stand_on(self) -> None:
+        children = GhRunRepository(process=self._process()).read_children(repo=_REPO, parent=43, expected=2)
+
+        assert children[0].branch == "slice/01-primera-de-prueba"
+
+    def test_a_title_with_the_identifier_but_no_name_is_rejected_instead_of_branching_namelessly(self) -> None:
+        nameless = [{"number": 1, "title": "slice-01: no name at all", "body": "", "labels": [], "state": "OPEN"}]
+
+        with pytest.raises(UnreadableIssueError, match="slice-NN"):
+            GhRunRepository(process=self._process(children=nameless)).read_children(repo=_REPO, parent=43, expected=1)

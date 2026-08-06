@@ -6,6 +6,8 @@ from typing import TYPE_CHECKING
 from slice_runner.domain.assignment import Assignment
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from slice_runner.domain.finding import Finding
     from slice_runner.domain.implementation import Implementation
     from slice_runner.domain.implementer import Implementer
@@ -19,6 +21,7 @@ class ImplementSliceParams:
     subissue: SubIssue
     parent: ParentIssue
     findings: tuple[Finding, ...] = ()
+    control_logs: tuple[Path, ...] = ()
 
 
 class ImplementSlice:
@@ -40,4 +43,5 @@ class ImplementSlice:
             sources=params.parent.sources,
             controls=params.parent.controls,
             findings=params.findings,
+            control_logs=params.control_logs,
         )

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import TYPE_CHECKING
 from unittest.mock import Mock, create_autospec
 
@@ -7,6 +8,7 @@ import pytest
 
 from slice_runner.application.actions.implement_slice import ImplementSlice, ImplementSliceParams
 from slice_runner.domain.implementer import Implementer
+from slice_runner.tests.mothers.control_outcome_mother import ControlOutcomeMother
 from slice_runner.tests.mothers.implementation_mother import ImplementationMother
 from slice_runner.tests.mothers.parent_issue_mother import ParentIssueMother
 from slice_runner.tests.mothers.sub_issue_mother import SubIssueMother
@@ -99,3 +101,10 @@ class TestImplementSlice:
         self, action: ImplementSlice, implementer: Mock
     ) -> None:
         assert action.execute(self._params()) == ImplementationMother.of_two_paths()
+
+    def test_the_log_of_a_control_in_red_is_assigned_as_a_path_because_nobody_who_judges_reads_build_output(
+        self, action: ImplementSlice, implementer: Mock
+    ) -> None:
+        action.execute(replace(self._params(), control_logs=(ControlOutcomeMother.LOG,)))
+
+        assert self._assigned(implementer).control_logs == (ControlOutcomeMother.LOG,)

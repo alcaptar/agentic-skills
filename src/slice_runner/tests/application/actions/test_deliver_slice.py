@@ -28,6 +28,7 @@ class TestDeliverSlice:
     @pytest.fixture
     def forum(self) -> Mock:
         forum: Mock = create_autospec(Forum, spec_set=True, instance=True)
+        forum.open_pull_request.return_value = None
         forum.create_pull_request.return_value = 48
         return forum
 
@@ -61,6 +62,25 @@ class TestDeliverSlice:
         forum.create_pull_request.assert_called_once_with(
             repo=_REPO, branch=_BRANCH, base=_BASE, title=_TITLE, body=_BODY
         )
+
+    def test_a_branch_that_already_has_an_open_pull_request_lands_the_new_commit_without_opening_a_second_one(
+        self, action: DeliverSlice, workspace: Mock, forum: Mock
+    ) -> None:
+        forum.open_pull_request.return_value = 48
+
+        assert action.execute(self._params()) == 48
+
+        workspace.commit.assert_called_once_with(worktree=_WORKTREE, message=_TITLE)
+        workspace.push.assert_called_once_with(worktree=_WORKTREE, branch=_BRANCH)
+        forum.create_pull_request.assert_not_called()
+
+    def test_only_an_open_pull_request_is_asked_about_so_a_closed_one_does_not_block_the_next_delivery(
+        self, action: DeliverSlice, forum: Mock
+    ) -> None:
+        action.execute(self._params())
+
+        forum.open_pull_request.assert_called_once_with(repo=_REPO, branch=_BRANCH)
+        forum.any_pull_request.assert_not_called()
 
     @pytest.mark.parametrize("protected", list(ProtectedBranch))
     def test_a_protected_branch_stops_the_delivery_before_anything_is_committed(

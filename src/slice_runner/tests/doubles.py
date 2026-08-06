@@ -63,6 +63,41 @@ class ScriptedProcess(Process):
         return self._outputs.pop(0)
 
 
+@dataclass(frozen=True, kw_only=True, slots=True)
+class Answer:
+    to: tuple[str, ...]
+    stdout: str = ""
+    code: int = 0
+    stderr: str = ""
+
+    def answers(self, argv: list[str]) -> bool:
+        return all(token in argv for token in self.to)
+
+    @property
+    def output(self) -> ProcessOutput:
+        return ProcessOutput(code=self.code, stdout=self.stdout, stderr=self.stderr)
+
+
+class AnsweringByArgv(Process):
+    def __init__(self, *answers: Answer) -> None:
+        self._answers = answers
+        self.calls: list[RecordedCall] = []
+
+    def run(self, argv: list[str], *, stdin: str = "", cwd: str | None = None) -> ProcessOutput:
+        self.calls.append(RecordedCall(argv=list(argv), stdin=stdin))
+        for answer in self._answers:
+            if answer.answers(argv):
+                return answer.output
+
+        raise AssertionError(f"no answer was scripted for `{' '.join(argv)}`")
+
+    def invoked(self, *tokens: str) -> bool:
+        return any(all(token in call.argv for token in tokens) for call in self.calls)
+
+    def ran(self, *argv: str) -> bool:
+        return list(argv) in [call.argv for call in self.calls]
+
+
 class RealExceptTheJudge(Process):
     def __init__(self, judge_output: dict[str, object]) -> None:
         self._judge_output = judge_output

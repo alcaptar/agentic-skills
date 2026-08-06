@@ -16,6 +16,8 @@ class SubIssueMother:
         return SubIssue(
             number=45,
             slice_id="slice-05",
+            name="prechecks-deterministas",
+            summary="comprobar antes de tocar codigo",
             title="slice-05 (prechecks-deterministas): comprobar antes de tocar codigo",
             state=IssueState.OPEN,
             repo=None,
@@ -42,11 +44,17 @@ class SubIssueMother:
         return replace(SubIssueMother.pending(), label=None)
 
     @staticmethod
+    def without_a_declared_intention() -> SubIssue:
+        return replace(SubIssueMother.pending(), intention="")
+
+    @staticmethod
     def of_another_repo() -> SubIssue:
         return replace(
             SubIssueMother.pending(),
             number=46,
             slice_id="slice-06",
+            name="pausa-de-alineacion",
+            summary="el entendimiento se escribe siempre",
             title="slice-06 (pausa-de-alineacion): el entendimiento se escribe siempre",
             repo=SubIssueMother.OTHER_REPO,
         )
