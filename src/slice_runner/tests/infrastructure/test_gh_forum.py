@@ -6,8 +6,8 @@ import pytest
 
 from slice_runner.domain.exceptions import UnreadableForumError
 from slice_runner.infrastructure.gh_forum import GhForum
+from slice_runner.infrastructure.gh_run_repository import GhCommandFailedError
 from slice_runner.infrastructure.process import ProcessOutput
-from slice_runner.infrastructure.run_repository import GhCommandFailedError
 from slice_runner.tests.argv import Argv
 from slice_runner.tests.doubles import ScriptedProcess
 from slice_runner.tests.mothers.gh_response_mother import GhResponseMother

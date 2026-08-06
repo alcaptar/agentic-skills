@@ -123,6 +123,20 @@ class TestVerifySlice:
 
         assert self._reviewed(verifier).repo == _PARAMS.repo
 
+    def test_the_slice_and_the_yardstick_its_items_are_measured_against_travel_to_the_judge_too(
+        self, action: VerifySlice, verifier: Mock
+    ) -> None:
+        action.execute(_PARAMS)
+
+        reviewed = self._reviewed(verifier)
+        assert (reviewed.slice_id, reviewed.signal, reviewed.criteria, reviewed.sources, reviewed.checklist) == (
+            _PARAMS.slice_id,
+            _PARAMS.signal,
+            _PARAMS.criteria,
+            _PARAMS.sources,
+            _PARAMS.checklist,
+        )
+
     def test_the_verification_comes_back_without_being_reinterpreted(self, action: VerifySlice, verifier: Mock) -> None:
         expected = VerificationMother.failing_after_a_denied_read()
         verifier.verify.return_value = expected

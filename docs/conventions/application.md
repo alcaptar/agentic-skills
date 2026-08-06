@@ -62,10 +62,30 @@ puertos que orquestar, asi que un caso de uso que solo reenviase la llamada seri
 rechaza el parrafo anterior. `queries/` llega con la primera lectura que **necesite un puerto** -leer el
 estado del run del foro, p. ej.-, no con la primera pregunta que se le haga al dominio.
 
+## Componer un value object del dominio si es trabajo del caso de uso
+
+El antipatron de mas abajo -"un helper privado de mapeo en el caso de uso"- se refiere al mapeo hacia un
+**contrato externo**: convertir a las claves que espera otro proceso es de la frontera, y hacerlo aqui
+duplica el mapeo que el modelo de frontera ya posee. **Componer un value object del dominio a partir de
+otros no es eso**, y es trabajo legitimo de un caso de uso.
+
+La desviacion viva es `ImplementSlice._assignment` (`application/actions/implement_slice.py`), que arma el
+`Assignment` con lo que trae la subissue (numero, identificador, intencion, criterios, senal), lo que trae
+el issue padre (fuentes y controles), el worktree y los hallazgos de la vuelta anterior. Reunir esas cuatro
+procedencias en el dato que el implementador necesita **es** lo que hace el caso de uso: moverlo a un
+`Assignment.of(...)` -como si fuera `ChecklistEntry.of(subissue)`, que si es factoria de dominio porque
+proyecta **una** entidad- dejaria a `ImplementSlice` reenviando una llamada, que es justo la indireccion que
+rechaza el apartado del value object de configuracion.
+
+La linea, para no ampliarla por precedente: si lo que se compone lleva claves de un contrato ajeno o
+formato de transporte, es de la frontera; si es un objeto del dominio hecho de otros objetos del dominio,
+se queda aqui.
+
 ## Antipatrones
 
 - Un caso de uso con coletilla en la clase, en `Params`, en `Result` o en el modulo.
 - Un caso de uso importando de `infrastructure/`.
 - Un helper privado de mapeo (`_to_dto`) en el caso de uso. **El mapeo vive en el modelo de frontera.**
+  Componer un value object del dominio a partir de otros no cuenta: ver el apartado de arriba.
 - Un caso de uso que devuelve `dict`.
 - Un `try/except` que traduce una excepcion de dominio a un codigo de salida.

@@ -8,10 +8,12 @@ from slice_runner.domain.corpus_entry import CorpusEntry
 from slice_runner.domain.slice_under_review import SliceUnderReview
 
 if TYPE_CHECKING:
+    from slice_runner.domain.checklist_entry import ChecklistEntry
     from slice_runner.domain.corpus import Corpus
     from slice_runner.domain.diff_reader import DiffReader
     from slice_runner.domain.judge import Judge
     from slice_runner.domain.skill_library import SkillLibrary
+    from slice_runner.domain.source import Source
     from slice_runner.domain.verification import Verification
     from slice_runner.domain.verifier import Verifier
 
@@ -21,6 +23,10 @@ class VerifySliceParams:
     repo: str
     base: str
     slice_id: str
+    signal: str
+    criteria: tuple[str, ...]
+    sources: tuple[Source, ...]
+    checklist: tuple[ChecklistEntry, ...]
 
 
 class VerifySlice:
@@ -37,7 +43,15 @@ class VerifySlice:
         diff = self._reader.read(repo=params.repo, base=params.base)
         verification = self._verifier.verify(
             self._judge_reading(params.repo),
-            SliceUnderReview(repo=params.repo, diff=diff),
+            SliceUnderReview(
+                slice_id=params.slice_id,
+                repo=params.repo,
+                diff=diff,
+                signal=params.signal,
+                criteria=params.criteria,
+                sources=params.sources,
+                checklist=params.checklist,
+            ),
         )
         self._corpus.record(CorpusEntry(slice_id=params.slice_id, diff=diff, verdict=verification.verdict))
 

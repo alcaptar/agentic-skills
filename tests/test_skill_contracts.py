@@ -36,6 +36,7 @@ from slice_runner.domain.severity import Severity
 from slice_runner.domain.staged_hygiene import StagedHygiene
 from slice_runner.domain.step import Step
 from slice_runner.infrastructure.exit_code import ExitCode
+from slice_runner.infrastructure.gh_run_repository import GhRunRepository
 from slice_runner.infrastructure.local_skill_library import LocalSkillLibrary
 from slice_runner.infrastructure.metrics_invocation import (
     DurableCi,
@@ -45,7 +46,6 @@ from slice_runner.infrastructure.metrics_invocation import (
 )
 from slice_runner.infrastructure.parent_body import ParentBody
 from slice_runner.infrastructure.process import ProcessOutput
-from slice_runner.infrastructure.run_repository import RunRepository
 from slice_runner.infrastructure.slice_verifier_judge import SliceVerifierJudge
 from slice_runner.infrastructure.subissue_body import SubissueBody
 from slice_runner.infrastructure.verdict_payload import FindingPayload
@@ -132,7 +132,7 @@ def test_no_label_in_the_vocabulary_lacks_a_source_in_the_translator_or_a_manual
     """A manual-source label is not "a person writes it": it is any label that something other
     than `IssueLabel.of` writes, because it happens outside the `(RunState, Step)` pair the
     translator knows about. `PENDING` is written by a person when they create a subissue
-    (`CLAUDE.md`'s slice). `AWAITING_ALIGNMENT` is written by `RunRepository.pause_for_alignment`
+    (`CLAUDE.md`'s slice). `AWAITING_ALIGNMENT` is written by `GhRunRepository.pause_for_alignment`
     before any `Run` exists, so there is no closure yet for the translator to project it from.
     Every other member has to come out of some `(RunState, Step)` pair the translator projects, or
     it is dead vocabulary nobody ever writes.
@@ -268,11 +268,18 @@ def _documented_subissue_title() -> str:
 def test_the_subissue_slice_spec_documents_is_read_by_the_program_as_the_slice_it_names() -> None:
     """Title, label and body of the documented subissue, read by the program that consumes them.
 
-    The identifier in the title is what orders the slices -- `RunRepository` sorts by it and rejects a
+    The identifier in the title is what orders the slices -- `GhRunRepository` sorts by it and rejects a
     title without it -- and the name is what derives the branch and the commit scope, so it has to be
     kebab-case. The macro state arrives as a label, not as a marker in the text. And the execution state
     block is absent: it belongs to the machine, so a documented body that already carried one would have
     the skill writing a run that never happened.
+
+    The four labelled lines are asserted, not just `REPO:`, because all four now have a consumer: the
+    intention, the criteria and the signal travel into the prompts of the implementer and of the judge.
+    Parsing them is fail-soft by design -- a line the parser does not recognise is not an error, it is an
+    empty field -- so a rename on one side alone would leave both agents working with an empty yardstick
+    and nothing at all would break. `_SUBISSUE_LINES` already claims the example writes the four; this is
+    what checks the program reads the four.
     """
     title = _documented_subissue_title()
     label = {"id": "LA_kwDOThEBoM8AAAACu6gVcw", "name": IssueLabel.PENDING.value, "description": "", "color": "5319e7"}
@@ -287,11 +294,14 @@ def test_the_subissue_slice_spec_documents_is_read_by_the_program_as_the_slice_i
     ]
     process = ScriptedProcess(ProcessOutput(code=0, stdout=json.dumps(recorded), stderr=""))
 
-    children = RunRepository(process=process).read_children(repo="alcaptar/agentic-skills", parent=43, expected=1)
+    children = GhRunRepository(process=process).read_children(repo="alcaptar/agentic-skills", parent=43, expected=1)
 
     assert _KEBAB_TITLE.match(title), f"the documented title {title!r} does not carry `slice-NN (name-kebab):`"
     assert children[0].slice_id == title.split(" ", 1)[0]
     assert children[0].repo, "the documented subissue carries no target repo the program can read"
+    assert children[0].intention, "the documented subissue carries no `INTENCION:` the program can read"
+    assert children[0].criteria, "the documented subissue carries no `ACEPTACION:` the program can read"
+    assert children[0].signal, "the documented subissue carries no `SENAL:` the program can read"
     assert children[0].label is IssueLabel.PENDING
     assert children[0].run is None, (
         "the documented subissue body already carries an execution state block, which is the machine's"
@@ -330,7 +340,7 @@ def test_the_labelled_lines_of_a_subissue_are_the_same_in_the_example_the_rules_
 def test_the_macro_state_slice_spec_writes_is_a_label_of_the_vocabulary_and_never_a_marker_in_the_text() -> None:
     """The state moved out of the prose and into a GitHub label, and both halves need measuring.
 
-    A label the skill invents is one nothing reads -- `RunRepository` only recognises members of
+    A label the skill invents is one nothing reads -- `GhRunRepository` only recognises members of
     `IssueLabel` and returns `None` for anything else, so an invented one reads as "no state at all".
     The markers are the other half: as long as the checkbox and the `[estado]` marker survive anywhere
     in the skill, a model has two ways to write the state and only one of them is read.

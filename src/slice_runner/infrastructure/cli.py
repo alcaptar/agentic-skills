@@ -123,7 +123,9 @@ class Cli:
 
     @staticmethod
     def _params(*, repo: str, base: str, slice_id: str) -> VerifySliceParams:
-        return VerifySliceParams(repo=repo, base=base, slice_id=slice_id)
+        return VerifySliceParams(
+            repo=repo, base=base, slice_id=slice_id, signal="", criteria=(), sources=(), checklist=()
+        )
 
     @staticmethod
     def _reported(reason: str, code: ExitCode) -> ExitCode:

@@ -43,19 +43,33 @@ class JudgeInvocation:
 
     @property
     def _run_data(self) -> str:
-        files = self.review.diff.files
+        review = self.review
 
         return "\n".join(
             [
                 "## Datos del run",
                 "",
-                f"- ruta del repo: {self.review.repo}",
-                f"- ficheros que toca la slice ({len(files)}):",
-                *(f"  - {path}" for path in files),
-                f"- directorios que puedes leer ({len(self.judge.readable)}):",
-                *(f"  - {directory}" for directory in self.judge.readable),
+                f"- slice: {review.slice_id}",
+                f"- ruta del repo: {review.repo}",
+                f"- senal: {review.signal}",
+                *self._counted("criterios de aceptacion", review.criteria),
+                *self._counted(
+                    "fuentes de convencion", tuple(f"{source.kind}: {source.path}" for source in review.sources)
+                ),
+                *self._counted(
+                    "checklist de slices del issue",
+                    tuple(f"[{entry.state}] {entry.title}" for entry in review.checklist),
+                ),
+                *self._counted("ficheros que toca la slice", review.diff.files),
+                *self._counted(
+                    "directorios que puedes leer", tuple(str(directory) for directory in self.judge.readable)
+                ),
             ]
         )
+
+    @staticmethod
+    def _counted(heading: str, entries: tuple[str, ...]) -> list[str]:
+        return [f"- {heading} ({len(entries)}):", *(f"  - {entry}" for entry in entries)]
 
     @property
     def _diff(self) -> str:

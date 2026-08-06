@@ -80,3 +80,7 @@ class MalformedConventionLineError(UnreadableIssueError):
 
 class LaggingSearchIndexError(ValueError):
     pass
+
+
+class NoSliceLeftError(LookupError):
+    pass

@@ -19,6 +19,10 @@ class ParentIssueMother:
         )
 
     @staticmethod
+    def of_two_slices() -> ParentIssue:
+        return replace(ParentIssueMother.with_sources_and_controls(), subissue_count=2)
+
+    @staticmethod
     def without_sources() -> ParentIssue:
         return replace(ParentIssueMother.with_sources_and_controls(), sources=())
 

@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 from slice_runner.domain.exceptions import LaggingSearchIndexError, UnreadableIssueError
 from slice_runner.domain.issue_label import IssueLabel
 from slice_runner.domain.parent_issue import ParentIssue
+from slice_runner.domain.run_repository import RunRepository
 from slice_runner.domain.sub_issue import SubIssue
 from slice_runner.infrastructure.gh_body_payload import GhBodyPayload
 from slice_runner.infrastructure.gh_parent_view_payload import GhParentViewPayload
@@ -29,7 +30,7 @@ class GhCommandFailedError(OSError):
     pass
 
 
-class RunRepository:
+class GhRunRepository(RunRepository):
     def __init__(self, *, process: Process) -> None:
         self._process = process
 
@@ -192,6 +193,9 @@ class RunRepository:
             title=payload.title,
             state=payload.state,
             repo=parsed.repo,
+            intention=parsed.intention,
+            criteria=parsed.criteria,
+            signal=parsed.signal,
             run=parsed.run,
             label=cls._label_of(payload.labels),
         )

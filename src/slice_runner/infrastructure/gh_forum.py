@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 from slice_runner.domain.exceptions import UnreadableForumError
 from slice_runner.domain.forum import Forum
 from slice_runner.infrastructure.gh_pull_request_payload import GhPullRequestPayload
-from slice_runner.infrastructure.run_repository import GhCommandFailedError
+from slice_runner.infrastructure.gh_run_repository import GhCommandFailedError
 
 if TYPE_CHECKING:
     from slice_runner.infrastructure.process import Process
