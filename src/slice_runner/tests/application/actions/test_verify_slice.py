@@ -11,10 +11,14 @@ from slice_runner.domain.corpus import Corpus
 from slice_runner.domain.diff_reader import DiffReader
 from slice_runner.domain.exceptions import DiffNotReadableError
 from slice_runner.domain.skill_library import SkillLibrary
-from slice_runner.domain.verification import Verification
 from slice_runner.domain.verifier import Verifier
 from slice_runner.tests.mothers.verdict_mother import VerdictMother
-from slice_runner.tests.mothers.verification_mother import JudgeMother, SliceDiffMother, VerifySliceParamsMother
+from slice_runner.tests.mothers.verification_mother import (
+    JudgeMother,
+    SliceDiffMother,
+    VerificationMother,
+    VerifySliceParamsMother,
+)
 
 if TYPE_CHECKING:
     from slice_runner.domain.corpus_entry import CorpusEntry
@@ -38,7 +42,7 @@ class TestVerifySlice:
     @pytest.fixture
     def verifier(self) -> Mock:
         verifier: Mock = create_autospec(Verifier, spec_set=True, instance=True)
-        verifier.verify.return_value = Verification(verdict=VerdictMother.passing())
+        verifier.verify.return_value = VerificationMother.passing()
         return verifier
 
     @pytest.fixture
@@ -120,7 +124,7 @@ class TestVerifySlice:
         assert self._reviewed(verifier).repo == _PARAMS.repo
 
     def test_the_verification_comes_back_without_being_reinterpreted(self, action: VerifySlice, verifier: Mock) -> None:
-        expected = Verification(verdict=VerdictMother.failing(), denied_reads=("Read /toolbox/skills/x.md",))
+        expected = VerificationMother.failing_after_a_denied_read()
         verifier.verify.return_value = expected
 
         assert action.execute(_PARAMS) is expected
@@ -141,7 +145,7 @@ class TestVerifySlice:
         self, action: VerifySlice, corpus: Mock, verifier: Mock
     ) -> None:
         vetoed = VerdictMother.failing()
-        verifier.verify.return_value = Verification(verdict=vetoed)
+        verifier.verify.return_value = VerificationMother.vetoing(vetoed)
 
         action.execute(_PARAMS)
 

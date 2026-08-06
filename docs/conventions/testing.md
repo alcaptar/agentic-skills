@@ -112,6 +112,7 @@ contratos que hoy estan escritos dos veces:
 
 - motivos de `bloqueada:` en `SKILL.md` vs `issue_body.py`
 - veredictos de `metrics.py`
+- el vocabulario del log durable y el argv de `record`, entre el programa y `metrics.py`
 - el JSON del verificador en `agents/` y en `slice-runner`
 - las herramientas que `src/slice_runner/` concede al juez vs las que declara su prompt
 - las claves del hallazgo en la rubrica vs los `alias` de `FindingPayload`

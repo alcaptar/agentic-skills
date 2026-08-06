@@ -11,6 +11,7 @@ from slice_runner.infrastructure.implementer_invocation import ImplementerInvoca
 from slice_runner.infrastructure.slice_implementer_brief import SliceImplementerBrief
 from slice_runner.tests.argv import Argv
 from slice_runner.tests.doubles import RecordedProcess
+from slice_runner.tests.mothers.harness_spend_mother import HarnessSpendMother
 from slice_runner.tests.mothers.judge_output_mother import HarnessEnvelopeMother
 
 _REPO = "/repos/project"
@@ -108,12 +109,12 @@ class TestTheReportOfARecordedCall:
 
         assert report.left_out == "Nada; python3 -m pytest estaba disponible y el test paso correctamente."
 
-    def test_the_cost_and_the_turns_of_the_harness_travel_with_the_report(self) -> None:
+    def test_what_the_harness_spent_on_the_call_travels_with_the_report(self) -> None:
         process = RecordedProcess(HarnessEnvelopeMother.recorded(_RECORDED))
 
         report = ClaudeImplementer(process=process).implement(repo=_REPO)
 
-        assert (report.cost_usd, report.turns) == (0.3433209, 9)
+        assert report.spend == HarnessSpendMother.of_the_implementer_call()
 
 
 class TestANonEmptyPermissionDenialsFailsTheCall:
@@ -129,6 +130,14 @@ class TestANonEmptyPermissionDenialsFailsTheCall:
         with pytest.raises(PermissionDeniedError, match=f"Read {HarnessEnvelopeMother.DENIED_READ}"):
             ClaudeImplementer(process=process).implement(repo=_REPO)
 
+    def test_what_the_denied_call_spent_survives_the_rejection(self) -> None:
+        process = RecordedProcess(HarnessEnvelopeMother.denying_a_read_over(_RECORDED))
+
+        with pytest.raises(PermissionDeniedError) as rejection:
+            ClaudeImplementer(process=process).implement(repo=_REPO)
+
+        assert rejection.value.spend == HarnessSpendMother.of_the_implementer_call()
+
 
 class TestWhatTheImplementerIsAllowedToReturn:
     def test_a_report_missing_a_required_field_is_rejected_instead_of_defaulted(self) -> None:
@@ -137,6 +146,15 @@ class TestWhatTheImplementerIsAllowedToReturn:
 
         with pytest.raises(InvalidImplementationReportError, match="left_out"):
             ClaudeImplementer(process=process).implement(repo=_REPO)
+
+    def test_a_rejected_report_still_reports_what_the_call_spent(self) -> None:
+        incomplete: dict[str, object] = {"paths": [{"path": "hello.py", "kind": "production"}]}
+        process = RecordedProcess(HarnessEnvelopeMother.carrying(incomplete, recorded=_RECORDED))
+
+        with pytest.raises(InvalidImplementationReportError) as rejection:
+            ClaudeImplementer(process=process).implement(repo=_REPO)
+
+        assert rejection.value.spend == HarnessSpendMother.of_the_implementer_call()
 
     def test_a_path_kind_outside_the_vocabulary_is_rejected_saying_which_one_it_was(self) -> None:
         invented_kind: dict[str, object] = {

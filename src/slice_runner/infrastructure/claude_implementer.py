@@ -20,14 +20,14 @@ class ClaudeImplementer:
         invocation = ImplementerInvocation(repo=repo)
         output = self._process.run(invocation.argv, stdin=invocation.text, cwd=invocation.cwd)
         envelope = HarnessOutput.from_process(output)
-        self._reject_denials(envelope)
-        report = ImplementationReportPayload.from_dict(envelope.structured_output)
+        with envelope.measuring():
+            self._reject_denials(envelope)
+            report = ImplementationReportPayload.from_dict(envelope.structured_output)
 
         return Implementation(
             paths=report.to_domain(),
             left_out=report.left_out,
-            cost_usd=envelope.total_cost_usd,
-            turns=envelope.num_turns,
+            spend=envelope.to_domain(),
         )
 
     @staticmethod
