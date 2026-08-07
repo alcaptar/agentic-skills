@@ -42,6 +42,8 @@ _TABLE: list[tuple[Step, Outcome, dict[str, int], tuple[Step, RunState, int]]] =
     (Step.RUN_CONTROLS, Outcome.FAILED, {}, (Step.IMPLEMENT, RunState.OPEN, 0)),
     (Step.RUN_CONTROLS, Outcome.FAILED, {"control_retries": 1}, (Step.IMPLEMENT, RunState.OPEN, 0)),
     (Step.RUN_CONTROLS, Outcome.FAILED, {"control_retries": 2}, (Step.RUN_CONTROLS, RunState.BLOCKED_CONTROLS, 0)),
+    (Step.RUN_CONTROLS, Outcome.INDETERMINATE, {}, (Step.RUN_CONTROLS, RunState.OPEN, 30)),
+    (Step.RUN_CONTROLS, Outcome.INDETERMINATE, {"control_retries": 2}, (Step.RUN_CONTROLS, RunState.OPEN, 30)),
     (Step.RUN_CONTROLS, Outcome.OVER_BUDGET, {}, (Step.RUN_CONTROLS, RunState.ABORTED_BUDGET, 0)),
     (Step.VERIFY, Outcome.DONE, {}, (Step.OPEN_PULL_REQUEST, RunState.OPEN, 0)),
     (Step.VERIFY, Outcome.DISCARDED, {}, (Step.VERIFY, RunState.OPEN, 0)),
@@ -418,6 +420,18 @@ class TestWhatEachBudgetPays:
 
         spent = json.loads(capsys.readouterr().out)["run"]
         assert (spent["control_retries"], spent["verify_retries"]) == (1, 0)
+
+    def test_a_control_that_could_not_run_spends_no_retry_at_all_unlike_a_red_one(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        Cli.explain(
+            request=TransitionRequestMother.asking(Step.RUN_CONTROLS, Outcome.INDETERMINATE, control_retries=2),
+            budgets=Budgets(),
+        )
+
+        emitted = json.loads(capsys.readouterr().out)
+        assert emitted["state"] == RunState.OPEN
+        assert emitted["run"]["control_retries"] == 2
 
     def test_a_veto_spends_a_retry_of_the_judge_and_not_one_of_the_controls(
         self, capsys: pytest.CaptureFixture[str]

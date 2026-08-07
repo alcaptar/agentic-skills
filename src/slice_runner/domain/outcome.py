@@ -4,9 +4,11 @@ from enum import StrEnum
 from typing import TYPE_CHECKING
 
 from slice_runner.domain.ci_status import CiStatus
+from slice_runner.domain.control_status import ControlStatus
 from slice_runner.domain.ruling import Ruling
 
 if TYPE_CHECKING:
+    from slice_runner.domain.control_outcome import ControlOutcome
     from slice_runner.domain.verdict import Verdict
 
 
@@ -38,3 +40,12 @@ class Outcome(StrEnum):
                 return cls.FAILED
             case Ruling.PASS:
                 return cls.CORRECTIONS_ORDERED if verdict.findings else cls.DONE
+
+    @classmethod
+    def of_the_controls(cls, outcomes: tuple[ControlOutcome, ...]) -> Outcome:
+        if any(outcome.status is ControlStatus.RED for outcome in outcomes):
+            return cls.FAILED
+        if any(outcome.status is ControlStatus.UNKNOWN for outcome in outcomes):
+            return cls.INDETERMINATE
+
+        return cls.DONE

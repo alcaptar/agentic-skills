@@ -37,38 +37,51 @@ class SelectSlice:
         children = self._repository.read_children(
             repo=params.repo, parent=params.issue, expected=overview.subissue_count
         )
-        chosen = self._chosen(children, params)
+        dangling = SliceQueue.dangling(children)
+        chosen = self._chosen(children, params, dangling=dangling)
 
         return SelectSliceResult(
             subissue=chosen,
             parent=self._yardstick_of(chosen, overview=overview, params=params),
             checklist=tuple(ChecklistEntry.of(child) for child in children),
-            dangling=SliceQueue.dangling(children),
+            dangling=dangling,
         )
 
     @staticmethod
-    def _chosen(children: tuple[SubIssue, ...], params: SelectSliceParams) -> SubIssue:
+    def _chosen(
+        children: tuple[SubIssue, ...], params: SelectSliceParams, *, dangling: tuple[SubIssue, ...]
+    ) -> SubIssue:
         if params.slice_id is None:
             next_in_line = SliceQueue.next_in_line(children)
             if next_in_line is None:
-                raise NoSliceLeftError(
+                raise SelectSlice._none_left(
                     f"none of the {len(children)} slice(s) of issue {params.issue} can be run: "
-                    f"every one is closed, blocked or aborted"
+                    f"every one is closed, blocked or aborted",
+                    dangling=dangling,
                 )
 
             return next_in_line
 
         named = SliceQueue.find(children, params.slice_id)
         if named is None:
-            raise NoSliceLeftError(
-                f"slice {params.slice_id} does not exist among the {len(children)} slice(s) of issue {params.issue}"
+            raise SelectSlice._none_left(
+                f"slice {params.slice_id} does not exist among the {len(children)} slice(s) of issue {params.issue}",
+                dangling=dangling,
             )
         if not SliceQueue.runnable(named):
-            raise NoSliceLeftError(
-                f"slice {params.slice_id} of issue {params.issue} cannot be run: it is closed, blocked or aborted"
+            raise SelectSlice._none_left(
+                f"slice {params.slice_id} of issue {params.issue} cannot be run: it is closed, blocked or aborted",
+                dangling=dangling,
             )
 
         return named
+
+    @staticmethod
+    def _none_left(message: str, *, dangling: tuple[SubIssue, ...]) -> NoSliceLeftError:
+        error = NoSliceLeftError(message)
+        error.dangling = dangling
+
+        return error
 
     def _yardstick_of(self, chosen: SubIssue, *, overview: ParentIssue, params: SelectSliceParams) -> ParentIssue:
         if chosen.repo is None:

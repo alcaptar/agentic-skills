@@ -3,8 +3,9 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from slice_runner.domain.ruling import Ruling
+from slice_runner.domain.control_status import ControlStatus
 from slice_runner.infrastructure.local_control_runner import LocalControlRunner
+from slice_runner.infrastructure.process import ProcessNotRunnableError
 from slice_runner.tests.doubles import ProcessDoubles
 from slice_runner.tests.mothers.control_command_mother import ControlCommandMother
 
@@ -25,20 +26,59 @@ class TestHowTheCommandIsRun:
         process.run.assert_called_once_with(["sh", "-c", ControlCommandMother.LINT_COMMAND], stdin="", cwd=_REPO)
 
 
-class TestTheRulingComesFromTheExitCode:
-    def test_a_zero_exit_code_is_the_passing_ruling(self, tmp_path: Path) -> None:
+class TestTheStatusComesFromTheExitCode:
+    def test_a_zero_exit_code_is_the_green_status(self, tmp_path: Path) -> None:
         process = ProcessDoubles.exiting(code=0)
 
         outcome = LocalControlRunner(process=process).run(ControlCommandMother.lint(), repo=_REPO, out=tmp_path)
 
-        assert outcome.ruling is Ruling.PASS
+        assert outcome.status is ControlStatus.GREEN
 
-    def test_a_nonzero_exit_code_is_the_failing_ruling(self, tmp_path: Path) -> None:
+    def test_a_nonzero_exit_code_is_the_red_status(self, tmp_path: Path) -> None:
         process = ProcessDoubles.exiting(code=1)
 
         outcome = LocalControlRunner(process=process).run(ControlCommandMother.lint(), repo=_REPO, out=tmp_path)
 
-        assert outcome.ruling is Ruling.FAIL
+        assert outcome.status is ControlStatus.RED
+
+
+class TestAControlThatNeverGetsToRun:
+    def test_a_process_that_cannot_be_launched_is_the_unknown_status_and_not_a_red_one(self, tmp_path: Path) -> None:
+        process = ProcessDoubles.exiting()
+        process.run.side_effect = ProcessNotRunnableError("sh: resource temporarily unavailable")
+
+        outcome = LocalControlRunner(process=process).run(ControlCommandMother.lint(), repo=_REPO, out=tmp_path)
+
+        assert outcome.status is ControlStatus.UNKNOWN
+
+    def test_a_process_that_cannot_be_launched_leaves_no_log_because_nothing_was_captured(self, tmp_path: Path) -> None:
+        process = ProcessDoubles.exiting()
+        process.run.side_effect = ProcessNotRunnableError("sh: resource temporarily unavailable")
+
+        outcome = LocalControlRunner(process=process).run(ControlCommandMother.lint(), repo=_REPO, out=tmp_path)
+
+        assert outcome.log is None
+
+    def test_a_process_that_cannot_be_launched_writes_nothing_under_the_requested_directory(
+        self, tmp_path: Path
+    ) -> None:
+        process = ProcessDoubles.exiting()
+        process.run.side_effect = ProcessNotRunnableError("sh: resource temporarily unavailable")
+        out = tmp_path / "round-1"
+
+        LocalControlRunner(process=process).run(ControlCommandMother.lint(), repo=_REPO, out=out)
+
+        assert not out.exists()
+
+
+class TestTheOutDirectoryIsCreatedOnDemand:
+    def test_a_directory_that_does_not_exist_yet_is_created_before_the_log_is_written(self, tmp_path: Path) -> None:
+        process = ProcessDoubles.exiting(code=0)
+        out = tmp_path / "round-1"
+
+        LocalControlRunner(process=process).run(ControlCommandMother.lint(), repo=_REPO, out=out)
+
+        assert (out / f"{ControlCommandMother.LINT_NAME}.log").exists()
 
 
 class TestWhereTheOutputEnds:
@@ -74,7 +114,7 @@ class TestTheLogIsNeverReopened:
 
         outcome = LocalControlRunner(process=process).run(ControlCommandMother.lint(), repo=_REPO, out=tmp_path)
 
-        assert outcome.ruling is Ruling.PASS
+        assert outcome.status is ControlStatus.GREEN
 
     @staticmethod
     def _forbid_rereading(monkeypatch: pytest.MonkeyPatch) -> None:

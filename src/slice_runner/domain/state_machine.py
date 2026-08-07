@@ -51,6 +51,8 @@ class StateMachine:
                 return self._moving_to(run, Step.VERIFY)
             case Outcome.FAILED:
                 return self._retrying_a_mechanical_failure(run)
+            case Outcome.INDETERMINATE:
+                return self._ticking(run)
             case _:
                 self._impossible(run, outcome)
 

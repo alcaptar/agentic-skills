@@ -86,6 +86,16 @@ class TestSelectSlice:
         with pytest.raises(NoSliceLeftError, match=str(_ISSUE)):
             query.execute(_PARAMS)
 
+    def test_an_issue_with_every_slice_closed_still_carries_what_was_left_dangling_among_its_siblings(
+        self, query: SelectSlice, repository: Mock
+    ) -> None:
+        repository.read_children.return_value = (SubIssueMother.dangling(),)
+
+        with pytest.raises(NoSliceLeftError) as raised:
+            query.execute(_PARAMS)
+
+        assert raised.value.dangling == (SubIssueMother.dangling(),)
+
     def test_with_two_slices_runnable_the_one_that_comes_first_is_the_one_that_runs(
         self, query: SelectSlice, repository: Mock
     ) -> None:
@@ -188,3 +198,14 @@ class TestSelectingTheSliceNamedByTheCaller:
 
         with pytest.raises(NoSliceLeftError, match=SubIssueMother.closed().slice_id):
             query.execute(params)
+
+    def test_a_slice_id_closed_by_github_while_its_own_run_was_open_still_closes_that_run_instead_of_only_raising(
+        self, query: SelectSlice, repository: Mock
+    ) -> None:
+        repository.read_children.return_value = (SubIssueMother.dangling(), SubIssueMother.of_another_repo())
+        params = SelectSliceParams(repo=_REPO, issue=_ISSUE, slice_id=SubIssueMother.dangling().slice_id)
+
+        with pytest.raises(NoSliceLeftError) as raised:
+            query.execute(params)
+
+        assert raised.value.dangling == (SubIssueMother.dangling(),)

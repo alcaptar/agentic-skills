@@ -6,10 +6,10 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from slice_runner.domain.ruling import Ruling
+    from slice_runner.domain.control_status import ControlStatus
 
 
 @dataclass(frozen=True, kw_only=True, slots=True)
 class ControlOutcome:
-    ruling: Ruling
-    log: Path
+    status: ControlStatus
+    log: Path | None = None

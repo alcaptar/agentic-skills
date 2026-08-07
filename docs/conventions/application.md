@@ -63,13 +63,16 @@ demasiado: la respuesta por defecto ahi es partirlo, no empaquetarle los argumen
   compara. `reintentos_implement` del registro durable **no** es un contador mas que nadie lleve: es la
   suma de los tres reintentos, porque esas son las unicas vueltas al paso de implementar.
 
-  Lo que **si** acumula por invocacion son tres, y los tres estan declarados fuera de aqui:
+  Lo que **si** acumula por invocacion son cuatro, y los cuatro estan declarados fuera de aqui:
   `ConductSliceProgress.waited_seconds` -porque el tope de espera acota la invocacion y no el run
   (`docs/conventions/domain.md`)-, `ConductSliceProgress.spends` -porque el gasto todavia no viaja en el
-  `Run` persistido, que es deuda declarada en `docs/conventions/infrastructure.md`- y
+  `Run` persistido, que es deuda declarada en `docs/conventions/infrastructure.md`-,
   `ConductSliceProgress.verdicts` -porque la fila durable cuenta los hallazgos de **todas** las vueltas del
-  juez y los intermedios no los ve nadie mas-. Los dos primeros se los pasa
-  a `Budgets` para que decida; seguir sin llevar el numero seria imposible, porque nadie mas los ve.
+  juez y los intermedios no los ve nadie mas- y `ConductSliceProgress.control_rounds` -porque cada ronda
+  de controles necesita su propio directorio de log (`round-N`) para que el de la ronda que cierra el run
+  no se sobrescriba con el de la siguiente, y el conductor es quien sabe cuantas rondas lleva dadas-. Los
+  dos primeros se los pasa a `Budgets` para que decida; seguir sin llevar el numero seria imposible,
+  porque nadie mas los ve.
 
   De los veredictos acumulados salen las **dos vistas** que el conductor necesita, y son propiedades y no
   campos a proposito: `findings_of_the_last_round` es lo que la vuelta siguiente tiene que arreglar -las
