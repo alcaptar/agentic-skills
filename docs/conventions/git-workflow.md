@@ -36,9 +36,31 @@ git switch master && git pull --ff-only
 - **La integracion continua se comprueba contra el SHA que vas a mergear**, no contra "la rama": un
   `success` heredado del commit anterior se lee igual en la interfaz.
 
+## Dos slices en paralelo
+
+Dos slices se conducen a la vez en **worktrees distintos**, cada una en su rama. Lo que decide si pueden
+ir juntas no es el enunciado de la slice sino **los ficheros que acaba tocando**, y eso no se sabe hasta
+implementarla.
+
+- **No estimes el territorio por el nombre de la slice.** Se ha fallado dos veces haciendolo: una pareja
+  elegida como "la mas disjunta" mirando su fichero protagonista compartio cuatro ficheros, y otra
+  compartio siete, incluido uno que **las dos crearon**.
+- **Hay ficheros iman que toca casi cualquier slice**: `infrastructure/cli.py` -ahi se monta el grafo de
+  dependencias entero-, `src/slice_runner/tests/doubles.py`, `domain/exceptions.py`, `infrastructure/subcommand.py`, el
+  `README.md` y `docs/conventions/`. Compartir uno de esos no impide lanzar, pero garantiza una fusion.
+- **`application/actions/conduct_slice.py` es el cuello de botella del programa.** Dos slices que lo
+  toquen no van juntas: ahi el conflicto deja de ser cosmetico.
+- **Al lanzar en paralelo, declara el riesgo en vez de prometer que no lo hay**: "comparten `cli.py`, si
+  hay conflicto sera pequeno" es honesto; "son disjuntas" ha resultado falso mas veces de las que ha
+  resultado cierto.
+- **La segunda en mergear fusiona `master` en su rama, y eso no obliga a volver a juzgar.** Una fusion
+  no es codigo nuevo: se resuelve el conflicto, se pasan los controles y se sube. Volver a pagar al juez
+  por una resolucion de conflicto es gastar la garantia donde no aporta.
+
 ## Antipatrones
 
 - Un commit en `master`.
+- Dar dos slices por disjuntas sin haber mirado que ficheros toca cada una.
 - `--squash` o `--rebase` al mergear.
 - Un cuerpo de pull request que resume el diff.
 - `git add -A`, o dar por bueno un commit sin comprobar que el indice iguala el arbol.
