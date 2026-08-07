@@ -5,9 +5,8 @@ Pydantic.
 
 ## Value objects
 
-- **Dataclasses `frozen=True, kw_only=True, slots=True`.** Sin excepciones: si algo se construia por
-  partes y luego se mutaba, se construye una vez al final o se usa `dataclasses.replace`. Es lo que
-  hizo falta en `parse_body` y en `comprueba_higiene_pr`.
+- **Dataclasses `frozen=True, kw_only=True, slots=True`.** Sin excepciones: lo que se construia por
+  partes y luego se mutaba, se construye una vez al final o se rehace con `dataclasses.replace`.
 - Sin sufijo `VO` ni `ValueObject`.
 - Datos y, si hace falta, comportamiento propio. **Nada de serializacion**: convertir a las claves de
   un contrato externo es trabajo de la frontera (`docs/conventions/infrastructure.md`).
@@ -99,18 +98,12 @@ implementador declaro, y la tupla vacia es el indice limpio. Las decisiones que 
 - **Un artefacto prohibido lo es aunque este declarado.** `StagedHygiene.FORBIDDEN_PREFIXES` es un
   backstop, no una regla mas del allow-list: si lo pudiera levantar quien declara las rutas, no
   protegeria de nada.
-- **Un rechazo de higiene no gasta presupuesto de controles: esta deuda ya esta pagada.** `ConductSlice`
-  lo convertia en `Outcome.FAILED`, que la maquina de estados no distinguia de un test en rojo, asi que
-  consumia `control_retries` y acababa cerrando el run con `bloqueada:controles`. **Son cosas
-  distintas**: un control rojo es codigo que falla y lo puede arreglar otra vuelta del implementador; un
-  rechazo de higiene es un informe incompleto -toco ficheros que no declaro- y no dice nada sobre si el
-  codigo esta bien. Costo dos runs enteros -slice-05 y slice-07, 23 y 22 dolares, los dos con el arbol
-  pasando sus controles- antes de que el motivo del rechazo llegara siquiera al implementador. Ahora
-  `ConductSlice` lo convierte en `Outcome.HYGIENE_REJECTED`, que `StateMachine` retira con su propio
-  `Budgets.hygiene_retries` y su propio contador en `Run.hygiene_retries`, y agotarlo cierra el run con
-  `RunState.BLOCKED_HYGIENE` -etiqueta `bloqueada:higiene`, veredicto durable `bloqueada-higiene`,
-  distinto de `bloqueada-controles` igual que `veredicto-incoherente` lo es de `llamada-fallida` en los
-  descartes del juez-.
+- **Un rechazo de higiene no gasta presupuesto de controles.** **Son cosas distintas**: un control rojo
+  es codigo que falla y lo puede arreglar otra vuelta del implementador; un rechazo de higiene es un
+  informe incompleto -toco ficheros que no declaro- y no dice nada sobre si el codigo esta bien. Por eso
+  tiene resultado propio (`Outcome.HYGIENE_REJECTED`), contador propio y presupuesto propio, y agotarlo
+  cierra el run con un estado que nombra la higiene y no los controles. **Dos causas que no se arreglan
+  igual no comparten contador**, aqui y en los descartes del juez.
 - **Fail-closed sin rama especial.** Con `declared` vacio todo lo staged sale `NOT_DECLARED`, que es lo
   que cae solo de la regla general. Y **"nada staged" no es asunto de esta politica**: eso ya lo dice
   `EmptyIndexError` cuando se va a leer el diff, y reimplementarlo aqui seria un segundo sitio donde
@@ -123,92 +116,36 @@ implementador declaro, y la tupla vacia es el indice limpio. Las decisiones que 
   pone `make check` en rojo.
 
 Las decisiones de `StateMachine` y de los `Budgets` que le entran tampoco son deriva, y estan aqui para
-que no se "arreglen" hacia el lado facil. **Los numeros de este apartado no son censo del codigo: son la
-regla**, medidos y con su motivo, y por eso se escriben.
+que no se "arreglen" hacia el lado facil. **Los valores concretos viven en `Budgets`, y de donde sale cada
+uno esta en `docs/design-notes.md`**: aqui va la regla que los gobierna, no la medicion que los fijo.
 
-- **La separacion minima entre ticks es una sola, para todos los tipos de tick.** La prosa solo pone
-  numero donde la cuenta es load-bearing -la ventana de gracia de la integracion continua-, y deja los
-  demas en "ticks acotados con un timeout razonable". Un segundo campo para el tick del merge seria un
-  numero que nadie ha medido; el que hay sale de un caso real medido en dos pull requests, asi que
-  gobierna las tres esperas. Consecuencia aceptada: mover el de la ventana mueve tambien la cadencia con
-  la que se sondea el merge.
-- **El tope de espera de una invocacion son 30 minutos (`total_wait_seconds`), y acota la invocacion, no
-  el run.** La integracion continua de este repo esta medida entre 15 y 33 segundos sobre 25 runs, asi
-  que el numero no lo fija ella: lo fija el repo destino peor, y hay uno escrito -un `make test` de ~20
-  minutos, en `skills/slice-spec/SKILL.md`- que hay que despejar con margen. Por arriba lo acota la otra
-  espera: el merge es **una decision humana**, y 30 minutos es lo bastante corto para que agotarlos
-  termine la invocacion en vez de retener el proceso durante horas, que es lo que prescribe el paso 10 de
-  `skills/slice-runner/SKILL.md`. **Agotarlo no cierra el run**: lo deja abierto y persistido en su paso,
-  con `wait-exhausted` diciendo que reinvocar es justo lo que toca.
-- **El tope de una llamada a un proceso externo es una hora (`process_timeout_seconds`), y es un backstop
-  contra una llamada que no vuelve, no un valor de ajuste.** Vive en `Budgets` -aunque quien lo aplica sea
-  un adaptador- porque es el mismo tipo de dato que los otros: un numero medido con el que se acota una
-  espera, y tenerlo aqui es lo que evita que cada adaptador se invente el suyo. Lo mas largo que se ha
-  medido llamar son los sobres de `claude -p` de `src/slice_runner/tests/payloads/`, cuyo mayor tarda 51
-  segundos, y lo mas largo declarado es el `make test` de ~20 minutos de `skills/slice-spec/SKILL.md`: una
-  hora los despeja a los dos con margen, que es lo que se le pide a un backstop -ponerlo bajo no ahorra
-  nada, mata un control sano a mitad-.
-
-  **Es un solo numero para todas las clases de llamada** -el harness, los controles y los `git`/`gh`-, por
-  el mismo motivo que la separacion entre ticks es una sola: un campo por clase serian numeros que
-  nadie ha medido. Consecuencia aceptada: un `gh` colgado tarda una hora en morir, cuando por su
-  naturaleza sobraban segundos. Sigue siendo acotado, que es lo que el tope existe para garantizar.
-- **El descarte del juez -devolver algo que no es su veredicto- no tiene presupuesto propio.** Es fiel a
-  la prosa: no gasta reintento porque **no se ha tocado el codigo**, asi que no es un intento de la fase.
-  Lo que cambia al pasar a programa es quien lo acota: antes, la persona mirando; ahora, el presupuesto de
-  coste del bullet siguiente, que **si** cierra (`over-budget` -> `aborted-budget`). Darle un contador
-  propio seria inventar una politica que ninguna medicion sostiene; dejarlo sin ningun cierre seria un
-  bucle que paga una llamada al harness por vuelta y no termina nunca.
-- **El coste de una slice son 50 dolares (`slice_cost_usd`), y es un backstop contra un bucle sin cierre,
-  no un valor de ajuste.** Nacio en 25 $ cuando el registro durable no tenia ni un dolar real y lo unico
-  medido eran las llamadas grabadas en `src/slice_runner/tests/payloads/`, cuya mayor son **0.343 $**: dos
-  ordenes de magnitud de margen sobre lo unico que se sabia. Ese parrafo prometia re-fijarlo con dolares
-  reales en cuanto hubiera muestras, y subio a 50 $ con cinco -**5.14, 10.75, 15.07, 25.46 y 27.73 $**-,
-  todas con Opus porque ninguna invocacion declaraba modelo todavia. El numero elegido como techo
-  inalcanzable resulto estar *dentro* del rango normal: **dos slices sanas murieron con
-  `abortada:presupuesto`**, y las dos justo despues de que el juez devolviera `PASA`, porque el limite se
-  comprobaba tras pagar la llamada -se tiraba una aprobacion ya pagada en vez de impedir la siguiente
-  llamada-.
-
-  **Esto ya esta corregido**: `cost_exhausted` se sigue comprobando tras la llamada para todo lo demas,
-  pero un veredicto con `ruling` `PASA` -apruebe limpio o con hallazgos no bloqueantes- nunca se convierte
-  en `over-budget`, porque entregar (`OPEN_PULL_REQUEST`) no cuesta harness y el limite solo tiene que
-  impedir la **siguiente** llamada. Esa siguiente llamada la corta `Budgets.exhausted(total)`,
-  comprobado **antes** de invocar al implementador o al juez: si el total ya esta agotado, la llamada no
-  se hace y el paso sale como `over-budget` sin gastar nada mas. Las dos comprobaciones conviven a
-  proposito -la de despues sigue cerrando el bucle de descartes del juez del bullet anterior, la de antes
-  es la que faltaba para no tirar una aprobacion ya pagada-.
-
-  El techo sube a 50 $ **sin tocar que se cuenta**: sigue sumando todas las llamadas del run, y por eso el
-  descarte del juez sigue acotado (bullet anterior). Contar solo al implementador abarataria el numero a
-  costa de dejar ese bucle sin ningun cierre, que es exactamente lo que ese bullet existe para impedir.
-
-  El otro lado de la misma medicion es que **el implementador fija su modelo** (`ImplementerInvocation.
-  MODEL`) en vez de heredar el de quien lanza el run: los 25-28 $ se pagaron con Opus porque ninguna
-  invocacion declaraba modelo. El juez **no** lo fija a proposito, y hay test de las dos cosas: el que
-  produce se puede permitir el barato porque su trabajo lo revisa otro; el que juzga es el ultimo control
-  antes de una pull request, y ahi ahorrar es ahorrar en la garantia.
-
-  Con el implementador ya fijando Sonnet, la muestra crecio de cinco a siete: las cinco de Opus de arriba
-  mas dos con Sonnet, **8.77 y 13.75 $**, bastante por debajo del rango de Opus -confirma que fijar el
-  modelo barato abarata la slice tipica sin tocar el backstop-. El techo de 50 $ sigue con margen sobre
-  las dos familias y **no se toca**: lo que se re-fija aqui es el motivo, con la muestra completa y con el
-  descarte-de-aprobacion ya cerrado, no el numero.
-
-  Y **un gasto no medido cuenta como agotado**, no como cero: `HarnessSpend` distingue "todavia no se ha
-  medido nada" de "cero medido" (`measured`), y lo que no se puede sumar no se puede acotar, asi que un
-  harness que jamas deja medicion -el sobre no llego a parsearse- cierra el run en vez de girar gratis
-  para siempre. Es la misma eleccion fail-closed que `CiStatus.UNKNOWN`: el precio del falso positivo es
-  una reinvocacion, y el del falso negativo es el bucle que este numero existe para cortar.
-
-  **La pregunta se hace por llamada, no por el agregado**, y esa firma es load-bearing:
-  `cost_exhausted(call=..., total=...)` mira primero si **esa** llamada dejo medicion y solo despues suma.
-  Preguntarselo al agregado tenia el agujero entero dentro: como una llamada sin medicion no anade nada a
-  la suma, bastaba **una** medicion previa en la invocacion -el `implement` del propio run- para que el
-  total quedase `measured` para siempre, y a partir de ahi cada llamada que muriera sin sobre parseable
-  dejaba el total congelado por debajo del limite. El descarte del juez vuelve al mismo paso con
-  `wait_seconds=0` y sin presupuesto propio, asi que eso era exactamente el bucle que paga una llamada al
-  harness por vuelta y no termina nunca.
+- **Un numero por concepto, no uno por caso.** Hay una sola separacion minima entre ticks para todas las
+  esperas y un solo tope para todas las clases de llamada a un proceso externo. Partirlos por caso serian
+  numeros que nadie ha medido, y un numero sin medicion no es una regla: es una preferencia. Consecuencia
+  aceptada, y se acepta a proposito: mover el de la ventana mueve tambien la cadencia del sondeo del
+  merge, y un `gh` colgado tarda en morir lo mismo que una suite entera.
+- **El tope de espera acota la invocacion, no el run.** Agotarlo **no cierra** nada: deja el run abierto y
+  persistido en su paso, diciendo que reinvocar es justo lo que toca.
+- **El tope por llamada vive en `Budgets` aunque quien lo aplique sea un adaptador**, porque es el mismo
+  tipo de dato que los demas: un numero medido con el que se acota una espera. Tenerlo aqui es lo que
+  evita que cada adaptador se invente el suyo.
+- **El descarte del juez -devolver algo que no es su veredicto- no tiene presupuesto propio.** No gasta
+  reintento porque **no se ha tocado el codigo**, asi que no es un intento de la fase. Quien lo acota es el
+  presupuesto de coste, que **si** cierra. Darle un contador propio seria inventar una politica que
+  ninguna medicion sostiene; dejarlo sin ningun cierre seria un bucle que paga una llamada al harness por
+  vuelta y no termina nunca.
+- **El presupuesto de coste impide la siguiente llamada; no tira la que ya se pago.** Un veredicto que
+  aprueba nunca se convierte en `over-budget` -entregar no cuesta harness-, y la llamada siguiente se corta
+  **antes** de invocar, no despues de pagarla. Las dos comprobaciones conviven a proposito: la de despues
+  cierra el bucle de descartes del bullet anterior, la de antes es la que impide tirar una aprobacion.
+- **La pregunta del coste se hace por llamada, no por el agregado**, y esa firma es load-bearing: se mira
+  primero si **esa** llamada dejo medicion y solo despues se suma. Al agregado se le puede preguntar
+  eternamente sin que conteste que no, porque lo que no se mide no suma.
+- **Un gasto no medido cuenta como agotado**, no como cero: lo que no se puede sumar no se puede acotar.
+  Es la misma eleccion fail-closed que el indeterminado de la integracion continua: el precio del falso
+  positivo es una reinvocacion, y el del falso negativo es el bucle que el tope existe para cortar.
+- **Lo que se cuenta son todas las llamadas del run.** Contar solo al implementador abarataria el numero a
+  costa de dejar sin cierre el bucle del descarte.
 
 ## Excepciones
 

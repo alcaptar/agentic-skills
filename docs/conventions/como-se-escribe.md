@@ -18,7 +18,13 @@ que se mide el codigo**, en una forma que siga siendo verdad dentro de veinte sl
   regla; el registro duradero dice como se llego a ella.
 - **Ni senala ficheros reales como ancla normativa.** "Es el caso de este adaptador concreto" obliga
   a mantener la prosa cada vez que ese fichero se mueve. Si la regla necesita ancla, se da como
-  **molde**.
+  **molde**. Lo que si se nombra es **la herramienta que mide** -el test que compara las dos copias de
+  un contrato, el linter que caza la firma larga-: eso no es un ejemplo de como se hace, es donde falla
+  si no se hace.
+- **Cada fichero cubre una capa, y un tema que se quiera cargar solo se saca a fichero propio.** No por
+  tamano: un documento largo y enfocado se cumple igual que uno corto -esta medido, y el como esta en
+  `docs/design-notes.md`-. Es por **poder cargar solo lo que toca**: mientras un tema viva dentro de
+  otro, quien solo necesita ese tema se lleva los dos.
 
 ## El molde, cuando hace falta
 
@@ -38,10 +44,9 @@ class Local{Cosa}({Cosa}):
 - **La ruta del molde no empieza por una carpeta de este repo.** Si empezara por una, el contrato de
   rutas citadas (`tests/test_skill_contracts.py`) la leeria como una afirmacion sobre el arbol y
   fallaria, con razon: en backticks, una ruta de este repo es una promesa de que existe.
-- **El molde no mejora el acierto: ahorra el trabajo de averiguarlo.** Medido en un playground con la
-  regla del puerto que solo consume la infraestructura: con molde y sin molde se acierta igual, pero
-  sin molde se gastan tres veces mas turnos yendo a mirar el arbol para confirmar. Por eso el molde se
-  pone donde el caso es frecuente, no en todas las reglas.
+- **El molde no mejora el acierto: ahorra el trabajo de averiguarlo.** Sin el se acierta igual, pero se
+  gastan turnos yendo a mirar el arbol para confirmar. Por eso el molde se pone donde el caso es
+  frecuente, no en todas las reglas. La medicion, en `docs/design-notes.md`.
 
 ## Antipatrones
 
