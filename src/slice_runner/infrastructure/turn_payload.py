@@ -13,7 +13,9 @@ class TurnPayload(ContractModel):
     slice_id: str
     step: Step
     number: int
+    tool: str
+    target: str | None = None
 
     @classmethod
     def from_domain(cls, turn: HarnessTurn) -> Self:
-        return cls(slice_id=turn.slice_id, step=turn.step, number=turn.number)
+        return cls(slice_id=turn.slice_id, step=turn.step, number=turn.number, tool=turn.tool, target=turn.target)
