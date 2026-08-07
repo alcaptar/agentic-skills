@@ -267,9 +267,9 @@ El codigo de salida es el contrato con quien lo invoca:
 
 `1` es un veredicto y `2` no lo es: esa es la distincion que hace el codigo de salida y que un booleano
 perderia. Del `5` en adelante la pregunta es otra -¿que hace quien invoca ahora?-, y por eso hay un codigo
-por decision y no uno por excepcion: `7` y `10` se reinvocan, `5`, `6`, `9` y `12` no. El `7` esperando
-el merge es la excepcion dentro del propio codigo: la pull request nace en borrador, asi que reinvocar
-sin sacarla de ahi repite la misma espera.
+por decision y no uno por excepcion: **cada fila de la tabla dice si reinvocar sirve o no**, que es lo
+unico que quien automatiza necesita saber. El `7` esperando el merge es la excepcion dentro del propio
+codigo: la pull request nace en borrador, asi que reinvocar sin sacarla de ahi repite la misma espera.
 
 ### La secuencia y los presupuestos, interrogables sin montar un run
 
