@@ -150,6 +150,16 @@ class TestTheSliceDataThatTravelsWithTheBrief:
             "- logs de los controles en rojo (1):\n  - /tmp/slice-runner/logs/lint.log"
         )
 
+    def test_a_round_refused_for_a_dirty_index_says_so_and_names_the_files_that_were_not_declared(self) -> None:
+        sent = self._sent(AssignmentMother.of_a_round_after_a_dirty_index())
+
+        assert "la vuelta anterior no llego a medirse" in sent
+        assert "src/leftover.py (not-declared)" in sent
+        assert "declara en tu informe TODO fichero que toques" in sent
+
+    def test_a_round_that_measured_carries_no_refusal_because_there_was_nothing_to_refuse(self) -> None:
+        assert "no llego a medirse" not in self._sent(AssignmentMother.of_the_first_round())
+
     def test_a_repo_exempt_from_controls_carries_its_reason_and_no_command_to_run(self) -> None:
         assert "- controles del repo: ninguno - la integracion continua solo publica en master\n" in self._sent(
             AssignmentMother.of_a_repo_exempt_from_controls()
