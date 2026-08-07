@@ -13,10 +13,14 @@ from slice_runner.infrastructure.process import (
     ProcessOutput,
     ProcessTimedOutError,
 )
+from slice_runner.infrastructure.turn_log import TurnLog
 from slice_runner.tests.real_process import Real
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from slice_runner.infrastructure.call_trace import HarnessCall
+    from slice_runner.infrastructure.turn_log import HarnessTurn
 
 
 class ProcessDoubles:
@@ -36,7 +40,14 @@ class RecordedProcess(Process):
         self.cwd: str | None = None
         self.calls = 0
 
-    def run(self, argv: list[str], *, stdin: str, cwd: str | None = None) -> ProcessOutput:
+    def run(
+        self,
+        argv: list[str],
+        *,
+        stdin: str,
+        cwd: str | None = None,
+        on_line: Callable[[str], None] | None = None,
+    ) -> ProcessOutput:
         self.argv = argv
         self.stdin = stdin
         self.cwd = cwd
@@ -45,13 +56,47 @@ class RecordedProcess(Process):
         return ProcessOutput(code=self._code, stdout=json.dumps(self._output), stderr="")
 
 
+class StreamingProcess(Process):
+    def __init__(self, stdout: str, *, code: int = 0) -> None:
+        self._stdout = stdout
+        self._code = code
+        self.argv: list[str] = []
+        self.stdin = ""
+        self.cwd: str | None = None
+
+    def run(
+        self,
+        argv: list[str],
+        *,
+        stdin: str,
+        cwd: str | None = None,
+        on_line: Callable[[str], None] | None = None,
+    ) -> ProcessOutput:
+        self.argv = argv
+        self.stdin = stdin
+        self.cwd = cwd
+        if on_line is not None:
+            for line in self._stdout.splitlines():
+                if line.strip():
+                    on_line(line)
+
+        return ProcessOutput(code=self._code, stdout=self._stdout, stderr="")
+
+
 class UnrunnableJudge(Process):
     def __init__(self) -> None:
         self._real = Real.process()
 
-    def run(self, argv: list[str], *, stdin: str, cwd: str | None = None) -> ProcessOutput:
+    def run(
+        self,
+        argv: list[str],
+        *,
+        stdin: str,
+        cwd: str | None = None,
+        on_line: Callable[[str], None] | None = None,
+    ) -> ProcessOutput:
         if argv[0] != JudgeInvocation.EXECUTABLE:
-            return self._real.run(argv, stdin=stdin, cwd=cwd)
+            return self._real.run(argv, stdin=stdin, cwd=cwd, on_line=on_line)
 
         raise ProcessNotRunnableError(f"{argv[0]}: no such executable")
 
@@ -59,7 +104,14 @@ class UnrunnableJudge(Process):
 class TimingOutProcess(Process):
     CAP_SECONDS: ClassVar[int] = 1
 
-    def run(self, argv: list[str], *, stdin: str, cwd: str | None = None) -> ProcessOutput:
+    def run(
+        self,
+        argv: list[str],
+        *,
+        stdin: str,
+        cwd: str | None = None,
+        on_line: Callable[[str], None] | None = None,
+    ) -> ProcessOutput:
         raise ProcessTimedOutError(f"{argv[0]}: killed after {self.CAP_SECONDS}s")
 
 
@@ -74,7 +126,14 @@ class ScriptedProcess(Process):
         self._outputs = list(outputs)
         self.calls: list[RecordedCall] = []
 
-    def run(self, argv: list[str], *, stdin: str = "", cwd: str | None = None) -> ProcessOutput:
+    def run(
+        self,
+        argv: list[str],
+        *,
+        stdin: str = "",
+        cwd: str | None = None,
+        on_line: Callable[[str], None] | None = None,
+    ) -> ProcessOutput:
         self.calls.append(RecordedCall(argv=list(argv), stdin=stdin))
 
         return self._outputs.pop(0)
@@ -100,7 +159,14 @@ class AnsweringByArgv(Process):
         self._answers = answers
         self.calls: list[RecordedCall] = []
 
-    def run(self, argv: list[str], *, stdin: str = "", cwd: str | None = None) -> ProcessOutput:
+    def run(
+        self,
+        argv: list[str],
+        *,
+        stdin: str = "",
+        cwd: str | None = None,
+        on_line: Callable[[str], None] | None = None,
+    ) -> ProcessOutput:
         self.calls.append(RecordedCall(argv=list(argv), stdin=stdin))
         for answer in self._answers:
             if answer.answers(argv):
@@ -123,9 +189,16 @@ class RealExceptTheJudge(Process):
         self.stdin = ""
         self.calls = 0
 
-    def run(self, argv: list[str], *, stdin: str, cwd: str | None = None) -> ProcessOutput:
+    def run(
+        self,
+        argv: list[str],
+        *,
+        stdin: str,
+        cwd: str | None = None,
+        on_line: Callable[[str], None] | None = None,
+    ) -> ProcessOutput:
         if argv[0] != JudgeInvocation.EXECUTABLE:
-            return self._real.run(argv, stdin=stdin, cwd=cwd)
+            return self._real.run(argv, stdin=stdin, cwd=cwd, on_line=on_line)
 
         self.argv = argv
         self.stdin = stdin
@@ -140,3 +213,11 @@ class RecordedTrace(CallTrace):
 
     def record(self, call: HarnessCall) -> None:
         self.calls.append(call)
+
+
+class RecordedTurnLog(TurnLog):
+    def __init__(self) -> None:
+        self.turns: list[HarnessTurn] = []
+
+    def observe(self, turn: HarnessTurn) -> None:
+        self.turns.append(turn)

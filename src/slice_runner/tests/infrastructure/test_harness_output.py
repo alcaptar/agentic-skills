@@ -71,6 +71,34 @@ class TestTheSessionEveryCallRunsUnder:
             HarnessOutput.from_dict(HarnessEnvelopeMother.plus(session_id=17))
 
 
+class TestAStreamedEnvelope:
+    def test_the_spend_extracts_the_same_as_the_single_object_envelope(self) -> None:
+        spend = HarnessOutput.from_process(self._streamed()).to_domain()
+
+        assert (spend.cost_usd, spend.turns, spend.duration_ms) == (0.0180821, 3, 4236)
+
+    def test_the_structured_output_is_the_one_carried_by_the_final_line_and_not_a_turn_in_between(self) -> None:
+        envelope = HarnessOutput.from_process(self._streamed())
+
+        assert envelope.structured_output == {"paths": [{"path": "hello.py", "kind": "production"}], "left_out": []}
+
+    def test_permission_denials_still_extract_empty_when_none_of_the_turns_were_denied(self) -> None:
+        envelope = HarnessOutput.from_process(self._streamed())
+
+        assert envelope.permission_denials == ()
+
+    def test_the_lines_that_are_not_the_final_result_do_not_have_to_validate_at_all(self) -> None:
+        stdout = HarnessEnvelopeMother.streamed()
+        turns = "\n".join(line for line in stdout.splitlines() if json.loads(line).get("type") == "assistant")
+
+        assert turns
+        assert "structured_output" not in turns
+
+    @staticmethod
+    def _streamed() -> ProcessOutput:
+        return ProcessOutput(code=0, stdout=HarnessEnvelopeMother.streamed(), stderr="")
+
+
 class TestWhatTheProcessLeftBehind:
     def test_a_call_the_harness_declares_failed_is_rejected(self) -> None:
         output = self._carrying(HarnessEnvelopeMother.plus(is_error=True))

@@ -12,7 +12,7 @@ from slice_runner.infrastructure.claude_implementer import ClaudeImplementer
 from slice_runner.infrastructure.implementer_invocation import ImplementerInvocation
 from slice_runner.infrastructure.slice_implementer_brief import SliceImplementerBrief
 from slice_runner.tests.argv import Argv
-from slice_runner.tests.doubles import RecordedProcess, RecordedTrace
+from slice_runner.tests.doubles import RecordedProcess, RecordedTrace, RecordedTurnLog, StreamingProcess
 from slice_runner.tests.mothers.assignment_mother import AssignmentMother
 from slice_runner.tests.mothers.harness_spend_mother import HarnessSpendMother
 from slice_runner.tests.mothers.judge_output_mother import HarnessEnvelopeMother
@@ -28,7 +28,7 @@ _RECORDED = "implementer-two-paths"
 class OneRound:
     @staticmethod
     def implemented(process: Process) -> Implementation:
-        return ClaudeImplementer(process=process, trace=RecordedTrace()).implement(
+        return ClaudeImplementer(process=process, trace=RecordedTrace(), turns=RecordedTurnLog()).implement(
             AssignmentMother.of_the_first_round()
         )
 
@@ -54,8 +54,11 @@ class TestHowTheImplementerIsInvoked:
     def test_the_mcp_servers_are_bounded(self, argv: Argv) -> None:
         assert argv.contains("--strict-mcp-config")
 
-    def test_the_json_envelope_of_the_harness_is_asked_for(self, argv: Argv) -> None:
-        assert argv.value_of("--output-format") == "json"
+    def test_the_streamed_envelope_of_the_harness_is_asked_for_so_its_turns_can_be_watched_as_they_happen(
+        self, argv: Argv
+    ) -> None:
+        assert argv.value_of("--output-format") == "stream-json"
+        assert argv.contains("--verbose")
 
     def test_the_schema_that_travels_is_flat_with_the_enum_and_the_nested_object_resolved(self, argv: Argv) -> None:
         assert json.loads(argv.value_of("--json-schema")) == {
@@ -97,7 +100,9 @@ class TestWhereTheProcessRuns:
     def test_the_repo_becomes_the_working_directory_of_the_process_and_not_only_prompt_text(self) -> None:
         process = RecordedProcess(HarnessEnvelopeMother.recorded(_RECORDED))
 
-        ClaudeImplementer(process=process, trace=RecordedTrace()).implement(AssignmentMother.of_the_first_round())
+        ClaudeImplementer(process=process, trace=RecordedTrace(), turns=RecordedTurnLog()).implement(
+            AssignmentMother.of_the_first_round()
+        )
 
         assert process.cwd == AssignmentMother.REPO
 
@@ -107,7 +112,7 @@ class TestTheSliceDataThatTravelsWithTheBrief:
     def _sent(assignment: Assignment) -> str:
         process = RecordedProcess(HarnessEnvelopeMother.recorded(_RECORDED))
 
-        ClaudeImplementer(process=process, trace=RecordedTrace()).implement(assignment)
+        ClaudeImplementer(process=process, trace=RecordedTrace(), turns=RecordedTurnLog()).implement(assignment)
 
         return process.stdin
 
@@ -199,7 +204,9 @@ class TestTheTraceOfTheCall:
         process = RecordedProcess(HarnessEnvelopeMother.recorded(_RECORDED))
         trace = RecordedTrace()
 
-        ClaudeImplementer(process=process, trace=trace).implement(AssignmentMother.of_the_first_round())
+        ClaudeImplementer(process=process, trace=trace, turns=RecordedTurnLog()).implement(
+            AssignmentMother.of_the_first_round()
+        )
 
         assert [(call.slice_id, call.step, call.session) for call in trace.calls] == [
             ("slice-05", Step.IMPLEMENT, HarnessEnvelopeMother.SESSION_OF_THE_IMPLEMENTER)
@@ -210,9 +217,49 @@ class TestTheTraceOfTheCall:
         trace = RecordedTrace()
 
         with pytest.raises(PermissionDeniedError):
-            ClaudeImplementer(process=process, trace=trace).implement(AssignmentMother.of_the_first_round())
+            ClaudeImplementer(process=process, trace=trace, turns=RecordedTurnLog()).implement(
+                AssignmentMother.of_the_first_round()
+            )
 
         assert [call.session for call in trace.calls] == [HarnessEnvelopeMother.SESSION_OF_THE_IMPLEMENTER]
+
+
+class TestTheTurnsObservedWhileTheCallIsInFlight:
+    def test_every_assistant_line_of_a_real_streamed_call_is_observed_in_order(self) -> None:
+        process = StreamingProcess(HarnessEnvelopeMother.streamed())
+        turns = RecordedTurnLog()
+
+        ClaudeImplementer(process=process, trace=RecordedTrace(), turns=turns).implement(
+            AssignmentMother.of_the_first_round()
+        )
+
+        assert [(turn.slice_id, turn.step, turn.number) for turn in turns.turns] == [
+            ("slice-05", Step.IMPLEMENT, 1),
+            ("slice-05", Step.IMPLEMENT, 2),
+            ("slice-05", Step.IMPLEMENT, 3),
+            ("slice-05", Step.IMPLEMENT, 4),
+            ("slice-05", Step.IMPLEMENT, 5),
+        ]
+
+    def test_lines_that_are_not_an_assistant_turn_are_not_observed(self) -> None:
+        process = StreamingProcess('{"type":"system","subtype":"init"}\n' + HarnessEnvelopeMother.streamed())
+        turns = RecordedTurnLog()
+
+        ClaudeImplementer(process=process, trace=RecordedTrace(), turns=turns).implement(
+            AssignmentMother.of_the_first_round()
+        )
+
+        assert len(turns.turns) == 5
+
+    def test_a_line_that_is_not_json_at_all_is_skipped_instead_of_raising(self) -> None:
+        process = StreamingProcess("not json\n" + HarnessEnvelopeMother.streamed())
+        turns = RecordedTurnLog()
+
+        ClaudeImplementer(process=process, trace=RecordedTrace(), turns=turns).implement(
+            AssignmentMother.of_the_first_round()
+        )
+
+        assert len(turns.turns) == 5
 
 
 class TestANonEmptyPermissionDenialsFailsTheCall:
