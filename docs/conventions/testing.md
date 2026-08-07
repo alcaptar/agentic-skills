@@ -37,7 +37,7 @@ maquina. Escribir en `tmp_path` no entra.
 | `src/slice_runner/tests/` | El programa. Co-localizado dentro del paquete, espejando las capas. |
 | `tests/` | Los scripts de `skills/` y los **contratos entre `.md`**, que no tienen paquete donde vivir. |
 
-Lo compartido por los dos arboles vive en `src/slice_runner/tests/`, y hoy son dos modulos:
+Lo compartido por los dos arboles vive en `src/slice_runner/tests/`:
 `git_repo.py` -la clase `Git`, con la rama base, el helper de `git` y el repo recien inicializado- y
 `real_process.py` -`Real.process()`, el `LocalProcess` con los `Budgets` del repo, por el motivo que
 declara el apartado de Dobles-. **La direccion es esa** porque `src` entra

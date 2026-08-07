@@ -64,6 +64,102 @@ Flujo de trabajo objetivo: escribo specs; cada slice de la spec quiero que se im
 - Nivel 3 con Workflow fan-out: N implementadores en worktrees, aislamiento de entorno de test por worktree (COMPOSE_PROJECT_NAME/puertos), estrategia de orden de merge (serializar quien toque alembic).
 - Convencion para archivar/marcar planes ya entregados y que el selector de "siguiente slice" no tropiece con specs stale.
 
+## Como se escribe una convencion (lo que se midio)
+
+La regla vive en `docs/conventions/como-se-escribe.md`. Lo que la sostiene se midio en un playground
+-un mini-repo con la misma arquitectura, cinco repeticiones por variante-, porque la discusion llevaba
+rato siendo de intuiciones:
+
+- **El molde no mejora el acierto; ahorra el descubrimiento.** Con la regla del puerto que solo consume
+  la infraestructura, y el precedente del arbol jugando en contra, **las tres formas de darla acertaron
+  5/5**: regla sola, regla con puntero al fichero real, y regla con molde embebido. Lo que cambio fue el
+  trabajo: **5 turnos con molde frente a 19 sin el**. De ahi que el molde se ponga donde el caso es
+  frecuente y no en todas las reglas.
+- **El volumen no rompe el cumplimiento.** La misma regla enterrada entre otras ~280 lineas siguio
+  acertando 5/5. Por eso partir un documento **no** se justifica por su tamano; se justifica por poder
+  cargar un tema sin llevarse los otros, que es otra cosa.
+- **El censo es lo que se cobra.** Con una convencion que contaba los miembros de un enum y la tarea de
+  anadir uno, la convencion quedo mintiendo en **1 de 5** intentos. Pedir explicitamente que se
+  actualice lo arregla (5/5), pero el dato que decidio el diseno es otro: **con censo, el implementador
+  edita `docs/conventions/` en 4 y 5 de cada 5 intentos; sin censo, en 0**. Su propio brief le dice que
+  no tiene autoridad para cambiar la vara con la que se le mide, asi que una convencion que le obliga a
+  tocarla ha dejado de ser vara. Con cinco repeticiones la diferencia 4/5 frente a 5/5 no es
+  concluyente; la de la ultima columna, si.
+
+El origen: de 38 hallazgos bloqueantes o medios del dogfooding, **seis eran prosa caducada** -conteos y
+listas cerradas que la propia slice invalidaba-, y `infrastructure.md` concentraba 10 de los 18 de
+severidad alta.
+
+## El programa (`src/slice_runner/`)
+
+Lo que sigue vivia dentro de `docs/conventions/`, mezclado con las reglas. Se movio aqui cuando
+`docs/conventions/como-se-escribe.md` fijo que una convencion dice la regla y no narra como se llego a
+ella: el relato no es vara de nada, y leerlo cada vez que se va a escribir codigo es contexto que no
+mide. Las reglas que salen de estas decisiones siguen en su capa.
+
+### De donde salen los numeros de `Budgets`
+
+- **El tope de espera de una invocacion.** La integracion continua de este repo esta medida entre 15 y
+  33 segundos sobre 25 runs, asi que el numero no lo fija ella: lo fija el repo destino peor, y hay uno
+  escrito -un `make test` de ~20 minutos, en `skills/slice-spec/SKILL.md`- que hay que despejar con
+  margen. Por arriba lo acota la otra espera: el merge es **una decision humana**, y el tope tiene que
+  ser lo bastante corto para que agotarlo termine la invocacion en vez de retener el proceso durante
+  horas.
+- **El tope de una llamada a un proceso externo.** Lo mas largo que se ha medido llamar son los sobres
+  de `claude -p` de `src/slice_runner/tests/payloads/`, cuyo mayor tarda 51 segundos, y lo mas largo
+  declarado es ese `make test` de ~20 minutos. El valor elegido los despeja a los dos con margen, que es
+  lo que se le pide a un backstop: ponerlo bajo no ahorra nada, mata un control sano a mitad.
+- **El coste de una slice.** Nacio en 25 $ cuando el registro durable no tenia ni un dolar real y lo
+  unico medido eran las llamadas grabadas en `src/slice_runner/tests/payloads/`, cuya mayor son
+  **0.343 $**: dos ordenes de magnitud de margen sobre lo unico que se sabia. El numero elegido como
+  techo inalcanzable resulto estar *dentro* del rango normal -las primeras muestras reales fueron
+  **5.14, 10.75, 15.07, 25.46 y 27.73 $**, todas con Opus porque ninguna invocacion declaraba modelo
+  todavia-, y **dos slices sanas murieron con `abortada:presupuesto`**, las dos justo despues de que el
+  juez devolviera `PASA`, porque el limite se comprobaba tras pagar la llamada: se tiraba una aprobacion
+  ya pagada en vez de impedir la siguiente. Con el implementador fijando Sonnet la muestra crecio con
+  **8.77 y 13.75 $**, bastante por debajo del rango de Opus, lo que confirma que fijar el modelo barato
+  abarata la slice tipica sin tocar el backstop. El techo subio a 50 $ **sin tocar que se cuenta**.
+
+### El descarte de aprobacion pagada, y por que hay dos comprobaciones de coste
+
+La comprobacion de despues de la llamada cierra el bucle del descarte del juez -que no gasta reintento
+porque no se toco el codigo-, y la de antes es la que faltaba para no tirar una aprobacion ya pagada.
+Preguntarselo al **agregado** en vez de a la llamada tenia el agujero entero dentro: como una llamada sin
+medicion no anade nada a la suma, bastaba **una** medicion previa en la invocacion para que el total
+quedase medido para siempre, y a partir de ahi cada llamada que muriera sin sobre parseable dejaba el
+total congelado por debajo del limite.
+
+### Por que el implementador fija modelo y el juez no
+
+Los 25-28 $ se pagaron con Opus porque ninguna invocacion declaraba modelo. El que produce se puede
+permitir el barato porque su trabajo lo revisa otro; el que juzga es el ultimo control antes de una pull
+request, y ahi ahorrar es ahorrar en la garantia. Hay test de las dos cosas.
+
+### La duplicacion con `skills/`: por que se acepta
+
+Hubo una version del programa que reutilizaba `escribe_diff_bundle` y `valida_veredicto` de
+`controles.py` para no duplicar logica, y el resultado fue peor: obligaba a que el programa arrastrase el
+`pythonpath` del script, a escribir un `files.txt` que solo el flujo viejo necesita, y a pasar el
+veredicto por un validador que Pydantic ya hacia redundante. **Acoplar el flujo nuevo al viejo para
+ahorrar duplicacion sale mas caro que la duplicacion**, porque el viejo esta condenado.
+
+### El juez como objeto, y no como proveedor de prompt
+
+`Judge(rubric, tools, readable)` sustituye a un `PromptProvider` que solo devolvia texto. Con la rubrica,
+las herramientas y los directorios legibles repartidos por capas distintas, nada obligaba a que
+cuadrasen: la rubrica llego a ordenar cargar skills que el juez no podia leer, y el veredicto salia igual
+de limpio. Un puerto para un valor constante era indireccion; el invariante necesitaba un objeto. La
+forma viene del agente raiz de `roman_expert/chat_agents` en `mercadona/mo.staff.django-playground`.
+
+### La forma de una lista, extraida al tercer consumidor
+
+`CountedLines` vivio duplicada a proposito mientras solo la compartian dos prompts: cada uno es un
+contrato con un agente distinto y nada exige que se parezcan, asi que extraerla habria fijado un parecido
+que no era invariante. La convencion se escribio a si misma la condicion "con un tercer prompt se
+extrae", el entendimiento fue ese tercero, y la condicion se cumplio -aunque no sola: el juez veto la
+slice con severidad `alta` citando esa misma linea-. Que una condicion escrita se ejecute importa mas que
+la regla concreta; la que nadie ejecuta ensena que el fichero donde vive es opinion.
+
 ## deploy-watch
 
 ### Decisiones clave
