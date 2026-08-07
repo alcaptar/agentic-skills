@@ -53,6 +53,7 @@ if TYPE_CHECKING:
     from slice_runner.domain.sub_issue import SubIssue
     from slice_runner.domain.transition import Transition
     from slice_runner.domain.understanding_writer import UnderstandingWriter
+    from slice_runner.domain.verdict import Verdict
 
 
 @dataclass(frozen=True, kw_only=True, slots=True)
@@ -82,7 +83,7 @@ class ConductSliceProgress:
     label: IssueLabel | None
     paths: tuple[ReportedPath, ...] = field(default=())
     debt: tuple[str, ...] = field(default=())
-    findings: tuple[Finding, ...] = field(default=())
+    verdicts: tuple[Verdict, ...] = field(default=())
     spends: tuple[HarnessSpend, ...] = field(default=())
     control_logs: tuple[Path, ...] = field(default=())
     pull_request: int | None = None
@@ -92,6 +93,14 @@ class ConductSliceProgress:
     @property
     def spend(self) -> HarnessSpend:
         return HarnessSpend.summing(self.spends)
+
+    @property
+    def findings_of_the_last_round(self) -> tuple[Finding, ...]:
+        return self.verdicts[-1].findings if self.verdicts else ()
+
+    @property
+    def findings_of_every_round(self) -> tuple[Finding, ...]:
+        return tuple(finding for verdict in self.verdicts for finding in verdict.findings)
 
     @property
     def subissue(self) -> SubIssue:
@@ -250,7 +259,7 @@ class ConductSlice:
                 worktree=progress.params.worktree,
                 subissue=progress.subissue,
                 parent=progress.parent,
-                findings=progress.findings,
+                findings=progress.findings_of_the_last_round,
                 control_logs=progress.control_logs,
             )
         )
@@ -309,7 +318,7 @@ class ConductSlice:
             )
 
         judged = replace(
-            progress, spends=(*progress.spends, verification.spend), findings=verification.verdict.findings
+            progress, spends=(*progress.spends, verification.spend), verdicts=(*progress.verdicts, verification.verdict)
         )
 
         return self._within_budget(
@@ -415,7 +424,7 @@ class ConductSlice:
                 state=state,
                 run=progress.run,
                 spends=progress.spends,
-                findings=progress.findings,
+                findings=progress.findings_of_every_round,
                 discard_cause=progress.discard_cause,
             )
         )

@@ -59,6 +59,18 @@ class TestWhatTheHarnessMeasured:
             HarnessOutput.from_dict(HarnessEnvelopeMother.plus(duration_ms="a while"))
 
 
+class TestTheSessionEveryCallRunsUnder:
+    def test_an_envelope_without_it_is_rejected_because_a_conversation_nobody_can_find_again_is_no_trace_at_all(
+        self,
+    ) -> None:
+        with pytest.raises(InvalidHarnessOutputError, match="session_id"):
+            HarnessOutput.from_dict(HarnessEnvelopeMother.without("session_id"))
+
+    def test_a_session_that_is_not_text_is_rejected_because_a_number_cannot_name_a_conversation(self) -> None:
+        with pytest.raises(InvalidHarnessOutputError, match="session_id"):
+            HarnessOutput.from_dict(HarnessEnvelopeMother.plus(session_id=17))
+
+
 class TestWhatTheProcessLeftBehind:
     def test_a_call_the_harness_declares_failed_is_rejected(self) -> None:
         output = self._carrying(HarnessEnvelopeMother.plus(is_error=True))
