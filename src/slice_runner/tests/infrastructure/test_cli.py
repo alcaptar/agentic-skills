@@ -972,7 +972,7 @@ class TestWhenTheRunStaysOpen:
                 Answer(to=("git", "switch")),
                 Answer(to=("gh", "pr", "list"), stdout=GhConversationMother.no_open_pull_request()),
                 Answer(
-                    to=(UnderstandingInvocation.MODEL, "json"),
+                    to=(UnderstandingInvocation.MODEL, "stream-json"),
                     stdout=json.dumps(
                         HarnessEnvelopeMother.carrying(
                             {"understanding": "entiendo la slice y este es mi plan"}, recorded=_IMPLEMENTER_PAYLOAD

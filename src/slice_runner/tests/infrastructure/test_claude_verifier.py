@@ -7,7 +7,13 @@ from slice_runner.domain.ruling import Ruling
 from slice_runner.domain.step import Step
 from slice_runner.infrastructure.claude_verifier import ClaudeVerifier
 from slice_runner.infrastructure.judge_invocation import JudgeInvocation
-from slice_runner.tests.doubles import RecordedProcess, RecordedSpendLog, RecordedTrace
+from slice_runner.tests.doubles import (
+    RecordedProcess,
+    RecordedSpendLog,
+    RecordedTrace,
+    RecordedTurnLog,
+    StreamingProcess,
+)
 from slice_runner.tests.mothers.harness_call_spend_mother import HarnessCallSpendMother
 from slice_runner.tests.mothers.harness_spend_mother import HarnessSpendMother
 from slice_runner.tests.mothers.judge_output_mother import HarnessEnvelopeMother, JudgeVerdictMother
@@ -21,9 +27,9 @@ class TestTheVerdictOfARecordedCall:
     def test_the_envelope_of_both_real_calls_is_read_whole_from_structured_output(self, recorded: str) -> None:
         process = RecordedProcess(HarnessEnvelopeMother.recorded(recorded))
 
-        verification = ClaudeVerifier(process=process, trace=RecordedTrace(), spend_log=RecordedSpendLog()).verify(
-            JudgeMother.adversarial(), SliceUnderReviewMother.of_the_slice()
-        )
+        verification = ClaudeVerifier(
+            process=process, trace=RecordedTrace(), turns=RecordedTurnLog(), spend_log=RecordedSpendLog()
+        ).verify(JudgeMother.adversarial(), SliceUnderReviewMother.of_the_slice())
 
         assert verification.verdict.ruling is Ruling.FAIL
         assert len(verification.verdict.findings) == 4
@@ -31,9 +37,9 @@ class TestTheVerdictOfARecordedCall:
     def test_the_first_finding_of_the_recorded_call_arrives_whole(self) -> None:
         process = RecordedProcess(HarnessEnvelopeMother.recorded())
 
-        verification = ClaudeVerifier(process=process, trace=RecordedTrace(), spend_log=RecordedSpendLog()).verify(
-            JudgeMother.adversarial(), SliceUnderReviewMother.of_the_slice()
-        )
+        verification = ClaudeVerifier(
+            process=process, trace=RecordedTrace(), turns=RecordedTurnLog(), spend_log=RecordedSpendLog()
+        ).verify(JudgeMother.adversarial(), SliceUnderReviewMother.of_the_slice())
 
         first = verification.verdict.findings[0]
         assert (first.rule, first.path, first.line) == ("convenciones", "mod.py", 11)
@@ -44,7 +50,9 @@ class TestHowTheJudgeIsCalled:
         review = SliceUnderReviewMother.of_the_slice()
         process = RecordedProcess(HarnessEnvelopeMother.recorded())
 
-        ClaudeVerifier(process=process, trace=RecordedTrace(), spend_log=RecordedSpendLog()).verify(_JUDGE, review)
+        ClaudeVerifier(
+            process=process, trace=RecordedTrace(), turns=RecordedTurnLog(), spend_log=RecordedSpendLog()
+        ).verify(_JUDGE, review)
 
         assert process.stdin == JudgeInvocation(judge=_JUDGE, review=review).text
         assert process.stdin not in process.argv
@@ -52,9 +60,9 @@ class TestHowTheJudgeIsCalled:
     def test_the_judge_is_invoked_exactly_once_because_a_retry_is_a_decision_of_whoever_orchestrates(self) -> None:
         process = RecordedProcess(HarnessEnvelopeMother.recorded())
 
-        ClaudeVerifier(process=process, trace=RecordedTrace(), spend_log=RecordedSpendLog()).verify(
-            JudgeMother.adversarial(), SliceUnderReviewMother.of_the_slice()
-        )
+        ClaudeVerifier(
+            process=process, trace=RecordedTrace(), turns=RecordedTurnLog(), spend_log=RecordedSpendLog()
+        ).verify(JudgeMother.adversarial(), SliceUnderReviewMother.of_the_slice())
 
         assert process.calls == 1
 
@@ -68,9 +76,9 @@ class TestWhatTheJudgeCallCost:
     def test_the_spend_of_the_call_comes_back_with_the_verdict_because_the_judge_is_not_free(self) -> None:
         process = RecordedProcess(HarnessEnvelopeMother.recorded())
 
-        verification = ClaudeVerifier(process=process, trace=RecordedTrace(), spend_log=RecordedSpendLog()).verify(
-            _JUDGE, SliceUnderReviewMother.of_the_slice()
-        )
+        verification = ClaudeVerifier(
+            process=process, trace=RecordedTrace(), turns=RecordedTurnLog(), spend_log=RecordedSpendLog()
+        ).verify(_JUDGE, SliceUnderReviewMother.of_the_slice())
 
         assert verification.spend == HarnessSpendMother.of_the_judge_call()
 
@@ -80,7 +88,7 @@ class TestWhereTheJudgeConversationCanBeFound:
         process = RecordedProcess(HarnessEnvelopeMother.recorded())
         trace = RecordedTrace()
 
-        ClaudeVerifier(process=process, trace=trace, spend_log=RecordedSpendLog()).verify(
+        ClaudeVerifier(process=process, trace=trace, turns=RecordedTurnLog(), spend_log=RecordedSpendLog()).verify(
             _JUDGE, SliceUnderReviewMother.of_the_slice()
         )
 
@@ -94,7 +102,7 @@ class TestWhereTheJudgeConversationCanBeFound:
         trace = RecordedTrace()
 
         with pytest.raises(InvalidVerdictError):
-            ClaudeVerifier(process=process, trace=trace, spend_log=RecordedSpendLog()).verify(
+            ClaudeVerifier(process=process, trace=trace, turns=RecordedTurnLog(), spend_log=RecordedSpendLog()).verify(
                 _JUDGE, SliceUnderReviewMother.of_the_slice()
             )
 
@@ -106,7 +114,7 @@ class TestTheSpendLogOfTheCall:
         process = RecordedProcess(HarnessEnvelopeMother.recorded())
         spend_log = RecordedSpendLog()
 
-        ClaudeVerifier(process=process, trace=RecordedTrace(), spend_log=spend_log).verify(
+        ClaudeVerifier(process=process, trace=RecordedTrace(), turns=RecordedTurnLog(), spend_log=spend_log).verify(
             _JUDGE, SliceUnderReviewMother.of_the_slice()
         )
 
@@ -118,7 +126,7 @@ class TestTheSpendLogOfTheCall:
         spend_log = RecordedSpendLog()
 
         with pytest.raises(InvalidVerdictError):
-            ClaudeVerifier(process=process, trace=RecordedTrace(), spend_log=spend_log).verify(
+            ClaudeVerifier(process=process, trace=RecordedTrace(), turns=RecordedTurnLog(), spend_log=spend_log).verify(
                 _JUDGE, SliceUnderReviewMother.of_the_slice()
             )
 
@@ -131,9 +139,9 @@ class TestWhenTheJudgeAnswersSomethingIncoherent:
         process = RecordedProcess(HarnessEnvelopeMother.carrying(incoherent))
 
         with pytest.raises(InvalidVerdictError) as rejection:
-            ClaudeVerifier(process=process, trace=RecordedTrace(), spend_log=RecordedSpendLog()).verify(
-                _JUDGE, SliceUnderReviewMother.of_the_slice()
-            )
+            ClaudeVerifier(
+                process=process, trace=RecordedTrace(), turns=RecordedTurnLog(), spend_log=RecordedSpendLog()
+            ).verify(_JUDGE, SliceUnderReviewMother.of_the_slice())
 
         assert rejection.value.spend == HarnessSpendMother.of_the_judge_call()
 
@@ -142,26 +150,42 @@ class TestWhatTheHarnessDeniedTheJudge:
     def test_a_denied_read_comes_back_with_the_verdict_so_nobody_has_to_reopen_the_envelope(self) -> None:
         process = RecordedProcess(HarnessEnvelopeMother.denying_a_read())
 
-        verification = ClaudeVerifier(process=process, trace=RecordedTrace(), spend_log=RecordedSpendLog()).verify(
-            _JUDGE, SliceUnderReviewMother.of_the_slice()
-        )
+        verification = ClaudeVerifier(
+            process=process, trace=RecordedTrace(), turns=RecordedTurnLog(), spend_log=RecordedSpendLog()
+        ).verify(_JUDGE, SliceUnderReviewMother.of_the_slice())
 
         assert verification.denied_reads == (f"Read {HarnessEnvelopeMother.DENIED_READ}",)
 
     def test_the_verdict_is_still_the_judges_because_a_denied_read_is_not_a_veto(self) -> None:
         process = RecordedProcess(HarnessEnvelopeMother.denying_a_read(JudgeVerdictMother.passing()))
 
-        verification = ClaudeVerifier(process=process, trace=RecordedTrace(), spend_log=RecordedSpendLog()).verify(
-            _JUDGE, SliceUnderReviewMother.of_the_slice()
-        )
+        verification = ClaudeVerifier(
+            process=process, trace=RecordedTrace(), turns=RecordedTurnLog(), spend_log=RecordedSpendLog()
+        ).verify(_JUDGE, SliceUnderReviewMother.of_the_slice())
 
         assert verification.verdict.ruling is Ruling.PASS
 
     def test_an_envelope_with_no_denials_leaves_nothing_to_warn_about(self) -> None:
         process = RecordedProcess(HarnessEnvelopeMother.recorded())
 
-        verification = ClaudeVerifier(process=process, trace=RecordedTrace(), spend_log=RecordedSpendLog()).verify(
-            _JUDGE, SliceUnderReviewMother.of_the_slice()
-        )
+        verification = ClaudeVerifier(
+            process=process, trace=RecordedTrace(), turns=RecordedTurnLog(), spend_log=RecordedSpendLog()
+        ).verify(_JUDGE, SliceUnderReviewMother.of_the_slice())
 
         assert verification.denied_reads == ()
+
+
+class TestTheTurnsObservedWhileTheCallIsInFlight:
+    def test_every_tool_use_of_a_real_streamed_call_is_observed_labelled_with_the_verify_step(self) -> None:
+        process = StreamingProcess(HarnessEnvelopeMother.streamed())
+        turns = RecordedTurnLog()
+
+        with pytest.raises(InvalidVerdictError):
+            ClaudeVerifier(process=process, trace=RecordedTrace(), turns=turns, spend_log=RecordedSpendLog()).verify(
+                _JUDGE, SliceUnderReviewMother.of_the_slice()
+            )
+
+        assert [(turn.slice_id, turn.step, turn.number, turn.tool) for turn in turns.turns] == [
+            (SliceUnderReviewMother.SLICE_ID, Step.VERIFY, 1, "Write"),
+            (SliceUnderReviewMother.SLICE_ID, Step.VERIFY, 2, "StructuredOutput"),
+        ]

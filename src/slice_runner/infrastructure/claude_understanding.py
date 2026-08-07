@@ -9,6 +9,7 @@ from slice_runner.domain.step import Step
 from slice_runner.domain.understanding import Understanding
 from slice_runner.domain.understanding_writer import UnderstandingWriter
 from slice_runner.infrastructure.harness_output import HarnessOutput
+from slice_runner.infrastructure.harness_turn_watch import HarnessTurnWatch
 from slice_runner.infrastructure.understanding_invocation import UnderstandingInvocation
 from slice_runner.infrastructure.understanding_report_payload import UnderstandingReportPayload
 
@@ -18,12 +19,14 @@ if TYPE_CHECKING:
     from slice_runner.domain.parent_issue import ParentIssue
     from slice_runner.domain.sub_issue import SubIssue
     from slice_runner.infrastructure.process import Process
+    from slice_runner.infrastructure.turn_log import TurnLog
 
 
 class ClaudeUnderstanding(UnderstandingWriter):
-    def __init__(self, *, process: Process, trace: CallTrace, spend_log: CallSpendLog) -> None:
+    def __init__(self, *, process: Process, trace: CallTrace, turns: TurnLog, spend_log: CallSpendLog) -> None:
         self._process = process
         self._trace = trace
+        self._turns = turns
         self._spend_log = spend_log
 
     def write(
@@ -32,7 +35,8 @@ class ClaudeUnderstanding(UnderstandingWriter):
         invocation = UnderstandingInvocation(
             subissue=subissue, parent=parent, repo=repo, worktree=worktree, correction=correction
         )
-        output = self._process.run(invocation.argv, stdin=invocation.text, cwd=invocation.cwd)
+        watch = HarnessTurnWatch(turns=self._turns, slice_id=subissue.slice_id, step=Step.UNDERSTAND)
+        output = self._process.run(invocation.argv, stdin=invocation.text, cwd=invocation.cwd, on_line=watch)
         envelope = HarnessOutput.from_process(output)
         self._trace.record(HarnessCall(slice_id=subissue.slice_id, step=Step.UNDERSTAND, session=envelope.session_id))
         spend = envelope.to_domain()
