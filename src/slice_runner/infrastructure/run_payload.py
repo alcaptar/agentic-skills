@@ -17,6 +17,7 @@ Spent = Annotated[int, Field(strict=True, ge=0)]
 class RunPayload(ContractModel):
     step: Step
     control_retries: Spent = 0
+    hygiene_retries: Spent = 0
     verify_retries: Spent = 0
     ci_retries: Spent = 0
     indeterminate_ticks: Spent = 0
@@ -32,6 +33,7 @@ class RunPayload(ContractModel):
         return cls(
             step=run.step,
             control_retries=run.control_retries,
+            hygiene_retries=run.hygiene_retries,
             verify_retries=run.verify_retries,
             ci_retries=run.ci_retries,
             indeterminate_ticks=run.indeterminate_ticks,
@@ -43,6 +45,7 @@ class RunPayload(ContractModel):
         return Run(
             step=self.step,
             control_retries=self.control_retries,
+            hygiene_retries=self.hygiene_retries,
             verify_retries=self.verify_retries,
             ci_retries=self.ci_retries,
             indeterminate_ticks=self.indeterminate_ticks,

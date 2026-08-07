@@ -343,7 +343,7 @@ class ConductSlice:
         except DirtyIndexError as refusal:
             return SteppedSlice(
                 progress=replace(progress, control_logs=(), hygiene_refusal=str(refusal)),
-                outcome=Outcome.FAILED,
+                outcome=Outcome.HYGIENE_REJECTED,
             )
 
         round_progress = replace(progress, control_rounds=progress.control_rounds + 1, hygiene_refusal="")

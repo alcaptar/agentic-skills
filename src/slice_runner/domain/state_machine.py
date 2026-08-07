@@ -55,6 +55,8 @@ class StateMachine:
                 return self._moving_to(run, Step.VERIFY)
             case Outcome.FAILED:
                 return self._retrying_a_mechanical_failure(run)
+            case Outcome.HYGIENE_REJECTED:
+                return self._retrying_a_hygiene_rejection(run)
             case Outcome.INDETERMINATE:
                 return self._ticking(run)
             case _:
@@ -65,6 +67,12 @@ class StateMachine:
             return self._moving_to(replace(run, control_retries=run.control_retries + 1), Step.IMPLEMENT)
 
         return self._closed(run, RunState.BLOCKED_CONTROLS)
+
+    def _retrying_a_hygiene_rejection(self, run: Run) -> Transition:
+        if run.hygiene_retries < self.budgets.hygiene_retries:
+            return self._moving_to(replace(run, hygiene_retries=run.hygiene_retries + 1), Step.IMPLEMENT)
+
+        return self._closed(run, RunState.BLOCKED_HYGIENE)
 
     def _after_the_judge(self, run: Run, outcome: Outcome) -> Transition:
         match outcome:

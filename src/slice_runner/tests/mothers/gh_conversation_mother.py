@@ -176,6 +176,7 @@ class GhConversationMother:
         state = {
             "step": run.step.value,
             "control_retries": run.control_retries,
+            "hygiene_retries": run.hygiene_retries,
             "verify_retries": run.verify_retries,
             "ci_retries": run.ci_retries,
             "indeterminate_ticks": run.indeterminate_ticks,

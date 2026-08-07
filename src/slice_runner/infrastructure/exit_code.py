@@ -52,6 +52,7 @@ class ExitCode(IntEnum):
             case (
                 RunState.OPEN
                 | RunState.BLOCKED_CONTROLS
+                | RunState.BLOCKED_HYGIENE
                 | RunState.BLOCKED_VERIFY
                 | RunState.BLOCKED_CI_RED
                 | RunState.BLOCKED_CI_INDETERMINATE

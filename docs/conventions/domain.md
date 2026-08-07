@@ -71,7 +71,7 @@ etiqueta de GitHub que escribe la frontera (`infrastructure/gh_run_repository.py
 par sin regla no cae en una rama generica, rompe en `mypy` en cuanto se anade un cierre o un paso sin
 proyectarlo-. El contrato ya esta medido, no pendiente: `tests/test_skill_contracts.py` comprueba que
 todo cierre de `RunState` distinto de `MERGED` (que no lleva etiqueta porque cierra GitHub el issue solo,
-via `Closes` de la pull request) proyecta a una de las nueve etiquetas del vocabulario, y que ninguna
+via `Closes` de la pull request) proyecta a una de las diez etiquetas del vocabulario, y que ninguna
 etiqueta del vocabulario carece de fuente -sale de una proyeccion del traductor, o es una de fuente
 manual-. Hay dos etiquetas de fuente manual: `estado:pendiente`, que escribe una persona a mano al crear
 la subissue, y `estado:esperando-alineacion`, que escribe `GhRunRepository.pause_for_alignment` antes de que
@@ -99,15 +99,18 @@ implementador declaro, y la tupla vacia es el indice limpio. Tres decisiones que
 - **Un artefacto prohibido lo es aunque este declarado.** `StagedHygiene.FORBIDDEN_PREFIXES` es un
   backstop, no una regla mas del allow-list: si lo pudiera levantar quien declara las rutas, no
   protegeria de nada.
-- **Deuda declarada: un rechazo de higiene gasta presupuesto de controles.** `ConductSlice` lo convierte
-  en `Outcome.FAILED`, que la maquina de estados no distingue de un test en rojo, asi que consume
-  `control_retries` y acaba cerrando el run con `bloqueada:controles`. **Son cosas distintas**: un
-  control rojo es codigo que falla y lo puede arreglar otra vuelta del implementador; un rechazo de
-  higiene es un informe incompleto -toco ficheros que no declaro- y no dice nada sobre si el codigo esta
-  bien. Costo dos runs enteros -slice-05 y slice-07, 23 y 22 dolares- antes de que el motivo del rechazo
-  llegara siquiera al implementador, que es lo unico corregido hasta ahora. Separarlos pide vocabulario
-  nuevo en `Outcome` y su rama en la maquina, y **no se hace aqui**: se declara para que quien toque
-  esta politica sepa que el contador que gasta no es el suyo.
+- **Un rechazo de higiene no gasta presupuesto de controles: esta deuda ya esta pagada.** `ConductSlice`
+  lo convertia en `Outcome.FAILED`, que la maquina de estados no distinguia de un test en rojo, asi que
+  consumia `control_retries` y acababa cerrando el run con `bloqueada:controles`. **Son cosas
+  distintas**: un control rojo es codigo que falla y lo puede arreglar otra vuelta del implementador; un
+  rechazo de higiene es un informe incompleto -toco ficheros que no declaro- y no dice nada sobre si el
+  codigo esta bien. Costo dos runs enteros -slice-05 y slice-07, 23 y 22 dolares, los dos con el arbol
+  pasando sus controles- antes de que el motivo del rechazo llegara siquiera al implementador. Ahora
+  `ConductSlice` lo convierte en `Outcome.HYGIENE_REJECTED`, que `StateMachine` retira con su propio
+  `Budgets.hygiene_retries` y su propio contador en `Run.hygiene_retries`, y agotarlo cierra el run con
+  `RunState.BLOCKED_HYGIENE` -etiqueta `bloqueada:higiene`, veredicto durable `bloqueada-higiene`,
+  distinto de `bloqueada-controles` igual que `veredicto-incoherente` lo es de `llamada-fallida` en los
+  descartes del juez-.
 - **Fail-closed sin rama especial.** Con `declared` vacio todo lo staged sale `NOT_DECLARED`, que es lo
   que cae solo de la regla general. Y **"nada staged" no es asunto de esta politica**: eso ya lo dice
   `EmptyIndexError` cuando se va a leer el diff, y reimplementarlo aqui seria un segundo sitio donde

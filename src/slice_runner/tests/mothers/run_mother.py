@@ -44,4 +44,11 @@ class RunMother:
 
     @staticmethod
     def that_went_back_for_every_reason() -> Run:
-        return Run(step=Step.AWAIT_MERGE, control_retries=1, verify_retries=2, ci_retries=3, verify_discards=4)
+        return Run(
+            step=Step.AWAIT_MERGE,
+            control_retries=1,
+            hygiene_retries=5,
+            verify_retries=2,
+            ci_retries=3,
+            verify_discards=4,
+        )
