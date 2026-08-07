@@ -50,12 +50,12 @@ src/slice_runner/
   define por no tener. Consecuencia: `domain/exceptions.py` es el catalogo de las excepciones **del
   dominio**, no de todas las del programa.
 
-  El segundo caso es `infrastructure/call_trace.py`, que declara el puerto `CallTrace` junto a su
-  `HarnessCall` por el mismo motivo y con la misma forma que `ProcessOutput`: lo que se apunta de una
-  llamada es **vocabulario de transporte** -su `session` es el `session_id` que trae el sobre del
-  harness-, y sus unicos consumidores son `ClaudeImplementer` y `ClaudeVerifier`. Nacio en `domain/` y
-  ahi no lo consumia nadie: aplicacion no escribe el rastro, y el motivo de que no lo haga esta en
-  `docs/conventions/infrastructure.md`.
+  `CallTrace` y su `HarnessCall` (`domain/call_trace.py`) vivieron un tiempo en `infrastructure/` por
+  este mismo argumento -sus unicos consumidores eran `ClaudeImplementer` y `ClaudeVerifier`-, pero la
+  premisa dejo de ser cierta en cuanto `ReadConversation` (`application/queries/read_conversation.py`)
+  paso a necesitar el rastro para resolver que sesion abrir: con un consumidor en `application/`, el
+  puerto volvio a `domain/`, que es donde vive por defecto todo lo que el dominio necesita. Lo mismo le
+  paso a `ConversationLog` (`domain/conversation_log.py`), consumido por el mismo caso de uso.
 - **Los tests del programa viven dentro del paquete**, no en `tests/`, y espejan la estructura de las
   capas **que se testean**: `src/slice_runner/tests/application/` y
   `src/slice_runner/tests/infrastructure/`. No hay un arbol de tests de dominio, y no es un olvido -la

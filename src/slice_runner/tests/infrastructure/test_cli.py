@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 
 from slice_runner.domain.budgets import Budgets
+from slice_runner.domain.call_trace import HarnessCall
 from slice_runner.domain.issue_label import IssueLabel
 from slice_runner.domain.outcome import Outcome
 from slice_runner.domain.run_state import RunState
@@ -19,9 +20,11 @@ from slice_runner.infrastructure.cli import Cli
 from slice_runner.infrastructure.exit_code import ExitCode
 from slice_runner.infrastructure.implementer_invocation import ImplementerInvocation
 from slice_runner.infrastructure.judge_invocation import JudgeInvocation
+from slice_runner.infrastructure.local_call_trace import LocalCallTrace
 from slice_runner.tests.argv import Argv
 from slice_runner.tests.doubles import Answer, RealExceptTheJudge, TimingOutProcess, UnrunnableJudge
 from slice_runner.tests.git_repo import Git
+from slice_runner.tests.mothers.conversation_transcript_mother import ConversationTranscriptMother
 from slice_runner.tests.mothers.gh_conversation_mother import GhConversationMother
 from slice_runner.tests.mothers.judge_output_mother import HarnessEnvelopeMother, JudgeVerdictMother
 from slice_runner.tests.mothers.repo_mother import RepoMother
@@ -295,6 +298,79 @@ class TestTheEntrypoint(BlindToTheToolboxOfThisMachine):
 
         assert code == ExitCode.USAGE_ERROR
         assert "a-base-that-is-not-there" in capsys.readouterr().err
+
+
+class TestTheCommandThatPrintsAConversation:
+    _SLICE = "slice-05"
+    _REPO = "/Users/someone/repos/the-slice"
+
+    @pytest.fixture(autouse=True)
+    def toolbox(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
+
+    def _traced(self) -> None:
+        LocalCallTrace().record(
+            HarnessCall(slice_id=self._SLICE, step=Step.IMPLEMENT, session=ConversationTranscriptMother.SESSION)
+        )
+        ConversationTranscriptMother.written_under(ClaudeConfig.root(), repo=self._REPO)
+
+    def test_the_conversation_of_a_traced_call_is_printed_as_readable_text(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        self._traced()
+
+        code = Cli.read(repo=self._REPO, slice_id=self._SLICE, step=Step.IMPLEMENT)
+
+        assert code == ExitCode.OK
+        output = capsys.readouterr()
+        assert output.err == ""
+        assert "Now let's confirm RED before implementing:" in output.out
+
+    def test_a_slice_and_step_never_traced_exits_with_a_usage_error_instead_of_guessing(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        code = Cli.read(repo=self._REPO, slice_id=self._SLICE, step=Step.IMPLEMENT)
+
+        assert code == ExitCode.USAGE_ERROR
+        output = capsys.readouterr()
+        assert output.out == ""
+        assert self._SLICE in output.err
+
+    def test_a_traced_session_whose_conversation_was_never_kept_exits_with_a_usage_error(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        LocalCallTrace().record(
+            HarnessCall(slice_id=self._SLICE, step=Step.IMPLEMENT, session=ConversationTranscriptMother.SESSION)
+        )
+
+        code = Cli.read(repo=self._REPO, slice_id=self._SLICE, step=Step.IMPLEMENT)
+
+        assert code == ExitCode.USAGE_ERROR
+        assert ConversationTranscriptMother.SESSION in capsys.readouterr().err
+
+    def test_main_wires_the_parsed_arguments_into_the_read(self, capsys: pytest.CaptureFixture[str]) -> None:
+        self._traced()
+
+        code = Cli.main(["read", "--repo", self._REPO, "--slice", self._SLICE, "--step", str(Step.IMPLEMENT)])
+
+        assert code == ExitCode.OK
+        assert "Now let's confirm RED before implementing:" in capsys.readouterr().out
+
+    def test_the_step_has_no_default_because_a_guessed_one_reads_the_wrong_call(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        with pytest.raises(SystemExit):
+            Cli.parser().parse_args(["read", "--repo", self._REPO, "--slice", self._SLICE])
+
+        assert "the following arguments are required: --step" in capsys.readouterr().err
+
+    def test_a_step_nobody_declared_is_refused_instead_of_being_forwarded(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        with pytest.raises(SystemExit):
+            Cli.parser().parse_args(["read", "--repo", self._REPO, "--slice", self._SLICE, "--step", "deploy"])
+
+        assert "invalid choice" in capsys.readouterr().err
 
 
 class TestTheTransitionOfEveryPair:

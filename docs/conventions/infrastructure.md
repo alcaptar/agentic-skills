@@ -166,8 +166,8 @@ importar**: un smoke que solo importe el modulo lo da por bueno. Lo evita
   best-effort, si su fallo es un cierre propio del run, y con que codigo de salida se distingue-, no
   capturando el `OSError` a escondidas dentro del adaptador.
 - **El rastro de cada llamada al harness lo escribe el adaptador que la hace, no el caso de uso.**
-  `LocalCallTrace` -el adaptador del puerto `CallTrace`, que vive con el en esta capa
-  (`docs/conventions/architecture.md`)- anexa una linea por
+  `LocalCallTrace` -el adaptador del puerto `CallTrace` (`domain/call_trace.py`,
+  ver `docs/conventions/architecture.md`)- anexa una linea por
   llamada -slice, paso y el `session_id` que trae el sobre- a `~/.claude/slice-runner/trace/calls.jsonl`, y quienes
   lo llaman son `ClaudeImplementer` y `ClaudeVerifier`, en cuanto el sobre parsea y **antes** del bloque
   `measuring()`. Dos motivos, y el segundo es el que cierra la decision:
@@ -188,6 +188,26 @@ importar**: un smoke que solo importe el modulo lo da por bueno. Lo evita
   tampoco, porque `HarnessOutput.from_process` corta antes de que el adaptador tenga el sobre en la mano.
   Por eso mismo `session_id` es campo **obligatorio** del sobre y no opcional: una llamada sin identificador
   no se puede volver a encontrar, que es exactamente el fallo que este rastro existe para cerrar.
+- **`LocalConversationLog` valida proyecciones de la transcripcion, no la linea entera, y es una
+  desviacion declarada de "en la frontera el esquema es Pydantic".** La transcripcion de una sesion
+  (`~/.claude/projects/<repo>/<session>.jsonl`) no es un contrato que este programa defina o del que
+  dependa una version fija, al contrario que el sobre de `HarnessOutput` -la salida documentada de
+  `claude -p --output-format json`- o el propio `calls.jsonl` de `LocalCallTrace` -un fichero que este
+  programa escribe entero-: cada `type` de linea (`assistant`, `user`, `last-prompt`, `summary`...) trae
+  decenas de claves que este lector no consume, y el vocabulario de un bloque de contenido es abierto
+  (`text`, `tool_use`, `tool_result`, `thinking`, `redacted_thinking`, `image`...) y crece con cada
+  version del harness sin aviso. Exigir `extra="forbid"` sobre la linea o el bloque entero rompería la
+  lectura de una transcripcion real con cada campo o bloque nuevo que Anthropic anada -justo el fallo
+  silencioso que "sin excepcion" evita en el resto de esta capa, pero aqui se lo haria a la funcion misma
+  de este lector, que es sobrevivir a transcripciones ya grabadas-. Por eso cada modelo de
+  `conversation_transcript.py` (`TranscriptUsage`, `TranscriptTextBlock`, `TranscriptToolUseBlock`,
+  `TranscriptToolResultBlock`, `TranscriptMessage`) valida una proyeccion construida a mano con
+  exactamente las claves de las que depende, nunca el diccionario externo completo, y sigue
+  siendo `extra="forbid"` sobre esa proyeccion: una clave que si declaramos conocer y que falta o llega
+  con el tipo equivocado sigue rompiendo, con `UnreadableConversationError`. Con esa misma vara,
+  `LocalConversationLog._decoded_lines` deja de tragar `json.JSONDecodeError` en silencio y lanza la
+  misma excepcion, igual que `LocalCallTrace._decoded`: una linea que no es JSON es corrupcion, no una
+  variante mas de un vocabulario abierto.
 - **El registro durable lo escribe `metrics.py` como subproceso, y su vocabulario esta duplicado a
   proposito.** `MetricsScriptLog` implementa el puerto `MetricsLog` invocando el script por el puerto
   `Process`, no importandolo: el programa no importa nada de `skills/` (arriba), y ademas el formato del

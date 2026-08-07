@@ -18,3 +18,6 @@ class HarnessCall:
 class CallTrace(ABC):
     @abstractmethod
     def record(self, call: HarnessCall) -> None: ...
+
+    @abstractmethod
+    def sessions_of(self, *, slice_id: str, step: Step) -> tuple[str, ...]: ...

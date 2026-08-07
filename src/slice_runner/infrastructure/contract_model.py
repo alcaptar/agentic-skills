@@ -18,6 +18,10 @@ class ContractModel(BaseModel):
         except ValidationError as error:
             raise rejection(f"{where}: {cls._readable(error)}") from error
 
+    @staticmethod
+    def _present(**fields: object) -> dict[str, object]:
+        return {name: value for name, value in fields.items() if value is not None}
+
     @classmethod
     def _readable(cls, error: ValidationError) -> str:
         return "; ".join(cls._detail(reported) for reported in error.errors())
