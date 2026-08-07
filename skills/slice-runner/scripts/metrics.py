@@ -13,10 +13,19 @@ controles, % de slices al primer intento, media de reintentos, tasa de CI roja. 
 tokens NO se mide aqui (sale de la telemetria/OTel de Claude Code): se admite como campo
 opcional best-effort y, si no viene, no se inventa.
 
-Lo que si mide el harness -coste en dolares, turnos y duracion- entra en el grupo `harness`,
-sumado por slice a lo largo de todas sus llamadas. Los tres salen de la misma suma, asi que se
-registran juntos o no se registran: pasar unos y no otros es error de uso, y si no vienen la clave
-`harness` NO se escribe, ni con ceros ni con `null`. Ningun numero de este log se estima.
+Lo que si mide el harness -coste en dolares, turnos, duracion y tokens leidos de cache- entra en
+el grupo `harness`, sumado por slice a lo largo de todas sus llamadas. Los cuatro salen de la misma
+suma, asi que se registran juntos o no se registran: pasar unos y no otros es error de uso, y si no
+vienen la clave `harness` NO se escribe, ni con ceros ni con `null`. Ningun numero de este log se
+estima.
+
+Con que modelo se hizo la slice tampoco lo estima quien invoca: `--modelo` es lo que el propio
+harness declaro haber usado (repetible, por si una slice uso mas de uno -implementador y juez, o un
+reintento que cambio de modelo-), nunca el alias que se le pidio. Y `--variante` nombra que forma de
+trabajar del pipeline se estaba probando, para poder comparar dos sin rehacer el analisis a mano. Los
+dos son vocabulario abierto -crecen con cada modelo y cada experimento nuevo- y ninguno se escribe si
+no se declara: una fila sin `--modelo` o sin `--variante` se lee como "desconocido" en el reporte, no
+como un valor mas del vocabulario.
 
 El log es durable y append-only, asi que los registros viejos no tienen los campos
 nuevos: el agregado los trata como cero, nunca como dato ausente que invalide la fila -salvo en los
@@ -37,7 +46,8 @@ Uso:
         --reintentos-verify 0 --descartes-verify 0 \\
         --duracion-s 540 \\
         [--descartes-verify-causa veredicto-incoherente|llamada-fallida] \\
-        [--coste-usd 1.23 --turnos 42 --duracion-ms 65652] \\
+        [--coste-usd 1.23 --turnos 42 --duracion-ms 65652 --tokens-cache 15510] \\
+        [--modelo claude-sonnet-5 [--modelo otro-modelo]] [--variante programa] \\
         [--coste-tokens 12345] [--ts 2026-07-22T10:00:00Z] [--path RUTA]
 
     metrics.py report [--repo <repo>] [--json] [--path RUTA]
@@ -52,8 +62,18 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 DEFAULT_PATH = Path.home() / ".claude" / "slice-runner" / "metrics.jsonl"
+DESCONOCIDO = "desconocido"
+"""Etiqueta de agrupacion para una fila que no declara modelo o variante.
+
+No es un tercer valor del vocabulario abierto: es la ausencia del dato -historico anterior a esta
+slice, o una invocacion que no lo paso-, y por eso vive fuera de `Fila.from_row` en vez de dentro:
+la ausencia se lee al agrupar, no al normalizar la fila."""
 
 
 class Veredicto(StrEnum):
@@ -142,28 +162,41 @@ class HallazgosRondaFinal:
 class Harness:
     """Lo que midio el harness en una slice, sumado a lo largo de todas sus llamadas.
 
-    Agrupados y no sueltos porque los tres salen de la misma suma: separados, una fila no diria
+    Agrupados y no sueltos porque los cuatro salen de la misma suma: separados, una fila no diria
     de cuantas llamadas es cada numero, y `harness` significa exactamente "esto lo midio el
-    harness", frente a los campos que rellena quien invoca.
+    harness", frente a los campos que rellena quien invoca. `tokens_cache` es la causa mecanica
+    de cualquier ahorro que un experimento de reutilizacion de sesion pretenda: sin el, un coste
+    mas bajo no se distingue de una slice que simplemente era mas facil.
     """
 
     coste_usd: float
     turnos: int
     duracion_ms: int
+    tokens_cache: int
 
     @staticmethod
     def from_args(args: argparse.Namespace) -> Harness | None:
         """El grupo, o `None` si esta slice no trae medicion del harness.
 
-        Que vengan los tres o ninguno lo garantiza `_error_de_uso` antes de llegar aqui.
+        Que vengan los cuatro o ninguno lo garantiza `_error_de_uso` antes de llegar aqui.
         """
         if args.coste_usd is None:
             return None
 
-        return Harness(coste_usd=args.coste_usd, turnos=args.turnos, duracion_ms=args.duracion_ms)
+        return Harness(
+            coste_usd=args.coste_usd,
+            turnos=args.turnos,
+            duracion_ms=args.duracion_ms,
+            tokens_cache=args.tokens_cache,
+        )
 
     def to_dict(self) -> dict[str, object]:
-        return {"coste_usd": self.coste_usd, "turnos": self.turnos, "duracion_ms": self.duracion_ms}
+        return {
+            "coste_usd": self.coste_usd,
+            "turnos": self.turnos,
+            "duracion_ms": self.duracion_ms,
+            "tokens_cache": self.tokens_cache,
+        }
 
 
 @dataclass(frozen=True, kw_only=True, slots=True)
@@ -188,6 +221,12 @@ class Registro:
     no aguanto su contrato de salida- y esa frontera no se movio, con lo que las dos epocas cuentan la
     misma cosa. Marcar la fecha partiria la serie en dos para conservar una distincion que ningun
     agregado del reporte usa.
+
+    `modelos` y `variante` son vocabulario abierto -crecen con cada modelo del harness y cada
+    experimento de pipeline nuevo- y por eso viajan sueltos y no como un miembro mas de un
+    `StrEnum`: no hay lista cerrada que mantener al dia. Una fila sin ellos no es un tercer valor,
+    es la ausencia del dato -el historico anterior a esta slice, o una invocacion que no los
+    declaro-, y el reporte la agrupa como "desconocido" en vez de mezclarla con un modelo real.
     """
 
     ts: str
@@ -207,6 +246,8 @@ class Registro:
     coste_tokens: int | None = None
     harness: Harness | None = None
     descartes_verify_causa: CausaDescarte | None = None
+    modelos: tuple[str, ...] = ()
+    variante: str | None = None
 
     @staticmethod
     def from_args(args: argparse.Namespace) -> Registro:
@@ -238,6 +279,8 @@ class Registro:
             descartes_verify_causa=(
                 CausaDescarte(args.descartes_verify_causa) if args.descartes_verify_causa else None
             ),
+            modelos=tuple(args.modelos) if args.modelos else (),
+            variante=args.variante,
         )
 
     def to_dict(self) -> dict[str, object]:
@@ -268,6 +311,10 @@ class Registro:
             escrito["harness"] = self.harness.to_dict()
         if self.descartes_verify_causa is not None:
             escrito["descartes_verify_causa"] = str(self.descartes_verify_causa)
+        if self.modelos:
+            escrito["modelos"] = list(self.modelos)
+        if self.variante is not None:
+            escrito["variante"] = self.variante
 
         return escrito
 
@@ -275,6 +322,24 @@ class Registro:
 def _texto(row: dict[str, object], clave: str) -> str:
     valor = row.get(clave)
     return valor if isinstance(valor, str) else ""
+
+
+def _texto_opcional(row: dict[str, object], clave: str) -> str | None:
+    """Igual que `_texto`, pero distingue "no declarado" de una cadena vacia.
+
+    `variante` no tiene default razonable: una cadena vacia se leeria como un valor mas del
+    vocabulario abierto en vez de como ausencia del dato.
+    """
+    valor = row.get(clave)
+    return valor if isinstance(valor, str) else None
+
+
+def _lista_str(row: dict[str, object], clave: str) -> tuple[str, ...]:
+    """Los elementos de texto de una lista, o vacio si la fila es anterior al campo o trae otra cosa."""
+    valor = row.get(clave)
+    if isinstance(valor, list) and all(isinstance(elemento, str) for elemento in valor):
+        return tuple(valor)
+    return ()
 
 
 def _numero(row: dict[str, object], *claves: str) -> float:
@@ -343,7 +408,10 @@ class Fila:
     coste_usd: float | None
     turnos: float | None
     duracion_ms: float | None
+    tokens_cache: float | None
     descartes_verify_causa: CausaDescarte | None
+    modelos: tuple[str, ...]
+    variante: str | None
 
     @staticmethod
     def from_row(row: dict[str, object]) -> Fila:
@@ -364,7 +432,10 @@ class Fila:
             coste_usd=_opcional(harness, "coste_usd"),
             turnos=_opcional(harness, "turnos"),
             duracion_ms=_opcional(harness, "duracion_ms"),
+            tokens_cache=_opcional(harness, "tokens_cache"),
             descartes_verify_causa=_causa(row, "descartes_verify_causa"),
+            modelos=_lista_str(row, "modelos"),
+            variante=_texto_opcional(row, "variante"),
         )
 
     @property
@@ -397,9 +468,9 @@ def _error_de_uso(args: argparse.Namespace) -> str | None:
     una causa que no atribuye nada se queda ahi para siempre, y el agregado no puede distinguirla
     de una buena. Los emite `parser.error`, o sea exit 2 y nada escrito, en vez de una excepcion.
     """
-    gasto = (args.coste_usd, args.turnos, args.duracion_ms)
+    gasto = (args.coste_usd, args.turnos, args.duracion_ms, args.tokens_cache)
     if any(dato is not None for dato in gasto) and any(dato is None for dato in gasto):
-        return "--coste-usd, --turnos y --duracion-ms salen de la misma suma: van los tres o ninguno"
+        return "--coste-usd, --turnos, --duracion-ms y --tokens-cache salen de la misma suma: van los cuatro o ninguno"
     if args.descartes_verify_causa and not args.descartes_verify:
         return "--descartes-verify-causa sin --descartes-verify: no hay ningun descarte al que atribuirla"
 
@@ -493,6 +564,62 @@ class DescartesPorCausa:
 
 
 @dataclass(frozen=True, kw_only=True, slots=True)
+class Grupo:
+    """Las cifras de nivel de un solo valor de un campo abierto (un modelo, o una variante).
+
+    Coste en dolares y tokens de cache son las dos cifras que motivaron este reporte -comparar dos
+    formas de trabajar sin rehacer la cuenta a mano-, y `primer_intento_pct` es lo que impide leer un
+    ahorro como una mejora si en realidad se pago con calidad: una variante mas barata que tambien
+    reintenta mas no esta ganando nada.
+    """
+
+    slices: int
+    primer_intento_pct: float
+    coste_usd_media: float | None
+    coste_usd_muestras: int
+    tokens_cache_media: float | None
+    tokens_cache_muestras: int
+
+    @staticmethod
+    def from_filas(filas: list[Fila]) -> Grupo:
+        total = len(filas)
+        dolares = [f.coste_usd for f in filas if f.coste_usd is not None]
+        cache = [f.tokens_cache for f in filas if f.tokens_cache is not None]
+        return Grupo(
+            slices=total,
+            primer_intento_pct=_pct(sum(1 for f in filas if f.primer_intento), total),
+            coste_usd_media=_mean(dolares) if dolares else None,
+            coste_usd_muestras=len(dolares),
+            tokens_cache_media=_mean(cache) if cache else None,
+            tokens_cache_muestras=len(cache),
+        )
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "slices": self.slices,
+            "primer_intento_pct": self.primer_intento_pct,
+            "coste_usd_media": self.coste_usd_media,
+            "coste_usd_muestras": self.coste_usd_muestras,
+            "tokens_cache_media": self.tokens_cache_media,
+            "tokens_cache_muestras": self.tokens_cache_muestras,
+        }
+
+
+def _agrupar(filas: list[Fila], etiquetas: Callable[[Fila], tuple[str, ...]]) -> dict[str, Grupo]:
+    """Agrupa las filas por cada etiqueta que declaran; las que no declaran ninguna van a `DESCONOCIDO`.
+
+    Una fila puede caer en mas de un grupo -una slice puede haber usado mas de un modelo, el del
+    implementador y el del juez, o un reintento que cambio de modelo-, y eso es la fila reflejando lo
+    que de verdad paso en vez de quedarse con uno solo en silencio.
+    """
+    grupos: dict[str, list[Fila]] = {}
+    for fila in filas:
+        for etiqueta in etiquetas(fila) or (DESCONOCIDO,):
+            grupos.setdefault(etiqueta, []).append(fila)
+    return {etiqueta: Grupo.from_filas(subfilas) for etiqueta, subfilas in grupos.items()}
+
+
+@dataclass(frozen=True, kw_only=True, slots=True)
 class Metricas:
     """Las cifras del reporte. Las claves de `to_dict` son las que consume `SKILL.md`."""
 
@@ -516,6 +643,10 @@ class Metricas:
     turnos_muestras: int
     duracion_ms_media: float | None
     duracion_ms_muestras: int
+    tokens_cache_media: float | None
+    tokens_cache_muestras: int
+    por_modelo: dict[str, Grupo]
+    por_variante: dict[str, Grupo]
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -539,6 +670,10 @@ class Metricas:
             "turnos_muestras": self.turnos_muestras,
             "duracion_ms_media": self.duracion_ms_media,
             "duracion_ms_muestras": self.duracion_ms_muestras,
+            "tokens_cache_media": self.tokens_cache_media,
+            "tokens_cache_muestras": self.tokens_cache_muestras,
+            "por_modelo": {modelo: grupo.to_dict() for modelo, grupo in self.por_modelo.items()},
+            "por_variante": {variante: grupo.to_dict() for variante, grupo in self.por_variante.items()},
         }
 
 
@@ -554,6 +689,7 @@ def _aggregate(filas: list[Fila]) -> Metricas:
     dolares = [f.coste_usd for f in filas if f.coste_usd is not None]
     turnos = [f.turnos for f in filas if f.turnos is not None]
     duraciones = [f.duracion_ms for f in filas if f.duracion_ms is not None]
+    tokens_cache = [f.tokens_cache for f in filas if f.tokens_cache is not None]
     return Metricas(
         slices=total,
         verificador_falla_pct=_pct(sum(1 for f in filas if f.veredicto == Veredicto.FALLA), total),
@@ -575,6 +711,10 @@ def _aggregate(filas: list[Fila]) -> Metricas:
         turnos_muestras=len(turnos),
         duracion_ms_media=_mean(duraciones) if duraciones else None,
         duracion_ms_muestras=len(duraciones),
+        tokens_cache_media=_mean(tokens_cache) if tokens_cache else None,
+        tokens_cache_muestras=len(tokens_cache),
+        por_modelo=_agrupar(filas, lambda f: f.modelos),
+        por_variante=_agrupar(filas, lambda f: (f.variante,) if f.variante else ()),
     )
 
 
@@ -610,7 +750,22 @@ def report(args: argparse.Namespace) -> int:
     print(f"  coste $                  {_medicion(agg.coste_usd_media, agg.coste_usd_muestras)}")
     print(f"  turnos del harness       {_medicion(agg.turnos_media, agg.turnos_muestras)}")
     print(f"  duracion del harness     {_medicion(agg.duracion_ms_media, agg.duracion_ms_muestras, 'ms')}")
+    print(f"  tokens de cache          {_medicion(agg.tokens_cache_media, agg.tokens_cache_muestras)}")
+    _imprime_grupos("por modelo", agg.por_modelo)
+    _imprime_grupos("por variante", agg.por_variante)
     return 0
+
+
+def _imprime_grupos(titulo: str, grupos: dict[str, Grupo]) -> None:
+    """Una linea por valor del campo abierto, para comparar dos formas de trabajar leyendo el reporte."""
+    print(f"  {titulo}:")
+    for etiqueta, grupo in sorted(grupos.items()):
+        coste = _medicion(grupo.coste_usd_media, grupo.coste_usd_muestras)
+        cache = _medicion(grupo.tokens_cache_media, grupo.tokens_cache_muestras)
+        print(
+            f"    {etiqueta:30s} {grupo.slices} slices, 1er intento {grupo.primer_intento_pct}%, "
+            f"coste $ {coste}, tokens de cache {cache}"
+        )
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -666,6 +821,24 @@ def main(argv: list[str] | None = None) -> int:
     rec.add_argument("--coste-usd", type=float, default=None, help="coste en dolares que sumo el harness")
     rec.add_argument("--turnos", type=int, default=None, help="turnos que sumo el harness")
     rec.add_argument("--duracion-ms", type=int, default=None, help="duracion en ms que sumo el harness")
+    rec.add_argument(
+        "--tokens-cache",
+        type=int,
+        default=None,
+        help="tokens leidos de cache que sumo el harness; va con --coste-usd/--turnos/--duracion-ms",
+    )
+    rec.add_argument(
+        "--modelo",
+        action="append",
+        default=None,
+        dest="modelos",
+        help="modelo que el harness declaro haber usado; repetible si la slice uso mas de uno",
+    )
+    rec.add_argument(
+        "--variante",
+        default=None,
+        help="forma de trabajar del pipeline que se estaba probando",
+    )
     rec.add_argument("--ts", default=None, help="ISO ts; default now(UTC)")
     rec.add_argument(
         "--path",

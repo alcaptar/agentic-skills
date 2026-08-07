@@ -22,7 +22,14 @@ class TestStderrEventLog:
             "slice_id": "slice-05",
             "step": "run-controls",
             "at": "2024-01-01T12:30:45Z",
-            "spend": {"cost_usd": 0.3433209, "turns": 9, "duration_ms": 36315, "calls": 1},
+            "spend": {
+                "cost_usd": 0.3433209,
+                "turns": 9,
+                "duration_ms": 36315,
+                "calls": 1,
+                "models": ["claude-sonnet-5"],
+                "cache_read_tokens": 241303,
+            },
             "status": "advancing",
         }
 

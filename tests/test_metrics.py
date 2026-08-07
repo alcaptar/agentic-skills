@@ -36,7 +36,10 @@ def _fila(**kw: Any) -> Fila:
         "coste_usd": None,
         "turnos": None,
         "duracion_ms": None,
+        "tokens_cache": None,
         "descartes_verify_causa": None,
+        "modelos": (),
+        "variante": None,
     }
     return Fila(**{**base, **kw})
 
@@ -410,16 +413,26 @@ def test_cli_acepta_y_persiste_los_dos_campos(tmp_path: Path, capsys: pytest.Cap
 
 
 def test_el_gasto_del_harness_se_escribe_como_un_grupo_anidado(tmp_path: Path) -> None:
-    """Los tres numeros salen de la misma suma del JSON del harness, asi que viajan juntos.
+    """Los cuatro numeros salen de la misma suma del JSON del harness, asi que viajan juntos.
 
     Sueltos, la fila no diria de cuantas llamadas es cada uno; agrupados, `harness` significa
     "esto es lo que midio el harness" y se distingue de los campos que estima quien invoca.
     """
     path = tmp_path / "m.jsonl"
 
-    assert metrics.main(_record(path, "--coste-usd", "0.42", "--turnos", "14", "--duracion-ms", "65652")) == 0
+    assert (
+        metrics.main(
+            _record(path, "--coste-usd", "0.42", "--turnos", "14", "--duracion-ms", "65652", "--tokens-cache", "15510")
+        )
+        == 0
+    )
 
-    assert _escrita(path)["harness"] == {"coste_usd": 0.42, "turnos": 14, "duracion_ms": 65652}
+    assert _escrita(path)["harness"] == {
+        "coste_usd": 0.42,
+        "turnos": 14,
+        "duracion_ms": 65652,
+        "tokens_cache": 15510,
+    }
 
 
 def test_los_hallazgos_de_la_ronda_final_viajan_aparte_de_los_acumulados(tmp_path: Path) -> None:
@@ -657,3 +670,162 @@ def test_las_medidas_del_harness_que_ninguna_fila_trae_se_reportan_como_sin_dato
     for linea in capsys.readouterr().out.splitlines():
         if linea.startswith(("  coste $", "  turnos del harness", "  duracion del harness")):
             assert "sin datos" in linea
+
+
+def test_el_modelo_declarado_por_el_harness_se_persiste(tmp_path: Path) -> None:
+    """`--modelo` es lo que el harness dijo haber usado, nunca el alias que se le pidio."""
+    path = tmp_path / "m.jsonl"
+
+    assert metrics.main(_record(path, "--modelo", "claude-sonnet-5")) == 0
+
+    assert _escrita(path)["modelos"] == ["claude-sonnet-5"]
+
+
+def test_una_slice_que_uso_mas_de_un_modelo_los_guarda_todos_en_vez_de_quedarse_con_uno(tmp_path: Path) -> None:
+    """Implementador y juez -o un reintento que cambio de modelo- pueden no coincidir.
+
+    Quedarse con el primero silenciaria justo el caso que el criterio de aceptacion pide reflejar.
+    """
+    path = tmp_path / "m.jsonl"
+
+    assert metrics.main(_record(path, "--modelo", "claude-sonnet-5", "--modelo", "claude-haiku-4-5-20251001")) == 0
+
+    assert _escrita(path)["modelos"] == ["claude-sonnet-5", "claude-haiku-4-5-20251001"]
+
+
+def test_sin_modelo_declarado_la_clave_no_se_escribe(tmp_path: Path) -> None:
+    """No inventar un modelo cuando no se declaro ninguno: ausente, no una lista vacia visible."""
+    path = tmp_path / "m.jsonl"
+
+    assert metrics.main(_record(path)) == 0
+
+    assert "modelos" not in _escrita(path)
+
+
+def test_la_variante_del_pipeline_se_persiste_cuando_se_declara(tmp_path: Path) -> None:
+    path = tmp_path / "m.jsonl"
+
+    assert metrics.main(_record(path, "--variante", "programa")) == 0
+
+    assert _escrita(path)["variante"] == "programa"
+
+
+def test_sin_variante_declarada_la_clave_no_se_escribe(tmp_path: Path) -> None:
+    path = tmp_path / "m.jsonl"
+
+    assert metrics.main(_record(path)) == 0
+
+    assert "variante" not in _escrita(path)
+
+
+def test_tokens_cache_viaja_con_los_otros_tres_numeros_del_harness(tmp_path: Path) -> None:
+    path = tmp_path / "m.jsonl"
+
+    assert (
+        metrics.main(
+            _record(path, "--coste-usd", "0.42", "--turnos", "14", "--duracion-ms", "65652", "--tokens-cache", "15510")
+        )
+        == 0
+    )
+
+    assert _escrita(path)["harness"]["tokens_cache"] == 15510
+
+
+def test_tokens_cache_sin_los_otros_tres_numeros_del_harness_es_error_de_uso(tmp_path: Path) -> None:
+    """Media suma con `tokens_cache` incluido es exactamente el mismo fallo que sin el."""
+    path = tmp_path / "m.jsonl"
+
+    with pytest.raises(SystemExit) as salida:
+        metrics.main(_record(path, "--tokens-cache", "15510"))
+
+    assert salida.value.code == 2
+    assert not path.exists()
+
+
+def test_una_fila_con_varios_modelos_los_lee_todos_de_la_lista() -> None:
+    fila = Fila.from_row(_row(modelos=["claude-sonnet-5", "claude-haiku-4-5-20251001"]))
+
+    assert fila.modelos == ("claude-sonnet-5", "claude-haiku-4-5-20251001")
+
+
+def test_una_fila_historica_sin_modelo_ni_variante_se_lee_como_ausente_y_no_como_vacio() -> None:
+    """Historico anterior a esta slice: ni la clave `modelos` ni `variante` existen todavia."""
+    fila = Fila.from_row(_row())
+
+    assert fila.modelos == ()
+    assert fila.variante is None
+
+
+def test_una_fila_sin_modelo_se_agrupa_como_desconocido_y_no_se_mezcla_con_uno_real() -> None:
+    filas = [_fila(modelos=("claude-sonnet-5",)), _fila(modelos=())]
+
+    agg = metrics._aggregate(filas)
+
+    assert set(agg.por_modelo) == {"claude-sonnet-5", metrics.DESCONOCIDO}
+    assert agg.por_modelo["claude-sonnet-5"].slices == 1
+    assert agg.por_modelo[metrics.DESCONOCIDO].slices == 1
+
+
+def test_una_fila_con_dos_modelos_cuenta_en_los_dos_grupos_a_la_vez() -> None:
+    """Reflejar los dos, no elegir uno: es el criterio de aceptacion sobre una slice con mas de un modelo."""
+    filas = [_fila(modelos=("claude-sonnet-5", "claude-haiku-4-5-20251001"))]
+
+    agg = metrics._aggregate(filas)
+
+    assert agg.por_modelo["claude-sonnet-5"].slices == 1
+    assert agg.por_modelo["claude-haiku-4-5-20251001"].slices == 1
+
+
+def test_el_reparto_por_variante_separa_las_filas_por_su_variante_declarada() -> None:
+    filas = [
+        _fila(variante="programa", coste_usd=0.10),
+        _fila(variante="programa", coste_usd=0.30),
+        _fila(variante="agente", coste_usd=1.00),
+        _fila(variante=None, coste_usd=2.00),
+    ]
+
+    agg = metrics._aggregate(filas)
+
+    assert (agg.por_variante["programa"].slices, agg.por_variante["programa"].coste_usd_media) == (2, 0.2)
+    assert (agg.por_variante["agente"].slices, agg.por_variante["agente"].coste_usd_media) == (1, 1.0)
+    assert (agg.por_variante[metrics.DESCONOCIDO].slices, agg.por_variante[metrics.DESCONOCIDO].coste_usd_media) == (
+        1,
+        2.0,
+    )
+
+
+def test_el_reparto_por_modelo_y_variante_llega_al_json_del_report(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """El cableado de `report`: si el reparto se queda en `_aggregate`, nadie lo puede leer."""
+    log = tmp_path / "m.jsonl"
+    _escribe_log(
+        log,
+        [
+            {
+                "repo": "r",
+                "veredicto": "PASA",
+                "ci": "green",
+                "modelos": ["claude-sonnet-5"],
+                "variante": "programa",
+                "harness": {"coste_usd": 0.3, "turnos": 9, "duracion_ms": 36315, "tokens_cache": 241303},
+            },
+            {"repo": "r", "veredicto": "PASA", "ci": "green"},
+        ],
+    )
+
+    assert metrics.main(["report", "--repo", "r", "--path", str(log), "--json"]) == 0
+
+    data = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
+    assert data["por_modelo"]["claude-sonnet-5"]["slices"] == 1
+    assert data["por_modelo"][metrics.DESCONOCIDO]["slices"] == 1
+    assert data["por_variante"]["programa"]["coste_usd_media"] == 0.3
+    assert data["tokens_cache_media"] == 241303.0
+
+    assert metrics.main(["report", "--repo", "r", "--path", str(log)]) == 0
+    salida = capsys.readouterr().out
+    assert "por modelo:" in salida
+    assert "por variante:" in salida
+    assert "claude-sonnet-5" in salida
+    assert "programa" in salida
+    assert "tokens de cache" in salida

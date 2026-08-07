@@ -553,7 +553,8 @@ python3 ~/.claude/skills/slice-runner/scripts/metrics.py record --repo <repo> --
   --veredicto <PASA|FALLA|bloqueada-controles|abortada-presupuesto> --ci <green|red|none> \
   --hallazgos-alta N --hallazgos-media N --hallazgos-baja N \
   --reintentos-implement N --reintentos-controles N --reintentos-ci N \
-  --reintentos-verify N --descartes-verify N --duracion-s N
+  --reintentos-verify N --descartes-verify N --duracion-s N \
+  --variante agente
 ```
 
 - `veredicto` = el del verificador (`PASA`/`FALLA`), `bloqueada-controles` si paro en el backstop del
@@ -567,6 +568,11 @@ python3 ~/.claude/skills/slice-runner/scripts/metrics.py record --repo <repo> --
   agente, sin tocar el codigo). Sumarlos haria que su indisciplina se leyera como que el juez encuentra
   defectos, y un descarte **no** descalifica la slice como "primer intento": el codigo salio limpio.
 - Coste en tokens: opcional (`--coste-tokens`); si no lo tienes de OTel, no lo inventes.
+- `--variante agente` distingue este flujo -el que estas siguiendo ahora, con subagentes- del flujo
+  programa (`slice-runner run`), que se registra solo con `--variante programa`: es lo que permite
+  comparar las dos formas de conducir una slice leyendo el reporte, sin mezclar sus medias. Si sabes
+  con que modelo corriste el implementador o el juez, declaralo con `--modelo` (repetible si usaste
+  mas de uno); si no lo sabes, no lo inventes.
 
 ### 10. Esperar el merge y encadenar el deploy
 

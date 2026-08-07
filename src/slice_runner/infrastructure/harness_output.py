@@ -9,6 +9,7 @@ from pydantic import Field
 from slice_runner.domain.exceptions import InvalidHarnessOutputError, MeasuredCallError
 from slice_runner.domain.harness_spend import HarnessSpend
 from slice_runner.infrastructure.contract_model import ContractModel
+from slice_runner.infrastructure.model_usage_payload import ModelUsageEntry
 from slice_runner.infrastructure.permission_denial import PermissionDenial
 
 if TYPE_CHECKING:
@@ -26,7 +27,7 @@ class HarnessOutput(ContractModel):
     duration_ms: int
     fast_mode_disabled_reason: object = None
     fast_mode_state: object = None
-    model_usage: object = Field(alias="modelUsage", default=None)
+    model_usage: dict[str, ModelUsageEntry] | None = Field(alias="modelUsage", default=None)
     num_turns: int
     permission_denials: tuple[PermissionDenial, ...] = ()
     result: object = None
@@ -43,7 +44,15 @@ class HarnessOutput(ContractModel):
     uuid: object = None
 
     def to_domain(self) -> HarnessSpend:
-        return HarnessSpend.of_a_call(cost_usd=self.total_cost_usd, turns=self.num_turns, duration_ms=self.duration_ms)
+        return HarnessSpend.of_a_call(
+            cost_usd=self.total_cost_usd,
+            turns=self.num_turns,
+            duration_ms=self.duration_ms,
+            models=tuple(self.model_usage) if self.model_usage else (),
+            cache_read_tokens=sum(entry.cache_read_input_tokens for entry in self.model_usage.values())
+            if self.model_usage
+            else 0,
+        )
 
     @contextmanager
     def measuring(self) -> Iterator[None]:
