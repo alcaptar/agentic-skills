@@ -146,15 +146,26 @@ que no se "arreglen" hacia el lado facil:
   coste del bullet siguiente, que **si** cierra (`over-budget` -> `aborted-budget`). Darle un contador
   propio seria inventar una politica que ninguna medicion sostiene; dejarlo sin ningun cierre seria un
   bucle que paga una llamada al harness por vuelta y no termina nunca.
-- **El coste de una slice son 25 dolares (`slice_cost_usd`), y es un backstop contra un bucle sin cierre,
-  no un valor de ajuste.** No hay todavia ningun coste real en dolares en el registro durable -`metrics.py
-  report` dice hoy "sin datos: ninguna fila trae medicion del harness"-, porque esta es la primera slice
-  que va a escribirlo. Lo unico medido hoy son las llamadas a `claude -p` grabadas en
-  `src/slice_runner/tests/payloads/`, cuya mayor es **0.343 $** (`implementer-two-paths.json`): 25 $ esta
-  dos ordenes de magnitud por encima de eso y muy por encima de cualquier slice plausible, que es
-  exactamente lo que se le pide a un backstop. **Se re-fija con dolares reales** en cuanto el registro
-  durable tenga muestras; ponerlo bajo para "ahorrar" no ahorra nada, convierte un backstop en un cierre
-  espurio -una slice sana cerrada a mitad, con su etiqueta y su fila de abortada-.
+- **El coste de una slice son 50 dolares (`slice_cost_usd`), y es un backstop contra un bucle sin cierre,
+  no un valor de ajuste.** Nacio en 25 $ cuando el registro durable no tenia ni un dolar real y lo unico
+  medido eran las llamadas grabadas en `src/slice_runner/tests/payloads/`, cuya mayor son **0.343 $**: dos
+  ordenes de magnitud de margen sobre lo unico que se sabia. Ese parrafo prometia re-fijarlo con dolares
+  reales en cuanto hubiera muestras, y **esto es ese momento**. Siete slices conducidas por el programa
+  miden **5.14, 10.75, 15.07, 25.46 y 27.73 $**, o sea que el numero elegido como techo inalcanzable
+  resulto estar *dentro* del rango normal: **dos slices sanas murieron con `abortada:presupuesto`**, y las
+  dos justo despues de que el juez devolviera `PASA`, porque el limite se comprueba tras pagar la llamada.
+  Un backstop que corta slices sanas no es un backstop, es el cierre espurio contra el que este mismo
+  bullet advertia.
+
+  El techo sube a 50 $ **sin tocar que se cuenta**: sigue sumando todas las llamadas del run, y por eso el
+  descarte del juez sigue acotado (bullet anterior). Contar solo al implementador abarataria el numero a
+  costa de dejar ese bucle sin ningun cierre, que es exactamente lo que ese bullet existe para impedir.
+
+  El otro lado de la misma medicion es que **el implementador fija su modelo** (`ImplementerInvocation.
+  MODEL`) en vez de heredar el de quien lanza el run: los 25-28 $ se pagaron con Opus porque ninguna
+  invocacion declaraba modelo. El juez **no** lo fija a proposito, y hay test de las dos cosas: el que
+  produce se puede permitir el barato porque su trabajo lo revisa otro; el que juzga es el ultimo control
+  antes de una pull request, y ahi ahorrar es ahorrar en la garantia.
 
   Y **un gasto no medido cuenta como agotado**, no como cero: `HarnessSpend` distingue "todavia no se ha
   medido nada" de "cero medido" (`measured`), y lo que no se puede sumar no se puede acotar, asi que un
