@@ -5,6 +5,9 @@ perder el control humano en los dos puntos donde importa: el merge y el rollback
 
 No es de la organizacion: de momento, uso personal.
 
+Si es tu primer contacto con este repo, `docs/getting-started.md` es el arranque de punta a punta -
+requisitos, coste, permisos y el comando concreto para tu primer run-. Lo que sigue explica el diseno.
+
 ## Para que existe
 
 El problema no es que un agente no sepa escribir codigo: es que un agente suelto sobre una tarea
@@ -291,7 +294,7 @@ mientras siga vivo, y si no, el cierre concreto- y **cuantos segundos hay que es
 proximo tick, para que el numero de la ventana de gracia no lo decida quien tickea. Los presupuestos son
 dos reintentos de controles, dos de verificacion, uno de integracion continua roja, y 3 ticks
 indeterminados consecutivos con 30 s o mas entre tick y tick. Por encima de todos ellos hay dos topes que
-no cuentan intentos sino gasto: **25 $ de harness por slice**, que cierra el run como abortado y es el
+no cuentan intentos sino gasto: **50 $ de harness por slice**, que cierra el run como abortado y es el
 backstop del unico bucle sin cierre propio -el descarte de un veredicto incoherente, que no gasta reintento
 porque no se toco el codigo-, y **30 minutos de espera**, que terminan la invocacion dejando el run abierto
 donde estaba. El motivo de los dos numeros esta en `docs/conventions/domain.md`. Un par (paso, resultado)

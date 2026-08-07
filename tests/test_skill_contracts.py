@@ -148,6 +148,45 @@ def test_no_label_in_the_vocabulary_lacks_a_source_in_the_translator_or_a_manual
     assert set(IssueLabel) - produced == manual_source
 
 
+_GETTING_STARTED = _ROOT / "docs" / "getting-started.md"
+_LABEL_LOOP_HEADING = "## Crear las etiquetas de estado en el repo destino"
+_LABEL_LOOP_TOKEN = re.compile(r"\b((?:estado|bloqueada|abortada):[a-z-]+)\b")
+
+
+def _getting_started_label_loop() -> str:
+    """The fenced `bash` loop under `_LABEL_LOOP_HEADING`, not the whole file.
+
+    The heading's own prose names a label outside the loop (`abortada:presupuesto`, in the cost
+    bullet above it), so scanning the full document would count a mention the loop never creates
+    as proof the loop creates it. Cut to the fence first, the way `_spec_example` cuts to a section
+    before it scans.
+    """
+    text = _read(_GETTING_STARTED)
+    at = text.find(f"\n{_LABEL_LOOP_HEADING}\n")
+    assert at != -1, f"cannot find `{_LABEL_LOOP_HEADING}` in {_rel(_GETTING_STARTED)}"
+
+    block = re.search(r"```bash\n(.*?)^```", text[at:], re.DOTALL | re.MULTILINE)
+    assert block, f"`{_LABEL_LOOP_HEADING}` in {_rel(_GETTING_STARTED)} carries no fenced loop"
+
+    return block.group(1)
+
+
+def test_every_label_the_getting_started_loop_creates_is_one_the_domain_knows() -> None:
+    """`getting-started.md` spells out the loop that creates every state label in a fresh repo.
+
+    `como-se-escribe.md` bans a closed enumeration of a value nothing measures -- a member added to
+    `IssueLabel` would leave the loop silently incomplete, and the doc's own text says as much
+    without a contract behind it. Comparing the loop's tokens against the enum turns that closed list
+    into the "copy a contract measures" form the convention accepts instead.
+    """
+    written = set(_LABEL_LOOP_TOKEN.findall(_getting_started_label_loop()))
+    assert written == set(IssueLabel), (
+        f"{_rel(_GETTING_STARTED)} and IssueLabel disagree on the labels its loop creates: "
+        f"only in the loop {sorted(written - set(IssueLabel))}, "
+        f"only in the domain {sorted(set(IssueLabel) - written)}"
+    )
+
+
 _PARENT_EXAMPLE = "### El issue padre"
 _SUBISSUE_EXAMPLE = "### Una subissue por slice"
 _HARD_RULES = "### Reglas duras"
@@ -526,6 +565,36 @@ def test_the_grace_window_is_the_same_number_wherever_it_is_written() -> None:
     assert set(written.values()) == {(budgets.indeterminate_ticks, budgets.seconds_between_ticks)}, (
         f"the grace window of {type(budgets).__name__} is "
         f"{(budgets.indeterminate_ticks, budgets.seconds_between_ticks)} and the prose writes {written}"
+    )
+
+
+_SLICE_COST_IS_WRITTEN_IN = (
+    _GETTING_STARTED,
+    _ROOT / "README.md",
+)
+
+
+def _slice_cost_usd(text: str) -> float:
+    """The dollar cap on a single slice's harness spend, however the surface phrases it."""
+    match = re.search(r"(\d+(?:\.\d+)?)\s*(?:\$ de harness por slice|dolares de harness)", text)
+    assert match, "the slice cost cap is not stated in a form this contract recognizes"
+
+    return float(match.group(1))
+
+
+def test_the_slice_cost_cap_is_the_same_number_wherever_it_is_written() -> None:
+    """`como-se-escribe.md` bans a count with no contract behind it, and this number is one.
+
+    `Budgets.slice_cost_usd` is what actually aborts a slice; `getting-started.md` and `README.md`
+    both restate it in prose so a newcomer sees the cap before the first run, and prose a slice can
+    change without touching the number it quotes is exactly the "censo sin contrato" the convention
+    forbids.
+    """
+    budgets = Budgets()
+    written = {_rel(path): _slice_cost_usd(_read(path)) for path in _SLICE_COST_IS_WRITTEN_IN}
+
+    assert set(written.values()) == {budgets.slice_cost_usd}, (
+        f"the slice cost cap of {type(budgets).__name__} is {budgets.slice_cost_usd} and the prose writes {written}"
     )
 
 
