@@ -137,6 +137,20 @@ class TestSelectSlice:
         repository.read_parent.assert_called_once_with(repo=_REPO, issue=_ISSUE, slice_repo=None)
         assert chosen.parent == ParentIssueMother.of_two_slices()
 
+    def test_a_subissue_github_closed_while_its_run_was_still_open_surfaces_as_dangling(
+        self, query: SelectSlice, repository: Mock
+    ) -> None:
+        repository.read_children.return_value = (SubIssueMother.dangling(), SubIssueMother.pending())
+
+        assert query.execute(_PARAMS).dangling == (SubIssueMother.dangling(),)
+
+    def test_a_closed_subissue_with_no_run_left_open_is_not_dangling(
+        self, query: SelectSlice, repository: Mock
+    ) -> None:
+        repository.read_children.return_value = (SubIssueMother.closed(), SubIssueMother.pending())
+
+        assert query.execute(_PARAMS).dangling == ()
+
 
 class TestSelectingTheSliceNamedByTheCaller:
     @pytest.fixture
