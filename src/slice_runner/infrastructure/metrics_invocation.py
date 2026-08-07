@@ -2,17 +2,15 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
+from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
 from slice_runner.domain.discard_cause import DiscardCause
 from slice_runner.domain.exceptions import RunNotClosedError
 from slice_runner.domain.run_state import RunState
 from slice_runner.domain.severity import Severity
-from slice_runner.infrastructure.claude_config import ClaudeConfig
 
 if TYPE_CHECKING:
-    from pathlib import Path
-
     from slice_runner.domain.closed_slice import ClosedSlice
 
 
@@ -72,13 +70,14 @@ class DurableClosure:
 @dataclass(frozen=True, kw_only=True, slots=True)
 class MetricsInvocation:
     EXECUTABLE: ClassVar[str] = "python3"
+    PROGRAM_ROOT: ClassVar[Path] = Path(__file__).parents[3]
     SCRIPT: ClassVar[tuple[str, ...]] = ("skills", "slice-runner", "scripts", "metrics.py")
 
     closed: ClosedSlice
 
     @property
     def script(self) -> Path:
-        return ClaudeConfig.root().joinpath(*self.SCRIPT)
+        return self.PROGRAM_ROOT.joinpath(*self.SCRIPT)
 
     @property
     def argv(self) -> list[str]:
