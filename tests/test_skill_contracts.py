@@ -15,10 +15,10 @@ step passes; changing one side alone fails. That is the only drift these tests e
 from __future__ import annotations
 
 import argparse
+import ast
 import importlib
 import json
 import re
-import subprocess
 import tomllib
 from pathlib import Path
 
@@ -52,6 +52,7 @@ from slice_runner.infrastructure.slice_verifier_judge import SliceVerifierJudge
 from slice_runner.infrastructure.subissue_body import SubissueBody
 from slice_runner.infrastructure.verdict_payload import FindingPayload
 from slice_runner.tests.doubles import ScriptedProcess
+from slice_runner.tests.git_repo import Git
 from slice_runner.tests.mothers.closed_slice_mother import ClosedSliceMother
 
 _ROOT = Path(__file__).resolve().parents[1]
@@ -83,13 +84,13 @@ def _rel(path: Path) -> str:
 
 
 def _tracked(*patterns: str) -> list[str]:
-    """Paths git tracks, so the check measures the repo as published, not the local mess."""
-    out = subprocess.run(
-        ["git", "-C", str(_ROOT), "ls-files", "-z", "--", *patterns],
-        capture_output=True,
-        text=True,
-        check=True,
-    ).stdout
+    """Paths git tracks, so the check measures the repo as published, not the local mess.
+
+    Launched through `Git.run` rather than by hand: it is the shared `git` helper of both test trees
+    and it carries the cap, which is what keeps this helper from being the one hole in the rule the
+    scan below exists to enforce.
+    """
+    out = Git.run(_ROOT, "ls-files", "-z", "--", *patterns)
     return sorted(p for p in out.split("\0") if p)
 
 
@@ -1126,3 +1127,77 @@ def test_the_smoke_fixture_is_linted_with_the_same_yardstick_as_the_repo() -> No
         f"a rule in the `select` is configured differently in {_rel(_FIXTURE_PYPROJECT)}, so the same "
         f"code would pass in one and fail in the other"
     )
+
+
+_LAUNCHERS = _tracked("src/slice_runner/*.py", "skills/*/scripts/*.py", "smoke/fixture/*.py", "tests/*.py")
+
+
+_LAUNCHING_CALLS = {
+    "subprocess": frozenset({"run", "call", "check_call", "check_output", "Popen"}),
+    "os": frozenset({"system", "popen"}),
+}
+"""Every spelling of "start an external process" in the stdlib this repo could reach for.
+
+`Popen` and `os.system`/`os.popen` take no `timeout` at all, so they have no capped spelling and
+always count as uncapped -- which is the point: the cap is not optional here.
+"""
+
+
+def _launches_a_process(node: ast.Call) -> bool:
+    return (
+        isinstance(node.func, ast.Attribute)
+        and isinstance(node.func.value, ast.Name)
+        and node.func.attr in _LAUNCHING_CALLS.get(node.func.value.id, frozenset())
+    )
+
+
+def _uncapped_calls(source: str) -> list[int]:
+    """Lines that launch an external process without a `timeout`, which is a call with no cap."""
+    tree = ast.parse(source)
+    called = (node for node in ast.walk(tree) if isinstance(node, ast.Call))
+
+    return sorted(
+        node.lineno
+        for node in called
+        if _launches_a_process(node) and not any(keyword.arg == "timeout" for keyword in node.keywords)
+    )
+
+
+@pytest.mark.integration
+def test_no_call_to_an_external_process_is_launched_without_a_cap() -> None:
+    """`CLAUDE.md` says every call to an external process carries a cap per call, and prose is not a cap.
+
+    A call that never comes back hangs the whole run with no diagnosis and no bounded cost, and the
+    yardstick that would catch it was written for the skills only, so nobody reviewing the program had
+    anything to fail it with -- which is what happened while judging slice-17. The program funnels every
+    launch through `LocalProcess`, so one uncapped `subprocess.run` anywhere here is one hole in a rule
+    that otherwise holds by construction: this measures the tree instead of trusting the funnel.
+    """
+    uncapped = {path: lines for path in _LAUNCHERS if (lines := _uncapped_calls(_read(_ROOT / path)))}
+
+    assert not uncapped, "these calls launch a process with no cap on how long it may take:\n" + "\n".join(
+        f"  {path}: line(s) {', '.join(str(line) for line in lines)}" for path, lines in sorted(uncapped.items())
+    )
+
+
+def test_the_scan_counts_as_uncapped_every_way_of_launching_a_process_not_only_subprocess_run() -> None:
+    """A yardstick that only knows one launcher measures the habit, not the rule.
+
+    `subprocess.run` is what this repo happens to write today, so a scan that keys on it passes a
+    `Popen`, a `check_output` or an `os.system` with no cap at all -- and the rule the scan exists to
+    enforce says *every* call, not every call written the usual way. `Popen` and `os.system` take no
+    `timeout`, so there is no capped spelling of them: they count as uncapped wherever they appear.
+    """
+    source = "\n".join(
+        [
+            "import os",
+            "import subprocess",
+            "subprocess.run(['x'], timeout=1)",
+            "subprocess.run(['x'])",
+            "subprocess.check_output(['x'])",
+            "subprocess.Popen(['x'])",
+            "os.system('x')",
+        ]
+    )
+
+    assert _uncapped_calls(source) == [4, 5, 6, 7]

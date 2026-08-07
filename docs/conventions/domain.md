@@ -110,7 +110,7 @@ implementador declaro, y la tupla vacia es el indice limpio. Tres decisiones que
   `tests/test_skill_contracts.py` compara los dos conjuntos, asi que anadir un prefijo en un solo lado
   pone `make check` en rojo.
 
-Cuatro decisiones mas de `StateMachine` y de los `Budgets` que le entran no son deriva, y estan aqui para
+Cinco decisiones mas de `StateMachine` y de los `Budgets` que le entran no son deriva, y estan aqui para
 que no se "arreglen" hacia el lado facil:
 
 - **La separacion minima entre ticks es una sola, para los tres tipos de tick.** La prosa solo pone
@@ -127,6 +127,19 @@ que no se "arreglen" hacia el lado facil:
   termine la invocacion en vez de retener el proceso durante horas, que es lo que prescribe el paso 10 de
   `skills/slice-runner/SKILL.md`. **Agotarlo no cierra el run**: lo deja abierto y persistido en su paso,
   con `wait-exhausted` diciendo que reinvocar es justo lo que toca.
+- **El tope de una llamada a un proceso externo es una hora (`process_timeout_seconds`), y es un backstop
+  contra una llamada que no vuelve, no un valor de ajuste.** Vive en `Budgets` -aunque quien lo aplica sea
+  un adaptador- porque es el mismo tipo de dato que los otros: un numero medido con el que se acota una
+  espera, y tenerlo aqui es lo que evita que cada adaptador se invente el suyo. Lo mas largo que se ha
+  medido llamar son los sobres de `claude -p` de `src/slice_runner/tests/payloads/`, cuyo mayor tarda 51
+  segundos, y lo mas largo declarado es el `make test` de ~20 minutos de `skills/slice-spec/SKILL.md`: una
+  hora los despeja a los dos con margen, que es lo que se le pide a un backstop -ponerlo bajo no ahorra
+  nada, mata un control sano a mitad-.
+
+  **Es un solo numero para las tres clases de llamada** -el harness, los controles y los `git`/`gh`-, por
+  el mismo motivo que la separacion entre ticks es una sola: un campo por clase serian dos numeros que
+  nadie ha medido. Consecuencia aceptada: un `gh` colgado tarda una hora en morir, cuando por su
+  naturaleza sobraban segundos. Sigue siendo acotado, que es lo que el tope existe para garantizar.
 - **El descarte del juez -devolver algo que no es su veredicto- no tiene presupuesto propio.** Es fiel a
   la prosa: no gasta reintento porque **no se ha tocado el codigo**, asi que no es un intento de la fase.
   Lo que cambia al pasar a programa es quien lo acota: antes, la persona mirando; ahora, el presupuesto de

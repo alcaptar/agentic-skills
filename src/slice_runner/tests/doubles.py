@@ -2,11 +2,17 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
+from typing import ClassVar
 from unittest.mock import Mock, create_autospec
 
 from slice_runner.infrastructure.judge_invocation import JudgeInvocation
-from slice_runner.infrastructure.local_process import LocalProcess
-from slice_runner.infrastructure.process import Process, ProcessNotRunnableError, ProcessOutput
+from slice_runner.infrastructure.process import (
+    Process,
+    ProcessNotRunnableError,
+    ProcessOutput,
+    ProcessTimedOutError,
+)
+from slice_runner.tests.real_process import Real
 
 
 class ProcessDoubles:
@@ -37,13 +43,20 @@ class RecordedProcess(Process):
 
 class UnrunnableJudge(Process):
     def __init__(self) -> None:
-        self._real = LocalProcess()
+        self._real = Real.process()
 
     def run(self, argv: list[str], *, stdin: str, cwd: str | None = None) -> ProcessOutput:
         if argv[0] != JudgeInvocation.EXECUTABLE:
             return self._real.run(argv, stdin=stdin, cwd=cwd)
 
         raise ProcessNotRunnableError(f"{argv[0]}: no such executable")
+
+
+class TimingOutProcess(Process):
+    CAP_SECONDS: ClassVar[int] = 1
+
+    def run(self, argv: list[str], *, stdin: str, cwd: str | None = None) -> ProcessOutput:
+        raise ProcessTimedOutError(f"{argv[0]}: killed after {self.CAP_SECONDS}s")
 
 
 @dataclass(frozen=True, kw_only=True, slots=True)
@@ -101,7 +114,7 @@ class AnsweringByArgv(Process):
 class RealExceptTheJudge(Process):
     def __init__(self, judge_output: dict[str, object]) -> None:
         self._judge_output = judge_output
-        self._real = LocalProcess()
+        self._real = Real.process()
         self.argv: list[str] = []
         self.stdin = ""
         self.calls = 0

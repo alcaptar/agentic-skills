@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from slice_runner.application.actions.conduct_slice import ConductSliceParams
+from slice_runner.domain.budgets import Budgets
 from slice_runner.infrastructure.cli import Cli
 from slice_runner.infrastructure.metrics_invocation import MetricsInvocation
 from slice_runner.tests.doubles import Answer, AnsweringByArgv
@@ -30,14 +31,25 @@ class RunInvocation:
             Answer(to=(MetricsInvocation.EXECUTABLE, "record")),
         )
 
-    def conduct(self, *, logs: Path, base: str = GhConversationMother.BASE, slice_id: str | None = None) -> int:
-        return Cli(process=self.process).run(
-            ConductSliceParams(
-                repo=GhConversationMother.REPO,
-                issue=GhConversationMother.ISSUE,
-                worktree=GhConversationMother.WORKTREE,
-                base=base,
-                logs=logs,
-                slice_id=slice_id,
-            )
+    def conduct(
+        self,
+        *,
+        logs: Path,
+        base: str = GhConversationMother.BASE,
+        slice_id: str | None = None,
+        budgets: Budgets | None = None,
+    ) -> int:
+        return Cli(process=self.process, budgets=budgets or Budgets()).run(
+            self.params(logs=logs, base=base, slice_id=slice_id)
+        )
+
+    @staticmethod
+    def params(*, logs: Path, base: str = GhConversationMother.BASE, slice_id: str | None = None) -> ConductSliceParams:
+        return ConductSliceParams(
+            repo=GhConversationMother.REPO,
+            issue=GhConversationMother.ISSUE,
+            worktree=GhConversationMother.WORKTREE,
+            base=base,
+            logs=logs,
+            slice_id=slice_id,
         )

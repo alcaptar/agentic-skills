@@ -6,9 +6,9 @@ import pytest
 
 from slice_runner.domain.exceptions import EmptyIndexError, UnresolvableRepoOrBaseError
 from slice_runner.infrastructure.git_diff_reader import GitDiffReader
-from slice_runner.infrastructure.local_process import LocalProcess
 from slice_runner.tests.git_repo import Git
 from slice_runner.tests.mothers.repo_mother import RepoMother
+from slice_runner.tests.real_process import Real
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -42,7 +42,7 @@ class TestWhatItReads:
 
     @staticmethod
     def _reader() -> GitDiffReader:
-        return GitDiffReader(process=LocalProcess())
+        return GitDiffReader(process=Real.process())
 
 
 @pytest.mark.integration
@@ -53,7 +53,7 @@ class TestWhatItRefusesToRead:
         repo = RepoMother.with_the_slice_staged(tmp_path)
         (repo / "mod.py").write_text("def f() -> int:\n    return 999\n", encoding="utf-8")
 
-        read = GitDiffReader(process=LocalProcess()).read(repo=str(repo), base=Git.BASE_BRANCH)
+        read = GitDiffReader(process=Real.process()).read(repo=str(repo), base=Git.BASE_BRANCH)
 
         assert "999" not in read.text
         assert "+    return 2" in read.text
@@ -62,16 +62,16 @@ class TestWhatItRefusesToRead:
         repo = RepoMother.with_nothing_staged(tmp_path)
 
         with pytest.raises(EmptyIndexError, match="nothing staged"):
-            GitDiffReader(process=LocalProcess()).read(repo=str(repo), base=Git.BASE_BRANCH)
+            GitDiffReader(process=Real.process()).read(repo=str(repo), base=Git.BASE_BRANCH)
 
     def test_a_base_that_does_not_resolve_is_told_apart_from_an_empty_index(self, tmp_path: Path) -> None:
         repo = RepoMother.with_the_slice_staged(tmp_path)
 
         with pytest.raises(UnresolvableRepoOrBaseError, match="not-a-base"):
-            GitDiffReader(process=LocalProcess()).read(repo=str(repo), base="not-a-base")
+            GitDiffReader(process=Real.process()).read(repo=str(repo), base="not-a-base")
 
     def test_a_directory_that_is_not_a_repo_is_told_apart_too(self, tmp_path: Path) -> None:
         outside = RepoMother.outside_git(tmp_path)
 
         with pytest.raises(UnresolvableRepoOrBaseError):
-            GitDiffReader(process=LocalProcess()).read(repo=str(outside), base=Git.BASE_BRANCH)
+            GitDiffReader(process=Real.process()).read(repo=str(outside), base=Git.BASE_BRANCH)

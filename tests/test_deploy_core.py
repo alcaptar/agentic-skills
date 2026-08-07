@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import json
-import subprocess
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 
@@ -23,6 +23,10 @@ from deploy_core import (
     classify,
     verdict,
 )
+from slice_runner.tests.real_process import Real
+
+if TYPE_CHECKING:
+    from slice_runner.infrastructure.process import ProcessOutput
 
 _CORE = Path(__file__).resolve().parent.parent / "skills" / "deploy-watch" / "scripts" / "deploy_core.py"
 
@@ -259,14 +263,8 @@ def test_un_umbral_en_texto_no_llega_hasta_la_comparacion() -> None:
         SignalConfig.from_dict({"crit_abs": "5"})
 
 
-def _cli(payload: object) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        [sys.executable, str(_CORE), "verdict"],
-        input=json.dumps(payload),
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+def _cli(payload: object) -> ProcessOutput:
+    return Real.process().run([sys.executable, str(_CORE), "verdict"], stdin=json.dumps(payload))
 
 
 def test_cli_verdict_json() -> None:
@@ -282,7 +280,7 @@ def test_cli_verdict_json() -> None:
         "elapsed_secs": 120,
     }
     out = _cli(payload)
-    assert out.returncode == 0
+    assert out.code == 0
     data = json.loads(out.stdout)
     assert data["verdict"] == Veredicto.NO_GO
     assert data["blocking"] == ["err"]
@@ -323,7 +321,7 @@ def test_cli_emite_el_aviso_de_baseline_ruidoso() -> None:
         "elapsed_secs": 120,
     }
     out = _cli(payload)
-    assert out.returncode == 0
+    assert out.code == 0
     avisos = json.loads(out.stdout)["baseline_warnings"]
     assert len(avisos) == 1
     assert "ruidoso" in avisos[0]
@@ -337,7 +335,7 @@ def test_cli_exit_2_y_ningun_veredicto_si_la_config_es_invalida() -> None:
     es lo unico peor que no responder.
     """
     out = _cli({"config": {"signals": {"err": {"declarado": True}}}})
-    assert out.returncode == 2
+    assert out.code == 2
     assert out.stdout == ""
     assert "declarado" in out.stderr
 
@@ -348,6 +346,6 @@ def test_cli_exit_2_si_una_muestra_no_es_un_numero() -> None:
     Lo que el CLI promete para un payload mal formado es exit 2, no un traceback.
     """
     out = _cli({"config": {"signals": {"err": {}}}, "tick_history": [{"err": "muchos"}]})
-    assert out.returncode == 2
+    assert out.code == 2
     assert out.stdout == ""
     assert "tick_history[0]" in out.stderr

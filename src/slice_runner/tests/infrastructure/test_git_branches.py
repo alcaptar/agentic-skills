@@ -5,8 +5,8 @@ from typing import TYPE_CHECKING
 import pytest
 
 from slice_runner.infrastructure.git_branches import GitBranches, GitCommandFailedError
-from slice_runner.infrastructure.local_process import LocalProcess
 from slice_runner.tests.git_repo import Git
+from slice_runner.tests.real_process import Real
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -18,7 +18,7 @@ class TestGitBranches:
         repo = Git.init_repo(tmp_path / "repo")
         Git.run(repo, "commit", "--allow-empty", "-m", "base")
 
-        exists = GitBranches(process=LocalProcess()).exists(worktree=str(repo), name=Git.BASE_BRANCH)
+        exists = GitBranches(process=Real.process()).exists(worktree=str(repo), name=Git.BASE_BRANCH)
 
         assert exists is True
 
@@ -26,7 +26,7 @@ class TestGitBranches:
         repo = Git.init_repo(tmp_path / "repo")
         Git.run(repo, "commit", "--allow-empty", "-m", "base")
 
-        exists = GitBranches(process=LocalProcess()).exists(worktree=str(repo), name="slice/99-never-branched")
+        exists = GitBranches(process=Real.process()).exists(worktree=str(repo), name="slice/99-never-branched")
 
         assert exists is False
 
@@ -35,7 +35,7 @@ class TestGitBranches:
         outside.mkdir()
 
         with pytest.raises(GitCommandFailedError):
-            GitBranches(process=LocalProcess()).exists(worktree=str(outside), name=Git.BASE_BRANCH)
+            GitBranches(process=Real.process()).exists(worktree=str(outside), name=Git.BASE_BRANCH)
 
 
 @pytest.mark.integration
@@ -51,7 +51,7 @@ class TestGitBranchesCreatingTheBranchOfTheSlice:
 
     def test_the_branch_of_the_slice_exists_after_creating_it(self, tmp_path: Path) -> None:
         repo = self._repo_with_a_base_commit(tmp_path)
-        branches = GitBranches(process=LocalProcess())
+        branches = GitBranches(process=Real.process())
 
         branches.create(worktree=str(repo), name=self._SLICE_BRANCH, base=Git.BASE_BRANCH)
 
@@ -60,7 +60,7 @@ class TestGitBranchesCreatingTheBranchOfTheSlice:
     def test_the_worktree_ends_standing_on_the_branch_it_created(self, tmp_path: Path) -> None:
         repo = self._repo_with_a_base_commit(tmp_path)
 
-        GitBranches(process=LocalProcess()).create(worktree=str(repo), name=self._SLICE_BRANCH, base=Git.BASE_BRANCH)
+        GitBranches(process=Real.process()).create(worktree=str(repo), name=self._SLICE_BRANCH, base=Git.BASE_BRANCH)
 
         assert Git.run(repo, "rev-parse", "--abbrev-ref", "HEAD").strip() == self._SLICE_BRANCH
 
@@ -71,7 +71,7 @@ class TestGitBranchesCreatingTheBranchOfTheSlice:
         Git.run(repo, "switch", "-c", "someone-elses-work")
         Git.run(repo, "commit", "--allow-empty", "-m", "work of another branch")
 
-        GitBranches(process=LocalProcess()).create(worktree=str(repo), name=self._SLICE_BRANCH, base=Git.BASE_BRANCH)
+        GitBranches(process=Real.process()).create(worktree=str(repo), name=self._SLICE_BRANCH, base=Git.BASE_BRANCH)
 
         assert Git.run(repo, "rev-parse", "HEAD").strip() == Git.run(repo, "rev-parse", Git.BASE_BRANCH).strip()
 
@@ -79,7 +79,7 @@ class TestGitBranchesCreatingTheBranchOfTheSlice:
         self, tmp_path: Path
     ) -> None:
         repo = self._repo_with_a_base_commit(tmp_path)
-        branches = GitBranches(process=LocalProcess())
+        branches = GitBranches(process=Real.process())
         branches.create(worktree=str(repo), name=self._SLICE_BRANCH, base=Git.BASE_BRANCH)
         Git.run(repo, "switch", Git.BASE_BRANCH)
 

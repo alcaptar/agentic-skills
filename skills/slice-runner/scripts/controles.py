@@ -88,6 +88,9 @@ DEFAULT_TAIL = 30
 DEFAULT_TIMEOUT = 600
 """Truncado de la salida de un control que falla (solo sin `--out`), y tope de duracion."""
 
+TOPE_AUXILIAR = 60
+"""Tope de las llamadas auxiliares a `git` y `gh`, que contestan en segundos: una colgada cuelga la skill entera."""
+
 FORBIDDEN_PREFIXES = (
     "docs/superpowers/specs/",
     "docs/superpowers/plans/",
@@ -136,6 +139,7 @@ def _staged_files(repo: str) -> list[str]:
         capture_output=True,
         text=True,
         check=True,
+        timeout=TOPE_AUXILIAR,
     )
     return [line.strip() for line in out.stdout.splitlines() if line.strip()]
 
@@ -412,12 +416,14 @@ def escribe_diff_bundle(repo: str, base: str, out: str) -> ResultadoBundle:
             capture_output=True,
             text=True,
             check=True,
+            timeout=TOPE_AUXILIAR,
         ).stdout
         names = subprocess.run(
             ["git", "-C", repo, "diff", "--cached", "--name-only", *rango],
             capture_output=True,
             text=True,
             check=True,
+            timeout=TOPE_AUXILIAR,
         ).stdout
     except subprocess.CalledProcessError as exc:
         return ResultadoBundle(
@@ -603,6 +609,7 @@ def consulta_ci(repo: str, pr: int) -> ResultadoCI:
         capture_output=True,
         text=True,
         check=False,
+        timeout=TOPE_AUXILIAR,
     )
     result = clasifica_ci(proc.stdout)
     if result.estado is EstadoCI.DESCONOCIDO and proc.stderr.strip():

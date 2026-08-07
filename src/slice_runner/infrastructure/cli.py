@@ -53,7 +53,7 @@ from slice_runner.infrastructure.local_corpus import LocalCorpus
 from slice_runner.infrastructure.local_process import LocalProcess
 from slice_runner.infrastructure.local_skill_library import LocalSkillLibrary
 from slice_runner.infrastructure.metrics_script_log import MetricsNotRecordedError, MetricsScriptLog
-from slice_runner.infrastructure.process import ProcessNotRunnableError
+from slice_runner.infrastructure.process import ProcessNotRunnableError, ProcessTimedOutError
 from slice_runner.infrastructure.slice_pull_request import SlicePullRequest
 from slice_runner.infrastructure.slice_verifier_judge import SliceVerifierJudge
 from slice_runner.infrastructure.stderr_event_log import StderrEventLog
@@ -71,9 +71,30 @@ if TYPE_CHECKING:
 class Cli:
     PROGRAM: ClassVar[str] = "slice-runner"
     LOGS: ClassVar[Path] = Path(tempfile.gettempdir()) / "slice-runner-logs"
+    STOPS: ClassVar[tuple[type[Exception], ...]] = (
+        NoSliceLeftError,
+        UnresolvableRepoOrBaseError,
+        UnreadableIssueError,
+        UnreadableRunError,
+        ImpossibleTransitionError,
+        ProtectedBranchError,
+        BranchMismatchError,
+        DiffNotReadableError,
+        MeasuredCallError,
+        ProcessTimedOutError,
+        UnreadableForumError,
+        LaggingSearchIndexError,
+        NoPullRequestError,
+        RunNotClosedError,
+        GhCommandFailedError,
+        GitCommandFailedError,
+        MetricsNotRecordedError,
+        ProcessNotRunnableError,
+    )
 
-    def __init__(self, *, process: Process) -> None:
+    def __init__(self, *, process: Process, budgets: Budgets) -> None:
         self._process = process
+        self._budgets = budgets
 
     @classmethod
     def main(cls, argv: list[str] | None = None) -> int:
@@ -82,15 +103,17 @@ class Cli:
         except SystemExit as refusal:
             return ExitCode.USAGE_ERROR if refusal.code else ExitCode.OK
 
+        budgets = Budgets()
+
         match Subcommand(arguments.command):
             case Subcommand.VERIFY:
-                return cls(process=LocalProcess()).verify(
+                return cls(process=LocalProcess(budgets=budgets), budgets=budgets).verify(
                     repo=arguments.repo, base=arguments.base, slice_id=arguments.slice_id
                 )
             case Subcommand.EXPLAIN:
-                return cls.explain(request=sys.stdin.read())
+                return cls.explain(request=sys.stdin.read(), budgets=budgets)
             case Subcommand.RUN:
-                return cls(process=LocalProcess()).run(
+                return cls(process=LocalProcess(budgets=budgets), budgets=budgets).run(
                     ConductSliceParams(
                         repo=arguments.repo,
                         issue=arguments.issue,
@@ -138,10 +161,10 @@ class Cli:
         return parser
 
     @classmethod
-    def explain(cls, *, request: str) -> int:
+    def explain(cls, *, request: str, budgets: Budgets) -> int:
         try:
             asked = TransitionRequestPayload.read(request)
-            transition = StateMachine(budgets=Budgets()).after(asked.run.to_domain(), asked.outcome)
+            transition = StateMachine(budgets=budgets).after(asked.run.to_domain(), asked.outcome)
         except (ImpossibleTransitionError, UnreadableRunError) as error:
             return cls._reported(f"there is no transition to explain: {error}", ExitCode.USAGE_ERROR)
 
@@ -158,6 +181,11 @@ class Cli:
             return self._reported(f"there is no diff to verify: {error}", ExitCode.NO_DIFF)
         except InvalidHarnessOutputError as error:
             return self._reported(f"the judge left no usable verdict: {error}", ExitCode.NO_USABLE_VERDICT)
+        except ProcessTimedOutError as error:
+            return self._reported(
+                f"a process the run needs never came back and was killed at its cap: {error}",
+                ExitCode.PROCESS_TIMED_OUT,
+            )
         except ProcessNotRunnableError as error:
             return self._reported(
                 f"a process the run needs could not be launched, so there is no verdict: {error}",
@@ -174,39 +202,39 @@ class Cli:
 
         try:
             conducted = self._conductor().execute(params)
-        except NoSliceLeftError as error:
-            return self._reported(f"there is no slice left to run: {error}", ExitCode.NO_SLICE_LEFT)
-        except (
-            UnresolvableRepoOrBaseError,
-            UnreadableIssueError,
-            UnreadableRunError,
-            ImpossibleTransitionError,
-            ProtectedBranchError,
-            BranchMismatchError,
-        ) as error:
-            return self._reported(f"the run cannot be conducted as asked: {error}", ExitCode.USAGE_ERROR)
-        except DiffNotReadableError as error:
-            return self._reported(f"there is no diff to verify: {error}", ExitCode.NO_DIFF)
-        except MeasuredCallError as error:
-            return self._reported(f"the harness left nothing usable behind: {error}", ExitCode.NO_USABLE_VERDICT)
-        except (
-            UnreadableForumError,
-            LaggingSearchIndexError,
-            NoPullRequestError,
-            RunNotClosedError,
-            GhCommandFailedError,
-            GitCommandFailedError,
-            MetricsNotRecordedError,
-            ProcessNotRunnableError,
-        ) as error:
-            return self._reported(f"the run stopped before reaching a halt: {error}", ExitCode.RUN_INTERRUPTED)
+        except self.STOPS as error:
+            return self._why_the_run_stopped(error)
 
         print(json.dumps(ConductedSlicePayload.from_domain(conducted).to_contract(), ensure_ascii=False))
 
         return ExitCode.of_the_halt(halt=conducted.halt, state=conducted.state)
 
+    def _why_the_run_stopped(self, error: Exception) -> ExitCode:
+        match error:
+            case NoSliceLeftError():
+                return self._reported(f"there is no slice left to run: {error}", ExitCode.NO_SLICE_LEFT)
+            case (
+                UnresolvableRepoOrBaseError()
+                | UnreadableIssueError()
+                | UnreadableRunError()
+                | ImpossibleTransitionError()
+                | ProtectedBranchError()
+                | BranchMismatchError()
+            ):
+                return self._reported(f"the run cannot be conducted as asked: {error}", ExitCode.USAGE_ERROR)
+            case DiffNotReadableError():
+                return self._reported(f"there is no diff to verify: {error}", ExitCode.NO_DIFF)
+            case MeasuredCallError():
+                return self._reported(f"the harness left nothing usable behind: {error}", ExitCode.NO_USABLE_VERDICT)
+            case ProcessTimedOutError():
+                return self._reported(
+                    f"a call the run made never came back and was killed at its cap: {error}",
+                    ExitCode.PROCESS_TIMED_OUT,
+                )
+            case _:
+                return self._reported(f"the run stopped before reaching a halt: {error}", ExitCode.RUN_INTERRUPTED)
+
     def _conductor(self) -> ConductSlice:
-        budgets = Budgets()
         repository = GhRunRepository(process=self._process)
         branches = GitBranches(process=self._process)
         forum = GhForum(process=self._process)
@@ -234,8 +262,8 @@ class Cli:
                 deploy_watch=ClaudeDeployWatch(process=self._process),
                 events=StderrEventLog(),
             ),
-            machine=StateMachine(budgets=budgets),
-            budgets=budgets,
+            machine=StateMachine(budgets=self._budgets),
+            budgets=self._budgets,
         )
 
     def _action(self) -> VerifySlice:

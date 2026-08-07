@@ -210,6 +210,19 @@ importar**: un smoke que solo importe el modulo lo da por bueno. Lo evita
   relativa.
 - Un codigo de salida distinto de cero **es un dato**, no una excepcion: se lanza el proceso con
   `check=False` y el adaptador interpreta, porque el motivo esta en `stderr` y una excepcion lo borra.
+- **Ninguna llamada a un proceso externo se lanza sin tope, y el tope no lo elige el adaptador.**
+  `LocalProcess` recibe los `Budgets` por constructor y pasa `process_timeout_seconds` como `timeout` de
+  `subprocess.run`; el numero y su motivo viven en `docs/conventions/domain.md`, que es lo que separa
+  "aplicar un tope" -trabajo de esta capa- de "decidir cual" -politica, y por eso el constructor **no
+  tiene default**: un `LocalProcess` sin presupuesto no compila-. Como el programa entero lanza procesos
+  por este puerto y **solo** por el, el tope se aplica en un sitio y no hay adaptador que se lo salte.
+
+  Al agotarse se **falla en cerrado**: `subprocess` mata al hijo y el adaptador traduce el
+  `TimeoutExpired` a `ProcessTimedOutError` -que vive con el puerto, junto a `ProcessNotRunnableError`, por
+  el motivo de `docs/conventions/architecture.md`-. Lo que el proceso hubiera escrito ya **se descarta**:
+  media respuesta no es una respuesta, y devolver un `ProcessOutput` con un `stdout` truncado es
+  exactamente como un veredicto a medias pasaria por veredicto. No hay reintento aqui: reintentar es
+  politica, y esta capa no la decide (ver antipatrones).
 - **`GhCi` clasifica la respuesta de `gh pr checks`, y su clasificador es una copia declarada del de
   `skills/slice-runner/scripts/controles.py`.** Tres decisiones que no son deriva, y estan escritas aqui para
   que no se "arreglen" hacia el lado facil mas adelante:
@@ -336,6 +349,21 @@ importar**: un smoke que solo importe el modulo lo da por bueno. Lo evita
   Las excepciones se agrupan por la misma vara: todo lo que significa "el mundo fallo, el estado
   persistido sigue bueno" cae en `RUN_INTERRUPTED` -`gh`, `git`, el foro ilegible, el registro durable-
   y no en un codigo por clase de excepcion.
+
+  **`PROCESS_TIMED_OUT` es el septimo, y sale de esa misma vara, no de tener una excepcion mas.** Una
+  llamada muerta en su tope no se reinvoca a ciegas -volveria a pagar el tope entero-, asi que la decision
+  de quien invoca es distinta de la de `RUN_INTERRUPTED`, donde reinvocar es lo que toca. Es el unico codigo
+  que emiten **los dos** subcomandos: `verify` tampoco lo colapsa en `NO_USABLE_VERDICT`, porque "el juez
+  no dejo veredicto" y "una llamada se colgo" se arreglan mirando sitios distintos. Y lo mapean `verify` y
+  `run` -no `main`- porque el `Process` lo inyecta el constructor: mapearlo arriba lo dejaria sin costura
+  con la que probarlo.
+
+  **Y por eso el reparto de `run` vive en `_why_the_run_stopped` y no en una cadena de `except`.** Con
+  siete grupos, la cadena pasaba de los seis `return` que mide `PLR0911`; el `match` sobre la excepcion
+  deja el reparto entero en un sitio y **la rama generica es `RUN_INTERRUPTED` a proposito**, que es
+  literalmente la regla del parrafo de arriba: lo que no tiene codigo propio significa "el mundo fallo, el
+  estado persistido sigue bueno". Lo que puede llegar lo acota `Cli.STOPS`, y lo que no este ahi sigue
+  saliendo sin capturar, igual que antes.
 - **La proyeccion del dominio al codigo de salida es un `match` exhaustivo sin rama generica**
   (`ExitCode.of_the_halt`, como `ExitCode.of` y `IssueLabel.of`): un `Halt` o un `RunState` nuevo rompe
   en `mypy` en vez de caer en un valor por omision. La unica rama que no se puede alcanzar -un cierre
@@ -356,4 +384,9 @@ importar**: un smoke que solo importe el modulo lo da por bueno. Lo evita
 - Duplicar en el programa una regla que ya vive en `controles.py` **sin declararlo con su motivo** en la
   seccion de adaptadores: la duplicacion declarada es la decision de esta capa, la silenciosa es el fallo.
 - `check=True` al lanzar un proceso cuyo `stderr` lleva el motivo del fallo.
+- **Lanzar un proceso sin `timeout`**, o lanzarlo con uno que el propio adaptador se inventa en vez de
+  recibirlo en los `Budgets`. Una llamada sin tope cuelga el run entero sin diagnostico y sin coste
+  acotado.
+- Lanzar un proceso **sin pasar por el puerto `Process`**: es donde se aplica el tope, asi que un
+  `subprocess` suelto en un adaptador se lo salta.
 - Un adaptador que ademas decide politica (reintentos, presupuesto).
