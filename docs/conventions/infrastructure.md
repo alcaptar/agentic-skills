@@ -212,20 +212,26 @@ importar**: un smoke que solo importe el modulo lo da por bueno. Lo evita
   invalido), y solo esa capa puede hacerlo porque es la unica que ve el sobre. Si el sobre **no** llego a
   parsearse no hay nada que colgar y la excepcion sale con `spend` en `None`: eso es "no medido", no un cero.
 
-  **Ese invariante se cumple dentro de una invocacion, no entre invocaciones, y eso es deuda declarada.**
-  El gasto lo acumula `ConductSliceProgress.spends`, que nace vacio en cada `slice-runner run`, y el `Run`
-  persistido en la subissue **no lo lleva**. Consecuencia concreta: cualquier slice que haya necesitado
-  reinvocarse escribe una fila con el coste de la **ultima** invocacion solamente -y con cero si esa
-  invocacion no llamo al harness, como la que solo espera el merge-. Cerrarlo es meter el gasto en el `Run`
-  persistido, o sea **tocar el formato del estado durable** (`SubissueBody`), que lo leen tambien todas las
-  subissues ya abiertas: se hace entero y con su slice, no a medias.
+  **Ese invariante se cumplia dentro de una invocacion pero no entre invocaciones, y era deuda
+  declarada; ya esta pagada.** El gasto lo acumula `ConductSliceProgress.spends`, que sigue naciendo
+  vacio en cada `slice-runner run`, pero ya no nace *sin nada que seguir*: se siembra con el gasto que
+  trae `Run.spend` -un campo mas del formato del estado durable (`RunPayload`/`SubissueBody`), omitido
+  cuando no hay nada medido, igual que el grupo `harness` del registro- y `ConductSlice._persisted`
+  escribe de vuelta el total acumulado en cada paso que cambia algo del `Run`. Consecuencia: una slice
+  reinvocada sigue viendo su presupuesto entero (`Budgets.exhausted` lo comprueba antes de cada llamada,
+  bullet anterior) y la fila que cierra el run suma el coste de **todas** las invocaciones, no solo la
+  ultima.
 
-  **Los hallazgos de las vueltas viven con la misma frontera.** La fila durable cuenta los de **todas** las
-  vueltas del juez y no solo los del ultimo veredicto -un hallazgo cazado y corregido a mitad tambien
-  ocurrio-, pero los acumula `ConductSliceProgress.verdicts`, que nace vacio en cada `slice-runner run`:
-  una slice reinvocada escribe la fila con las vueltas de la **ultima** invocacion solamente. Se cierra con
-  el mismo `SubissueBody` y con la misma slice que el gasto y la deuda. Mientras tanto, el presupuesto de
-  coste (`docs/conventions/domain.md`) acota **la invocacion**, que es donde el gasto si esta completo.
+  **Los hallazgos de las vueltas viven con la misma frontera, y esa deuda sigue abierta.** La fila
+  durable cuenta los de **todas** las vueltas del juez y no solo los del ultimo veredicto -un hallazgo
+  cazado y corregido a mitad tambien ocurrio, y por eso el registro durable ahora los distingue de los de
+  la ronda que de verdad cerro la slice (`--hallazgos-ronda-final-*` en `metrics.py`), para que un `PASA`
+  con un `alta` acumulado deje de leerse igual que un `veredicto-incoherente`-, pero los acumula
+  `ConductSliceProgress.verdicts`, que nace vacio en cada `slice-runner run`: una slice reinvocada sigue
+  escribiendo la fila con las vueltas de la **ultima** invocacion solamente. Cerrarlo es la misma cirugia
+  que el gasto -sembrar `ConductSliceProgress.verdicts` desde el `Run` persistido-, y toca el mismo
+  `SubissueBody`: se hace entero y con su slice, no a medias. Mientras tanto, el presupuesto de coste
+  (`docs/conventions/domain.md`) acota **la invocacion**, que es donde el gasto si esta completo.
 
   **Deuda vecina, del mismo formato durable, ya pagada: un merge entre invocaciones dejaba el run sin
   cerrar.** Si la persona mergeaba la pull request cuando no habia ninguna invocacion corriendo, el

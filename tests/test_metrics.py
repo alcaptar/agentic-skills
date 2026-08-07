@@ -211,6 +211,7 @@ def test_las_claves_del_registro_son_el_formato_del_log_durable() -> None:
         "veredicto",
         "ci",
         "hallazgos",
+        "hallazgos_ronda_final",
         "reintentos_implement",
         "reintentos_controles",
         "reintentos_ci",
@@ -220,6 +221,7 @@ def test_las_claves_del_registro_son_el_formato_del_log_durable() -> None:
         "coste_tokens",
     }
     assert escrito["hallazgos"] == {"alta": 0, "media": 0, "baja": 0}
+    assert escrito["hallazgos_ronda_final"] == {"alta": 0, "media": 0, "baja": 0}
     assert escrito["veredicto"] == "PASA"
     assert escrito["ci"] == "green"
 
@@ -418,6 +420,30 @@ def test_el_gasto_del_harness_se_escribe_como_un_grupo_anidado(tmp_path: Path) -
     assert metrics.main(_record(path, "--coste-usd", "0.42", "--turnos", "14", "--duracion-ms", "65652")) == 0
 
     assert _escrita(path)["harness"] == {"coste_usd": 0.42, "turnos": 14, "duracion_ms": 65652}
+
+
+def test_los_hallazgos_de_la_ronda_final_viajan_aparte_de_los_acumulados(tmp_path: Path) -> None:
+    """Una fila `PASA` con un `alta` acumulado deja de leerse como `veredicto-incoherente`.
+
+    `--hallazgos-alta` acumula los de todas las rondas del verificador, y `Verdict` impide que la
+    ronda final de un `PASA` traiga un `alta` -por eso las dos filas dejan de confundirse: la que de
+    verdad se contradice no puede llegar aqui-.
+    """
+    path = tmp_path / "m.jsonl"
+
+    assert metrics.main(_record(path, "--hallazgos-alta", "1", "--hallazgos-ronda-final-alta", "0")) == 0
+
+    escrita = _escrita(path)
+    assert escrita["hallazgos"]["alta"] == 1
+    assert escrita["hallazgos_ronda_final"]["alta"] == 0
+
+
+def test_sin_pasar_la_ronda_final_se_registra_como_cero_y_no_como_ausente(tmp_path: Path) -> None:
+    path = tmp_path / "m.jsonl"
+
+    assert metrics.main(_record(path)) == 0
+
+    assert _escrita(path)["hallazgos_ronda_final"] == {"alta": 0, "media": 0, "baja": 0}
 
 
 def test_sin_datos_del_harness_no_se_escribe_la_clave(tmp_path: Path) -> None:

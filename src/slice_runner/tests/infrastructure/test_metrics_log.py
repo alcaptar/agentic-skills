@@ -150,6 +150,20 @@ class TestWhatTheRunAlreadyCounted:
             argv.value_of("--hallazgos-baja"),
         ) == ("1", "0", "2")
 
+    def test_the_findings_of_the_last_round_travel_apart_so_a_pass_with_one_accumulated_is_never_ambiguous(
+        self,
+    ) -> None:
+        argv = TheRecord.of(
+            ClosedSliceMother.merged_after_correcting(FindingMother.without_line(severity=Severity.HIGH))
+        )
+
+        assert (
+            argv.value_of("--hallazgos-alta"),
+            argv.value_of("--hallazgos-ronda-final-alta"),
+            argv.value_of("--hallazgos-ronda-final-media"),
+            argv.value_of("--hallazgos-ronda-final-baja"),
+        ) == ("1", "0", "0", "0")
+
 
 class TestWhyTheJudgeWasReinvoked:
     def test_the_cause_of_the_discards_travels_next_to_their_count(self) -> None:

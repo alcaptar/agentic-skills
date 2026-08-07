@@ -32,6 +32,7 @@ Uso:
     metrics.py record --repo <repo> --slice slice-01 --name cantidad-vo \\
         --veredicto PASA --ci green \\
         --hallazgos-alta 0 --hallazgos-media 1 --hallazgos-baja 2 \\
+        [--hallazgos-ronda-final-alta 0 --hallazgos-ronda-final-media 0 --hallazgos-ronda-final-baja 0] \\
         --reintentos-implement 0 --reintentos-controles 0 --reintentos-ci 0 \\
         --reintentos-verify 0 --descartes-verify 0 \\
         --duracion-s 540 \\
@@ -47,7 +48,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
@@ -118,6 +119,26 @@ class Hallazgos:
 
 
 @dataclass(frozen=True, kw_only=True, slots=True)
+class HallazgosRondaFinal:
+    """Los hallazgos del veredicto que cerro la slice, sin los de rondas ya corregidas.
+
+    `Hallazgos` acumula los de **todas** las rondas del verificador -un hallazgo cazado y corregido a
+    mitad tambien ocurrio-, y por eso una fila `PASA` puede traer ahi un `alta` que en realidad se
+    arreglo antes de la ultima ronda. Leida sola, esa fila es indistinguible de la definicion de
+    `veredicto-incoherente`: un `PASA` con un hallazgo `alta`. Este grupo trae solo los de la ronda que
+    de verdad cerro la slice, y en esa ronda un `PASA` con `alta` no puede pasar -lo rechaza `Verdict`
+    antes de llegar aqui-, asi que las dos filas dejan de leerse igual.
+    """
+
+    alta: int = 0
+    media: int = 0
+    baja: int = 0
+
+    def to_dict(self) -> dict[str, object]:
+        return {"alta": self.alta, "media": self.media, "baja": self.baja}
+
+
+@dataclass(frozen=True, kw_only=True, slots=True)
 class Harness:
     """Lo que midio el harness en una slice, sumado a lo largo de todas sus llamadas.
 
@@ -176,6 +197,7 @@ class Registro:
     veredicto: Veredicto
     ci: Ci
     hallazgos: Hallazgos
+    hallazgos_ronda_final: HallazgosRondaFinal = field(default_factory=HallazgosRondaFinal)
     reintentos_implement: int = 0
     reintentos_controles: int = 0
     reintentos_ci: int = 0
@@ -199,6 +221,11 @@ class Registro:
                 alta=args.hallazgos_alta,
                 media=args.hallazgos_media,
                 baja=args.hallazgos_baja,
+            ),
+            hallazgos_ronda_final=HallazgosRondaFinal(
+                alta=args.hallazgos_ronda_final_alta,
+                media=args.hallazgos_ronda_final_media,
+                baja=args.hallazgos_ronda_final_baja,
             ),
             reintentos_implement=args.reintentos_implement,
             reintentos_controles=args.reintentos_controles,
@@ -228,6 +255,7 @@ class Registro:
             "veredicto": str(self.veredicto),
             "ci": str(self.ci),
             "hallazgos": self.hallazgos.to_dict(),
+            "hallazgos_ronda_final": self.hallazgos_ronda_final.to_dict(),
             "reintentos_implement": self.reintentos_implement,
             "reintentos_controles": self.reintentos_controles,
             "reintentos_ci": self.reintentos_ci,
@@ -604,6 +632,14 @@ def main(argv: list[str] | None = None) -> int:
     rec.add_argument("--hallazgos-alta", type=int, default=0)
     rec.add_argument("--hallazgos-media", type=int, default=0)
     rec.add_argument("--hallazgos-baja", type=int, default=0)
+    rec.add_argument(
+        "--hallazgos-ronda-final-alta",
+        type=int,
+        default=0,
+        help="hallazgos alta del veredicto que cerro la slice, sin los de rondas ya corregidas",
+    )
+    rec.add_argument("--hallazgos-ronda-final-media", type=int, default=0)
+    rec.add_argument("--hallazgos-ronda-final-baja", type=int, default=0)
     rec.add_argument("--reintentos-implement", type=int, default=0)
     rec.add_argument("--reintentos-controles", type=int, default=0)
     rec.add_argument("--reintentos-ci", type=int, default=0)

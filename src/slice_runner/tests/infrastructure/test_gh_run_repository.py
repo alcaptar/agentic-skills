@@ -22,6 +22,7 @@ from slice_runner.infrastructure.process import ProcessOutput
 from slice_runner.tests.argv import Argv
 from slice_runner.tests.doubles import ScriptedProcess
 from slice_runner.tests.mothers.gh_response_mother import GhResponseMother
+from slice_runner.tests.mothers.harness_spend_mother import HarnessSpendMother
 from slice_runner.tests.mothers.run_mother import RunMother
 
 _REPO = "alcaptar/agentic-skills"
@@ -245,6 +246,30 @@ class TestReadingTheChildren:
         by_slice = {child.slice_id: child for child in children}
         assert by_slice["slice-01"].run == RunMother.awaiting_ci()
 
+    def test_a_state_block_with_a_spend_reads_it_back_so_a_reinvocation_sees_the_prior_cost(self) -> None:
+        with_spend = [
+            {
+                "number": 1,
+                "title": "slice-01 (x): y",
+                "body": (
+                    "INTENCION: z\n\n"
+                    "<!-- slice-runner:estado\n"
+                    '{"step": "verify", "control_retries": 0, "verify_retries": 0, "ci_retries": 0, '
+                    '"indeterminate_ticks": 0, "verify_discards": 0, '
+                    '"spend": {"cost_usd": 0.3433209, "turns": 9, "duration_ms": 36315, "calls": 1}}\n'
+                    "-->\n"
+                ),
+                "labels": [],
+                "state": "OPEN",
+            }
+        ]
+
+        children = GhRunRepository(process=self._process(children=with_spend)).read_children(
+            repo=_REPO, parent=43, expected=1
+        )
+
+        assert children[0].run == RunMother.judging_after_spending(HarnessSpendMother.of_the_implementer_call())
+
     def test_the_macro_state_label_present_on_the_issue_is_read_as_the_issue_label(self) -> None:
         children = GhRunRepository(process=self._process()).read_children(repo=_REPO, parent=43, expected=2)
 
@@ -326,6 +351,30 @@ class TestWritingTheExecutionStateBlock:
             '{"step": "await-merge", "control_retries": 0, "verify_retries": 0, "ci_retries": 0, '
             '"indeterminate_ticks": 0, "verify_discards": 0}\n'
             "-->\n\n"
+        )
+
+    def test_a_run_with_a_measured_spend_writes_it_nested_under_its_own_key_so_reinvoking_keeps_the_budget(
+        self,
+    ) -> None:
+        process = self._process(body=_SUB2_BODY)
+
+        GhRunRepository(process=process).write_run(
+            repo=_OTHER_REPO,
+            issue=44,
+            run=RunMother.judging_after_spending(HarnessSpendMother.of_the_implementer_call()),
+        )
+
+        assert process.calls[1].stdin == (
+            "REPO: alcaptar/otro-repo\n"
+            "INTENCION: comprobar que el orden sale del titulo y no de la interfaz de programacion\n"
+            "ACEPTACION: se ordena por slice-NN aunque la api la devuelva antes\n"
+            "SENAL: exenta - spike de medicion\n"
+            "\n"
+            "<!-- slice-runner:estado\n"
+            '{"step": "verify", "control_retries": 0, "verify_retries": 0, "ci_retries": 0, '
+            '"indeterminate_ticks": 0, "verify_discards": 0, '
+            '"spend": {"cost_usd": 0.3433209, "turns": 9, "duration_ms": 36315, "calls": 1}}\n'
+            "-->\n"
         )
 
     def test_writing_the_same_run_that_is_already_there_issues_no_edit_call(self) -> None:

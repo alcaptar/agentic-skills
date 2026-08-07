@@ -150,12 +150,21 @@ que no se "arreglen" hacia el lado facil:
   no un valor de ajuste.** Nacio en 25 $ cuando el registro durable no tenia ni un dolar real y lo unico
   medido eran las llamadas grabadas en `src/slice_runner/tests/payloads/`, cuya mayor son **0.343 $**: dos
   ordenes de magnitud de margen sobre lo unico que se sabia. Ese parrafo prometia re-fijarlo con dolares
-  reales en cuanto hubiera muestras, y **esto es ese momento**. Siete slices conducidas por el programa
-  miden **5.14, 10.75, 15.07, 25.46 y 27.73 $**, o sea que el numero elegido como techo inalcanzable
-  resulto estar *dentro* del rango normal: **dos slices sanas murieron con `abortada:presupuesto`**, y las
-  dos justo despues de que el juez devolviera `PASA`, porque el limite se comprueba tras pagar la llamada.
-  Un backstop que corta slices sanas no es un backstop, es el cierre espurio contra el que este mismo
-  bullet advertia.
+  reales en cuanto hubiera muestras, y subio a 50 $ con cinco -**5.14, 10.75, 15.07, 25.46 y 27.73 $**-,
+  todas con Opus porque ninguna invocacion declaraba modelo todavia. El numero elegido como techo
+  inalcanzable resulto estar *dentro* del rango normal: **dos slices sanas murieron con
+  `abortada:presupuesto`**, y las dos justo despues de que el juez devolviera `PASA`, porque el limite se
+  comprobaba tras pagar la llamada -se tiraba una aprobacion ya pagada en vez de impedir la siguiente
+  llamada-.
+
+  **Esto ya esta corregido**: `cost_exhausted` se sigue comprobando tras la llamada para todo lo demas,
+  pero un veredicto con `ruling` `PASA` -apruebe limpio o con hallazgos no bloqueantes- nunca se convierte
+  en `over-budget`, porque entregar (`OPEN_PULL_REQUEST`) no cuesta harness y el limite solo tiene que
+  impedir la **siguiente** llamada. Esa siguiente llamada la corta `Budgets.exhausted(total)`,
+  comprobado **antes** de invocar al implementador o al juez: si el total ya esta agotado, la llamada no
+  se hace y el paso sale como `over-budget` sin gastar nada mas. Las dos comprobaciones conviven a
+  proposito -la de despues sigue cerrando el bucle de descartes del juez del bullet anterior, la de antes
+  es la que faltaba para no tirar una aprobacion ya pagada-.
 
   El techo sube a 50 $ **sin tocar que se cuenta**: sigue sumando todas las llamadas del run, y por eso el
   descarte del juez sigue acotado (bullet anterior). Contar solo al implementador abarataria el numero a
@@ -166,6 +175,12 @@ que no se "arreglen" hacia el lado facil:
   invocacion declaraba modelo. El juez **no** lo fija a proposito, y hay test de las dos cosas: el que
   produce se puede permitir el barato porque su trabajo lo revisa otro; el que juzga es el ultimo control
   antes de una pull request, y ahi ahorrar es ahorrar en la garantia.
+
+  Con el implementador ya fijando Sonnet, la muestra crecio de cinco a siete: las cinco de Opus de arriba
+  mas dos con Sonnet, **8.77 y 13.75 $**, bastante por debajo del rango de Opus -confirma que fijar el
+  modelo barato abarata la slice tipica sin tocar el backstop-. El techo de 50 $ sigue con margen sobre
+  las dos familias y **no se toca**: lo que se re-fija aqui es el motivo, con la muestra completa y con el
+  descarte-de-aprobacion ya cerrado, no el numero.
 
   Y **un gasto no medido cuenta como agotado**, no como cero: `HarnessSpend` distingue "todavia no se ha
   medido nada" de "cero medido" (`measured`), y lo que no se puede sumar no se puede acotar, asi que un

@@ -22,6 +22,7 @@ class ClosedSlice:
     run: Run
     spends: tuple[HarnessSpend, ...] = field(default=())
     findings: tuple[Finding, ...] = field(default=())
+    findings_of_the_last_round: tuple[Finding, ...] = field(default=())
     discard_cause: DiscardCause | None = None
 
     @property
@@ -30,3 +31,6 @@ class ClosedSlice:
 
     def count_findings(self, severity: Severity) -> int:
         return sum(1 for finding in self.findings if finding.severity is severity)
+
+    def count_findings_of_the_last_round(self, severity: Severity) -> int:
+        return sum(1 for finding in self.findings_of_the_last_round if finding.severity is severity)

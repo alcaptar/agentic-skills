@@ -1,13 +1,22 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from slice_runner.domain.run import Run
 from slice_runner.domain.step import Step
+
+if TYPE_CHECKING:
+    from slice_runner.domain.harness_spend import HarnessSpend
 
 
 class RunMother:
     @staticmethod
     def implementing() -> Run:
         return Run(step=Step.IMPLEMENT)
+
+    @staticmethod
+    def judging_after_spending(spend: HarnessSpend) -> Run:
+        return Run(step=Step.VERIFY, spend=spend)
 
     @staticmethod
     def running_the_controls() -> Run:
