@@ -44,6 +44,9 @@ _SLICE = "slice-01"
 _IMPLEMENTER_PAYLOAD = "implementer-two-paths"
 
 _TABLE: list[tuple[Step, Outcome, dict[str, int], tuple[Step, RunState, int]]] = [
+    (Step.UNDERSTAND, Outcome.DONE, {}, (Step.IMPLEMENT, RunState.OPEN, 0)),
+    (Step.UNDERSTAND, Outcome.PENDING, {}, (Step.UNDERSTAND, RunState.OPEN, 30)),
+    (Step.UNDERSTAND, Outcome.OVER_BUDGET, {}, (Step.UNDERSTAND, RunState.ABORTED_BUDGET, 0)),
     (Step.IMPLEMENT, Outcome.DONE, {}, (Step.RUN_CONTROLS, RunState.OPEN, 0)),
     (Step.IMPLEMENT, Outcome.OVER_BUDGET, {}, (Step.IMPLEMENT, RunState.ABORTED_BUDGET, 0)),
     (Step.RUN_CONTROLS, Outcome.DONE, {}, (Step.VERIFY, RunState.OPEN, 0)),
@@ -976,15 +979,17 @@ class TestWhenTheRunStaysOpen:
                         )
                     ),
                 ),
+                Answer(to=("gh", "issue", "view", "--json", "comments"), stdout=json.dumps({"comments": []})),
             ),
         )
 
     def test_the_branch_of_the_slice_is_cut_in_the_worktree_from_the_base_the_invocation_named(
-        self, tmp_path: Path
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        monkeypatch.setattr("time.sleep", lambda seconds: None)
         invocation = self._never_run()
 
-        invocation.conduct(logs=tmp_path / "logs")
+        invocation.conduct(logs=tmp_path / "logs", budgets=Budgets(total_wait_seconds=0))
 
         assert invocation.process.ran(
             "git",
@@ -996,19 +1001,21 @@ class TestWhenTheRunStaysOpen:
             GhConversationMother.BASE,
         )
 
-    def test_a_slice_that_was_never_run_stops_at_the_alignment_a_person_has_to_answer(
-        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    def test_a_slice_that_was_never_run_ticks_through_the_alignment_pause_until_the_wait_runs_out(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
     ) -> None:
+        slept: list[int] = []
+        monkeypatch.setattr("time.sleep", slept.append)
         invocation = self._never_run()
 
-        code = invocation.conduct(logs=tmp_path / "logs")
+        code = invocation.conduct(logs=tmp_path / "logs", budgets=Budgets(total_wait_seconds=0))
 
-        assert code == ExitCode.AWAITING_ALIGNMENT
+        assert code == ExitCode.WAIT_EXHAUSTED
+        assert sum(slept) == Budgets(total_wait_seconds=0).seconds_between_ticks
         assert json.loads(capsys.readouterr().out) == {
-            "halt": "awaiting-alignment",
+            "halt": "wait-exhausted",
             "state": "open",
-            "step": "implement",
-            "precheck": "clear",
+            "step": "understand",
         }
 
     def test_a_precheck_that_is_not_clear_exits_with_its_own_code_and_names_which_one_stopped_it(

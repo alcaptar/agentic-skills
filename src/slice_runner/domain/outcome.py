@@ -3,6 +3,7 @@ from __future__ import annotations
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
+from slice_runner.domain.alignment_response_kind import AlignmentResponseKind
 from slice_runner.domain.ci_status import CiStatus
 from slice_runner.domain.control_status import ControlStatus
 from slice_runner.domain.ruling import Ruling
@@ -22,6 +23,14 @@ class Outcome(StrEnum):
     INDETERMINATE = "indeterminate"
     DISCARDED = "discarded"
     OVER_BUDGET = "over-budget"
+
+    @classmethod
+    def of_the_alignment(cls, kind: AlignmentResponseKind) -> Outcome:
+        match kind:
+            case AlignmentResponseKind.GO:
+                return cls.DONE
+            case AlignmentResponseKind.REVIEW | AlignmentResponseKind.NOT_YET:
+                return cls.PENDING
 
     @classmethod
     def of_the_ci(cls, status: CiStatus) -> Outcome:

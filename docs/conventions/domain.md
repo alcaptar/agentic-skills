@@ -73,10 +73,12 @@ proyectarlo-. El contrato ya esta medido, no pendiente: `tests/test_skill_contra
 todo cierre de `RunState` distinto de `MERGED` (que no lleva etiqueta porque cierra GitHub el issue solo,
 via `Closes` de la pull request) proyecta a una de las diez etiquetas del vocabulario, y que ninguna
 etiqueta del vocabulario carece de fuente -sale de una proyeccion del traductor, o es una de fuente
-manual-. Hay dos etiquetas de fuente manual: `estado:pendiente`, que escribe una persona a mano al crear
-la subissue, y `estado:esperando-alineacion`, que escribe `GhRunRepository.pause_for_alignment` antes de que
-exista ningun `Run` -la pausa de alineacion ocurre fuera de cualquier `(state, step)` que `IssueLabel.of`
-pueda conocer, asi que no hay cierre del que proyectarla-.
+manual-. Solo `estado:pendiente` es de fuente manual -la escribe una persona a mano al crear la subissue-.
+`estado:esperando-alineacion` no lo es: proyecta de `(RunState.OPEN, Step.UNDERSTAND)`, el paso en el que
+`ConductSlice._awaiting_alignment` tickea mientras espera respuesta, y `IssueLabel.of` la produce igual que
+cualquier otra. Lo unico manual que sobrevive es el primer escrito: `GhRunRepository.pause_for_alignment` la
+pone antes de que exista ningun `Run` -no hay cierre todavia del que partir-, pero el valor que escribe es el
+mismo que el traductor ya conoce para ese paso.
 
 **`CiStatus` es la tercera copia declarada del mismo tipo.** `domain/ci_status.py` repite en ingles el
 vocabulario `EstadoCI` de `skills/slice-runner/scripts/controles.py` (`verde`, `rojo`, `pendiente`,
@@ -125,12 +127,13 @@ implementador declaro, y la tupla vacia es el indice limpio. Tres decisiones que
 Cinco decisiones mas de `StateMachine` y de los `Budgets` que le entran no son deriva, y estan aqui para
 que no se "arreglen" hacia el lado facil:
 
-- **La separacion minima entre ticks es una sola, para los tres tipos de tick.** La prosa solo pone
+- **La separacion minima entre ticks es una sola, para los cuatro tipos de tick.** La prosa solo pone
   numero donde la cuenta es load-bearing -la ventana de gracia de la integracion continua-, y deja los
-  demas en "ticks acotados con un timeout razonable". Un segundo campo para el tick del merge seria un
-  numero que nadie ha medido; el que hay sale de un caso real medido en dos pull requests, asi que
-  gobierna las tres esperas. Consecuencia aceptada: mover el de la ventana mueve tambien la cadencia con
-  la que se sondea el merge.
+  demas en "ticks acotados con un timeout razonable". Un segundo campo para el tick del merge -o para el
+  de la pausa de alineacion, que espera exactamente igual- seria un numero que nadie ha medido; el que
+  hay sale de un caso real medido en dos pull requests, asi que gobierna las cuatro esperas. Consecuencia
+  aceptada: mover el de la ventana mueve tambien la cadencia con la que se sondea el merge y la
+  alineacion.
 - **El tope de espera de una invocacion son 30 minutos (`total_wait_seconds`), y acota la invocacion, no
   el run.** La integracion continua de este repo esta medida entre 15 y 33 segundos sobre 25 runs, asi
   que el numero no lo fija ella: lo fija el repo destino peor, y hay uno escrito -un `make test` de ~20

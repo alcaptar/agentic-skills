@@ -17,6 +17,8 @@ from slice_runner.application.actions.stage_slice import StageSlice
 from slice_runner.application.actions.verify_slice import VerifySlice
 from slice_runner.application.queries.run_prechecks import RunPrechecks
 from slice_runner.application.queries.select_slice import SelectSlice
+from slice_runner.domain.alignment_response import AlignmentResponse
+from slice_runner.domain.alignment_response_kind import AlignmentResponseKind
 from slice_runner.domain.branches import Branches
 from slice_runner.domain.budgets import Budgets
 from slice_runner.domain.ci import Ci
@@ -65,6 +67,7 @@ class Conductor:
         self.verify = self._doubling(VerifySlice, execute=VerificationMother.passing())
         self.deliver = self._doubling(DeliverSlice, execute=self.PULL_REQUEST)
         self.repository: Mock = create_autospec(RunRepository, spec_set=True, instance=True)
+        self.repository.read_alignment_response.return_value = AlignmentResponse(kind=AlignmentResponseKind.NOT_YET)
         self.branches: Mock = create_autospec(Branches, spec_set=True, instance=True)
         self.controls: Mock = create_autospec(ControlRunner, spec_set=True, instance=True)
         self.controls.run.return_value = ControlOutcomeMother.green()

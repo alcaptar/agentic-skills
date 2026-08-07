@@ -14,7 +14,6 @@ class ExitCode(IntEnum):
     NO_DIFF = 3
     USAGE_ERROR = 4
     RUN_UNMERGED = 5
-    AWAITING_ALIGNMENT = 6
     WAIT_EXHAUSTED = 7
     PRECHECKS_BLOCKED = 8
     NO_SLICE_LEFT = 9
@@ -37,8 +36,6 @@ class ExitCode(IntEnum):
                 return cls._of_the_closing(state)
             case Halt.PRECHECKS_BLOCKED:
                 return cls.PRECHECKS_BLOCKED
-            case Halt.AWAITING_ALIGNMENT:
-                return cls.AWAITING_ALIGNMENT
             case Halt.WAIT_EXHAUSTED:
                 return cls.WAIT_EXHAUSTED
             case Halt.PULL_REQUEST_CLOSED:

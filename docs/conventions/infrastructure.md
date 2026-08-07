@@ -420,14 +420,15 @@ importar**: un smoke que solo importe el modulo lo da por bueno. Lo evita
   `README.md`** -que un test de contrato compara con el `IntEnum`-, se anaden al final y no se
   reordenan.
 - **Un codigo por decision de quien invoca, no uno por excepcion.** La vara para decidir si hace falta
-  uno nuevo es: ¿que hace distinto quien lo recibe? De ahi salen los seis de `run`: el run cerro
+  uno nuevo es: ¿que hace distinto quien lo recibe? De ahi salen los cinco de `run`: el run cerro
   mergeado (`OK`, sigue la siguiente slice), cerro sin mergear (`RUN_UNMERGED`, hay que mirar el issue),
-  espera a una persona (`AWAITING_ALIGNMENT`, reinvocar no sirve), se agoto la espera con el run vivo
-  (`WAIT_EXHAUSTED`, reinvocar es justo lo que toca), los prechecks lo pararon (`PRECHECKS_BLOCKED`) y la
-  pull request se cerro sin mergear (`PULL_REQUEST_CLOSED`, reinvocar repetiria la espera entera: la
-  decision -reabrirla o dar la slice por muerta- es de una persona). Ese ultimo **no cierra el run**: es
-  la otra mitad de "el merge lo decide el usuario", asi que la invocacion termina y el run se queda
-  abierto y persistido en `await-merge`, sin `RunState` ni etiqueta propios.
+  se agoto la espera con el run vivo -pausa de alineacion, integracion continua o merge, las tres
+  esperan igual- (`WAIT_EXHAUSTED`, reinvocar es justo lo que toca), los prechecks lo pararon
+  (`PRECHECKS_BLOCKED`) y la pull request se cerro sin mergear (`PULL_REQUEST_CLOSED`, reinvocar
+  repetiria la espera entera: la decision -reabrirla o dar la slice por muerta- es de una persona). Ese
+  ultimo **no cierra el run**: es la otra mitad de "el merge lo decide el usuario", asi que la
+  invocacion termina y el run se queda abierto y persistido en `await-merge`, sin `RunState` ni etiqueta
+  propios.
   Las excepciones se agrupan por la misma vara: todo lo que significa "el mundo fallo, el estado
   persistido sigue bueno" cae en `RUN_INTERRUPTED` -`gh`, `git`, el foro ilegible, el registro durable-
   y no en un codigo por clase de excepcion.
