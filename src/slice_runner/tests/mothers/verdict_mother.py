@@ -33,6 +33,16 @@ class FindingMother:
             line=line,
         )
 
+    @staticmethod
+    def low_severity(*, path: str = "src/x.py") -> Finding:
+        return Finding(
+            rule="nombrado",
+            path=path,
+            severity=Severity.LOW,
+            evidence="una constante sin nombre",
+            detail="queda para otra vuelta, no bloquea la entrega",
+        )
+
 
 class VerdictMother:
     @staticmethod

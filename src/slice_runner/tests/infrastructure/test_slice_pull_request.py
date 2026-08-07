@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from slice_runner.infrastructure.slice_pull_request import SlicePullRequest
 from slice_runner.tests.mothers.sub_issue_mother import SubIssueMother
+from slice_runner.tests.mothers.verdict_mother import FindingMother
 
 
 class TestSlicePullRequest:
@@ -13,7 +14,7 @@ class TestSlicePullRequest:
     def test_the_body_carries_the_intention_a_confirmation_of_the_criteria_and_the_signal_the_subissue_declared(
         self,
     ) -> None:
-        body = SlicePullRequest().body(SubIssueMother.pending(), debt=())
+        body = SlicePullRequest().body(SubIssueMother.pending(), debt=(), findings=())
 
         assert body == (
             "## Intencion\n"
@@ -31,13 +32,13 @@ class TestSlicePullRequest:
     def test_the_criteria_the_subissue_declared_are_not_reproduced_word_for_word_in_the_body(self) -> None:
         subissue = SubIssueMother.pending()
 
-        body = SlicePullRequest().body(subissue, debt=())
+        body = SlicePullRequest().body(subissue, debt=(), findings=())
 
         for criterion in subissue.criteria:
             assert criterion not in body
 
     def test_a_subissue_with_one_criterion_is_confirmed_in_the_singular_and_not_as_los_1_criterios(self) -> None:
-        body = SlicePullRequest().body(SubIssueMother.with_a_single_criterion(), debt=())
+        body = SlicePullRequest().body(SubIssueMother.with_a_single_criterion(), debt=(), findings=())
 
         assert (
             "## Criterios de aceptacion cumplidos\n"
@@ -47,13 +48,13 @@ class TestSlicePullRequest:
     def test_a_slice_that_declared_no_intention_says_so_in_the_heading_instead_of_presenting_it_as_declared(
         self,
     ) -> None:
-        body = SlicePullRequest().body(SubIssueMother.without_a_declared_intention(), debt=())
+        body = SlicePullRequest().body(SubIssueMother.without_a_declared_intention(), debt=(), findings=())
 
         assert body.startswith("## Intencion (inferida del issue, no declarada)\n")
 
     def test_the_debt_the_implementer_declared_fills_the_debt_section(self) -> None:
         body = SlicePullRequest().body(
-            SubIssueMother.pending(), debt=("el cableado del subcomando queda para otra slice",)
+            SubIssueMother.pending(), debt=("el cableado del subcomando queda para otra slice",), findings=()
         )
 
         assert (
@@ -64,6 +65,13 @@ class TestSlicePullRequest:
         ) in body
 
     def test_a_slice_with_nothing_left_out_writes_no_debt_section(self) -> None:
-        body = SlicePullRequest().body(SubIssueMother.pending(), debt=())
+        body = SlicePullRequest().body(SubIssueMother.pending(), debt=(), findings=())
 
         assert "## Deuda aceptada" not in body
+
+    def test_a_finding_the_judge_approved_without_correcting_reaches_the_debt_section_too(self) -> None:
+        accepted = FindingMother.low_severity()
+
+        body = SlicePullRequest().body(SubIssueMother.pending(), debt=(), findings=(accepted,))
+
+        assert f"## Deuda aceptada\n- {accepted.severity}: {accepted.detail} ({accepted.path})\n" in body

@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 from slice_runner.domain.ci_status import CiStatus
 from slice_runner.domain.control_status import ControlStatus
 from slice_runner.domain.ruling import Ruling
+from slice_runner.domain.severity import Severity
 
 if TYPE_CHECKING:
     from slice_runner.domain.control_outcome import ControlOutcome
@@ -39,7 +40,9 @@ class Outcome(StrEnum):
             case Ruling.FAIL:
                 return cls.FAILED
             case Ruling.PASS:
-                return cls.CORRECTIONS_ORDERED if verdict.findings else cls.DONE
+                blocking = any(finding.severity is not Severity.LOW for finding in verdict.findings)
+
+                return cls.CORRECTIONS_ORDERED if blocking else cls.DONE
 
     @classmethod
     def of_the_controls(cls, outcomes: tuple[ControlOutcome, ...]) -> Outcome:

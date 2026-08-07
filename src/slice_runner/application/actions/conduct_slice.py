@@ -370,7 +370,9 @@ class ConductSlice:
                 branch=progress.subissue.branch,
                 base=progress.params.base,
                 title=self._pull_request.title(progress.subissue),
-                body=self._pull_request.body(progress.subissue, debt=progress.debt),
+                body=self._pull_request.body(
+                    progress.subissue, debt=progress.debt, findings=progress.findings_of_the_last_round
+                ),
             )
         )
 

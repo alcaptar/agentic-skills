@@ -672,6 +672,27 @@ class TestConductSliceWhenTheJudgeSpeaks:
         assert conductor.implement.execute.call_args.args[0].findings == (raised,)
         assert conductor.deliver.execute.call_count == 1
 
+    def test_a_pass_whose_findings_are_all_low_severity_delivers_without_asking_the_implementer_again(self) -> None:
+        accepted = FindingMother.low_severity()
+        conductor = self._conductor(budgets=Budgets(verify_retries=1))
+        conductor.verify.execute.return_value = VerificationMother.approving_with_accepted_debt(accepted)
+
+        conductor.conduct()
+
+        assert conductor.implement.execute.call_count == 0
+        assert conductor.deliver.execute.call_count == 1
+
+    def test_a_pass_whose_findings_are_all_low_severity_puts_them_in_front_of_whoever_reviews_the_pull_request(
+        self,
+    ) -> None:
+        accepted = FindingMother.low_severity()
+        conductor = self._conductor(budgets=Budgets(verify_retries=1))
+        conductor.verify.execute.return_value = VerificationMother.approving_with_accepted_debt(accepted)
+
+        conductor.conduct()
+
+        assert conductor.pull_request.body.call_args.kwargs["findings"] == (accepted,)
+
     def test_the_durable_row_keeps_the_findings_of_every_round_because_one_caught_and_fixed_still_happened(
         self,
     ) -> None:
