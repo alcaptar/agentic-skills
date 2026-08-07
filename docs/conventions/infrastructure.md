@@ -227,15 +227,17 @@ importar**: un smoke que solo importe el modulo lo da por bueno. Lo evita
   el mismo `SubissueBody` y con la misma slice que el gasto y la deuda. Mientras tanto, el presupuesto de
   coste (`docs/conventions/domain.md`) acota **la invocacion**, que es donde el gasto si esta completo.
 
-  **Deuda vecina, del mismo formato durable: un merge entre invocaciones deja el run sin cerrar.** Si la
-  persona mergea la pull request cuando no hay ninguna invocacion corriendo, el `Closes #N` de la pull
-  request cierra la subissue, `SliceQueue` deja de considerarla ejecutable y el run **nunca llega a
-  cerrarse** ni escribe su fila durable. La slice-17 (`encadenar-deploy-watch`) encadeno `deploy-watch`
-  solo en el camino en que el propio run detecta el merge mientras esta corriendo (`_closing`, alcanzable
-  unicamente desde `_conducting`); ese camino no llega a este escenario, porque `Prechecks.of_the_subissue`
-  corta antes con `PrecheckOutcome.SUBISSUE_ALREADY_CLOSED` en cuanto `subissue.state is IssueState.CLOSED`.
-  Detectar el merge de un run que GitHub ya cerro entre invocaciones sigue sin construirse: se declara y no
-  se construye.
+  **Deuda vecina, del mismo formato durable, ya pagada: un merge entre invocaciones dejaba el run sin
+  cerrar.** Si la persona mergeaba la pull request cuando no habia ninguna invocacion corriendo, el
+  `Closes #N` de la pull request cerraba la subissue, `SliceQueue` dejaba de considerarla ejecutable y el
+  run **nunca llegaba a cerrarse** ni escribia su fila durable. La slice-17 (`encadenar-deploy-watch`)
+  encadeno `deploy-watch` solo en el camino en que el propio run detecta el merge mientras esta corriendo
+  (`_closing`, alcanzable unicamente desde `_conducting`); ese camino no llegaba a este escenario, porque
+  `Prechecks.of_the_subissue` corta antes con `PrecheckOutcome.SUBISSUE_ALREADY_CLOSED` en cuanto
+  `subissue.state is IssueState.CLOSED`. La slice-08 (`merge-entre-invocaciones`) lo cerro: `SelectSlice`
+  marca como `dangling` toda subissue del checklist que GitHub cerro con un `Run` todavia abierto, y
+  `ConductSlice` la resuelve antes de conducir la slice elegida -si la pull request de su rama esta
+  mergeada escribe la fila durable como `MERGED` y retira la etiqueta que hubiera; si no, la deja intacta-.
 - **La ruta del script sale de `CLAUDE_CONFIG_DIR`, no del repo** (`ClaudeConfig`, el objeto del
   bullet de arriba): la slice puede vivir en otro repo, donde no hay `skills/` del que colgar una ruta
   relativa.

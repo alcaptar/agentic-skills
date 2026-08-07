@@ -25,6 +25,7 @@ class SelectSliceResult:
     subissue: SubIssue
     parent: ParentIssue
     checklist: tuple[ChecklistEntry, ...]
+    dangling: tuple[SubIssue, ...] = ()
 
 
 class SelectSlice:
@@ -42,6 +43,7 @@ class SelectSlice:
             subissue=chosen,
             parent=self._yardstick_of(chosen, overview=overview, params=params),
             checklist=tuple(ChecklistEntry.of(child) for child in children),
+            dangling=SliceQueue.dangling(children),
         )
 
     @staticmethod

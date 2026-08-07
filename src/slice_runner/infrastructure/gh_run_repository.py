@@ -90,6 +90,9 @@ class GhRunRepository(RunRepository):
         argv = self._edit_of(repo=repo, issue=issue, add=add, remove=remove)
         self._edit_with_label_fallback(argv, repo=repo, issue=issue, add=add)
 
+    def remove_label(self, *, repo: str, issue: int, remove: IssueLabel) -> None:
+        self._run(["gh", "issue", "edit", str(issue), "--repo", repo, "--remove-label", remove.value])
+
     def pause_for_alignment(self, *, repo: str, issue: int, remove: IssueLabel | None) -> None:
         argv = [
             *self._edit_of(repo=repo, issue=issue, add=IssueLabel.AWAITING_ALIGNMENT, remove=remove),

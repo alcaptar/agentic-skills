@@ -128,6 +128,73 @@ class TestConductSliceStartingANewRun:
         assert conductor.repository.write_run.call_count == 0
 
 
+class TestConductSliceClosingAMergeMissedBetweenInvocations:
+    @staticmethod
+    def _conductor(*, dangling: tuple[SubIssue, ...]) -> Conductor:
+        return Conductor(chosen=SelectSliceResultMother.about_to_start(dangling=dangling))
+
+    def test_a_dangling_subissue_whose_pull_request_merged_writes_its_durable_row_as_merged(self) -> None:
+        dangling = SubIssueMother.dangling()
+        conductor = self._conductor(dangling=(dangling,))
+
+        conductor.conduct()
+
+        recorded = conductor.metrics.record.call_args_list[0].args[0]
+        assert (recorded.repo, recorded.slice_id, recorded.name, recorded.state, recorded.run) == (
+            Conductor.REPO,
+            dangling.slice_id,
+            dangling.name,
+            RunState.MERGED,
+            dangling.run,
+        )
+
+    def test_a_dangling_subissue_whose_pull_request_merged_drops_the_label_it_still_carried(self) -> None:
+        dangling = SubIssueMother.dangling()
+        conductor = self._conductor(dangling=(dangling,))
+
+        conductor.conduct()
+
+        conductor.repository.remove_label.assert_any_call(
+            repo=Conductor.REPO, issue=dangling.number, remove=dangling.label
+        )
+
+    def test_a_dangling_subissue_whose_pull_request_closed_without_merging_is_left_untouched(self) -> None:
+        dangling = SubIssueMother.dangling()
+        conductor = self._conductor(dangling=(dangling,))
+        conductor.forum.pull_request_state.return_value = PullRequestState.CLOSED
+
+        conductor.conduct()
+
+        assert conductor.metrics.record.call_count == 0
+        assert conductor.repository.remove_label.call_count == 0
+
+    def test_a_dangling_subissue_with_no_pull_request_found_for_its_branch_is_left_untouched(self) -> None:
+        dangling = SubIssueMother.dangling()
+        conductor = self._conductor(dangling=(dangling,))
+        conductor.forum.any_pull_request.return_value = None
+
+        conductor.conduct()
+
+        assert conductor.forum.pull_request_state.call_count == 0
+        assert conductor.metrics.record.call_count == 0
+
+    def test_the_pull_request_asked_about_is_the_one_open_on_the_dangling_subissues_own_branch(self) -> None:
+        dangling = SubIssueMother.dangling()
+        conductor = self._conductor(dangling=(dangling,))
+
+        conductor.conduct()
+
+        conductor.forum.any_pull_request.assert_any_call(repo=Conductor.REPO, branch=dangling.branch)
+
+    def test_an_invocation_with_nothing_dangling_neither_records_nor_removes_a_label_for_it(self) -> None:
+        conductor = self._conductor(dangling=())
+
+        conductor.conduct()
+
+        assert conductor.metrics.record.call_count == 0
+        assert conductor.repository.remove_label.call_count == 0
+
+
 class TestConductSliceResumingAnInterruptedRun:
     @staticmethod
     def _conductor() -> Conductor:
@@ -249,6 +316,24 @@ class TestConductSliceOnTheHappyPath:
         conductor.conduct()
 
         assert conductor.repository.write_label.call_count == 0
+
+    def test_a_merged_run_still_removes_whatever_label_the_subissue_carried_so_the_two_do_not_contradict(
+        self,
+    ) -> None:
+        conductor = Conductor(chosen=SelectSliceResultMother.resumed_at(RunMother.awaiting_merge()))
+
+        conductor.conduct()
+
+        conductor.repository.remove_label.assert_called_once_with(
+            repo=Conductor.REPO, issue=_SUBISSUE, remove=IssueLabel.IN_PROGRESS
+        )
+
+    def test_a_merged_run_that_carried_no_label_removes_none_because_there_is_nothing_to_retire(self) -> None:
+        conductor = Conductor(chosen=SelectSliceResultMother.resumed_at(RunMother.awaiting_merge(), label=None))
+
+        conductor.conduct()
+
+        assert conductor.repository.remove_label.call_count == 0
 
     def test_the_durable_row_carries_the_slice_the_state_and_every_call_that_was_paid_for(self) -> None:
         conductor = self._conductor()

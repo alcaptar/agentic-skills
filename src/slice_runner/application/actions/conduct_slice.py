@@ -179,6 +179,8 @@ class ConductSlice:
 
     def execute(self, params: ConductSliceParams) -> ConductSliceResult:
         chosen = self._select.execute(SelectSliceParams(repo=params.repo, issue=params.issue, slice_id=params.slice_id))
+        for dangling in chosen.dangling:
+            self._closing_a_merge_missed_between_invocations(params, dangling)
         progress = ConductSliceProgress(
             params=params,
             chosen=chosen,
@@ -387,14 +389,41 @@ class ConductSlice:
         if transition.run != progress.run:
             self._writing(progress, run=transition.run)
         label = IssueLabel.of(state=transition.state, step=transition.run.step)
-        if label is None or label is progress.label:
+        if label is progress.label:
             return replace(progress, run=transition.run)
+        if label is None:
+            if progress.label is not None:
+                self._repository.remove_label(
+                    repo=progress.params.repo, issue=progress.subissue.number, remove=progress.label
+                )
+            return replace(progress, run=transition.run, label=None)
 
         self._repository.write_label(
             repo=progress.params.repo, issue=progress.subissue.number, remove=progress.label, add=label
         )
 
         return replace(progress, run=transition.run, label=label)
+
+    def _closing_a_merge_missed_between_invocations(self, params: ConductSliceParams, subissue: SubIssue) -> None:
+        run = subissue.run
+        if run is None:
+            return
+
+        opened = self._forum.any_pull_request(repo=params.repo, branch=subissue.branch)
+        if (
+            opened is None
+            or self._forum.pull_request_state(repo=params.repo, number=opened) is not PullRequestState.MERGED
+        ):
+            return
+
+        self._metrics.record(
+            ClosedSlice(
+                repo=params.repo, slice_id=subissue.slice_id, name=subissue.name, state=RunState.MERGED, run=run
+            )
+        )
+        label = subissue.label
+        if label is not None:
+            self._repository.remove_label(repo=params.repo, issue=subissue.number, remove=label)
 
     def _reporting(self, progress: ConductSliceProgress, transition: Transition) -> None:
         self._events.emit(

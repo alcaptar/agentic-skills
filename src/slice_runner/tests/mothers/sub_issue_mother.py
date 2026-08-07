@@ -6,6 +6,7 @@ from typing import ClassVar
 from slice_runner.domain.issue_label import IssueLabel
 from slice_runner.domain.issue_state import IssueState
 from slice_runner.domain.sub_issue import SubIssue
+from slice_runner.tests.mothers.run_mother import RunMother
 
 
 class SubIssueMother:
@@ -34,6 +35,15 @@ class SubIssueMother:
     @staticmethod
     def closed() -> SubIssue:
         return replace(SubIssueMother.pending(), state=IssueState.CLOSED)
+
+    @staticmethod
+    def dangling() -> SubIssue:
+        return replace(
+            SubIssueMother.pending(),
+            state=IssueState.CLOSED,
+            run=RunMother.awaiting_merge(),
+            label=IssueLabel.AWAITING_MERGE,
+        )
 
     @staticmethod
     def carrying(label: IssueLabel) -> SubIssue:

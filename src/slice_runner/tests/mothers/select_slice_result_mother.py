@@ -17,21 +17,32 @@ if TYPE_CHECKING:
 
 class SelectSliceResultMother:
     @classmethod
-    def about_to_start(cls, *, subissue: SubIssue | None = None) -> SelectSliceResult:
-        return cls._of(subissue or SubIssueMother.pending())
+    def about_to_start(
+        cls, *, subissue: SubIssue | None = None, dangling: tuple[SubIssue, ...] = ()
+    ) -> SelectSliceResult:
+        return cls._of(subissue or SubIssueMother.pending(), dangling=dangling)
 
     @classmethod
     def resumed_at(
-        cls, run: Run, *, subissue: SubIssue | None = None, parent: ParentIssue | None = None
+        cls,
+        run: Run,
+        *,
+        subissue: SubIssue | None = None,
+        parent: ParentIssue | None = None,
+        label: IssueLabel | None = IssueLabel.IN_PROGRESS,
+        dangling: tuple[SubIssue, ...] = (),
     ) -> SelectSliceResult:
         return cls._of(
-            replace(subissue or SubIssueMother.pending(), run=run, label=IssueLabel.IN_PROGRESS), parent=parent
+            replace(subissue or SubIssueMother.pending(), run=run, label=label), parent=parent, dangling=dangling
         )
 
     @staticmethod
-    def _of(subissue: SubIssue, *, parent: ParentIssue | None = None) -> SelectSliceResult:
+    def _of(
+        subissue: SubIssue, *, parent: ParentIssue | None = None, dangling: tuple[SubIssue, ...] = ()
+    ) -> SelectSliceResult:
         return SelectSliceResult(
             subissue=subissue,
             parent=parent or ParentIssueMother.with_sources_and_controls(),
             checklist=(ChecklistEntry.of(subissue),),
+            dangling=dangling,
         )

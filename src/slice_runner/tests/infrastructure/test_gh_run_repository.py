@@ -462,6 +462,32 @@ class TestWritingTheMacroStateLabel:
         assert len(process.calls) == 1
 
 
+class TestRemovingTheMacroStateLabel:
+    def test_a_call_removes_the_label_named_and_adds_none_in_its_place(self) -> None:
+        process = ScriptedProcess(ProcessOutput(code=0, stdout="", stderr=""))
+
+        GhRunRepository(process=process).remove_label(repo=_REPO, issue=45, remove=IssueLabel.AWAITING_MERGE)
+
+        assert len(process.calls) == 1
+        argv = Argv(process.calls[0].argv)
+        assert argv.value_of("--remove-label") == "estado:esperando-merge"
+        assert "--add-label" not in process.calls[0].argv
+
+    def test_the_only_issue_number_named_is_the_one_being_closed(self) -> None:
+        process = ScriptedProcess(ProcessOutput(code=0, stdout="", stderr=""))
+
+        GhRunRepository(process=process).remove_label(repo=_REPO, issue=45, remove=IssueLabel.AWAITING_MERGE)
+
+        assert all("44" not in call.argv for call in process.calls)
+        assert all("45" in call.argv for call in process.calls)
+
+    def test_a_non_zero_exit_raises_with_the_stderr_it_carried(self) -> None:
+        process = ScriptedProcess(ProcessOutput(code=1, stdout="", stderr="authentication required"))
+
+        with pytest.raises(GhCommandFailedError, match="authentication required"):
+            GhRunRepository(process=process).remove_label(repo=_REPO, issue=45, remove=IssueLabel.AWAITING_MERGE)
+
+
 class TestWritingTheUnderstanding:
     def test_the_call_is_a_comment_carrying_the_understanding_as_stdin(self) -> None:
         process = ScriptedProcess(ProcessOutput(code=0, stdout="", stderr=""))
