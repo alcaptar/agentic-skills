@@ -189,6 +189,13 @@ error, nunca mezclados. Ademas escribe: cada verificacion anexa una linea a
 `~/.claude/slice-runner/corpus/verdicts.jsonl` -o al equivalente bajo `CLAUDE_CONFIG_DIR`- con el
 identificador de la slice, el diff juzgado, el veredicto entero y su conteo por severidad. Es un registro
 append-only, y vive **fuera del repo** para que ningun `git add` de la slice se lo lleve a la pull request.
+
+Y **cada llamada al harness** -la que implementa y la que juzga- anexa su linea a
+`~/.claude/slice-runner/trace/calls.jsonl`, con la slice, el paso que servia y el identificador de sesion de
+su conversacion. Es lo que permite abrir la conversacion de una llamada concreta -viven en
+`~/.claude/projects/`, una por sesion- sin adivinar por marcas de tiempo entre decenas de ficheros. Tambien
+append-only y tambien fuera del repo, y por el mismo motivo.
+
 El codigo de salida es el contrato con quien lo invoca:
 
 | | Que significa |

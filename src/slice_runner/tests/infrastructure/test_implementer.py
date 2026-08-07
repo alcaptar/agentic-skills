@@ -7,19 +7,30 @@ import pytest
 
 from slice_runner.domain.exceptions import InvalidImplementationReportError, PermissionDeniedError
 from slice_runner.domain.path_kind import PathKind
+from slice_runner.domain.step import Step
 from slice_runner.infrastructure.claude_implementer import ClaudeImplementer
 from slice_runner.infrastructure.implementer_invocation import ImplementerInvocation
 from slice_runner.infrastructure.slice_implementer_brief import SliceImplementerBrief
 from slice_runner.tests.argv import Argv
-from slice_runner.tests.doubles import RecordedProcess
+from slice_runner.tests.doubles import RecordedProcess, RecordedTrace
 from slice_runner.tests.mothers.assignment_mother import AssignmentMother
 from slice_runner.tests.mothers.harness_spend_mother import HarnessSpendMother
 from slice_runner.tests.mothers.judge_output_mother import HarnessEnvelopeMother
 
 if TYPE_CHECKING:
     from slice_runner.domain.assignment import Assignment
+    from slice_runner.domain.implementation import Implementation
+    from slice_runner.infrastructure.process import Process
 
 _RECORDED = "implementer-two-paths"
+
+
+class OneRound:
+    @staticmethod
+    def implemented(process: Process) -> Implementation:
+        return ClaudeImplementer(process=process, trace=RecordedTrace()).implement(
+            AssignmentMother.of_the_first_round()
+        )
 
 
 class TestHowTheImplementerIsInvoked:
@@ -83,7 +94,7 @@ class TestWhereTheProcessRuns:
     def test_the_repo_becomes_the_working_directory_of_the_process_and_not_only_prompt_text(self) -> None:
         process = RecordedProcess(HarnessEnvelopeMother.recorded(_RECORDED))
 
-        ClaudeImplementer(process=process).implement(AssignmentMother.of_the_first_round())
+        ClaudeImplementer(process=process, trace=RecordedTrace()).implement(AssignmentMother.of_the_first_round())
 
         assert process.cwd == AssignmentMother.REPO
 
@@ -93,7 +104,7 @@ class TestTheSliceDataThatTravelsWithTheBrief:
     def _sent(assignment: Assignment) -> str:
         process = RecordedProcess(HarnessEnvelopeMother.recorded(_RECORDED))
 
-        ClaudeImplementer(process=process).implement(assignment)
+        ClaudeImplementer(process=process, trace=RecordedTrace()).implement(assignment)
 
         return process.stdin
 
@@ -141,7 +152,7 @@ class TestTheReportOfARecordedCall:
     def test_both_paths_of_the_recorded_call_arrive_labelled(self) -> None:
         process = RecordedProcess(HarnessEnvelopeMother.recorded(_RECORDED))
 
-        report = ClaudeImplementer(process=process).implement(AssignmentMother.of_the_first_round())
+        report = OneRound.implemented(process)
 
         assert [(reported.path, reported.kind) for reported in report.paths] == [
             ("hello.py", PathKind.PRODUCTION),
@@ -151,7 +162,7 @@ class TestTheReportOfARecordedCall:
     def test_a_report_with_nothing_left_out_carries_an_empty_tuple(self) -> None:
         process = RecordedProcess(HarnessEnvelopeMother.recorded(_RECORDED))
 
-        report = ClaudeImplementer(process=process).implement(AssignmentMother.of_the_first_round())
+        report = OneRound.implemented(process)
 
         assert report.left_out == ()
 
@@ -165,7 +176,7 @@ class TestTheReportOfARecordedCall:
         }
         process = RecordedProcess(HarnessEnvelopeMother.carrying(left_out, recorded=_RECORDED))
 
-        report = ClaudeImplementer(process=process).implement(AssignmentMother.of_the_first_round())
+        report = OneRound.implemented(process)
 
         assert report.left_out == (
             "el cableado del subcomando de metrics queda para otra slice",
@@ -175,9 +186,30 @@ class TestTheReportOfARecordedCall:
     def test_what_the_harness_spent_on_the_call_travels_with_the_report(self) -> None:
         process = RecordedProcess(HarnessEnvelopeMother.recorded(_RECORDED))
 
-        report = ClaudeImplementer(process=process).implement(AssignmentMother.of_the_first_round())
+        report = OneRound.implemented(process)
 
         assert report.spend == HarnessSpendMother.of_the_implementer_call()
+
+
+class TestTheTraceOfTheCall:
+    def test_the_session_the_call_ran_under_is_written_down_under_the_slice_and_the_step_it_served(self) -> None:
+        process = RecordedProcess(HarnessEnvelopeMother.recorded(_RECORDED))
+        trace = RecordedTrace()
+
+        ClaudeImplementer(process=process, trace=trace).implement(AssignmentMother.of_the_first_round())
+
+        assert [(call.slice_id, call.step, call.session) for call in trace.calls] == [
+            ("slice-05", Step.IMPLEMENT, HarnessEnvelopeMother.SESSION_OF_THE_IMPLEMENTER)
+        ]
+
+    def test_a_call_whose_report_is_rejected_is_traced_too_because_that_conversation_is_the_one_to_read(self) -> None:
+        process = RecordedProcess(HarnessEnvelopeMother.denying_a_read_over(_RECORDED))
+        trace = RecordedTrace()
+
+        with pytest.raises(PermissionDeniedError):
+            ClaudeImplementer(process=process, trace=trace).implement(AssignmentMother.of_the_first_round())
+
+        assert [call.session for call in trace.calls] == [HarnessEnvelopeMother.SESSION_OF_THE_IMPLEMENTER]
 
 
 class TestANonEmptyPermissionDenialsFailsTheCall:
@@ -185,19 +217,19 @@ class TestANonEmptyPermissionDenialsFailsTheCall:
         process = RecordedProcess(HarnessEnvelopeMother.denying_a_read_over(_RECORDED))
 
         with pytest.raises(PermissionDeniedError):
-            ClaudeImplementer(process=process).implement(AssignmentMother.of_the_first_round())
+            OneRound.implemented(process)
 
     def test_the_error_names_which_permission_was_denied(self) -> None:
         process = RecordedProcess(HarnessEnvelopeMother.denying_a_read_over(_RECORDED))
 
         with pytest.raises(PermissionDeniedError, match=f"Read {HarnessEnvelopeMother.DENIED_READ}"):
-            ClaudeImplementer(process=process).implement(AssignmentMother.of_the_first_round())
+            OneRound.implemented(process)
 
     def test_what_the_denied_call_spent_survives_the_rejection(self) -> None:
         process = RecordedProcess(HarnessEnvelopeMother.denying_a_read_over(_RECORDED))
 
         with pytest.raises(PermissionDeniedError) as rejection:
-            ClaudeImplementer(process=process).implement(AssignmentMother.of_the_first_round())
+            OneRound.implemented(process)
 
         assert rejection.value.spend == HarnessSpendMother.of_the_implementer_call()
 
@@ -208,14 +240,14 @@ class TestWhatTheImplementerIsAllowedToReturn:
         process = RecordedProcess(HarnessEnvelopeMother.carrying(incomplete, recorded=_RECORDED))
 
         with pytest.raises(InvalidImplementationReportError, match="left_out"):
-            ClaudeImplementer(process=process).implement(AssignmentMother.of_the_first_round())
+            OneRound.implemented(process)
 
     def test_a_rejected_report_still_reports_what_the_call_spent(self) -> None:
         incomplete: dict[str, object] = {"paths": [{"path": "hello.py", "kind": "production"}]}
         process = RecordedProcess(HarnessEnvelopeMother.carrying(incomplete, recorded=_RECORDED))
 
         with pytest.raises(InvalidImplementationReportError) as rejection:
-            ClaudeImplementer(process=process).implement(AssignmentMother.of_the_first_round())
+            OneRound.implemented(process)
 
         assert rejection.value.spend == HarnessSpendMother.of_the_implementer_call()
 
@@ -227,4 +259,4 @@ class TestWhatTheImplementerIsAllowedToReturn:
         process = RecordedProcess(HarnessEnvelopeMother.carrying(invented_kind, recorded=_RECORDED))
 
         with pytest.raises(InvalidImplementationReportError, match="'documentation'"):
-            ClaudeImplementer(process=process).implement(AssignmentMother.of_the_first_round())
+            OneRound.implemented(process)

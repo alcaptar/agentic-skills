@@ -33,6 +33,9 @@ class HarnessEnvelopeMother:
     JUDGE_RECORDED: ClassVar[tuple[str, ...]] = ("full-recipe", "unbounded-tools")
     ALL_RECORDED: ClassVar[tuple[str, ...]] = (*JUDGE_RECORDED, "implementer-two-paths")
 
+    SESSION_OF_THE_JUDGE: ClassVar[str] = "721332c7-007c-4eb4-9c21-5b29b78de64e"
+    SESSION_OF_THE_IMPLEMENTER: ClassVar[str] = "cd8b5450-595b-403e-b6a6-a1f2c9af512c"
+
     DENIED_READ: ClassVar[str] = (
         "/Users/someone/.claude/plugins/cache/skills/backend-engineering/2.0.2/skills/"
         "backend-best-practices/references/code-style.md"

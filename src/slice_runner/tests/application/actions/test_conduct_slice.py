@@ -462,6 +462,37 @@ class TestConductSliceWhenTheJudgeSpeaks:
         assert conductor.implement.execute.call_args.args[0].findings == (raised,)
         assert conductor.deliver.execute.call_count == 1
 
+    def test_the_durable_row_keeps_the_findings_of_every_round_because_one_caught_and_fixed_still_happened(
+        self,
+    ) -> None:
+        raised = FindingMother.without_line()
+        conductor = self._conductor(budgets=Budgets(verify_retries=1))
+        conductor.verify.execute.side_effect = [
+            VerificationMother.vetoing(VerdictMother.failing(raised)),
+            VerificationMother.passing(),
+        ]
+
+        conductor.conduct()
+
+        assert conductor.metrics.record.call_args.args[0].findings == (raised,)
+
+    def test_a_second_round_is_sent_only_what_the_last_verdict_raised_because_the_earlier_ones_may_be_fixed(
+        self,
+    ) -> None:
+        first = FindingMother.without_line()
+        second = FindingMother.without_line(path="src/y.py")
+        conductor = self._conductor(budgets=Budgets(verify_retries=2))
+        conductor.verify.execute.side_effect = [
+            VerificationMother.vetoing(VerdictMother.failing(first)),
+            VerificationMother.vetoing(VerdictMother.failing(second)),
+            VerificationMother.passing(),
+        ]
+
+        conductor.conduct()
+
+        assert conductor.implement.execute.call_args.args[0].findings == (second,)
+        assert conductor.metrics.record.call_args.args[0].findings == (first, second)
+
     def test_a_veto_with_no_budget_left_closes_the_run_as_blocked_by_the_judge(self) -> None:
         conductor = self._conductor(budgets=Budgets(verify_retries=0))
         conductor.verify.execute.return_value = VerificationMother.vetoing(VerdictMother.failing())

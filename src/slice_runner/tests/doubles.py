@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar
 from unittest.mock import Mock, create_autospec
 
+from slice_runner.infrastructure.call_trace import CallTrace
 from slice_runner.infrastructure.judge_invocation import JudgeInvocation
 from slice_runner.infrastructure.process import (
     Process,
@@ -13,6 +14,9 @@ from slice_runner.infrastructure.process import (
     ProcessTimedOutError,
 )
 from slice_runner.tests.real_process import Real
+
+if TYPE_CHECKING:
+    from slice_runner.infrastructure.call_trace import HarnessCall
 
 
 class ProcessDoubles:
@@ -128,3 +132,11 @@ class RealExceptTheJudge(Process):
         self.calls += 1
 
         return ProcessOutput(code=0, stdout=json.dumps(self._judge_output), stderr="")
+
+
+class RecordedTrace(CallTrace):
+    def __init__(self) -> None:
+        self.calls: list[HarnessCall] = []
+
+    def record(self, call: HarnessCall) -> None:
+        self.calls.append(call)

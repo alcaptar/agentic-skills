@@ -143,10 +143,11 @@ importar**: un smoke que solo importe el modulo lo da por bueno. Lo evita
   vacio en silencio.
 - **La raiz de configuracion de la herramienta la resuelve `ClaudeConfig`** (`CLAUDE_CONFIG_DIR`, o
   `~/.claude` expandido, con la variable vacia tratada como ausente). La comparten `LocalSkillLibrary`
-  -que lee los dos arboles de la vara- y `MetricsInvocation` -que resuelve la ruta del script del
-  registro durable-, porque lo que comparten no es una regla del programa sino **la convencion de Claude
+  -que lee los dos arboles de la vara-, `MetricsInvocation` -que resuelve la ruta del script del
+  registro durable- y `LocalCallTrace` -que resuelve donde vive el rastro de las llamadas-, porque lo que
+  comparten no es una regla del programa sino **la convencion de Claude
   Code sobre donde vive su configuracion**: de ahi que viva en un objeto propio y no colgada de uno de
-  los dos adaptadores. Se extrajo al aparecer el tercer consumidor, que es la condicion que la
+  los adaptadores. Se extrajo al aparecer el tercer consumidor, que es la condicion que la
   duplicacion anterior se habia puesto a si misma. **`LocalCorpus` se queda con su copia**, y eso es
   deuda declarada y abierta, no precedente: migrarla obliga a renombrar la constante por la que **todos**
   los tests que ejecutan una verificacion mantienen la suite fuera del home real, que es mas superficie
@@ -160,9 +161,33 @@ importar**: un smoke que solo importe el modulo lo da por bueno. Lo evita
   que hacer con el fallo de escritura seria inventar una politica que ningun criterio pidio**, y un
   adaptador que decide politica es antipatron declarado de esta misma capa. El precedente vivo es
   `LocalControlRunner.run` (`src/slice_runner/infrastructure/local_control_runner.py`), que escribe su log
-  igual de desprotegido. Cuando se cierre, se cierra **decidiendo la politica** -si el corpus es
+  igual de desprotegido, y `LocalCallTrace.record` (bullet siguiente) hereda la misma decision. Cuando se
+  cierre, se cierra **decidiendo la politica** -si el corpus es
   best-effort, si su fallo es un cierre propio del run, y con que codigo de salida se distingue-, no
   capturando el `OSError` a escondidas dentro del adaptador.
+- **El rastro de cada llamada al harness lo escribe el adaptador que la hace, no el caso de uso.**
+  `LocalCallTrace` -el adaptador del puerto `CallTrace`, que vive con el en esta capa
+  (`docs/conventions/architecture.md`)- anexa una linea por
+  llamada -slice, paso y el `session_id` que trae el sobre- a `~/.claude/slice-runner/trace/calls.jsonl`, y quienes
+  lo llaman son `ClaudeImplementer` y `ClaudeVerifier`, en cuanto el sobre parsea y **antes** del bloque
+  `measuring()`. Dos motivos, y el segundo es el que cierra la decision:
+
+  1. **El unico sitio que ve el sobre de todas las llamadas es el adaptador.** Una llamada que muere dentro
+     de `measuring()` -veredicto incoherente, permiso denegado, informe invalido- es justo la conversacion
+     que se quiere leer, y en aplicacion no queda nada de ella: no hay `Verification` ni `Implementation`, y
+     el `MeasuredCallError` solo lleva el gasto. Grabar en la frontera cubre las dos llamadas del run, el
+     `verify` suelto y tambien los descartes.
+  2. **Al caso de uso ya no le cabe, y eso dice lo mismo.** Con un puerto mas suelto, `VerifySlice` pasa a
+     seis dependencias y salta `PLR0913`; las dos salidas que **no** valen son relajar el linter y
+     empaquetarle los argumentos, que es del conductor y solo de el (ver `docs/conventions/application.md`).
+     Que el linter lo cace ahi es la senal de que escribir el rastro es de la capa que ve el sobre, no de la
+     que orquesta.
+
+  Consecuencia aceptada, y es la misma frontera que tiene el gasto: un sobre que **no** parsea no deja
+  rastro -no hay identificador que escribir-, y una llamada que el harness marca fallida (`is_error`)
+  tampoco, porque `HarnessOutput.from_process` corta antes de que el adaptador tenga el sobre en la mano.
+  Por eso mismo `session_id` es campo **obligatorio** del sobre y no opcional: una llamada sin identificador
+  no se puede volver a encontrar, que es exactamente el fallo que este rastro existe para cerrar.
 - **El registro durable lo escribe `metrics.py` como subproceso, y su vocabulario esta duplicado a
   proposito.** `MetricsScriptLog` implementa el puerto `MetricsLog` invocando el script por el puerto
   `Process`, no importandolo: el programa no importa nada de `skills/` (arriba), y ademas el formato del
@@ -193,7 +218,13 @@ importar**: un smoke que solo importe el modulo lo da por bueno. Lo evita
   reinvocarse escribe una fila con el coste de la **ultima** invocacion solamente -y con cero si esa
   invocacion no llamo al harness, como la que solo espera el merge-. Cerrarlo es meter el gasto en el `Run`
   persistido, o sea **tocar el formato del estado durable** (`SubissueBody`), que lo leen tambien todas las
-  subissues ya abiertas: se hace entero y con su slice, no a medias. Mientras tanto, el presupuesto de
+  subissues ya abiertas: se hace entero y con su slice, no a medias.
+
+  **Los hallazgos de las vueltas viven con la misma frontera.** La fila durable cuenta los de **todas** las
+  vueltas del juez y no solo los del ultimo veredicto -un hallazgo cazado y corregido a mitad tambien
+  ocurrio-, pero los acumula `ConductSliceProgress.verdicts`, que nace vacio en cada `slice-runner run`:
+  una slice reinvocada escribe la fila con las vueltas de la **ultima** invocacion solamente. Se cierra con
+  el mismo `SubissueBody` y con la misma slice que el gasto y la deuda. Mientras tanto, el presupuesto de
   coste (`docs/conventions/domain.md`) acota **la invocacion**, que es donde el gasto si esta completo.
 
   **Deuda vecina, del mismo formato durable: un merge entre invocaciones deja el run sin cerrar.** Si la
