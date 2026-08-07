@@ -18,7 +18,13 @@ class TestStderrTurnLog:
 
         output = capsys.readouterr()
         assert output.out == ""
-        assert json.loads(output.err) == {"slice_id": "slice-05", "step": "implement", "number": 1}
+        assert json.loads(output.err) == {
+            "slice_id": "slice-05",
+            "step": "implement",
+            "number": 1,
+            "tool": "Write",
+            "target": "hello.py",
+        }
 
     def test_two_consecutive_turns_land_on_two_separable_lines_and_never_on_a_single_run_together(
         self, capsys: pytest.CaptureFixture[str]
