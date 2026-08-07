@@ -15,6 +15,7 @@ class Budgets:
     indeterminate_ticks: int = 3
     seconds_between_ticks: int = 30
     total_wait_seconds: int = 1800
+    process_timeout_seconds: int = 3600
     slice_cost_usd: float = 25.0
 
     def wait_exhausted(self, waited_seconds: int) -> bool:

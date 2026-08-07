@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
+from slice_runner.domain.budgets import Budgets
 from slice_runner.infrastructure.cli import Cli
 from slice_runner.infrastructure.exit_code import ExitCode
 from slice_runner.infrastructure.local_corpus import LocalCorpus
@@ -100,7 +101,9 @@ class TestNothingOfTheCorpusCanReachAPullRequest(WithTheCorpusOutOfTheRealHome):
     def _verified(repo: Path) -> None:
         process = RealExceptTheJudge(HarnessEnvelopeMother.carrying(JudgeVerdictMother.passing()))
 
-        code = Cli(process=process).verify(repo=str(repo), base=Git.BASE_BRANCH, slice_id=CorpusEntryMother.SLICE_ID)
+        code = Cli(process=process, budgets=Budgets()).verify(
+            repo=str(repo), base=Git.BASE_BRANCH, slice_id=CorpusEntryMother.SLICE_ID
+        )
 
         assert code == ExitCode.OK
 

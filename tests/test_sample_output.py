@@ -15,11 +15,12 @@ cualquier regla del ruleset, no solo la que hoy estaba incumplida.
 from __future__ import annotations
 
 import shutil
-import subprocess
 import sys
 from pathlib import Path
 
 import pytest
+
+from slice_runner.tests.real_process import Real
 
 _ROOT = Path(__file__).resolve().parents[1]
 _FIXTURE = _ROOT / "smoke" / "fixture"
@@ -58,15 +59,13 @@ def fixture_con_el_ejemplo_instalado(tmp_path: Path) -> Path:
 @pytest.mark.parametrize("target", sorted(_LINTING))
 def test_el_ejemplo_pasa_el_linting_de_la_fixture(target: str, fixture_con_el_ejemplo_instalado: Path) -> None:
     """Cada mitad de `make -C smoke/fixture linting` sale con 0 sobre el ejemplo instalado."""
-    resultado = subprocess.run(
+    resultado = Real.process().run(
         [sys.executable, "-m", "ruff", *_LINTING[target]],
-        cwd=fixture_con_el_ejemplo_instalado,
-        capture_output=True,
-        text=True,
-        check=False,
+        stdin="",
+        cwd=str(fixture_con_el_ejemplo_instalado),
     )
 
-    assert resultado.returncode == 0, (
+    assert resultado.code == 0, (
         f"`make -C smoke/fixture {target}` rechazaria el ejemplo de smoke/sample-output/, "
         f"asi que la referencia que el harness ofrece no pasa la vara con la que el harness "
         f"mide:\n{resultado.stdout}{resultado.stderr}"

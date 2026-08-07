@@ -9,10 +9,17 @@ if TYPE_CHECKING:
 
 class Git:
     BASE_BRANCH: ClassVar[str] = "master"
+    TIMEOUT_SECONDS: ClassVar[int] = 60
 
     @staticmethod
     def run(repo: Path, *args: str) -> str:
-        done = subprocess.run(["git", "-C", str(repo), *args], check=True, capture_output=True, text=True)
+        done = subprocess.run(
+            ["git", "-C", str(repo), *args],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=Git.TIMEOUT_SECONDS,
+        )
 
         return done.stdout
 

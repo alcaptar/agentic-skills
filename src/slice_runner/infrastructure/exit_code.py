@@ -20,6 +20,7 @@ class ExitCode(IntEnum):
     NO_SLICE_LEFT = 9
     RUN_INTERRUPTED = 10
     PULL_REQUEST_CLOSED = 11
+    PROCESS_TIMED_OUT = 12
 
     @classmethod
     def of(cls, ruling: Ruling) -> ExitCode:

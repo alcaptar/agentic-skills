@@ -20,7 +20,7 @@ from slice_runner.infrastructure.exit_code import ExitCode
 from slice_runner.infrastructure.implementer_invocation import ImplementerInvocation
 from slice_runner.infrastructure.judge_invocation import JudgeInvocation
 from slice_runner.tests.argv import Argv
-from slice_runner.tests.doubles import Answer, RealExceptTheJudge, UnrunnableJudge
+from slice_runner.tests.doubles import Answer, RealExceptTheJudge, TimingOutProcess, UnrunnableJudge
 from slice_runner.tests.git_repo import Git
 from slice_runner.tests.mothers.gh_conversation_mother import GhConversationMother
 from slice_runner.tests.mothers.judge_output_mother import HarnessEnvelopeMother, JudgeVerdictMother
@@ -84,6 +84,15 @@ class BlindToTheToolboxOfThisMachine:
         monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path / "no-toolbox"))
 
 
+class ReadingWhatWasReported:
+    @staticmethod
+    def _reported(capsys: pytest.CaptureFixture[str]) -> str:
+        output = capsys.readouterr()
+        assert output.out == ""
+
+        return output.err
+
+
 @pytest.mark.integration
 class TestTheExitCodeOfTheVerdict(BlindToTheToolboxOfThisMachine):
     def test_a_pass_exits_with_zero_and_emits_the_verdict_as_json_on_standard_output(
@@ -92,7 +101,7 @@ class TestTheExitCodeOfTheVerdict(BlindToTheToolboxOfThisMachine):
         repo = RepoMother.with_the_slice_staged(tmp_path)
         process = RealExceptTheJudge(HarnessEnvelopeMother.carrying(JudgeVerdictMother.passing()))
 
-        code = Cli(process=process).verify(repo=str(repo), base=Git.BASE_BRANCH, slice_id=_SLICE)
+        code = Cli(process=process, budgets=Budgets()).verify(repo=str(repo), base=Git.BASE_BRANCH, slice_id=_SLICE)
 
         assert code == ExitCode.OK
         assert json.loads(capsys.readouterr().out) == {"veredicto": "PASA", "hallazgos": []}
@@ -103,7 +112,7 @@ class TestTheExitCodeOfTheVerdict(BlindToTheToolboxOfThisMachine):
         repo = RepoMother.with_the_slice_staged(tmp_path)
         process = RealExceptTheJudge(HarnessEnvelopeMother.recorded())
 
-        code = Cli(process=process).verify(repo=str(repo), base=Git.BASE_BRANCH, slice_id=_SLICE)
+        code = Cli(process=process, budgets=Budgets()).verify(repo=str(repo), base=Git.BASE_BRANCH, slice_id=_SLICE)
 
         assert code == ExitCode.VETOED
         emitted = json.loads(capsys.readouterr().out)
@@ -120,7 +129,7 @@ class TestWhenThereIsNoVerdictToTrust(BlindToTheToolboxOfThisMachine):
         incoherent = JudgeVerdictMother.passing_with(JudgeVerdictMother.high_severity_finding(path="mod.py"))
         process = RealExceptTheJudge(HarnessEnvelopeMother.carrying(incoherent))
 
-        code = Cli(process=process).verify(repo=str(repo), base=Git.BASE_BRANCH, slice_id=_SLICE)
+        code = Cli(process=process, budgets=Budgets()).verify(repo=str(repo), base=Git.BASE_BRANCH, slice_id=_SLICE)
 
         assert code == ExitCode.NO_USABLE_VERDICT
         output = capsys.readouterr()
@@ -132,7 +141,9 @@ class TestWhenThereIsNoVerdictToTrust(BlindToTheToolboxOfThisMachine):
     ) -> None:
         repo = RepoMother.with_the_slice_staged(tmp_path)
 
-        code = Cli(process=UnrunnableJudge()).verify(repo=str(repo), base=Git.BASE_BRANCH, slice_id=_SLICE)
+        code = Cli(process=UnrunnableJudge(), budgets=Budgets()).verify(
+            repo=str(repo), base=Git.BASE_BRANCH, slice_id=_SLICE
+        )
 
         assert code == ExitCode.NO_USABLE_VERDICT
         output = capsys.readouterr()
@@ -151,7 +162,7 @@ class TestWhenThereIsNothingToJudge(BlindToTheToolboxOfThisMachine):
     ) -> None:
         repo = RepoMother.with_nothing_staged(tmp_path)
 
-        code = Cli(process=process).verify(repo=str(repo), base=Git.BASE_BRANCH, slice_id=_SLICE)
+        code = Cli(process=process, budgets=Budgets()).verify(repo=str(repo), base=Git.BASE_BRANCH, slice_id=_SLICE)
 
         assert code == ExitCode.NO_DIFF
         assert process.calls == 0
@@ -162,7 +173,7 @@ class TestWhenThereIsNothingToJudge(BlindToTheToolboxOfThisMachine):
     ) -> None:
         repo = RepoMother.with_the_slice_staged(tmp_path)
 
-        code = Cli(process=process).verify(repo=str(repo), base="does-not-exist", slice_id=_SLICE)
+        code = Cli(process=process, budgets=Budgets()).verify(repo=str(repo), base="does-not-exist", slice_id=_SLICE)
 
         assert code == ExitCode.USAGE_ERROR
         assert process.calls == 0
@@ -171,7 +182,7 @@ class TestWhenThereIsNothingToJudge(BlindToTheToolboxOfThisMachine):
     def test_a_repo_that_does_not_resolve_exits_with_four_without_blaming_the_base(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str], process: RealExceptTheJudge
     ) -> None:
-        code = Cli(process=process).verify(
+        code = Cli(process=process, budgets=Budgets()).verify(
             repo=str(RepoMother.outside_git(tmp_path)), base=Git.BASE_BRANCH, slice_id=_SLICE
         )
 
@@ -186,7 +197,7 @@ class TestTheDiffTheJudgeReads(BlindToTheToolboxOfThisMachine):
         repo = RepoMother.with_the_slice_staged(tmp_path)
         process = RealExceptTheJudge(HarnessEnvelopeMother.recorded())
 
-        Cli(process=process).verify(repo=str(repo), base=Git.BASE_BRANCH, slice_id=_SLICE)
+        Cli(process=process, budgets=Budgets()).verify(repo=str(repo), base=Git.BASE_BRANCH, slice_id=_SLICE)
 
         assert "+    return 2" in process.stdin
 
@@ -196,7 +207,7 @@ class TestTheDiffTheJudgeReads(BlindToTheToolboxOfThisMachine):
         repo = RepoMother.with_the_slice_staged(tmp_path)
         process = RealExceptTheJudge(HarnessEnvelopeMother.recorded())
 
-        Cli(process=process).verify(repo=str(repo), base=Git.BASE_BRANCH, slice_id=_SLICE)
+        Cli(process=process, budgets=Budgets()).verify(repo=str(repo), base=Git.BASE_BRANCH, slice_id=_SLICE)
 
         assert "slice.diff" not in process.stdin
 
@@ -209,7 +220,7 @@ class TestWhatTheJudgeWasDeniedReading(BlindToTheToolboxOfThisMachine):
         repo = RepoMother.with_the_slice_staged(tmp_path)
         process = RealExceptTheJudge(HarnessEnvelopeMother.denying_a_read())
 
-        code = Cli(process=process).verify(repo=str(repo), base=Git.BASE_BRANCH, slice_id=_SLICE)
+        code = Cli(process=process, budgets=Budgets()).verify(repo=str(repo), base=Git.BASE_BRANCH, slice_id=_SLICE)
 
         output = capsys.readouterr()
         assert code == ExitCode.OK
@@ -222,7 +233,7 @@ class TestWhatTheJudgeWasDeniedReading(BlindToTheToolboxOfThisMachine):
         repo = RepoMother.with_the_slice_staged(tmp_path)
         process = RealExceptTheJudge(HarnessEnvelopeMother.carrying(JudgeVerdictMother.passing()))
 
-        Cli(process=process).verify(repo=str(repo), base=Git.BASE_BRANCH, slice_id=_SLICE)
+        Cli(process=process, budgets=Budgets()).verify(repo=str(repo), base=Git.BASE_BRANCH, slice_id=_SLICE)
 
         assert capsys.readouterr().err == ""
 
@@ -238,7 +249,7 @@ class TestWhatTheJudgeMayRead:
         repo = RepoMother.with_the_slice_staged(tmp_path)
         process = RealExceptTheJudge(HarnessEnvelopeMother.recorded())
 
-        Cli(process=process).verify(repo=str(repo), base=Git.BASE_BRANCH, slice_id=_SLICE)
+        Cli(process=process, budgets=Budgets()).verify(repo=str(repo), base=Git.BASE_BRANCH, slice_id=_SLICE)
 
         assert Argv(process.argv).values_of("--add-dir") == [str(repo), str(toolbox / "skills")]
 
@@ -251,7 +262,7 @@ class TestWhatTheJudgeMayRead:
         repo = RepoMother.with_the_slice_staged(tmp_path)
         process = RealExceptTheJudge(HarnessEnvelopeMother.recorded())
 
-        Cli(process=process).verify(repo=str(repo), base=Git.BASE_BRANCH, slice_id=_SLICE)
+        Cli(process=process, budgets=Budgets()).verify(repo=str(repo), base=Git.BASE_BRANCH, slice_id=_SLICE)
 
         assert str(toolbox / "skills") in process.stdin
 
@@ -296,7 +307,7 @@ class TestTheTransitionOfEveryPair:
         expected: tuple[Step, RunState, int],
         capsys: pytest.CaptureFixture[str],
     ) -> None:
-        code = Cli.explain(request=TransitionRequestMother.asking(step, outcome, **spent))
+        code = Cli.explain(request=TransitionRequestMother.asking(step, outcome, **spent), budgets=Budgets())
 
         assert code == ExitCode.OK
         emitted = json.loads(capsys.readouterr().out)
@@ -307,7 +318,7 @@ class TestTheTransitionOfEveryPair:
     ) -> None:
         asked = TransitionRequestMother.asking(Step.RUN_CONTROLS, Outcome.FAILED, verify_discards=1)
 
-        Cli.explain(request=asked)
+        Cli.explain(request=asked, budgets=Budgets())
 
         assert json.loads(capsys.readouterr().out) == {
             "run": {
@@ -327,7 +338,7 @@ class TestWhatEachBudgetPays:
     def test_a_red_control_spends_a_retry_of_its_own_and_not_one_of_the_judge(
         self, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        Cli.explain(request=TransitionRequestMother.asking(Step.RUN_CONTROLS, Outcome.FAILED))
+        Cli.explain(request=TransitionRequestMother.asking(Step.RUN_CONTROLS, Outcome.FAILED), budgets=Budgets())
 
         spent = json.loads(capsys.readouterr().out)["run"]
         assert (spent["control_retries"], spent["verify_retries"]) == (1, 0)
@@ -335,7 +346,7 @@ class TestWhatEachBudgetPays:
     def test_a_veto_spends_a_retry_of_the_judge_and_not_one_of_the_controls(
         self, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        Cli.explain(request=TransitionRequestMother.asking(Step.VERIFY, Outcome.FAILED))
+        Cli.explain(request=TransitionRequestMother.asking(Step.VERIFY, Outcome.FAILED), budgets=Budgets())
 
         spent = json.loads(capsys.readouterr().out)["run"]
         assert (spent["verify_retries"], spent["control_retries"]) == (1, 0)
@@ -343,7 +354,10 @@ class TestWhatEachBudgetPays:
     def test_a_discarded_verdict_is_counted_apart_because_the_code_was_never_touched(
         self, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        Cli.explain(request=TransitionRequestMother.asking(Step.VERIFY, Outcome.DISCARDED, verify_retries=2))
+        Cli.explain(
+            request=TransitionRequestMother.asking(Step.VERIFY, Outcome.DISCARDED, verify_retries=2),
+            budgets=Budgets(),
+        )
 
         emitted = json.loads(capsys.readouterr().out)
         assert emitted["state"] == RunState.OPEN
@@ -354,7 +368,7 @@ class TestWhatEachBudgetPays:
     ) -> None:
         asked = TransitionRequestMother.asking(Step.VERIFY, Outcome.CORRECTIONS_ORDERED, verify_retries=1)
 
-        Cli.explain(request=asked)
+        Cli.explain(request=asked, budgets=Budgets())
 
         assert json.loads(capsys.readouterr().out)["run"]["verify_retries"] == 2
 
@@ -363,7 +377,7 @@ class TestWhatEachBudgetPays:
     ) -> None:
         asked = TransitionRequestMother.asking(Step.VERIFY, Outcome.CORRECTIONS_ORDERED, verify_retries=2)
 
-        Cli.explain(request=asked)
+        Cli.explain(request=asked, budgets=Budgets())
 
         emitted = json.loads(capsys.readouterr().out)
         assert (emitted["run"]["step"], emitted["state"]) == (Step.OPEN_PULL_REQUEST, RunState.OPEN)
@@ -373,7 +387,7 @@ class TestWhatEachBudgetPays:
     ) -> None:
         asked = TransitionRequestMother.asking(Step.AWAIT_CI, Outcome.PENDING, indeterminate_ticks=2)
 
-        Cli.explain(request=asked)
+        Cli.explain(request=asked, budgets=Budgets())
 
         assert json.loads(capsys.readouterr().out)["run"]["indeterminate_ticks"] == 0
 
@@ -383,7 +397,7 @@ class TestWhenThereIsNoTransitionToExplain:
     def test_a_pair_the_prose_never_describes_is_refused_instead_of_taking_a_generic_branch(
         self, step: Step, outcome: Outcome, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        code = Cli.explain(request=TransitionRequestMother.asking(step, outcome))
+        code = Cli.explain(request=TransitionRequestMother.asking(step, outcome), budgets=Budgets())
 
         assert code == ExitCode.USAGE_ERROR
         output = capsys.readouterr()
@@ -394,7 +408,7 @@ class TestWhenThereIsNoTransitionToExplain:
     def test_a_run_that_is_not_json_is_refused_because_a_guessed_one_advances_the_wrong_slice(
         self, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        code = Cli.explain(request=TransitionRequestMother.not_even_json())
+        code = Cli.explain(request=TransitionRequestMother.not_even_json(), budgets=Budgets())
 
         assert code == ExitCode.USAGE_ERROR
         assert capsys.readouterr().out == ""
@@ -402,7 +416,7 @@ class TestWhenThereIsNoTransitionToExplain:
     def test_a_step_nobody_declared_is_refused_instead_of_defaulting_to_the_first_one(
         self, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        code = Cli.explain(request=TransitionRequestMother.with_a_step_nobody_declared())
+        code = Cli.explain(request=TransitionRequestMother.with_a_step_nobody_declared(), budgets=Budgets())
 
         assert code == ExitCode.USAGE_ERROR
         assert "deploy" in capsys.readouterr().err
@@ -410,7 +424,7 @@ class TestWhenThereIsNoTransitionToExplain:
     def test_a_counter_that_arrives_as_text_is_refused_because_it_decides_when_a_budget_runs_out(
         self, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        code = Cli.explain(request=TransitionRequestMother.with_a_counter_that_arrives_as_text())
+        code = Cli.explain(request=TransitionRequestMother.with_a_counter_that_arrives_as_text(), budgets=Budgets())
 
         assert code == ExitCode.USAGE_ERROR
         assert "control_retries" in capsys.readouterr().err
@@ -867,14 +881,7 @@ class TestWhenTheRunStaysOpen:
         }
 
 
-class TestWhenTheInvocationCannotBeConducted:
-    @staticmethod
-    def _reported(capsys: pytest.CaptureFixture[str]) -> str:
-        output = capsys.readouterr()
-        assert output.out == ""
-
-        return output.err
-
+class TestWhenTheInvocationCannotBeConducted(ReadingWhatWasReported):
     def test_an_issue_whose_slices_are_all_closed_exits_saying_there_is_nothing_left_to_run(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
@@ -907,3 +914,55 @@ class TestWhenTheInvocationCannotBeConducted:
 
         assert code == ExitCode.RUN_INTERRUPTED
         assert "authentication required" in self._reported(capsys)
+
+
+class TestWhenACallOutlivesItsCap(ReadingWhatWasReported):
+    def test_conducting_a_slice_exits_with_the_code_of_the_cap_and_not_with_the_one_that_says_to_reinvoke(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        code = Cli(process=TimingOutProcess(), budgets=Budgets()).run(RunInvocation.params(logs=tmp_path / "logs"))
+
+        assert code == ExitCode.PROCESS_TIMED_OUT
+        assert "gh: killed after 1s" in self._reported(capsys)
+
+    def test_verifying_a_slice_exits_with_the_code_of_the_cap_and_not_with_the_one_of_a_missing_verdict(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        code = Cli(process=TimingOutProcess(), budgets=Budgets()).verify(
+            repo=str(tmp_path), base=Git.BASE_BRANCH, slice_id=_SLICE
+        )
+
+        assert code == ExitCode.PROCESS_TIMED_OUT
+        assert "git: killed after 1s" in self._reported(capsys)
+
+
+class TestTheBudgetsTheEntrypointInjects:
+    def test_a_conducted_run_waits_the_budget_the_entrypoint_was_given_and_not_one_of_its_own(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        slept: list[int] = []
+        monkeypatch.setattr("time.sleep", slept.append)
+        invocation = RunInvocation(
+            children=GhConversationMother.the_slice_resumed_at(RunMother.awaiting_merge()),
+            answers=(
+                Answer(
+                    to=("gh", "pr", "list", "--state", "all"),
+                    stdout=GhConversationMother.the_pull_request_of_the_branch(),
+                ),
+                Answer(to=("gh", "pr", "view"), stdout=GhConversationMother.a_pull_request_still_open()),
+            ),
+        )
+
+        code = invocation.conduct(logs=tmp_path / "logs", budgets=Budgets(total_wait_seconds=60))
+
+        assert code == ExitCode.WAIT_EXHAUSTED
+        assert sum(slept) == 60
+
+    def test_an_explained_transition_ticks_at_the_cadence_the_entrypoint_was_given_and_not_at_one_of_its_own(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        asked = TransitionRequestMother.asking(Step.AWAIT_CI, Outcome.PENDING)
+
+        Cli.explain(request=asked, budgets=Budgets(seconds_between_ticks=7))
+
+        assert json.loads(capsys.readouterr().out)["wait_seconds"] == 7

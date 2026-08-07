@@ -82,7 +82,13 @@ Estos no son convenciones de codigo: son las invariantes del pipeline, y valen e
   convenciones/arquitectura, no re-testea).
 - **Control humano en los puntos de riesgo**: el merge y el rollback los decide el usuario.
 - **Esperas no bloqueantes**: ninguna skill lanza shells bloqueantes largas (`--watch`, `sleep`
-  largos); las esperas son ticks acotados en background + notificacion.
+  largos); las esperas son ticks acotados en background + notificacion. **Y el programa no queda
+  fuera**: al orquestador se le relajo sondear -un bucle de sondeo no congela ninguna sesion ni gasta
+  contexto-, pero no el tope. Toda llamada a un proceso externo lleva **tope por llamada**
+  (`Budgets.process_timeout_seconds`, que el entrypoint inyecta en `LocalProcess`), y agotarlo mata al
+  hijo y sale con su propio codigo de salida. Una llamada sin tope cuelga el run entero sin
+  diagnostico y sin coste acotado, y la vara que lo caza vive en
+  `docs/conventions/infrastructure.md`.
 - **No asumir worktree**: rama normal por defecto; worktree solo al paralelizar slices.
 - **El estado del run vive en el issue de GitHub**: la spec y el estado de cada slice viven en el
   cuerpo de un issue (una feature = un issue), unica fuente de verdad viva y duradera. No hay estado

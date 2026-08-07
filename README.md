@@ -212,10 +212,11 @@ El codigo de salida es el contrato con quien lo invoca:
 | `9` | `run`: el issue no tiene ninguna slice ejecutable (todas cerradas, bloqueadas o abortadas) |
 | `10` | `run`: el run se interrumpio antes de llegar a una parada -`gh` o `git` fallaron, el foro contesto algo ilegible, el registro durable no se pudo escribir-. El estado persistido sigue siendo bueno |
 | `11` | `run`: la pull request de la slice se cerro **sin** mergear, asi que el merge que la invocacion esperaba ya no puede llegar. El run se queda abierto en su paso; lo decide una persona (reabrir la pull request, o cerrar la slice) |
+| `12` | Una llamada a un proceso externo agoto su tope por llamada y se mato, asi que no hay respuesta que interpretar. Reinvocar a ciegas vuelve a pagar el tope entero: primero hay que mirar **que** se colgo |
 
 `1` es un veredicto y `2` no lo es: esa es la distincion que hace el codigo de salida y que un booleano
-perderia. Del `5` al `10` la pregunta es otra -¿que hace quien invoca ahora?-, y por eso hay un codigo
-por decision y no uno por excepcion: `7` y `10` se reinvocan, `5`, `6` y `9` no.
+perderia. Del `5` en adelante la pregunta es otra -¿que hace quien invoca ahora?-, y por eso hay un codigo
+por decision y no uno por excepcion: `7` y `10` se reinvocan, `5`, `6`, `9` y `12` no.
 
 ### La secuencia y los presupuestos, interrogables sin montar un run
 

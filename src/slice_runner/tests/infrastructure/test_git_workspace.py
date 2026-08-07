@@ -7,10 +7,10 @@ import pytest
 
 from slice_runner.infrastructure.git_branches import GitCommandFailedError
 from slice_runner.infrastructure.git_workspace import GitWorkspace
-from slice_runner.infrastructure.local_process import LocalProcess
 from slice_runner.infrastructure.process import ProcessOutput
 from slice_runner.tests.doubles import ScriptedProcess
 from slice_runner.tests.git_repo import Git
+from slice_runner.tests.real_process import Real
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -83,7 +83,7 @@ class TestGitWorkspaceAgainstARealRepo:
         repo = self._repo_with_a_commit(tmp_path / "repo")
         (repo / "added.py").write_text("y = 2\n", encoding="utf-8")
         (repo / "kept.py").unlink()
-        workspace = GitWorkspace(process=LocalProcess())
+        workspace = GitWorkspace(process=Real.process())
 
         workspace.stage(worktree=str(repo), paths=("added.py", "kept.py"))
 
@@ -92,32 +92,32 @@ class TestGitWorkspaceAgainstARealRepo:
     def test_an_untouched_index_reads_back_empty_instead_of_one_blank_name(self, tmp_path: Path) -> None:
         repo = self._repo_with_a_commit(tmp_path / "repo")
 
-        assert GitWorkspace(process=LocalProcess()).staged(worktree=str(repo)) == ()
+        assert GitWorkspace(process=Real.process()).staged(worktree=str(repo)) == ()
 
     def test_a_path_that_is_not_in_the_repo_raises_instead_of_staging_nothing_in_silence(self, tmp_path: Path) -> None:
         repo = self._repo_with_a_commit(tmp_path / "repo")
 
         with pytest.raises(GitCommandFailedError, match=re.escape("never-written.py")):
-            GitWorkspace(process=LocalProcess()).stage(worktree=str(repo), paths=("never-written.py",))
+            GitWorkspace(process=Real.process()).stage(worktree=str(repo), paths=("never-written.py",))
 
     def test_the_branch_a_repo_is_on_is_the_one_it_reports(self, tmp_path: Path) -> None:
         repo = self._repo_with_a_commit(tmp_path / "repo")
         Git.run(repo, "checkout", "-b", _BRANCH)
 
-        assert GitWorkspace(process=LocalProcess()).current_branch(worktree=str(repo)) == _BRANCH
+        assert GitWorkspace(process=Real.process()).current_branch(worktree=str(repo)) == _BRANCH
 
     def test_a_detached_head_raises_instead_of_reporting_a_branch_name_nobody_is_on(self, tmp_path: Path) -> None:
         repo = self._repo_with_a_commit(tmp_path / "repo")
         Git.run(repo, "checkout", "--detach", "HEAD")
 
         with pytest.raises(GitCommandFailedError):
-            GitWorkspace(process=LocalProcess()).current_branch(worktree=str(repo))
+            GitWorkspace(process=Real.process()).current_branch(worktree=str(repo))
 
     def test_the_commit_it_writes_carries_the_message_and_only_what_was_staged(self, tmp_path: Path) -> None:
         repo = self._repo_with_a_commit(tmp_path / "repo")
         (repo / "added.py").write_text("y = 2\n", encoding="utf-8")
         (repo / "left-alone.py").write_text("z = 3\n", encoding="utf-8")
-        workspace = GitWorkspace(process=LocalProcess())
+        workspace = GitWorkspace(process=Real.process())
         workspace.stage(worktree=str(repo), paths=("added.py",))
 
         workspace.commit(worktree=str(repo), message=_TITLE)
@@ -129,7 +129,7 @@ class TestGitWorkspaceAgainstARealRepo:
         repo = self._repo_with_a_commit(tmp_path / "repo")
 
         with pytest.raises(GitCommandFailedError):
-            GitWorkspace(process=LocalProcess()).commit(worktree=str(repo), message=_TITLE)
+            GitWorkspace(process=Real.process()).commit(worktree=str(repo), message=_TITLE)
 
     def test_the_pushed_branch_lands_on_the_remote_pointing_at_the_commit_it_had_locally(self, tmp_path: Path) -> None:
         remote = tmp_path / "remote.git"
@@ -138,7 +138,7 @@ class TestGitWorkspaceAgainstARealRepo:
         Git.run(repo, "checkout", "-b", _BRANCH)
         Git.run(repo, "remote", "add", "origin", str(remote))
 
-        GitWorkspace(process=LocalProcess()).push(worktree=str(repo), branch=_BRANCH)
+        GitWorkspace(process=Real.process()).push(worktree=str(repo), branch=_BRANCH)
 
         assert Git.run(remote, "rev-parse", _BRANCH).strip() == Git.run(repo, "rev-parse", "HEAD").strip()
 
@@ -146,4 +146,4 @@ class TestGitWorkspaceAgainstARealRepo:
         repo = self._repo_with_a_commit(tmp_path / "repo")
 
         with pytest.raises(GitCommandFailedError, match="origin"):
-            GitWorkspace(process=LocalProcess()).push(worktree=str(repo), branch=Git.BASE_BRANCH)
+            GitWorkspace(process=Real.process()).push(worktree=str(repo), branch=Git.BASE_BRANCH)

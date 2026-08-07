@@ -15,6 +15,10 @@ class ProcessNotRunnableError(OSError):
     pass
 
 
+class ProcessTimedOutError(OSError):
+    pass
+
+
 class Process(ABC):
     @abstractmethod
     def run(self, argv: list[str], *, stdin: str, cwd: str | None = None) -> ProcessOutput: ...
