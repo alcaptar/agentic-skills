@@ -10,10 +10,11 @@ from slice_runner.application.actions.verify_slice import VerifySliceParams
 from slice_runner.application.queries.run_prechecks import RunPrechecksParams
 from slice_runner.application.queries.select_slice import SelectSliceParams
 from slice_runner.domain.closed_slice import ClosedSlice
+from slice_runner.domain.control_status import ControlStatus
 from slice_runner.domain.discard_cause import DiscardCause
 from slice_runner.domain.event import Event
 from slice_runner.domain.event_status import EventStatus
-from slice_runner.domain.exceptions import DirtyIndexError, MeasuredCallError, NoPullRequestError
+from slice_runner.domain.exceptions import DirtyIndexError, MeasuredCallError, NoPullRequestError, NoSliceLeftError
 from slice_runner.domain.halt import Halt
 from slice_runner.domain.harness_spend import HarnessSpend
 from slice_runner.domain.issue_label import IssueLabel
@@ -39,6 +40,7 @@ if TYPE_CHECKING:
     from slice_runner.domain.budgets import Budgets
     from slice_runner.domain.ci import Ci
     from slice_runner.domain.clock import Clock
+    from slice_runner.domain.control_outcome import ControlOutcome
     from slice_runner.domain.control_runner import ControlRunner
     from slice_runner.domain.deploy_watch import DeployWatch
     from slice_runner.domain.event_log import EventLog
@@ -86,6 +88,7 @@ class ConductSliceProgress:
     verdicts: tuple[Verdict, ...] = field(default=())
     spends: tuple[HarnessSpend, ...] = field(default=())
     control_logs: tuple[Path, ...] = field(default=())
+    control_rounds: int = 0
     pull_request: int | None = None
     waited_seconds: int = 0
     discard_cause: DiscardCause | None = None
@@ -178,7 +181,15 @@ class ConductSlice:
         self._budgets = budgets
 
     def execute(self, params: ConductSliceParams) -> ConductSliceResult:
-        chosen = self._select.execute(SelectSliceParams(repo=params.repo, issue=params.issue, slice_id=params.slice_id))
+        try:
+            chosen = self._select.execute(
+                SelectSliceParams(repo=params.repo, issue=params.issue, slice_id=params.slice_id)
+            )
+        except NoSliceLeftError as unselectable:
+            for dangling in unselectable.dangling:
+                self._closing_a_merge_missed_between_invocations(params, dangling)
+            raise
+
         for dangling in chosen.dangling:
             self._closing_a_merge_missed_between_invocations(params, dangling)
         run = chosen.subissue.run or Run(step=Step.IMPLEMENT)
@@ -286,23 +297,26 @@ class ConductSlice:
         except DirtyIndexError:
             return SteppedSlice(progress=replace(progress, control_logs=()), outcome=Outcome.FAILED)
 
-        red = self._logs_of_the_red_controls(progress)
-
-        return SteppedSlice(
-            progress=replace(progress, control_logs=red), outcome=Outcome.FAILED if red else Outcome.DONE
+        round_progress = replace(progress, control_rounds=progress.control_rounds + 1)
+        outcomes = self._ran_controls(round_progress)
+        red = tuple(
+            outcome.log for outcome in outcomes if outcome.status is ControlStatus.RED and outcome.log is not None
         )
 
-    def _logs_of_the_red_controls(self, progress: ConductSliceProgress) -> tuple[Path, ...]:
+        return SteppedSlice(
+            progress=replace(round_progress, control_logs=red), outcome=Outcome.of_the_controls(outcomes)
+        )
+
+    def _ran_controls(self, progress: ConductSliceProgress) -> tuple[ControlOutcome, ...]:
         controls = progress.parent.controls
         if controls.exemption_reason is not None:
             return ()
 
-        outcomes = [
-            self._controls.run(command, repo=progress.params.worktree, out=progress.params.logs)
-            for command in controls.commands
-        ]
+        out = progress.params.logs / f"round-{progress.control_rounds}"
 
-        return tuple(outcome.log for outcome in outcomes if outcome.ruling is Ruling.FAIL)
+        return tuple(
+            self._controls.run(command, repo=progress.params.worktree, out=out) for command in controls.commands
+        )
 
     def _judging(self, progress: ConductSliceProgress) -> SteppedSlice:
         if self._budgets.exhausted(progress.spend):

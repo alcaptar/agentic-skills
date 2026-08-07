@@ -8,7 +8,7 @@ from slice_runner.domain.budgets import Budgets
 from slice_runner.domain.ci_status import CiStatus
 from slice_runner.domain.discard_cause import DiscardCause
 from slice_runner.domain.event_status import EventStatus
-from slice_runner.domain.exceptions import DirtyIndexError, NoPullRequestError
+from slice_runner.domain.exceptions import DirtyIndexError, NoPullRequestError, NoSliceLeftError
 from slice_runner.domain.halt import Halt
 from slice_runner.domain.harness_spend import HarnessSpend
 from slice_runner.domain.issue_label import IssueLabel
@@ -193,6 +193,46 @@ class TestConductSliceClosingAMergeMissedBetweenInvocations:
 
         assert conductor.metrics.record.call_count == 0
         assert conductor.repository.remove_label.call_count == 0
+
+
+class TestConductSliceWhenTheNamedSliceCannotBeSelected:
+    @staticmethod
+    def _unselectable(*, dangling: tuple[SubIssue, ...]) -> NoSliceLeftError:
+        error = NoSliceLeftError("slice-12 of issue 38 cannot be run: it is closed, blocked or aborted")
+        error.dangling = dangling
+
+        return error
+
+    def test_a_run_left_dangling_still_closes_and_writes_its_row_instead_of_the_selection_failing_silently(
+        self,
+    ) -> None:
+        conductor = Conductor(chosen=SelectSliceResultMother.about_to_start())
+        dangling = SubIssueMother.dangling()
+        conductor.select.execute.side_effect = self._unselectable(dangling=(dangling,))
+
+        with pytest.raises(NoSliceLeftError):
+            conductor.conduct()
+
+        recorded = conductor.metrics.record.call_args_list[0].args[0]
+        assert (recorded.slice_id, recorded.state) == (dangling.slice_id, RunState.MERGED)
+
+    def test_the_slice_that_cannot_be_selected_still_fails_the_invocation_once_the_dangling_run_is_closed(
+        self,
+    ) -> None:
+        conductor = Conductor(chosen=SelectSliceResultMother.about_to_start())
+        conductor.select.execute.side_effect = self._unselectable(dangling=(SubIssueMother.dangling(),))
+
+        with pytest.raises(NoSliceLeftError, match="slice-12"):
+            conductor.conduct()
+
+    def test_nothing_left_dangling_records_no_row_before_the_selection_failure_propagates(self) -> None:
+        conductor = Conductor(chosen=SelectSliceResultMother.about_to_start())
+        conductor.select.execute.side_effect = self._unselectable(dangling=())
+
+        with pytest.raises(NoSliceLeftError):
+            conductor.conduct()
+
+        assert conductor.metrics.record.call_count == 0
 
 
 class TestConductSliceResumingAnInterruptedRun:
@@ -514,12 +554,24 @@ class TestConductSliceWhenTheControlsComeBackRed:
         retried = conductor.implement.execute.call_args_list[-1].args[0]
         assert retried.control_logs == (ControlOutcomeMother.LOG,)
 
-    def test_the_controls_are_run_in_the_worktree_and_leave_their_log_where_the_invocation_asked(self) -> None:
+    def test_the_controls_are_run_in_the_worktree_and_leave_their_log_under_a_round_specific_directory(self) -> None:
         conductor = self._conductor()
 
         conductor.conduct()
 
-        assert conductor.controls.run.call_args.kwargs == {"repo": Conductor.WORKTREE, "out": Conductor.LOGS}
+        assert conductor.controls.run.call_args.kwargs == {
+            "repo": Conductor.WORKTREE,
+            "out": Conductor.LOGS / "round-1",
+        }
+
+    def test_each_retried_round_of_controls_writes_under_a_directory_of_its_own(self) -> None:
+        conductor = self._conductor(budgets=Budgets(control_retries=1))
+        conductor.controls.run.return_value = ControlOutcomeMother.red()
+
+        conductor.conduct()
+
+        outs = [call.kwargs["out"] for call in conductor.controls.run.call_args_list]
+        assert outs == [Conductor.LOGS / "round-1", Conductor.LOGS / "round-2"]
 
     def test_a_dirty_index_fails_the_step_without_running_a_single_control(self) -> None:
         conductor = self._conductor(budgets=Budgets(control_retries=0))
@@ -553,6 +605,47 @@ class TestConductSliceWhenTheControlsComeBackRed:
 
         assert conductor.controls.run.call_count == 0
         assert conductor.verify.execute.call_count == 1
+
+
+class TestConductSliceWhenAControlCannotBeMeasured:
+    @staticmethod
+    def _conductor(*, budgets: Budgets | None = None) -> Conductor:
+        return Conductor(chosen=SelectSliceResultMother.resumed_at(RunMother.implementing()), budgets=budgets)
+
+    def test_a_control_that_could_not_run_is_retried_on_the_same_step_instead_of_being_read_as_red(self) -> None:
+        conductor = self._conductor()
+        conductor.controls.run.side_effect = [ControlOutcomeMother.unknown(), ControlOutcomeMother.green()]
+
+        result = conductor.conduct()
+
+        assert conductor.controls.run.call_count == 2
+        assert conductor.implement.execute.call_count == 1
+        assert IssueLabel.BLOCKED_CONTROLS not in [
+            call.kwargs["add"] for call in conductor.repository.write_label.call_args_list
+        ]
+        assert result.state is RunState.MERGED
+
+    def test_a_control_that_never_settles_waits_out_the_invocation_instead_of_blocking_the_slice(self) -> None:
+        conductor = self._conductor(budgets=Budgets(control_retries=0))
+        conductor.controls.run.return_value = ControlOutcomeMother.unknown()
+
+        result = conductor.conduct()
+
+        assert conductor.implement.execute.call_count == 1
+        assert result.halt is Halt.WAIT_EXHAUSTED
+
+    def test_a_red_control_still_blocks_even_when_another_one_could_not_run(self) -> None:
+        conductor = Conductor(
+            chosen=SelectSliceResultMother.resumed_at(
+                RunMother.implementing(), parent=ParentIssueMother.with_two_controls()
+            ),
+            budgets=Budgets(control_retries=0),
+        )
+        conductor.controls.run.side_effect = [ControlOutcomeMother.red(), ControlOutcomeMother.unknown()]
+
+        result = conductor.conduct()
+
+        assert result.state is RunState.BLOCKED_CONTROLS
 
 
 class TestConductSliceWhenTheJudgeSpeaks:

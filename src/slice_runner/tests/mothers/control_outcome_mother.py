@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import ClassVar
 
 from slice_runner.domain.control_outcome import ControlOutcome
-from slice_runner.domain.ruling import Ruling
+from slice_runner.domain.control_status import ControlStatus
 
 
 class ControlOutcomeMother:
@@ -12,8 +12,12 @@ class ControlOutcomeMother:
 
     @classmethod
     def green(cls) -> ControlOutcome:
-        return ControlOutcome(ruling=Ruling.PASS, log=cls.LOG)
+        return ControlOutcome(status=ControlStatus.GREEN, log=cls.LOG)
 
     @classmethod
     def red(cls) -> ControlOutcome:
-        return ControlOutcome(ruling=Ruling.FAIL, log=cls.LOG)
+        return ControlOutcome(status=ControlStatus.RED, log=cls.LOG)
+
+    @classmethod
+    def unknown(cls) -> ControlOutcome:
+        return ControlOutcome(status=ControlStatus.UNKNOWN)

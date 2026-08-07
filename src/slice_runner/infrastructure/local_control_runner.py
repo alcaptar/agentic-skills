@@ -4,7 +4,8 @@ from typing import TYPE_CHECKING
 
 from slice_runner.domain.control_outcome import ControlOutcome
 from slice_runner.domain.control_runner import ControlRunner
-from slice_runner.domain.ruling import Ruling
+from slice_runner.domain.control_status import ControlStatus
+from slice_runner.infrastructure.process import ProcessNotRunnableError
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -18,8 +19,13 @@ class LocalControlRunner(ControlRunner):
         self._process = process
 
     def run(self, command: ControlCommand, *, repo: str, out: Path) -> ControlOutcome:
-        output = self._process.run(["sh", "-c", command.command], stdin="", cwd=repo)
+        try:
+            output = self._process.run(["sh", "-c", command.command], stdin="", cwd=repo)
+        except ProcessNotRunnableError:
+            return ControlOutcome(status=ControlStatus.UNKNOWN)
+
+        out.mkdir(parents=True, exist_ok=True)
         log = out / f"{command.name}.log"
         log.write_text(output.stdout + output.stderr, encoding="utf-8")
 
-        return ControlOutcome(ruling=Ruling.PASS if output.code == 0 else Ruling.FAIL, log=log)
+        return ControlOutcome(status=ControlStatus.GREEN if output.code == 0 else ControlStatus.RED, log=log)
