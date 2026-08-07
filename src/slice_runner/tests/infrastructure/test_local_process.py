@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from typing import TYPE_CHECKING
 
 import pytest
@@ -42,3 +43,40 @@ class TestACallThatDoesNotComeBack:
 
         with pytest.raises(ProcessTimedOutError, match="sleep: killed after 1s"):
             capped.run(["sleep", "30"], stdin="")
+
+
+@pytest.mark.integration
+class TestACallThatWantsEachLineAsItArrives:
+    _SPACED_LINES = "echo one; sleep 0.3; echo two; sleep 0.3; echo three"
+
+    def test_every_line_the_command_prints_reaches_the_callback_in_order(self) -> None:
+        seen: list[str] = []
+
+        LocalProcess(budgets=Budgets()).run(["sh", "-c", self._SPACED_LINES], stdin="", on_line=seen.append)
+
+        assert seen == ["one", "two", "three"]
+
+    def test_the_callback_fires_while_the_command_is_still_running_and_not_only_once_it_exits(self) -> None:
+        seen_at: list[float] = []
+
+        LocalProcess(budgets=Budgets()).run(
+            ["sh", "-c", self._SPACED_LINES], stdin="", on_line=lambda _: seen_at.append(time.monotonic())
+        )
+
+        assert seen_at[-1] - seen_at[0] > 0.5
+
+    def test_the_full_output_still_comes_back_whole_once_the_command_is_done(self) -> None:
+        output = LocalProcess(budgets=Budgets()).run(["sh", "-c", self._SPACED_LINES], stdin="", on_line=lambda _: None)
+
+        assert output.stdout == "one\ntwo\nthree\n"
+
+    def test_a_command_that_outlives_the_cap_is_killed_even_while_a_callback_is_watching_its_lines(self) -> None:
+        capped = LocalProcess(budgets=Budgets(process_timeout_seconds=1))
+
+        with pytest.raises(ProcessTimedOutError, match="sh: killed after 1s"):
+            capped.run(["sh", "-c", "echo one; sleep 30"], stdin="", on_line=lambda _: None)
+
+    def test_without_a_callback_the_process_behaves_exactly_as_before(self) -> None:
+        output = LocalProcess(budgets=Budgets()).run(["sh", "-c", self._SPACED_LINES], stdin="")
+
+        assert output.stdout == "one\ntwo\nthree\n"

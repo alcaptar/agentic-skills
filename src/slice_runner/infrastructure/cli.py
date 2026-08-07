@@ -58,6 +58,7 @@ from slice_runner.infrastructure.process import ProcessNotRunnableError, Process
 from slice_runner.infrastructure.slice_pull_request import SlicePullRequest
 from slice_runner.infrastructure.slice_verifier_judge import SliceVerifierJudge
 from slice_runner.infrastructure.stderr_event_log import StderrEventLog
+from slice_runner.infrastructure.stderr_turn_log import StderrTurnLog
 from slice_runner.infrastructure.subcommand import Subcommand
 from slice_runner.infrastructure.system_clock import SystemClock
 from slice_runner.infrastructure.transition_payload import TransitionPayload
@@ -245,7 +246,9 @@ class Cli:
             use_cases=ConductSliceUseCases(
                 select=SelectSlice(repository=repository),
                 prechecks=RunPrechecks(branches=branches, forum=forum),
-                implement=ImplementSlice(implementer=ClaudeImplementer(process=self._process, trace=LocalCallTrace())),
+                implement=ImplementSlice(
+                    implementer=ClaudeImplementer(process=self._process, trace=LocalCallTrace(), turns=StderrTurnLog())
+                ),
                 stage=StageSlice(workspace=workspace),
                 verify=self._action(),
                 deliver=DeliverSlice(workspace=workspace, forum=forum),

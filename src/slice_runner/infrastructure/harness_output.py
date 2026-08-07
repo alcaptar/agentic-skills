@@ -68,8 +68,13 @@ class HarnessOutput(ContractModel):
 
     @classmethod
     def _decoded(cls, output: ProcessOutput) -> dict[str, object]:
+        lines = [line for line in output.stdout.splitlines() if line.strip()]
+        if not lines:
+            raise InvalidHarnessOutputError(
+                f"the harness returned no JSON (code {output.code}): {cls._excerpt(output)}"
+            )
         try:
-            data = json.loads(output.stdout)
+            data = json.loads(lines[-1])
         except json.JSONDecodeError as error:
             raise InvalidHarnessOutputError(
                 f"the harness returned no JSON (code {output.code}): {cls._excerpt(output)}"

@@ -59,6 +59,10 @@ class HarnessEnvelopeMother:
         return data
 
     @classmethod
+    def streamed(cls, name: str = "implementer-streamed") -> str:
+        return (cls._DIRECTORY / f"{name}.jsonl").read_text(encoding="utf-8")
+
+    @classmethod
     def carrying(cls, verdict: dict[str, object], *, recorded: str = "full-recipe") -> dict[str, object]:
         return cls.recorded(recorded) | {"structured_output": verdict}
 
