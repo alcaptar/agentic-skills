@@ -82,3 +82,13 @@ class TestTheSliceDataThatTravelsWithTheBrief:
         text = UnderstandingInvocationMother.of_a_repo_exempt_from_controls().text
 
         assert text.endswith("- controles del repo: ninguno - la integracion continua solo publica en master")
+
+    def test_a_call_with_no_correction_carries_no_correction_section_at_all(self) -> None:
+        text = UnderstandingInvocationMother.of_the_chosen_slice().text
+
+        assert "## Correccion pedida" not in text
+
+    def test_a_correction_travels_in_its_own_section_at_the_end_because_it_is_the_newest_data(self) -> None:
+        text = UnderstandingInvocationMother.carrying_a_correction("la senal no esta exenta, hay que medirla").text
+
+        assert text.endswith("## Correccion pedida\n\nla senal no esta exenta, hay que medirla")

@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from dataclasses import replace
 from typing import TYPE_CHECKING
 
 import pytest
 
+from slice_runner.domain.alignment_response import AlignmentResponse
+from slice_runner.domain.alignment_response_kind import AlignmentResponseKind
 from slice_runner.domain.budgets import Budgets
 from slice_runner.domain.ci_status import CiStatus
 from slice_runner.domain.discard_cause import DiscardCause
@@ -20,6 +21,7 @@ from slice_runner.domain.harness_spend import HarnessSpend
 from slice_runner.domain.issue_label import IssueLabel
 from slice_runner.domain.precheck_outcome import PrecheckOutcome
 from slice_runner.domain.pull_request_state import PullRequestState
+from slice_runner.domain.run import Run
 from slice_runner.domain.run_state import RunState
 from slice_runner.domain.step import Step
 from slice_runner.tests.conductor import Conductor
@@ -65,7 +67,11 @@ class TestConductSliceStartingANewRun:
         conductor.conduct()
 
         conductor.understanding.write.assert_called_once_with(
-            subissue=chosen.subissue, parent=chosen.parent, repo=Conductor.REPO, worktree=Conductor.WORKTREE
+            subissue=chosen.subissue,
+            parent=chosen.parent,
+            repo=Conductor.REPO,
+            worktree=Conductor.WORKTREE,
+            correction="",
         )
 
     def test_a_call_that_leaves_no_usable_understanding_stops_before_anything_is_written_or_branched(self) -> None:
@@ -115,7 +121,9 @@ class TestConductSliceStartingANewRun:
             worktree=Conductor.WORKTREE, name=_BRANCH, base=Conductor.BASE
         )
 
-    def test_the_run_is_persisted_at_implement_so_the_next_invocation_resumes_instead_of_starting_over(self) -> None:
+    def test_publishing_the_understanding_persists_only_the_spend_because_the_response_is_what_decides_to_start(
+        self,
+    ) -> None:
         conductor = self._conductor()
 
         conductor.conduct()
@@ -123,27 +131,35 @@ class TestConductSliceStartingANewRun:
         conductor.repository.write_run.assert_called_once_with(
             repo=Conductor.REPO,
             issue=_SUBISSUE,
-            run=replace(RunMother.implementing(), spend=HarnessSpendMother.of_the_understanding_call()),
+            run=Run(step=Step.UNDERSTAND, spend=HarnessSpendMother.of_the_understanding_call()),
         )
 
-    def test_a_pause_that_never_lands_persists_no_run_so_the_next_invocation_cannot_skip_the_gate(self) -> None:
+    def test_a_pause_that_never_lands_still_persists_the_spend_already_paid_but_cuts_no_branch(self) -> None:
         conductor = self._conductor()
         conductor.repository.pause_for_alignment.side_effect = OSError("gh: rate limited")
 
         with pytest.raises(OSError, match="rate limited"):
             conductor.conduct()
 
-        assert conductor.repository.write_run.call_count == 0
+        conductor.repository.write_run.assert_called_once_with(
+            repo=Conductor.REPO,
+            issue=_SUBISSUE,
+            run=Run(step=Step.UNDERSTAND, spend=HarnessSpendMother.of_the_understanding_call()),
+        )
         assert conductor.branches.create.call_count == 0
 
-    def test_an_understanding_that_never_lands_persists_no_run_because_nobody_could_answer_it(self) -> None:
+    def test_an_understanding_whose_comment_never_lands_still_persists_the_spend_already_paid(self) -> None:
         conductor = self._conductor()
         conductor.repository.write_understanding.side_effect = OSError("gh: rate limited")
 
         with pytest.raises(OSError, match="rate limited"):
             conductor.conduct()
 
-        assert conductor.repository.write_run.call_count == 0
+        conductor.repository.write_run.assert_called_once_with(
+            repo=Conductor.REPO,
+            issue=_SUBISSUE,
+            run=Run(step=Step.UNDERSTAND, spend=HarnessSpendMother.of_the_understanding_call()),
+        )
         assert conductor.repository.pause_for_alignment.call_count == 0
 
     def test_a_precheck_that_is_not_clear_ends_the_invocation_without_branching_or_writing_anything(self) -> None:
@@ -156,6 +172,117 @@ class TestConductSliceStartingANewRun:
         assert conductor.branches.create.call_count == 0
         assert conductor.repository.write_understanding.call_count == 0
         assert conductor.repository.write_run.call_count == 0
+
+
+class TestConductSliceRespondingToAlignment:
+    @staticmethod
+    def _subissue() -> SubIssue:
+        return SubIssueMother.carrying(IssueLabel.AWAITING_ALIGNMENT)
+
+    @classmethod
+    def _conductor(cls) -> Conductor:
+        return Conductor(chosen=SelectSliceResultMother.about_to_start(subissue=cls._subissue()))
+
+    def test_no_response_yet_asks_gh_about_the_comments_of_the_one_subissue_chosen(self) -> None:
+        conductor = self._conductor()
+        conductor.repository.read_alignment_response.return_value = AlignmentResponse(
+            kind=AlignmentResponseKind.NOT_YET
+        )
+
+        conductor.conduct()
+
+        conductor.repository.read_alignment_response.assert_called_once_with(repo=Conductor.REPO, issue=_SUBISSUE)
+
+    def test_no_response_yet_halts_without_touching_the_harness_or_the_understanding_comment_again(self) -> None:
+        conductor = self._conductor()
+        conductor.repository.read_alignment_response.return_value = AlignmentResponse(
+            kind=AlignmentResponseKind.NOT_YET
+        )
+
+        result = conductor.conduct()
+
+        assert result.halt is Halt.AWAITING_ALIGNMENT
+        assert conductor.understanding.write.call_count == 0
+        assert conductor.repository.write_understanding.call_count == 0
+        assert conductor.repository.write_run.call_count == 0
+
+    def test_a_review_rewrites_the_understanding_with_the_correction_it_carried(self) -> None:
+        conductor = self._conductor()
+        conductor.repository.read_alignment_response.return_value = AlignmentResponse(
+            kind=AlignmentResponseKind.REVIEW, correction="la senal no esta exenta"
+        )
+
+        conductor.conduct()
+
+        conductor.understanding.write.assert_called_once_with(
+            subissue=self._subissue(),
+            parent=SelectSliceResultMother.about_to_start().parent,
+            repo=Conductor.REPO,
+            worktree=Conductor.WORKTREE,
+            correction="la senal no esta exenta",
+        )
+
+    def test_a_review_publishes_the_rewritten_understanding_without_advancing_the_step(self) -> None:
+        conductor = self._conductor()
+        conductor.repository.read_alignment_response.return_value = AlignmentResponse(
+            kind=AlignmentResponseKind.REVIEW, correction="la senal no esta exenta"
+        )
+
+        result = conductor.conduct()
+
+        conductor.repository.write_understanding.assert_called_once_with(
+            repo=Conductor.REPO, issue=_SUBISSUE, understanding=Conductor.UNDERSTANDING
+        )
+        assert result.halt is Halt.AWAITING_ALIGNMENT
+
+    def test_a_review_pauses_no_further_and_cuts_no_branch_but_still_persists_the_spend(self) -> None:
+        conductor = self._conductor()
+        conductor.repository.read_alignment_response.return_value = AlignmentResponse(
+            kind=AlignmentResponseKind.REVIEW, correction="la senal no esta exenta"
+        )
+
+        conductor.conduct()
+
+        assert conductor.repository.pause_for_alignment.call_count == 0
+        assert conductor.branches.create.call_count == 0
+        conductor.repository.write_run.assert_called_once_with(
+            repo=Conductor.REPO,
+            issue=_SUBISSUE,
+            run=Run(step=Step.UNDERSTAND, spend=HarnessSpendMother.of_the_understanding_call()),
+        )
+
+    def test_a_go_persists_the_initial_run_and_starts_implementing_in_the_same_invocation(self) -> None:
+        conductor = self._conductor()
+        conductor.repository.read_alignment_response.return_value = AlignmentResponse(kind=AlignmentResponseKind.GO)
+
+        conductor.conduct()
+
+        conductor.repository.write_run.assert_any_call(
+            repo=Conductor.REPO, issue=_SUBISSUE, run=RunMother.implementing()
+        )
+        assert conductor.implement.execute.call_count == 1
+
+    def test_a_go_asks_the_harness_for_no_understanding_of_its_own(self) -> None:
+        conductor = self._conductor()
+        conductor.repository.read_alignment_response.return_value = AlignmentResponse(kind=AlignmentResponseKind.GO)
+
+        conductor.conduct()
+
+        assert conductor.understanding.write.call_count == 0
+
+    def test_a_go_carries_forward_whatever_was_spent_while_asking_for_alignment(self) -> None:
+        spend = HarnessSpendMother.of_the_understanding_call()
+        conductor = Conductor(
+            chosen=SelectSliceResultMother.about_to_start(subissue=SubIssueMother.paused_after_spending(spend))
+        )
+        conductor.repository.read_alignment_response.return_value = AlignmentResponse(kind=AlignmentResponseKind.GO)
+
+        conductor.conduct()
+
+        conductor.repository.write_run.assert_any_call(
+            repo=Conductor.REPO, issue=_SUBISSUE, run=Run(step=Step.IMPLEMENT, spend=spend)
+        )
+        assert conductor.implement.execute.call_count == 1
 
 
 class TestConductSliceClosingAMergeMissedBetweenInvocations:

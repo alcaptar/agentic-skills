@@ -11,4 +11,6 @@ if TYPE_CHECKING:
 
 class UnderstandingWriter(ABC):
     @abstractmethod
-    def write(self, *, subissue: SubIssue, parent: ParentIssue, repo: str, worktree: str) -> Understanding: ...
+    def write(
+        self, *, subissue: SubIssue, parent: ParentIssue, repo: str, worktree: str, correction: str
+    ) -> Understanding: ...

@@ -5,6 +5,7 @@ import re
 
 import pytest
 
+from slice_runner.domain.alignment_response_kind import AlignmentResponseKind
 from slice_runner.domain.control_command import ControlCommand
 from slice_runner.domain.controls import Controls
 from slice_runner.domain.exceptions import (
@@ -19,6 +20,7 @@ from slice_runner.domain.issue_state import IssueState
 from slice_runner.domain.source import Source, SourceKind
 from slice_runner.infrastructure.gh_run_repository import GhCommandFailedError, GhRunRepository
 from slice_runner.infrastructure.process import ProcessOutput
+from slice_runner.infrastructure.understanding_comment import UnderstandingComment
 from slice_runner.tests.argv import Argv
 from slice_runner.tests.doubles import ScriptedProcess
 from slice_runner.tests.mothers.gh_response_mother import GhResponseMother
@@ -548,13 +550,112 @@ class TestWritingTheUnderstanding:
         )
 
         assert process.calls[0].argv == ["gh", "issue", "comment", "45", "--repo", _REPO, "--body-file", "-"]
-        assert process.calls[0].stdin == "lo que el agente entendio de la slice"
+        assert process.calls[0].stdin == UnderstandingComment.rendered("lo que el agente entendio de la slice")
+
+    def test_the_comment_says_how_to_respond_because_the_instruction_travels_with_the_artifact(self) -> None:
+        process = ScriptedProcess(ProcessOutput(code=0, stdout="", stderr=""))
+
+        GhRunRepository(process=process).write_understanding(repo=_REPO, issue=45, understanding="x")
+
+        stdin = process.calls[0].stdin
+        assert "-GO" in stdin
+        assert "-REVIEW" in stdin
+
+    def test_the_comment_carries_the_marker_that_lets_a_later_read_find_it_back(self) -> None:
+        process = ScriptedProcess(ProcessOutput(code=0, stdout="", stderr=""))
+
+        GhRunRepository(process=process).write_understanding(repo=_REPO, issue=45, understanding="x")
+
+        assert UnderstandingComment.MARKER in process.calls[0].stdin
 
     def test_a_non_zero_exit_raises_with_the_stderr_it_carried(self) -> None:
         process = ScriptedProcess(ProcessOutput(code=1, stdout="", stderr="HTTP 422: Unprocessable Entity"))
 
         with pytest.raises(GhCommandFailedError, match="HTTP 422"):
             GhRunRepository(process=process).write_understanding(repo=_REPO, issue=45, understanding="x")
+
+
+class TestReadingTheAlignmentResponse:
+    @staticmethod
+    def _process(bodies: list[str]) -> ScriptedProcess:
+        template = GhResponseMother.subissue_comments()[0]
+        payload = {"comments": [{**template, "body": body} for body in bodies]}
+
+        return ScriptedProcess(ProcessOutput(code=0, stdout=json.dumps(payload), stderr=""))
+
+    def test_a_comment_with_every_field_gh_actually_sends_is_still_read_by_its_body(self) -> None:
+        payload = {"comments": GhResponseMother.subissue_comments()}
+        process = ScriptedProcess(ProcessOutput(code=0, stdout=json.dumps(payload), stderr=""))
+
+        response = GhRunRepository(process=process).read_alignment_response(repo=_REPO, issue=45)
+
+        assert response.kind is AlignmentResponseKind.GO
+
+    def test_it_asks_gh_for_exactly_the_comments_of_the_subissue(self) -> None:
+        process = self._process([])
+
+        GhRunRepository(process=process).read_alignment_response(repo=_REPO, issue=45)
+
+        argv = Argv(process.calls[0].argv)
+        assert process.calls[0].argv[:4] == ["gh", "issue", "view", "45"]
+        assert argv.value_of("--repo") == _REPO
+        assert argv.value_of("--json") == "comments"
+
+    def test_no_comment_at_all_reads_as_not_answered_yet(self) -> None:
+        process = self._process([])
+
+        response = GhRunRepository(process=process).read_alignment_response(repo=_REPO, issue=45)
+
+        assert response.kind is AlignmentResponseKind.NOT_YET
+
+    def test_a_comment_that_only_repeats_the_understanding_is_never_read_as_its_own_answer(self) -> None:
+        process = self._process([UnderstandingComment.rendered("asi entiendo la slice")])
+
+        response = GhRunRepository(process=process).read_alignment_response(repo=_REPO, issue=45)
+
+        assert response.kind is AlignmentResponseKind.NOT_YET
+
+    def test_a_go_after_the_understanding_is_read_as_the_answer_to_arrange_for(self) -> None:
+        process = self._process([UnderstandingComment.rendered("asi entiendo la slice"), "-GO"])
+
+        response = GhRunRepository(process=process).read_alignment_response(repo=_REPO, issue=45)
+
+        assert response.kind is AlignmentResponseKind.GO
+
+    def test_a_review_after_the_understanding_carries_its_correction_through(self) -> None:
+        process = self._process(
+            [UnderstandingComment.rendered("asi entiendo la slice"), "-REVIEW la senal no esta exenta"]
+        )
+
+        response = GhRunRepository(process=process).read_alignment_response(repo=_REPO, issue=45)
+
+        assert (response.kind, response.correction) == (AlignmentResponseKind.REVIEW, "la senal no esta exenta")
+
+    def test_a_stray_comment_before_the_understanding_is_never_read_as_its_answer(self) -> None:
+        process = self._process(["-GO", UnderstandingComment.rendered("asi entiendo la slice")])
+
+        response = GhRunRepository(process=process).read_alignment_response(repo=_REPO, issue=45)
+
+        assert response.kind is AlignmentResponseKind.NOT_YET
+
+    def test_only_the_most_recent_understanding_bounds_the_search_after_a_review_round(self) -> None:
+        process = self._process(
+            [
+                UnderstandingComment.rendered("primer entendimiento"),
+                "-REVIEW la senal no esta exenta",
+                UnderstandingComment.rendered("entendimiento corregido"),
+            ]
+        )
+
+        response = GhRunRepository(process=process).read_alignment_response(repo=_REPO, issue=45)
+
+        assert response.kind is AlignmentResponseKind.NOT_YET
+
+    def test_a_non_zero_exit_raises_with_the_stderr_it_carried(self) -> None:
+        process = ScriptedProcess(ProcessOutput(code=1, stdout="", stderr="HTTP 404: Not Found"))
+
+        with pytest.raises(GhCommandFailedError, match="HTTP 404"):
+            GhRunRepository(process=process).read_alignment_response(repo=_REPO, issue=45)
 
 
 class TestPausingForAlignment:

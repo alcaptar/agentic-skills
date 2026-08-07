@@ -4,6 +4,7 @@ from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from slice_runner.domain.alignment_response import AlignmentResponse
     from slice_runner.domain.issue_label import IssueLabel
     from slice_runner.domain.parent_issue import ParentIssue
     from slice_runner.domain.run import Run
@@ -16,6 +17,9 @@ class RunRepository(ABC):
 
     @abstractmethod
     def read_children(self, *, repo: str, parent: int, expected: int) -> tuple[SubIssue, ...]: ...
+
+    @abstractmethod
+    def read_alignment_response(self, *, repo: str, issue: int) -> AlignmentResponse: ...
 
     @abstractmethod
     def write_run(self, *, repo: str, issue: int, run: Run) -> None: ...

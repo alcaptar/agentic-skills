@@ -26,9 +26,7 @@ _CLOSURES_OF_A_PREVIOUS_RUN = (
     IssueLabel.ABORTED_BUDGET,
 )
 
-_A_PAUSE_THAT_ONLY_A_PERSON_LIFTS = (IssueLabel.AWAITING_ALIGNMENT,)
-
-_LABELS_THAT_DISQUALIFY_A_SLICE = (*_CLOSURES_OF_A_PREVIOUS_RUN, *_A_PAUSE_THAT_ONLY_A_PERSON_LIFTS)
+_LABELS_THAT_DISQUALIFY_A_SLICE = _CLOSURES_OF_A_PREVIOUS_RUN
 
 _LABELS_THAT_LEAVE_A_SLICE_RUNNABLE = tuple(
     label for label in IssueLabel if label not in _LABELS_THAT_DISQUALIFY_A_SLICE
@@ -114,7 +112,7 @@ class TestSelectSlice:
         assert query.execute(_PARAMS).subissue == SubIssueMother.of_another_repo()
 
     @pytest.mark.parametrize("label", _LABELS_THAT_DISQUALIFY_A_SLICE)
-    def test_a_slice_a_run_closed_or_left_waiting_on_a_person_is_never_picked_up_again_on_its_own(
+    def test_a_slice_a_previous_run_closed_or_blocked_is_never_picked_up_again_on_its_own(
         self, query: SelectSlice, repository: Mock, label: IssueLabel
     ) -> None:
         repository.read_children.return_value = (SubIssueMother.carrying(label),)

@@ -23,6 +23,7 @@ class UnderstandingInvocation:
     parent: ParentIssue
     repo: str
     worktree: str
+    correction: str
 
     @property
     def cwd(self) -> str:
@@ -46,7 +47,15 @@ class UnderstandingInvocation:
 
     @property
     def text(self) -> str:
-        return "\n".join([UnderstandingBrief.TEXT, "", self._slice_data])
+        sections = [UnderstandingBrief.TEXT, "", self._slice_data]
+        if self.correction.strip():
+            sections.extend(["", self._correction])
+
+        return "\n".join(sections)
+
+    @property
+    def _correction(self) -> str:
+        return "\n".join(["## Correccion pedida", "", self.correction])
 
     @property
     def _slice_data(self) -> str:

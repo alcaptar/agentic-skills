@@ -1,12 +1,17 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar
 
 from slice_runner.domain.issue_label import IssueLabel
 from slice_runner.domain.issue_state import IssueState
+from slice_runner.domain.run import Run
+from slice_runner.domain.step import Step
 from slice_runner.domain.sub_issue import SubIssue
 from slice_runner.tests.mothers.run_mother import RunMother
+
+if TYPE_CHECKING:
+    from slice_runner.domain.harness_spend import HarnessSpend
 
 
 class SubIssueMother:
@@ -48,6 +53,14 @@ class SubIssueMother:
     @staticmethod
     def carrying(label: IssueLabel) -> SubIssue:
         return replace(SubIssueMother.pending(), label=label)
+
+    @staticmethod
+    def paused_after_spending(spend: HarnessSpend) -> SubIssue:
+        return replace(
+            SubIssueMother.pending(),
+            label=IssueLabel.AWAITING_ALIGNMENT,
+            run=Run(step=Step.UNDERSTAND, spend=spend),
+        )
 
     @staticmethod
     def unlabelled() -> SubIssue:

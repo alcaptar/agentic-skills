@@ -31,3 +31,14 @@ class GhResponseMother:
             raise TypeError("the recorded pull request payload is not an array")
 
         return data
+
+    @classmethod
+    def subissue_comments(cls) -> list[dict[str, object]]:
+        data = json.loads((cls._DIRECTORY / "subissue-comments.json").read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            raise TypeError("the recorded comments payload is not an object")
+        comments = data["comments"]
+        if not isinstance(comments, list):
+            raise TypeError("the recorded comments payload does not carry an array of comments")
+
+        return comments

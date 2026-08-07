@@ -41,11 +41,16 @@ class SliceQueue:
     @staticmethod
     def _disqualifying(label: IssueLabel | None) -> bool:
         match label:
-            case None | IssueLabel.PENDING | IssueLabel.IN_PROGRESS | IssueLabel.AWAITING_MERGE:
+            case (
+                None
+                | IssueLabel.PENDING
+                | IssueLabel.IN_PROGRESS
+                | IssueLabel.AWAITING_MERGE
+                | IssueLabel.AWAITING_ALIGNMENT
+            ):
                 return False
             case (
-                IssueLabel.AWAITING_ALIGNMENT
-                | IssueLabel.BLOCKED_CONTROLS
+                IssueLabel.BLOCKED_CONTROLS
                 | IssueLabel.BLOCKED_VERIFY
                 | IssueLabel.BLOCKED_CI_RED
                 | IssueLabel.BLOCKED_CI_INDETERMINATE

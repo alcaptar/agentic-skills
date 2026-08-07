@@ -4,16 +4,19 @@ import json
 import re
 from typing import TYPE_CHECKING
 
+from slice_runner.domain.alignment_response import AlignmentResponse
 from slice_runner.domain.exceptions import LaggingSearchIndexError, UnreadableIssueError
 from slice_runner.domain.issue_label import IssueLabel
 from slice_runner.domain.parent_issue import ParentIssue
 from slice_runner.domain.run_repository import RunRepository
 from slice_runner.domain.sub_issue import SubIssue
 from slice_runner.infrastructure.gh_body_payload import GhBodyPayload
+from slice_runner.infrastructure.gh_comments_payload import GhCommentPayload, GhCommentsPayload
 from slice_runner.infrastructure.gh_parent_view_payload import GhParentViewPayload
 from slice_runner.infrastructure.gh_sub_issue_payload import GhSubIssuePayload
 from slice_runner.infrastructure.parent_body import ParentBody
 from slice_runner.infrastructure.subissue_body import SubissueBody
+from slice_runner.infrastructure.understanding_comment import UnderstandingComment
 
 if TYPE_CHECKING:
     from slice_runner.domain.run import Run
@@ -84,7 +87,25 @@ class GhRunRepository(RunRepository):
         self._run(["gh", "issue", "edit", str(issue), "--repo", repo, "--body-file", "-"], stdin=updated)
 
     def write_understanding(self, *, repo: str, issue: int, understanding: str) -> None:
-        self._run(["gh", "issue", "comment", str(issue), "--repo", repo, "--body-file", "-"], stdin=understanding)
+        self._run(
+            ["gh", "issue", "comment", str(issue), "--repo", repo, "--body-file", "-"],
+            stdin=UnderstandingComment.rendered(understanding),
+        )
+
+    def read_alignment_response(self, *, repo: str, issue: int) -> AlignmentResponse:
+        output = self._run(["gh", "issue", "view", str(issue), "--repo", repo, "--json", "comments"])
+        payload = GhCommentsPayload.from_dict(self._decoded_object(output))
+        bodies = tuple(GhCommentPayload.from_dict(comment).body for comment in payload.comments)
+
+        return AlignmentResponse.of_the_comments(self._after_the_understanding(bodies))
+
+    @staticmethod
+    def _after_the_understanding(bodies: tuple[str, ...]) -> tuple[str, ...]:
+        for index in range(len(bodies) - 1, -1, -1):
+            if UnderstandingComment.is_the_understanding(bodies[index]):
+                return bodies[index + 1 :]
+
+        return ()
 
     def write_label(self, *, repo: str, issue: int, remove: IssueLabel | None, add: IssueLabel) -> None:
         argv = self._edit_of(repo=repo, issue=issue, add=add, remove=remove)
