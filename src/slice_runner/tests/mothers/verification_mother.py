@@ -12,7 +12,7 @@ from slice_runner.domain.verification import Verification
 from slice_runner.tests.mothers.harness_spend_mother import HarnessSpendMother
 from slice_runner.tests.mothers.parent_issue_mother import ParentIssueMother
 from slice_runner.tests.mothers.sub_issue_mother import SubIssueMother
-from slice_runner.tests.mothers.verdict_mother import VerdictMother
+from slice_runner.tests.mothers.verdict_mother import FindingMother, VerdictMother
 
 if TYPE_CHECKING:
     from slice_runner.domain.finding import Finding
@@ -115,6 +115,12 @@ class VerificationMother:
     @staticmethod
     def ordering_corrections(*findings: Finding) -> Verification:
         return Verification(verdict=VerdictMother.passing_with(*findings), spend=HarnessSpendMother.of_the_judge_call())
+
+    @staticmethod
+    def approving_with_accepted_debt(*findings: Finding) -> Verification:
+        chosen = findings or (FindingMother.low_severity(),)
+
+        return Verification(verdict=VerdictMother.passing_with(*chosen), spend=HarnessSpendMother.of_the_judge_call())
 
     @classmethod
     def failing_after_a_denied_read(cls) -> Verification:
