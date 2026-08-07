@@ -61,7 +61,8 @@ demasiado: la respuesta por defecto ahi es partirlo, no empaquetarle los argumen
   le pregunta y ejecuta lo que conteste. **Los contadores que no lleva son los de reintento y los de
   presupuesto de fase**: esos viajan en el `Run` de la transicion y el conductor ni los suma ni los
   compara. `reintentos_implement` del registro durable **no** es un contador mas que nadie lleve: es la
-  suma de los tres reintentos, porque esas son las unicas vueltas al paso de implementar.
+  suma de los cuatro reintentos -controles, higiene, verify y CI-, porque esas son las unicas vueltas al
+  paso de implementar.
 
   Lo que **si** acumula por invocacion son cuatro, y los cuatro estan declarados fuera de aqui:
   `ConductSliceProgress.waited_seconds` -porque el tope de espera acota la invocacion y no el run

@@ -17,6 +17,7 @@ class Outcome(StrEnum):
     DONE = "done"
     CORRECTIONS_ORDERED = "corrections-ordered"
     FAILED = "failed"
+    HYGIENE_REJECTED = "hygiene-rejected"
     PENDING = "pending"
     INDETERMINATE = "indeterminate"
     DISCARDED = "discarded"

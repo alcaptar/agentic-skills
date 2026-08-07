@@ -18,6 +18,7 @@ class DurableVerdict(StrEnum):
     PASS = "PASA"
     FAIL = "FALLA"
     BLOCKED_CONTROLS = "bloqueada-controles"
+    BLOCKED_HYGIENE = "bloqueada-higiene"
     ABORTED_BUDGET = "abortada-presupuesto"
 
 
@@ -45,6 +46,13 @@ class DurableClosure:
     verdict: DurableVerdict
     ci: DurableCi
 
+    _VERDICTS_WITH_NO_CI: ClassVar[dict[RunState, DurableVerdict]] = {
+        RunState.BLOCKED_VERIFY: DurableVerdict.FAIL,
+        RunState.BLOCKED_CONTROLS: DurableVerdict.BLOCKED_CONTROLS,
+        RunState.BLOCKED_HYGIENE: DurableVerdict.BLOCKED_HYGIENE,
+        RunState.ABORTED_BUDGET: DurableVerdict.ABORTED_BUDGET,
+    }
+
     @classmethod
     def of(cls, state: RunState) -> DurableClosure:
         match state:
@@ -54,12 +62,10 @@ class DurableClosure:
                 return cls(verdict=DurableVerdict.PASS, ci=DurableCi.RED)
             case RunState.BLOCKED_CI_INDETERMINATE:
                 return cls(verdict=DurableVerdict.PASS, ci=DurableCi.NONE)
-            case RunState.BLOCKED_VERIFY:
-                return cls(verdict=DurableVerdict.FAIL, ci=DurableCi.NONE)
-            case RunState.BLOCKED_CONTROLS:
-                return cls(verdict=DurableVerdict.BLOCKED_CONTROLS, ci=DurableCi.NONE)
-            case RunState.ABORTED_BUDGET:
-                return cls(verdict=DurableVerdict.ABORTED_BUDGET, ci=DurableCi.NONE)
+            case (
+                RunState.BLOCKED_VERIFY | RunState.BLOCKED_CONTROLS | RunState.BLOCKED_HYGIENE | RunState.ABORTED_BUDGET
+            ):
+                return cls(verdict=cls._VERDICTS_WITH_NO_CI[state], ci=DurableCi.NONE)
             case RunState.OPEN:
                 raise RunNotClosedError(
                     f"a run in state {RunState.OPEN} has no verdict to record: "

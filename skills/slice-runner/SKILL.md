@@ -550,7 +550,7 @@ presupuesto), anexa un registro con:
 
 ```
 python3 ~/.claude/skills/slice-runner/scripts/metrics.py record --repo <repo> --slice <slice_id> --name <name> \
-  --veredicto <PASA|FALLA|bloqueada-controles|abortada-presupuesto> --ci <green|red|none> \
+  --veredicto <PASA|FALLA|bloqueada-controles|bloqueada-higiene|abortada-presupuesto> --ci <green|red|none> \
   --hallazgos-alta N --hallazgos-media N --hallazgos-baja N \
   --reintentos-implement N --reintentos-controles N --reintentos-ci N \
   --reintentos-verify N --descartes-verify N --duracion-s N \
@@ -561,6 +561,9 @@ python3 ~/.claude/skills/slice-runner/scripts/metrics.py record --repo <repo> --
   paso 6, o `abortada-presupuesto`. Los conteos de `hallazgos` salen del veredicto estructurado del
   paso 7 (en `bloqueada-controles` son 0: no hubo juicio semantico). **No uses `FALLA` para un fallo de
   controles**: es mecanico, no un veto del juez, y confundirlos deja inservible su calibracion.
+  `bloqueada-higiene` existe en el mismo vocabulario para el flujo `programa`, que si tiene presupuesto
+  propio para `pr-hygiene`: en este flujo con subagentes el paso 6.2 reintenta sin limite, asi que no lo
+  alcanzaras.
 - **Los dos contadores del verificador tampoco se mezclan, por el mismo motivo.**
   `--reintentos-verify` son las rondas de **vuelta al paso 5 que decide el juez** -por `FALLA`, o por un
   hallazgo no bloqueante que la regla del paso 7 manda corregir-, o sea rechazo semantico;

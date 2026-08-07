@@ -130,6 +130,22 @@ def test_bloqueada_controles_no_cuenta_como_falla_del_verificador() -> None:
     assert agg.primer_intento_pct == 50.0
 
 
+def test_bloqueada_higiene_no_cuenta_como_bloqueada_controles() -> None:
+    """La distincion es el mismo proposito que separa `bloqueada-controles` de `FALLA`.
+
+    Un rechazo de higiene no ejecuto ningun control, asi que sumarlo a `bloqueada_controles_pct`
+    atribuiria a los tests un fallo que fue del informe del implementador, no del codigo.
+    """
+    filas = [
+        _fila(veredicto=Veredicto.BLOQUEADA_HIGIENE, ci=Ci.NINGUNA),
+        _fila(veredicto=Veredicto.BLOQUEADA_CONTROLES, ci=Ci.NINGUNA, reintentos_controles=2.0),
+        _fila(),
+    ]
+    agg = metrics._aggregate(filas)
+    assert agg.bloqueada_higiene_pct == 33.3
+    assert agg.bloqueada_controles_pct == 33.3
+
+
 def test_primer_intento_excluye_reintentos_de_controles() -> None:
     """Verde a la primera del juez y de la CI, pero con una vuelta por lint sucio: no es limpia."""
     agg = metrics._aggregate([_fila(reintentos_controles=1.0)])

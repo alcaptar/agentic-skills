@@ -81,12 +81,18 @@ class Veredicto(StrEnum):
 
     `FALLA` es el veto del juez adversarial. `BLOQUEADA_CONTROLES` es agotar los reintentos de
     lint/tipos/tests: un fallo mecanico, que se registra aparte porque confundirlo con un veto
-    del juez dejaria inservible el unico instrumento para calibrarlo.
+    del juez dejaria inservible el unico instrumento para calibrarlo. `BLOQUEADA_HIGIENE` es agotar
+    el presupuesto propio de `pr-hygiene` (indice staged con algo no declarado, o un artefacto
+    prohibido): tampoco es un veto del juez ni un control en rojo -no se llego a ejecutar ninguno-,
+    asi que compartir cualquiera de los otros dos dejaria ese mismo instrumento leyendo un fallo que
+    no fue suyo. Solo la variante `programa` la escribe hoy: su agente (`SKILL.md`, paso 6.2)
+    reintenta `pr-hygiene` sin limite propio.
     """
 
     PASA = "PASA"
     FALLA = "FALLA"
     BLOQUEADA_CONTROLES = "bloqueada-controles"
+    BLOQUEADA_HIGIENE = "bloqueada-higiene"
     ABORTADA_PRESUPUESTO = "abortada-presupuesto"
 
 
@@ -626,6 +632,7 @@ class Metricas:
     slices: int
     verificador_falla_pct: float
     bloqueada_controles_pct: float
+    bloqueada_higiene_pct: float
     ci_roja_pct: float
     primer_intento_pct: float
     reintentos_implement_media: float
@@ -653,6 +660,7 @@ class Metricas:
             "slices": self.slices,
             "verificador_falla_pct": self.verificador_falla_pct,
             "bloqueada_controles_pct": self.bloqueada_controles_pct,
+            "bloqueada_higiene_pct": self.bloqueada_higiene_pct,
             "ci_roja_pct": self.ci_roja_pct,
             "primer_intento_pct": self.primer_intento_pct,
             "reintentos_implement_media": self.reintentos_implement_media,
@@ -694,6 +702,7 @@ def _aggregate(filas: list[Fila]) -> Metricas:
         slices=total,
         verificador_falla_pct=_pct(sum(1 for f in filas if f.veredicto == Veredicto.FALLA), total),
         bloqueada_controles_pct=_pct(sum(1 for f in filas if f.veredicto == Veredicto.BLOQUEADA_CONTROLES), total),
+        bloqueada_higiene_pct=_pct(sum(1 for f in filas if f.veredicto == Veredicto.BLOQUEADA_HIGIENE), total),
         ci_roja_pct=_pct(sum(1 for f in filas if f.ci == Ci.ROJA), total),
         primer_intento_pct=_pct(sum(1 for f in filas if f.primer_intento), total),
         reintentos_implement_media=_mean([f.reintentos_implement for f in filas]),
@@ -734,6 +743,7 @@ def report(args: argparse.Namespace) -> int:
     print(f"metricas slice-runner ({scope}) - {agg.slices} slices - {path}")
     print(f"  verificador FALLA        {agg.verificador_falla_pct}%")
     print(f"  bloqueada por controles  {agg.bloqueada_controles_pct}%")
+    print(f"  bloqueada por higiene    {agg.bloqueada_higiene_pct}%")
     print(f"  CI roja                  {agg.ci_roja_pct}%")
     print(f"  slices al 1er intento    {agg.primer_intento_pct}%")
     print(f"  reintentos implement     {agg.reintentos_implement_media} media")

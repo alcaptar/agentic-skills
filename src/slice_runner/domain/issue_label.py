@@ -12,6 +12,7 @@ class IssueLabel(StrEnum):
     IN_PROGRESS = "estado:en-curso"
     AWAITING_MERGE = "estado:esperando-merge"
     BLOCKED_CONTROLS = "bloqueada:controles"
+    BLOCKED_HYGIENE = "bloqueada:higiene"
     BLOCKED_VERIFY = "bloqueada:verify"
     BLOCKED_CI_RED = "bloqueada:ci-roja"
     BLOCKED_CI_INDETERMINATE = "bloqueada:ci-indeterminada"
@@ -26,6 +27,7 @@ class IssueLabel(StrEnum):
                 return None
             case (
                 RunState.BLOCKED_CONTROLS
+                | RunState.BLOCKED_HYGIENE
                 | RunState.BLOCKED_VERIFY
                 | RunState.BLOCKED_CI_RED
                 | RunState.BLOCKED_CI_INDETERMINATE
@@ -53,6 +55,7 @@ class IssueLabel(StrEnum):
     def _of_the_blocked_reason(cls, state: RunState) -> IssueLabel:
         return {
             RunState.BLOCKED_CONTROLS: cls.BLOCKED_CONTROLS,
+            RunState.BLOCKED_HYGIENE: cls.BLOCKED_HYGIENE,
             RunState.BLOCKED_VERIFY: cls.BLOCKED_VERIFY,
             RunState.BLOCKED_CI_RED: cls.BLOCKED_CI_RED,
             RunState.BLOCKED_CI_INDETERMINATE: cls.BLOCKED_CI_INDETERMINATE,

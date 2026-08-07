@@ -50,6 +50,14 @@ _TABLE: list[tuple[Step, Outcome, dict[str, int], tuple[Step, RunState, int]]] =
     (Step.RUN_CONTROLS, Outcome.FAILED, {}, (Step.IMPLEMENT, RunState.OPEN, 0)),
     (Step.RUN_CONTROLS, Outcome.FAILED, {"control_retries": 1}, (Step.IMPLEMENT, RunState.OPEN, 0)),
     (Step.RUN_CONTROLS, Outcome.FAILED, {"control_retries": 2}, (Step.RUN_CONTROLS, RunState.BLOCKED_CONTROLS, 0)),
+    (Step.RUN_CONTROLS, Outcome.HYGIENE_REJECTED, {}, (Step.IMPLEMENT, RunState.OPEN, 0)),
+    (Step.RUN_CONTROLS, Outcome.HYGIENE_REJECTED, {"hygiene_retries": 1}, (Step.IMPLEMENT, RunState.OPEN, 0)),
+    (
+        Step.RUN_CONTROLS,
+        Outcome.HYGIENE_REJECTED,
+        {"hygiene_retries": 2},
+        (Step.RUN_CONTROLS, RunState.BLOCKED_HYGIENE, 0),
+    ),
     (Step.RUN_CONTROLS, Outcome.INDETERMINATE, {}, (Step.RUN_CONTROLS, RunState.OPEN, 30)),
     (Step.RUN_CONTROLS, Outcome.INDETERMINATE, {"control_retries": 2}, (Step.RUN_CONTROLS, RunState.OPEN, 30)),
     (Step.RUN_CONTROLS, Outcome.OVER_BUDGET, {}, (Step.RUN_CONTROLS, RunState.ABORTED_BUDGET, 0)),
@@ -481,6 +489,7 @@ class TestTheTransitionOfEveryPair:
             "run": {
                 "step": "implement",
                 "control_retries": 1,
+                "hygiene_retries": 0,
                 "verify_retries": 0,
                 "ci_retries": 0,
                 "indeterminate_ticks": 0,
@@ -511,6 +520,16 @@ class TestWhatEachBudgetPays:
         emitted = json.loads(capsys.readouterr().out)
         assert emitted["state"] == RunState.OPEN
         assert emitted["run"]["control_retries"] == 2
+
+    def test_a_hygiene_rejection_spends_a_retry_of_its_own_and_not_one_of_the_controls(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        asked = TransitionRequestMother.asking(Step.RUN_CONTROLS, Outcome.HYGIENE_REJECTED)
+
+        Cli.explain(request=asked, budgets=Budgets())
+
+        spent = json.loads(capsys.readouterr().out)["run"]
+        assert (spent["hygiene_retries"], spent["control_retries"]) == (1, 0)
 
     def test_a_veto_spends_a_retry_of_the_judge_and_not_one_of_the_controls(
         self, capsys: pytest.CaptureFixture[str]

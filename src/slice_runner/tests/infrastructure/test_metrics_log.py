@@ -65,6 +65,7 @@ class TestHowEachClosureIsRecorded:
             (RunState.BLOCKED_CI_INDETERMINATE, "PASA", "none"),
             (RunState.BLOCKED_VERIFY, "FALLA", "none"),
             (RunState.BLOCKED_CONTROLS, "bloqueada-controles", "none"),
+            (RunState.BLOCKED_HYGIENE, "bloqueada-higiene", "none"),
             (RunState.ABORTED_BUDGET, "abortada-presupuesto", "none"),
         ],
     )
@@ -149,12 +150,14 @@ class TestWhatVariantIsWritten:
 
 
 class TestWhatTheRunAlreadyCounted:
-    def test_the_retries_of_implementing_are_the_sum_of_the_three_ways_back_to_that_step(self) -> None:
+    def test_the_retries_of_implementing_are_the_sum_of_the_four_ways_back_to_that_step(self) -> None:
         run = RunMother.that_went_back_for_every_reason()
 
         argv = TheRecord.of(ClosedSliceMother.merged_after_going_back_for_every_reason())
 
-        assert argv.value_of("--reintentos-implement") == str(run.control_retries + run.verify_retries + run.ci_retries)
+        assert argv.value_of("--reintentos-implement") == str(
+            run.control_retries + run.hygiene_retries + run.verify_retries + run.ci_retries
+        )
 
     def test_each_kind_of_retry_also_travels_on_its_own_so_the_sum_can_be_read_apart(self) -> None:
         run = RunMother.that_went_back_for_every_reason()
