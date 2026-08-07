@@ -66,6 +66,7 @@ class ImplementerInvocation:
                 *self._controls,
                 *self._findings,
                 *self._control_logs,
+                *self._hygiene_refusal,
             ]
         )
 
@@ -94,6 +95,18 @@ class ImplementerInvocation:
             return []
 
         return self._counted("logs de los controles en rojo", tuple(str(log) for log in logs))
+
+    @property
+    def _hygiene_refusal(self) -> list[str]:
+        refusal = self.assignment.hygiene_refusal
+        if not refusal:
+            return []
+
+        return [
+            "- la vuelta anterior no llego a medirse: el indice quedo sucio y los controles no se ejecutaron",
+            f"  - {refusal}",
+            "  - declara en tu informe TODO fichero que toques, o no lo toques",
+        ]
 
     @staticmethod
     def _raised(finding: Finding) -> str:

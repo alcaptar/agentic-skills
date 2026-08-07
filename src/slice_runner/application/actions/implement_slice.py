@@ -22,6 +22,7 @@ class ImplementSliceParams:
     parent: ParentIssue
     findings: tuple[Finding, ...] = ()
     control_logs: tuple[Path, ...] = ()
+    hygiene_refusal: str = ""
 
 
 class ImplementSlice:
@@ -44,4 +45,5 @@ class ImplementSlice:
             controls=params.parent.controls,
             findings=params.findings,
             control_logs=params.control_logs,
+            hygiene_refusal=params.hygiene_refusal,
         )

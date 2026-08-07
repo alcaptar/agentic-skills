@@ -108,3 +108,10 @@ class TestImplementSlice:
         action.execute(replace(self._params(), control_logs=(ControlOutcomeMother.LOG,)))
 
         assert self._assigned(implementer).control_logs == (ControlOutcomeMother.LOG,)
+
+    def test_the_refusal_of_a_dirty_index_is_assigned_because_otherwise_the_round_repeats_it_blind(
+        self, action: ImplementSlice, implementer: Mock
+    ) -> None:
+        action.execute(replace(self._params(), hygiene_refusal="src/leftover.py (not-declared)"))
+
+        assert self._assigned(implementer).hygiene_refusal == "src/leftover.py (not-declared)"
