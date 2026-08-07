@@ -72,6 +72,7 @@ class MetricsInvocation:
     EXECUTABLE: ClassVar[str] = "python3"
     PROGRAM_ROOT: ClassVar[Path] = Path(__file__).parents[3]
     SCRIPT: ClassVar[tuple[str, ...]] = ("skills", "slice-runner", "scripts", "metrics.py")
+    VARIANT: ClassVar[str] = "programa"
 
     closed: ClosedSlice
 
@@ -122,6 +123,8 @@ class MetricsInvocation:
             str(run.verify_discards),
             *self._cause_of_the_discards,
             *self._what_the_harness_measured,
+            "--variante",
+            self.VARIANT,
         ]
 
     @property
@@ -143,4 +146,7 @@ class MetricsInvocation:
             str(spend.turns),
             "--duracion-ms",
             str(spend.duration_ms),
+            "--tokens-cache",
+            str(spend.cache_read_tokens),
+            *(flag for model in spend.models for flag in ("--modelo", model)),
         ]

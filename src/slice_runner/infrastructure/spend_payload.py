@@ -11,10 +11,26 @@ class SpendPayload(ContractModel):
     turns: int
     duration_ms: int
     calls: int
+    models: tuple[str, ...] = ()
+    cache_read_tokens: int = 0
 
     @classmethod
     def from_domain(cls, spend: HarnessSpend) -> Self:
-        return cls(cost_usd=spend.cost_usd, turns=spend.turns, duration_ms=spend.duration_ms, calls=spend.calls)
+        return cls(
+            cost_usd=spend.cost_usd,
+            turns=spend.turns,
+            duration_ms=spend.duration_ms,
+            calls=spend.calls,
+            models=spend.models,
+            cache_read_tokens=spend.cache_read_tokens,
+        )
 
     def to_domain(self) -> HarnessSpend:
-        return HarnessSpend(cost_usd=self.cost_usd, turns=self.turns, duration_ms=self.duration_ms, calls=self.calls)
+        return HarnessSpend(
+            cost_usd=self.cost_usd,
+            turns=self.turns,
+            duration_ms=self.duration_ms,
+            calls=self.calls,
+            models=self.models,
+            cache_read_tokens=self.cache_read_tokens,
+        )

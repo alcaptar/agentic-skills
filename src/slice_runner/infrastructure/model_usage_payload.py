@@ -1,0 +1,18 @@
+from __future__ import annotations
+
+from pydantic import Field
+
+from slice_runner.infrastructure.contract_model import ContractModel
+
+
+class ModelUsageEntry(ContractModel):
+    input_tokens: int = Field(alias="inputTokens")
+    output_tokens: int = Field(alias="outputTokens")
+    cache_read_input_tokens: int = Field(alias="cacheReadInputTokens")
+    cache_creation_input_tokens: int = Field(alias="cacheCreationInputTokens")
+    web_search_requests: int = Field(alias="webSearchRequests")
+    cost_usd: float = Field(alias="costUSD")
+    context_window: int = Field(alias="contextWindow")
+    max_output_tokens: int = Field(alias="maxOutputTokens")
+    canonical_model: str = Field(alias="canonicalModel")
+    provider: str

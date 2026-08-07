@@ -58,6 +58,35 @@ class TestWhatTheHarnessMeasured:
         with pytest.raises(InvalidHarnessOutputError, match="duration_ms"):
             HarnessOutput.from_dict(HarnessEnvelopeMother.plus(duration_ms="a while"))
 
+    def test_the_judge_call_arrives_with_the_model_the_harness_declares_and_its_cache_reads(self) -> None:
+        spend = HarnessOutput.from_dict(HarnessEnvelopeMother.recorded("full-recipe")).to_domain()
+
+        assert spend.models == ("claude-haiku-4-5-20251001",)
+        assert spend.cache_read_tokens == 15510
+
+    def test_the_implementer_call_arrives_with_its_own_model_and_cache_reads(self) -> None:
+        spend = HarnessOutput.from_dict(HarnessEnvelopeMother.recorded("implementer-two-paths")).to_domain()
+
+        assert spend.models == ("claude-sonnet-5",)
+        assert spend.cache_read_tokens == 241303
+
+    def test_an_envelope_without_model_usage_arrives_with_no_model_and_zero_cache_reads(self) -> None:
+        spend = HarnessOutput.from_dict(HarnessEnvelopeMother.without("modelUsage")).to_domain()
+
+        assert spend.models == ()
+        assert spend.cache_read_tokens == 0
+
+    def test_a_model_usage_entry_with_a_key_we_do_not_know_is_rejected_instead_of_ignored(self) -> None:
+        recorded = HarnessEnvelopeMother.recorded("full-recipe")
+        model_usage = recorded["modelUsage"]
+        assert isinstance(model_usage, dict)
+        model_id, entry = next(iter(model_usage.items()))
+        assert isinstance(entry, dict)
+        broken = recorded | {"modelUsage": {model_id: entry | {"campo_nuevo_del_harness": 1}}}
+
+        with pytest.raises(InvalidHarnessOutputError, match="campo_nuevo_del_harness"):
+            HarnessOutput.from_dict(broken)
+
 
 class TestTheSessionEveryCallRunsUnder:
     def test_an_envelope_without_it_is_rejected_because_a_conversation_nobody_can_find_again_is_no_trace_at_all(
