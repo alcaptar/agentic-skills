@@ -99,6 +99,15 @@ implementador declaro, y la tupla vacia es el indice limpio. Tres decisiones que
 - **Un artefacto prohibido lo es aunque este declarado.** `StagedHygiene.FORBIDDEN_PREFIXES` es un
   backstop, no una regla mas del allow-list: si lo pudiera levantar quien declara las rutas, no
   protegeria de nada.
+- **Deuda declarada: un rechazo de higiene gasta presupuesto de controles.** `ConductSlice` lo convierte
+  en `Outcome.FAILED`, que la maquina de estados no distingue de un test en rojo, asi que consume
+  `control_retries` y acaba cerrando el run con `bloqueada:controles`. **Son cosas distintas**: un
+  control rojo es codigo que falla y lo puede arreglar otra vuelta del implementador; un rechazo de
+  higiene es un informe incompleto -toco ficheros que no declaro- y no dice nada sobre si el codigo esta
+  bien. Costo dos runs enteros -slice-05 y slice-07, 23 y 22 dolares- antes de que el motivo del rechazo
+  llegara siquiera al implementador, que es lo unico corregido hasta ahora. Separarlos pide vocabulario
+  nuevo en `Outcome` y su rama en la maquina, y **no se hace aqui**: se declara para que quien toque
+  esta politica sepa que el contador que gasta no es el suyo.
 - **Fail-closed sin rama especial.** Con `declared` vacio todo lo staged sale `NOT_DECLARED`, que es lo
   que cae solo de la regla general. Y **"nada staged" no es asunto de esta politica**: eso ya lo dice
   `EmptyIndexError` cuando se va a leer el diff, y reimplementarlo aqui seria un segundo sitio donde

@@ -83,4 +83,3 @@ class UnderstandingInvocation:
         return CountedLines.of(
             "controles del repo", tuple(f"{control.name}: {control.command}" for control in controls.commands)
         )
-

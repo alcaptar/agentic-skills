@@ -68,7 +68,6 @@ class JudgeInvocation:
             ]
         )
 
-
     @property
     def _diff(self) -> str:
         return "\n".join(

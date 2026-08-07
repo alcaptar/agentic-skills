@@ -114,4 +114,3 @@ class ImplementerInvocation:
         where = f"{finding.path}:{finding.line}" if finding.line is not None else finding.path
 
         return f"[{finding.severity}] {finding.rule} en {where}: {finding.evidence} (detalle: {finding.detail})"
-
