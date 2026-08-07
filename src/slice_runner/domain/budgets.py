@@ -16,7 +16,7 @@ class Budgets:
     seconds_between_ticks: int = 30
     total_wait_seconds: int = 1800
     process_timeout_seconds: int = 3600
-    slice_cost_usd: float = 25.0
+    slice_cost_usd: float = 50.0
 
     def wait_exhausted(self, waited_seconds: int) -> bool:
         return waited_seconds >= self.total_wait_seconds

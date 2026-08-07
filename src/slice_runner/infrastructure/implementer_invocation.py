@@ -15,6 +15,7 @@ if TYPE_CHECKING:
 @dataclass(frozen=True, kw_only=True, slots=True)
 class ImplementerInvocation:
     EXECUTABLE: ClassVar[str] = "claude"
+    MODEL: ClassVar[str] = "sonnet"
 
     assignment: Assignment
 
@@ -27,6 +28,8 @@ class ImplementerInvocation:
         return [
             self.EXECUTABLE,
             "-p",
+            "--model",
+            self.MODEL,
             "--output-format",
             "json",
             "--permission-mode",

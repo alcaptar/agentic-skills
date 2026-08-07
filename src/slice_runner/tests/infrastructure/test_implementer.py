@@ -41,6 +41,9 @@ class TestHowTheImplementerIsInvoked:
     def test_it_runs_with_bypassed_permissions_because_it_writes_and_runs_commands(self, argv: Argv) -> None:
         assert argv.value_of("--permission-mode") == "bypassPermissions"
 
+    def test_the_model_is_fixed_and_not_inherited_from_whoever_launches_the_run(self, argv: Argv) -> None:
+        assert argv.value_of("--model") == "sonnet"
+
     def test_the_tools_travel_in_a_single_comma_separated_argument(self, argv: Argv) -> None:
         assert argv.value_of("--tools") == "Read,Write,Edit,Bash,Grep,Glob,Skill"
 
