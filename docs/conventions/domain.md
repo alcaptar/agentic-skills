@@ -71,11 +71,10 @@ par sin regla no cae en una rama generica, rompe en `mypy` en cuanto se anade un
 proyectarlo-. El contrato ya esta medido, no pendiente: `tests/test_skill_contracts.py` comprueba que
 todo cierre de `RunState` distinto de `MERGED` (que no lleva etiqueta porque cierra GitHub el issue solo,
 via `Closes` de la pull request) proyecta a una etiqueta del vocabulario, y que ninguna etiqueta del
-vocabulario carece de fuente -sale de una proyeccion del traductor, o es de fuente manual-. Una etiqueta
-de fuente manual es la que se escribe fuera de cualquier `(state, step)` que `IssueLabel.of` pueda
-conocer: la que pone una persona al crear la subissue, y la de la pausa de alineacion, que se escribe
-antes de que exista ningun `Run`. Una etiqueta nueva sin proyeccion ni fuente manual declarada pone
-`make check` en rojo.
+vocabulario carece de fuente -sale de una proyeccion del traductor, o es de fuente manual-. **De fuente
+manual es la que se escribe fuera de cualquier `(state, step)` que `IssueLabel.of` pueda conocer**, que
+es lo que pasa antes de que exista ningun `Run`. Una etiqueta nueva sin proyeccion ni fuente manual
+declarada pone `make check` en rojo.
 
 **`CiStatus` es la tercera copia declarada del mismo tipo.** `domain/ci_status.py` repite en ingles el
 vocabulario `EstadoCI` de `skills/slice-runner/scripts/controles.py` (`verde`, `rojo`, `pendiente`,

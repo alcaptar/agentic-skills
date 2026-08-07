@@ -1,10 +1,34 @@
 # Como se escribe una convencion
 
-Esta es la vara de las varas: rige para todo `.md` de `docs/conventions/`.
+Esta es la vara de las varas. Rige para todo `.md` de `docs/conventions/` **y para cualquier otro que un
+contrato mida o que un agente lea como vara** -hoy, el `README.md`-. Lo que obliga a mantener un
+documento no es la carpeta en la que vive: es que algo se rompa cuando deje de ser verdad.
+
+Quedan fuera los `.md` del flujo viejo (`skills/`, `agents/`), que son codigo que no es referencia (ver
+`CLAUDE.md`): estan congelados a proposito y reescribirlos no compra nada.
 
 Una convencion la leen dos agentes que no pueden preguntar -el implementador antes de escribir, el
 juez antes de bloquear- y una persona que llega nueva. Los tres necesitan lo mismo: **la regla con la
 que se mide el codigo**, en una forma que siga siendo verdad dentro de veinte slices.
+
+## Un dato del codigo escrito en prosa: las tres formas
+
+No todas cuestan lo mismo, y la diferencia no es el estilo sino **quien avisa cuando el codigo cambia**:
+
+| | quien avisa | coste |
+|---|---|---|
+| **Regla atemporal** | nadie tiene que avisar: sigue siendo verdad | ninguno |
+| **Copia medida por un contrato** | `make check`, al instante | se arregla en la misma vuelta |
+| **Censo sin contrato** | el juez, dos pasos despues | una vuelta entera al implementador |
+
+La segunda **es aceptable**: la tabla de codigos de salida del `README.md` repite el `IntEnum` del
+programa y un test compara los dos conjuntos, asi que anadir un miembro sin documentarlo pone `make
+check` en rojo antes de que nadie juzgue nada. Lo que la hace aceptable no es estar en una tabla: es que
+el contrato **compara vocabulario y no prosa**, de modo que reescribir el texto no rompe nada mientras
+los dos lados digan lo mismo.
+
+Lo que sigue prohibe la tercera. Si un dato del codigo tiene que estar escrito, **se le pone contrato o
+no se escribe**.
 
 ## Reglas criticas
 
@@ -12,7 +36,9 @@ que se mide el codigo**, en una forma que siga siendo verdad dentro de veinte sl
   "el unico codigo que emiten los dos subcomandos". Un conteo es una foto del codigo, y la proxima
   slice que anada un miembro la convierte en mentira.
 - **Ni enumera en lista cerrada.** "Lo que acumula por invocacion son estos tres" caduca igual que un
-  numero. Si la lista importa, vive en el codigo, que es donde se puede comprobar.
+  numero, y una enumeracion **al lado de una tabla que si tiene contrato** caduca igual que si estuviera
+  sola: lo que protege es el contrato, no la vecindad. Si la lista importa, vive en el codigo, que es
+  donde se puede comprobar.
 - **Ni narra la historia.** Que algo vivio antes en otro sitio, que se descarto una alternativa o que
   un fallo costo un run es el **por que**, y su casa es `docs/design-notes.md`. La convencion dice la
   regla; el registro duradero dice como se llego a ella.
