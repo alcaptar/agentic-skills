@@ -181,11 +181,13 @@ class ConductSlice:
         chosen = self._select.execute(SelectSliceParams(repo=params.repo, issue=params.issue, slice_id=params.slice_id))
         for dangling in chosen.dangling:
             self._closing_a_merge_missed_between_invocations(params, dangling)
+        run = chosen.subissue.run or Run(step=Step.IMPLEMENT)
         progress = ConductSliceProgress(
             params=params,
             chosen=chosen,
-            run=chosen.subissue.run or Run(step=Step.IMPLEMENT),
+            run=run,
             label=chosen.subissue.label,
+            spends=(run.spend,) if run.spend.measured else (),
         )
         of_the_subissue = Prechecks.of_the_subissue(chosen.subissue)
         if of_the_subissue is not PrecheckOutcome.CLEAR:
@@ -256,6 +258,9 @@ class ConductSlice:
                 return self._asking_for_the_merge(progress)
 
     def _implementing(self, progress: ConductSliceProgress) -> SteppedSlice:
+        if self._budgets.exhausted(progress.spend):
+            return SteppedSlice(progress=progress, outcome=Outcome.OVER_BUDGET)
+
         implementation = self._implement.execute(
             ImplementSliceParams(
                 worktree=progress.params.worktree,
@@ -300,6 +305,9 @@ class ConductSlice:
         return tuple(outcome.log for outcome in outcomes if outcome.ruling is Ruling.FAIL)
 
     def _judging(self, progress: ConductSliceProgress) -> SteppedSlice:
+        if self._budgets.exhausted(progress.spend):
+            return SteppedSlice(progress=progress, outcome=Outcome.OVER_BUDGET)
+
         try:
             verification = self._verify.execute(
                 VerifySliceParams(
@@ -322,11 +330,11 @@ class ConductSlice:
         judged = replace(
             progress, spends=(*progress.spends, verification.spend), verdicts=(*progress.verdicts, verification.verdict)
         )
+        stepped = SteppedSlice(progress=judged, outcome=Outcome.of_the_verdict(verification.verdict))
+        if verification.verdict.ruling is Ruling.PASS:
+            return stepped
 
-        return self._within_budget(
-            SteppedSlice(progress=judged, outcome=Outcome.of_the_verdict(verification.verdict)),
-            call=verification.spend,
-        )
+        return self._within_budget(stepped, call=verification.spend)
 
     def _within_budget(self, stepped: SteppedSlice, *, call: HarnessSpend | None) -> SteppedSlice:
         if not self._budgets.cost_exhausted(call=call, total=stepped.progress.spend):
@@ -386,23 +394,24 @@ class ConductSlice:
         return opened
 
     def _persisted(self, progress: ConductSliceProgress, transition: Transition) -> ConductSliceProgress:
-        if transition.run != progress.run:
-            self._writing(progress, run=transition.run)
-        label = IssueLabel.of(state=transition.state, step=transition.run.step)
+        run = replace(transition.run, spend=progress.spend)
+        if run != progress.run:
+            self._writing(progress, run=run)
+        label = IssueLabel.of(state=transition.state, step=run.step)
         if label is progress.label:
-            return replace(progress, run=transition.run)
+            return replace(progress, run=run)
         if label is None:
             if progress.label is not None:
                 self._repository.remove_label(
                     repo=progress.params.repo, issue=progress.subissue.number, remove=progress.label
                 )
-            return replace(progress, run=transition.run, label=None)
+            return replace(progress, run=run, label=None)
 
         self._repository.write_label(
             repo=progress.params.repo, issue=progress.subissue.number, remove=progress.label, add=label
         )
 
-        return replace(progress, run=transition.run, label=label)
+        return replace(progress, run=run, label=label)
 
     def _closing_a_merge_missed_between_invocations(self, params: ConductSliceParams, subissue: SubIssue) -> None:
         run = subissue.run
@@ -418,7 +427,12 @@ class ConductSlice:
 
         self._metrics.record(
             ClosedSlice(
-                repo=params.repo, slice_id=subissue.slice_id, name=subissue.name, state=RunState.MERGED, run=run
+                repo=params.repo,
+                slice_id=subissue.slice_id,
+                name=subissue.name,
+                state=RunState.MERGED,
+                run=run,
+                spends=(run.spend,) if run.spend.measured else (),
             )
         )
         label = subissue.label
@@ -454,6 +468,7 @@ class ConductSlice:
                 run=progress.run,
                 spends=progress.spends,
                 findings=progress.findings_of_every_round,
+                findings_of_the_last_round=progress.findings_of_the_last_round,
                 discard_cause=progress.discard_cause,
             )
         )

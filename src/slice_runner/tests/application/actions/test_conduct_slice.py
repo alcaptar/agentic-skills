@@ -228,6 +228,38 @@ class TestConductSliceResumingAnInterruptedRun:
         assert conductor.repository.write_run.call_count == 0
 
 
+class TestConductSliceResumingWithSpendAlreadyPersisted:
+    def test_reinvoking_does_not_reset_the_budget_because_the_prior_spend_travels_with_the_run(self) -> None:
+        prior = HarnessSpendMother.of_the_implementer_call()
+        conductor = Conductor(
+            chosen=SelectSliceResultMother.resumed_at(RunMother.judging_after_spending(prior)),
+            budgets=Budgets(slice_cost_usd=prior.cost_usd),
+        )
+
+        result = conductor.conduct()
+
+        assert conductor.verify.execute.call_count == 0
+        assert result.state is RunState.ABORTED_BUDGET
+
+    def test_the_durable_row_of_a_reinvoked_run_still_carries_the_cost_paid_in_an_earlier_invocation(self) -> None:
+        prior = HarnessSpendMother.of_the_implementer_call()
+        conductor = Conductor(chosen=SelectSliceResultMother.resumed_at(RunMother.judging_after_spending(prior)))
+
+        conductor.conduct()
+
+        recorded: ClosedSlice = conductor.metrics.record.call_args.args[0]
+        assert recorded.spends == (prior, HarnessSpendMother.of_the_judge_call())
+
+    def test_the_run_written_after_a_paid_call_persists_the_cumulative_spend_and_not_only_this_calls(self) -> None:
+        prior = HarnessSpendMother.of_the_implementer_call()
+        conductor = Conductor(chosen=SelectSliceResultMother.resumed_at(RunMother.judging_after_spending(prior)))
+
+        conductor.conduct()
+
+        written = [call.kwargs["run"] for call in conductor.repository.write_run.call_args_list]
+        assert written[0].spend == HarnessSpend.summing((prior, HarnessSpendMother.of_the_judge_call()))
+
+
 class TestConductSliceOnTheHappyPath:
     @staticmethod
     def _conductor(*, budgets: Budgets | None = None) -> Conductor:
@@ -561,6 +593,22 @@ class TestConductSliceWhenTheJudgeSpeaks:
 
         assert conductor.metrics.record.call_args.args[0].findings == (raised,)
 
+    def test_the_durable_row_keeps_the_findings_of_the_last_round_apart_so_a_pass_with_one_is_never_ambiguous(
+        self,
+    ) -> None:
+        raised = FindingMother.without_line()
+        conductor = self._conductor(budgets=Budgets(verify_retries=1))
+        conductor.verify.execute.side_effect = [
+            VerificationMother.vetoing(VerdictMother.failing(raised)),
+            VerificationMother.passing(),
+        ]
+
+        conductor.conduct()
+
+        recorded: ClosedSlice = conductor.metrics.record.call_args.args[0]
+        assert recorded.findings == (raised,)
+        assert recorded.findings_of_the_last_round == ()
+
     def test_a_second_round_is_sent_only_what_the_last_verdict_raised_because_the_earlier_ones_may_be_fixed(
         self,
     ) -> None:
@@ -686,6 +734,34 @@ class TestConductSliceWhenTheCostOfTheSliceRunsOut:
         result = conductor.conduct()
 
         assert result.state is RunState.MERGED
+
+    def test_a_pass_that_alone_exceeds_the_cost_still_merges_because_it_was_already_paid_for(self) -> None:
+        conductor = self._judging(budgets=Budgets(slice_cost_usd=0.01))
+        conductor.verify.execute.return_value = VerificationMother.passing()
+
+        result = conductor.conduct()
+
+        assert conductor.verify.execute.call_count == 1
+        assert result.state is RunState.MERGED
+
+    def test_a_pass_with_corrections_still_delivers_over_budget_because_delivering_costs_no_harness(self) -> None:
+        conductor = self._judging(budgets=Budgets(slice_cost_usd=0.01, verify_retries=0))
+        conductor.verify.execute.return_value = VerificationMother.ordering_corrections(FindingMother.with_line())
+
+        result = conductor.conduct()
+
+        assert conductor.verify.execute.call_count == 1
+        assert result.state is RunState.MERGED
+
+    def test_the_cost_of_an_over_budget_pass_still_blocks_the_next_call_the_harness_would_make(self) -> None:
+        conductor = self._judging(budgets=Budgets(slice_cost_usd=0.01, ci_retries=1))
+        conductor.verify.execute.return_value = VerificationMother.passing()
+        conductor.ci.status.return_value = CiStatus.RED
+
+        result = conductor.conduct()
+
+        assert conductor.implement.execute.call_count == 0
+        assert result.state is RunState.ABORTED_BUDGET
 
     @staticmethod
     def _judging(*, budgets: Budgets) -> Conductor:

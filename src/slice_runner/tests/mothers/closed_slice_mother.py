@@ -44,6 +44,10 @@ class ClosedSliceMother:
         return cls._closed(RunState.BLOCKED_VERIFY, findings=findings)
 
     @classmethod
+    def merged_after_correcting(cls, *findings: Finding) -> ClosedSlice:
+        return cls._closed(RunState.MERGED, findings=findings, findings_of_the_last_round=())
+
+    @classmethod
     def merged_after_going_back_for_every_reason(cls) -> ClosedSlice:
         return cls._closed(RunState.MERGED, run=RunMother.that_went_back_for_every_reason())
 
@@ -59,6 +63,7 @@ class ClosedSliceMother:
         run: Run | None = None,
         spends: tuple[HarnessSpend, ...] | None = None,
         findings: tuple[Finding, ...] = (),
+        findings_of_the_last_round: tuple[Finding, ...] | None = None,
         discard_cause: DiscardCause | None = None,
     ) -> ClosedSlice:
         return ClosedSlice(
@@ -69,5 +74,6 @@ class ClosedSliceMother:
             run=run or RunMother.awaiting_merge(),
             spends=(HarnessSpendMother.of_the_implementer_call(),) if spends is None else spends,
             findings=findings,
+            findings_of_the_last_round=findings if findings_of_the_last_round is None else findings_of_the_last_round,
             discard_cause=discard_cause,
         )

@@ -21,8 +21,11 @@ class Budgets:
     def wait_exhausted(self, waited_seconds: int) -> bool:
         return waited_seconds >= self.total_wait_seconds
 
+    def exhausted(self, total: HarnessSpend) -> bool:
+        return total.cost_usd >= self.slice_cost_usd
+
     def cost_exhausted(self, *, call: HarnessSpend | None, total: HarnessSpend) -> bool:
         if call is None or not call.measured:
             return True
 
-        return total.cost_usd >= self.slice_cost_usd
+        return self.exhausted(total)
