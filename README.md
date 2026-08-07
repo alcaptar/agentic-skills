@@ -190,7 +190,7 @@ error, nunca mezclados. Ademas escribe: cada verificacion anexa una linea a
 identificador de la slice, el diff juzgado, el veredicto entero y su conteo por severidad. Es un registro
 append-only, y vive **fuera del repo** para que ningun `git add` de la slice se lo lleve a la pull request.
 
-Y **cada llamada al harness** -la que implementa y la que juzga- anexa su linea a
+Y **cada llamada al harness** -la que entiende, la que implementa y la que juzga- anexa su linea a
 `~/.claude/slice-runner/trace/calls.jsonl`, con la slice, el paso que servia y el identificador de sesion de
 su conversacion. Es lo que permite abrir la conversacion de una llamada concreta -viven en
 `~/.claude/projects/`, una por sesion- sin adivinar por marcas de tiempo entre decenas de ficheros. Tambien
@@ -220,7 +220,7 @@ El codigo de salida es el contrato con quien lo invoca:
 | `4` | Error de uso: el repo o la base no resuelven, falta un argumento, el issue o el estado que se quiere leer no se pueden leer, o `read` no encuentra la conversacion pedida |
 | `5` | `run`: la slice cerro **sin** mergear (controles, juez, integracion continua o presupuesto). Hay que mirar el issue; reinvocar sin tocar nada repite el cierre |
 | `6` | `run`: la slice espera a una persona (pausa de alineacion). Reinvocar no sirve hasta que alguien conteste |
-| `7` | `run`: se agoto la espera con el run todavia abierto. Reinvocar es exactamente lo que toca |
+| `7` | `run`: se agoto la espera con el run todavia abierto. Reinvocar es exactamente lo que toca, salvo esperando el merge: ahi la pull request nace en borrador (`--draft`) y reinvocar no la saca de ahi -hay que sacarla a mano-, y tanto la salida como un comentario en la subissue lo dicen |
 | `8` | `run`: los prechecks pararon la invocacion antes de tocar codigo |
 | `9` | `run`: el issue no tiene ninguna slice ejecutable (todas cerradas, bloqueadas o abortadas) |
 | `10` | `run`: el run se interrumpio antes de llegar a una parada -`gh` o `git` fallaron, el foro contesto algo ilegible, el registro durable no se pudo escribir-. El estado persistido sigue siendo bueno |
@@ -229,7 +229,9 @@ El codigo de salida es el contrato con quien lo invoca:
 
 `1` es un veredicto y `2` no lo es: esa es la distincion que hace el codigo de salida y que un booleano
 perderia. Del `5` en adelante la pregunta es otra -¿que hace quien invoca ahora?-, y por eso hay un codigo
-por decision y no uno por excepcion: `7` y `10` se reinvocan, `5`, `6`, `9` y `12` no.
+por decision y no uno por excepcion: `7` y `10` se reinvocan, `5`, `6`, `9` y `12` no. El `7` esperando
+el merge es la excepcion dentro del propio codigo: la pull request nace en borrador, asi que reinvocar
+sin sacarla de ahi repite la misma espera.
 
 ### La secuencia y los presupuestos, interrogables sin montar un run
 

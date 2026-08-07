@@ -4,6 +4,7 @@ import json
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar
 
+from slice_runner.infrastructure.counted_lines import CountedLines
 from slice_runner.infrastructure.report_payload import ImplementationReportPayload
 from slice_runner.infrastructure.slice_implementer_brief import SliceImplementerBrief
 
@@ -59,8 +60,8 @@ class ImplementerInvocation:
                 f"- ruta del repo: {assignment.repo}",
                 f"- intencion: {assignment.intention}",
                 f"- senal: {assignment.signal}",
-                *self._counted("criterios de aceptacion", assignment.criteria),
-                *self._counted(
+                *CountedLines.of("criterios de aceptacion", assignment.criteria),
+                *CountedLines.of(
                     "fuentes de convencion", tuple(f"{source.kind}: {source.path}" for source in assignment.sources)
                 ),
                 *self._controls,
@@ -76,7 +77,7 @@ class ImplementerInvocation:
         if controls.exemption_reason is not None:
             return [f"- controles del repo: ninguno - {controls.exemption_reason}"]
 
-        return self._counted(
+        return CountedLines.of(
             "controles del repo", tuple(f"{control.name}: {control.command}" for control in controls.commands)
         )
 
@@ -86,7 +87,7 @@ class ImplementerInvocation:
         if not findings:
             return ["- hallazgos de la vuelta anterior: ninguno, esta es la primera"]
 
-        return self._counted("hallazgos de la vuelta anterior", tuple(self._raised(finding) for finding in findings))
+        return CountedLines.of("hallazgos de la vuelta anterior", tuple(self._raised(finding) for finding in findings))
 
     @property
     def _control_logs(self) -> list[str]:
@@ -94,7 +95,7 @@ class ImplementerInvocation:
         if not logs:
             return []
 
-        return self._counted("logs de los controles en rojo", tuple(str(log) for log in logs))
+        return CountedLines.of("logs de los controles en rojo", tuple(str(log) for log in logs))
 
     @property
     def _hygiene_refusal(self) -> list[str]:
@@ -113,7 +114,3 @@ class ImplementerInvocation:
         where = f"{finding.path}:{finding.line}" if finding.line is not None else finding.path
 
         return f"[{finding.severity}] {finding.rule} en {where}: {finding.evidence} (detalle: {finding.detail})"
-
-    @staticmethod
-    def _counted(heading: str, entries: tuple[str, ...]) -> list[str]:
-        return [f"- {heading} ({len(entries)}):", *(f"  - {entry}" for entry in entries)]

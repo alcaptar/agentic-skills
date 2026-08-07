@@ -621,6 +621,23 @@ class TestPausingForAlignment:
         assert len(process.calls) == 1
 
 
+class TestFlaggingADraftPullRequest:
+    def test_the_call_is_a_comment_naming_the_pull_request_and_that_it_is_still_a_draft(self) -> None:
+        process = ScriptedProcess(ProcessOutput(code=0, stdout="", stderr=""))
+
+        GhRunRepository(process=process).flag_draft_pull_request(repo=_REPO, issue=45, pull_request=61)
+
+        assert process.calls[0].argv == ["gh", "issue", "comment", "45", "--repo", _REPO, "--body-file", "-"]
+        assert "#61" in process.calls[0].stdin
+        assert "borrador" in process.calls[0].stdin
+
+    def test_a_non_zero_exit_raises_with_the_stderr_it_carried(self) -> None:
+        process = ScriptedProcess(ProcessOutput(code=1, stdout="", stderr="HTTP 422: Unprocessable Entity"))
+
+        with pytest.raises(GhCommandFailedError, match="HTTP 422"):
+            GhRunRepository(process=process).flag_draft_pull_request(repo=_REPO, issue=45, pull_request=61)
+
+
 class TestGhFailuresAreInterpretedNotSwallowed:
     def test_a_non_zero_exit_reading_the_parent_raises_with_the_stderr_it_carried(self) -> None:
         process = ScriptedProcess(ProcessOutput(code=1, stdout="", stderr="HTTP 404: Not Found"))

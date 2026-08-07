@@ -35,6 +35,7 @@ from slice_runner.domain.state_machine import StateMachine
 from slice_runner.domain.understanding_writer import UnderstandingWriter
 from slice_runner.tests.mothers.control_outcome_mother import ControlOutcomeMother
 from slice_runner.tests.mothers.implementation_mother import ImplementationMother
+from slice_runner.tests.mothers.understanding_mother import UnderstandingMother
 from slice_runner.tests.mothers.verification_mother import VerificationMother
 
 if TYPE_CHECKING:
@@ -52,7 +53,7 @@ class Conductor:
     PULL_REQUEST: ClassVar[int] = 61
     TITLE: ClassVar[str] = "feat(prechecks-deterministas): comprobar antes de tocar codigo"
     BODY: ClassVar[str] = "## Intencion\nhoy nada evita reimplementar una slice ya entregada\n\nCloses #45"
-    UNDERSTANDING: ClassVar[str] = "## Entendimiento de la slice\n\nslice-05 (prechecks-deterministas)\n"
+    UNDERSTANDING: ClassVar[str] = UnderstandingMother.TEXT
     NOW: ClassVar[datetime] = datetime(2024, 1, 1, tzinfo=UTC)
 
     def __init__(self, *, chosen: SelectSliceResult, budgets: Budgets | None = None) -> None:
@@ -77,7 +78,7 @@ class Conductor:
         self.clock.now.return_value = self.NOW
         self.metrics: Mock = create_autospec(MetricsLog, spec_set=True, instance=True)
         self.understanding: Mock = create_autospec(UnderstandingWriter, spec_set=True, instance=True)
-        self.understanding.write.return_value = self.UNDERSTANDING
+        self.understanding.write.return_value = UnderstandingMother.of_the_chosen_slice()
         self.pull_request: Mock = create_autospec(PullRequestWriter, spec_set=True, instance=True)
         self.pull_request.title.return_value = self.TITLE
         self.pull_request.body.return_value = self.BODY

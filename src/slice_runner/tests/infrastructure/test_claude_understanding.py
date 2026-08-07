@@ -1,0 +1,98 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+import pytest
+
+from slice_runner.domain.exceptions import InvalidUnderstandingReportError
+from slice_runner.domain.step import Step
+from slice_runner.infrastructure.claude_understanding import ClaudeUnderstanding
+from slice_runner.tests.doubles import RecordedProcess, RecordedTrace
+from slice_runner.tests.mothers.harness_spend_mother import HarnessSpendMother
+from slice_runner.tests.mothers.judge_output_mother import HarnessEnvelopeMother
+from slice_runner.tests.mothers.parent_issue_mother import ParentIssueMother
+from slice_runner.tests.mothers.sub_issue_mother import SubIssueMother
+from slice_runner.tests.mothers.understanding_invocation_mother import UnderstandingInvocationMother
+
+if TYPE_CHECKING:
+    from slice_runner.domain.understanding import Understanding
+
+_RECORDED = "implementer-two-paths"
+
+
+class Writing:
+    @staticmethod
+    def understood(process: RecordedProcess, *, trace: RecordedTrace | None = None) -> Understanding:
+        return ClaudeUnderstanding(process=process, trace=trace or RecordedTrace()).write(
+            subissue=SubIssueMother.pending(),
+            parent=ParentIssueMother.with_sources_and_controls(),
+            repo=UnderstandingInvocationMother.REPO,
+            worktree=UnderstandingInvocationMother.WORKTREE,
+        )
+
+    @staticmethod
+    def carrying(text: str) -> RecordedProcess:
+        return RecordedProcess(HarnessEnvelopeMother.carrying({"understanding": text}, recorded=_RECORDED))
+
+
+class TestWhereTheProcessRuns:
+    def test_the_worktree_becomes_the_working_directory_of_the_process_and_not_the_gh_repo_slug(self) -> None:
+        process = Writing.carrying("asi entiendo la slice")
+
+        Writing.understood(process)
+
+        assert process.cwd == UnderstandingInvocationMother.WORKTREE
+
+
+class TestTheUnderstandingOfARecordedCall:
+    def test_the_text_the_harness_wrote_arrives_whole(self) -> None:
+        understanding = Writing.understood(Writing.carrying("asi entiendo la slice y este es mi plan"))
+
+        assert understanding.text == "asi entiendo la slice y este es mi plan"
+
+    def test_surrounding_blank_space_is_trimmed_because_it_is_not_part_of_what_was_understood(self) -> None:
+        understanding = Writing.understood(Writing.carrying("  asi entiendo la slice  \n"))
+
+        assert understanding.text == "asi entiendo la slice"
+
+    def test_what_the_harness_spent_on_the_call_travels_with_the_understanding(self) -> None:
+        understanding = Writing.understood(Writing.carrying("asi entiendo la slice"))
+
+        assert understanding.spend == HarnessSpendMother.of_the_implementer_call()
+
+
+class TestWhatTheCallIsAllowedToReturn:
+    def test_a_report_missing_the_only_field_it_may_carry_is_rejected_instead_of_defaulted(self) -> None:
+        process = RecordedProcess(HarnessEnvelopeMother.carrying({}, recorded=_RECORDED))
+
+        with pytest.raises(InvalidUnderstandingReportError, match="understanding"):
+            Writing.understood(process)
+
+    def test_blank_text_is_rejected_because_it_is_not_usable_as_a_gate(self) -> None:
+        with pytest.raises(InvalidUnderstandingReportError):
+            Writing.understood(Writing.carrying("   "))
+
+    def test_a_rejected_call_still_reports_what_it_spent_so_the_budget_still_sees_it(self) -> None:
+        with pytest.raises(InvalidUnderstandingReportError) as rejection:
+            Writing.understood(Writing.carrying("   "))
+
+        assert rejection.value.spend == HarnessSpendMother.of_the_implementer_call()
+
+
+class TestWhereTheConversationCanBeFound:
+    def test_the_session_the_call_ran_under_is_written_down_under_the_slice_and_the_understand_step(self) -> None:
+        trace = RecordedTrace()
+
+        Writing.understood(Writing.carrying("asi entiendo la slice"), trace=trace)
+
+        assert [(call.slice_id, call.step, call.session) for call in trace.calls] == [
+            (SubIssueMother.pending().slice_id, Step.UNDERSTAND, HarnessEnvelopeMother.SESSION_OF_THE_IMPLEMENTER)
+        ]
+
+    def test_a_call_whose_report_is_rejected_is_traced_too_because_that_conversation_is_the_one_to_read(self) -> None:
+        trace = RecordedTrace()
+
+        with pytest.raises(InvalidUnderstandingReportError):
+            Writing.understood(Writing.carrying("   "), trace=trace)
+
+        assert [call.session for call in trace.calls] == [HarnessEnvelopeMother.SESSION_OF_THE_IMPLEMENTER]

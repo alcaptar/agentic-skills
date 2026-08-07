@@ -21,6 +21,7 @@ from slice_runner.infrastructure.exit_code import ExitCode
 from slice_runner.infrastructure.implementer_invocation import ImplementerInvocation
 from slice_runner.infrastructure.judge_invocation import JudgeInvocation
 from slice_runner.infrastructure.local_call_trace import LocalCallTrace
+from slice_runner.infrastructure.understanding_invocation import UnderstandingInvocation
 from slice_runner.tests.argv import Argv
 from slice_runner.tests.doubles import Answer, RealExceptTheJudge, TimingOutProcess, UnrunnableJudge
 from slice_runner.tests.git_repo import Git
@@ -870,6 +871,14 @@ class TestWhenTheRunStaysOpen:
                 Answer(to=("git", "rev-parse"), code=1),
                 Answer(to=("git", "switch")),
                 Answer(to=("gh", "pr", "list"), stdout=GhConversationMother.no_open_pull_request()),
+                Answer(
+                    to=(UnderstandingInvocation.MODEL, "json"),
+                    stdout=json.dumps(
+                        HarnessEnvelopeMother.carrying(
+                            {"understanding": "entiendo la slice y este es mi plan"}, recorded=_IMPLEMENTER_PAYLOAD
+                        )
+                    ),
+                ),
             ),
         )
 
@@ -921,7 +930,7 @@ class TestWhenTheRunStaysOpen:
         assert code == ExitCode.PRECHECKS_BLOCKED
         assert json.loads(capsys.readouterr().out)["precheck"] == "pull-request-already-open"
 
-    def test_a_merge_that_never_arrives_spends_the_whole_wait_and_says_that_reinvoking_is_what_comes_next(
+    def test_a_merge_that_never_arrives_spends_the_whole_wait_and_says_the_pull_request_is_still_draft(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
     ) -> None:
         slept: list[int] = []
@@ -934,14 +943,19 @@ class TestWhenTheRunStaysOpen:
                     stdout=GhConversationMother.the_pull_request_of_the_branch(),
                 ),
                 Answer(to=("gh", "pr", "view"), stdout=GhConversationMother.a_pull_request_still_open()),
+                Answer(to=("gh", "issue", "comment")),
             ),
         )
 
         code = invocation.conduct(logs=tmp_path / "logs")
+        captured = capsys.readouterr()
 
         assert code == ExitCode.WAIT_EXHAUSTED
         assert sum(slept) == Budgets().total_wait_seconds
-        assert json.loads(capsys.readouterr().out)["halt"] == "wait-exhausted"
+        assert json.loads(captured.out)["halt"] == "wait-exhausted"
+        assert invocation.process.invoked("gh", "issue", "comment")
+        assert "draft" in captured.err
+        assert str(GhConversationMother.PULL_REQUEST) in captured.err
 
     def test_a_pull_request_closed_without_merging_ends_the_invocation_with_its_own_code_and_no_waiting(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]

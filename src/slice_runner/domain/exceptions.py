@@ -23,6 +23,10 @@ class InvalidImplementationReportError(MeasuredCallError):
     pass
 
 
+class InvalidUnderstandingReportError(MeasuredCallError):
+    pass
+
+
 class PermissionDeniedError(MeasuredCallError):
     pass
 

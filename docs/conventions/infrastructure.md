@@ -121,12 +121,16 @@ importar**: un smoke que solo importe el modulo lo da por bueno. Lo evita
   al final es lo que evita que un delimitador tenga que sobrevivir a su propio contenido -en el juez, el
   diff es literalmente lo ultimo del prompt-.
 
-  Las dos invocaciones llevan **su propio `_counted`** -el par "encabezado con cuantos son" mas una linea
-  por entrada- en vez de compartirlo, por el mismo motivo por el que `ClaudeConfig` no existio hasta que
-  tuvo tres consumidores (bullet siguiente): lo que comparten no es una regla del programa sino la forma
-  de una lista, cada prompt es un contrato con un agente distinto y **nada exige que se parezcan**, asi
-  que extraerlas hoy fijaria un parecido que no es invariante. Con un tercer prompt se extrae, y esa
-  condicion ya se ha cobrado una vez, asi que no es una promesa que nadie piense cumplir.
+  Las tres invocaciones comparten **`CountedLines`** -el par "encabezado con cuantos son" mas una linea
+  por entrada-. **Vivio duplicada en dos a proposito**, por el mismo motivo por el que `ClaudeConfig` no
+  existio hasta tener tres consumidores: lo que comparten no es una regla del programa sino la forma de
+  una lista, cada prompt es un contrato con un agente distinto y nada exige que se parezcan, asi que
+  extraerla con dos habria fijado un parecido que no era invariante. El texto anterior declaraba que
+  **con un tercer prompt se extrae**; el entendimiento fue ese tercero y la condicion se cumplio, aunque
+  no sola: el juez veto la slice con severidad `alta` citando esta misma linea.
+
+  Que se cumpliera importa mas que la regla concreta. Una condicion escrita que luego nadie ejecuta
+  ensena que este fichero es opinion; esta lleva dos veces disparando.
 
   **Hay dos invocadores del juez y solo uno llena esos campos.** `ConductSlice._judging` los llena
   enteros -senal, criterios y fuentes de la slice, y el checklist del issue-, porque el conductor tiene
@@ -169,13 +173,13 @@ importar**: un smoke que solo importe el modulo lo da por bueno. Lo evita
   `LocalCallTrace` -el adaptador del puerto `CallTrace` (`domain/call_trace.py`,
   ver `docs/conventions/architecture.md`)- anexa una linea por
   llamada -slice, paso y el `session_id` que trae el sobre- a `~/.claude/slice-runner/trace/calls.jsonl`, y quienes
-  lo llaman son `ClaudeImplementer` y `ClaudeVerifier`, en cuanto el sobre parsea y **antes** del bloque
-  `measuring()`. Dos motivos, y el segundo es el que cierra la decision:
+  lo llaman son `ClaudeUnderstanding`, `ClaudeImplementer` y `ClaudeVerifier`, en cuanto el sobre parsea y
+  **antes** del bloque `measuring()`. Dos motivos, y el segundo es el que cierra la decision:
 
   1. **El unico sitio que ve el sobre de todas las llamadas es el adaptador.** Una llamada que muere dentro
      de `measuring()` -veredicto incoherente, permiso denegado, informe invalido- es justo la conversacion
      que se quiere leer, y en aplicacion no queda nada de ella: no hay `Verification` ni `Implementation`, y
-     el `MeasuredCallError` solo lleva el gasto. Grabar en la frontera cubre las dos llamadas del run, el
+     el `MeasuredCallError` solo lleva el gasto. Grabar en la frontera cubre las tres llamadas del run, el
      `verify` suelto y tambien los descartes.
   2. **Al caso de uso ya no le cabe, y eso dice lo mismo.** Con un puerto mas suelto, `VerifySlice` pasa a
      seis dependencias y salta `PLR0913`; las dos salidas que **no** valen son relajar el linter y

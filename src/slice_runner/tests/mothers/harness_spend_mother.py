@@ -19,3 +19,9 @@ class HarnessSpendMother:
             models=("claude-haiku-4-5-20251001",),
             cache_read_tokens=15510,
         )
+
+    @staticmethod
+    def of_the_understanding_call() -> HarnessSpend:
+        return HarnessSpend.of_a_call(
+            cost_usd=0.021415, turns=3, duration_ms=14208, models=("claude-sonnet-5",), cache_read_tokens=42066
+        )

@@ -19,6 +19,8 @@ class StateMachine:
     budgets: Budgets
 
     def after(self, run: Run, outcome: Outcome) -> Transition:
+        if run.step is Step.UNDERSTAND:
+            self._impossible(run, outcome)
         if outcome is Outcome.OVER_BUDGET:
             return self._closed(run, RunState.ABORTED_BUDGET)
 
@@ -26,6 +28,8 @@ class StateMachine:
 
     def _after_the_step_of(self, run: Run, outcome: Outcome) -> Transition:
         match run.step:
+            case Step.UNDERSTAND:
+                self._impossible(run, outcome)
             case Step.IMPLEMENT:
                 return self._after_implementing(run, outcome)
             case Step.RUN_CONTROLS:

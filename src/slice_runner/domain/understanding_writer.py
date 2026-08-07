@@ -6,8 +6,9 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from slice_runner.domain.parent_issue import ParentIssue
     from slice_runner.domain.sub_issue import SubIssue
+    from slice_runner.domain.understanding import Understanding
 
 
 class UnderstandingWriter(ABC):
     @abstractmethod
-    def write(self, *, subissue: SubIssue, parent: ParentIssue, repo: str) -> str: ...
+    def write(self, *, subissue: SubIssue, parent: ParentIssue, repo: str, worktree: str) -> Understanding: ...
