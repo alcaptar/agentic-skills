@@ -5,7 +5,9 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, ClassVar
 from unittest.mock import Mock, create_autospec
 
+from slice_runner.domain.call_spend_log import CallSpendLog
 from slice_runner.domain.call_trace import CallTrace
+from slice_runner.domain.harness_spend import HarnessSpend
 from slice_runner.infrastructure.judge_invocation import JudgeInvocation
 from slice_runner.infrastructure.process import (
     Process,
@@ -19,6 +21,7 @@ from slice_runner.tests.real_process import Real
 if TYPE_CHECKING:
     from collections.abc import Callable
 
+    from slice_runner.domain.call_spend_log import HarnessCallSpend
     from slice_runner.domain.call_trace import HarnessCall
     from slice_runner.domain.step import Step
     from slice_runner.infrastructure.turn_log import HarnessTurn
@@ -225,3 +228,14 @@ class RecordedTurnLog(TurnLog):
 
     def observe(self, turn: HarnessTurn) -> None:
         self.turns.append(turn)
+
+
+class RecordedSpendLog(CallSpendLog):
+    def __init__(self) -> None:
+        self.calls: list[HarnessCallSpend] = []
+
+    def record(self, call: HarnessCallSpend) -> None:
+        self.calls.append(call)
+
+    def spend_of(self, sessions: tuple[str, ...]) -> HarnessSpend:
+        return HarnessSpend.summing(call.spend for call in self.calls if call.session in sessions)

@@ -103,6 +103,10 @@ class UnreadableCallTraceError(ValueError):
     pass
 
 
+class UnreadableCallSpendLogError(ValueError):
+    pass
+
+
 class ConversationNotFoundError(OSError):
     pass
 

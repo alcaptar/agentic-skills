@@ -7,7 +7,8 @@ from slice_runner.domain.ruling import Ruling
 from slice_runner.domain.step import Step
 from slice_runner.infrastructure.claude_verifier import ClaudeVerifier
 from slice_runner.infrastructure.judge_invocation import JudgeInvocation
-from slice_runner.tests.doubles import RecordedProcess, RecordedTrace
+from slice_runner.tests.doubles import RecordedProcess, RecordedSpendLog, RecordedTrace
+from slice_runner.tests.mothers.harness_call_spend_mother import HarnessCallSpendMother
 from slice_runner.tests.mothers.harness_spend_mother import HarnessSpendMother
 from slice_runner.tests.mothers.judge_output_mother import HarnessEnvelopeMother, JudgeVerdictMother
 from slice_runner.tests.mothers.verification_mother import JudgeMother, SliceUnderReviewMother
@@ -20,7 +21,7 @@ class TestTheVerdictOfARecordedCall:
     def test_the_envelope_of_both_real_calls_is_read_whole_from_structured_output(self, recorded: str) -> None:
         process = RecordedProcess(HarnessEnvelopeMother.recorded(recorded))
 
-        verification = ClaudeVerifier(process=process, trace=RecordedTrace()).verify(
+        verification = ClaudeVerifier(process=process, trace=RecordedTrace(), spend_log=RecordedSpendLog()).verify(
             JudgeMother.adversarial(), SliceUnderReviewMother.of_the_slice()
         )
 
@@ -30,7 +31,7 @@ class TestTheVerdictOfARecordedCall:
     def test_the_first_finding_of_the_recorded_call_arrives_whole(self) -> None:
         process = RecordedProcess(HarnessEnvelopeMother.recorded())
 
-        verification = ClaudeVerifier(process=process, trace=RecordedTrace()).verify(
+        verification = ClaudeVerifier(process=process, trace=RecordedTrace(), spend_log=RecordedSpendLog()).verify(
             JudgeMother.adversarial(), SliceUnderReviewMother.of_the_slice()
         )
 
@@ -43,7 +44,7 @@ class TestHowTheJudgeIsCalled:
         review = SliceUnderReviewMother.of_the_slice()
         process = RecordedProcess(HarnessEnvelopeMother.recorded())
 
-        ClaudeVerifier(process=process, trace=RecordedTrace()).verify(_JUDGE, review)
+        ClaudeVerifier(process=process, trace=RecordedTrace(), spend_log=RecordedSpendLog()).verify(_JUDGE, review)
 
         assert process.stdin == JudgeInvocation(judge=_JUDGE, review=review).text
         assert process.stdin not in process.argv
@@ -51,7 +52,7 @@ class TestHowTheJudgeIsCalled:
     def test_the_judge_is_invoked_exactly_once_because_a_retry_is_a_decision_of_whoever_orchestrates(self) -> None:
         process = RecordedProcess(HarnessEnvelopeMother.recorded())
 
-        ClaudeVerifier(process=process, trace=RecordedTrace()).verify(
+        ClaudeVerifier(process=process, trace=RecordedTrace(), spend_log=RecordedSpendLog()).verify(
             JudgeMother.adversarial(), SliceUnderReviewMother.of_the_slice()
         )
 
@@ -67,7 +68,7 @@ class TestWhatTheJudgeCallCost:
     def test_the_spend_of_the_call_comes_back_with_the_verdict_because_the_judge_is_not_free(self) -> None:
         process = RecordedProcess(HarnessEnvelopeMother.recorded())
 
-        verification = ClaudeVerifier(process=process, trace=RecordedTrace()).verify(
+        verification = ClaudeVerifier(process=process, trace=RecordedTrace(), spend_log=RecordedSpendLog()).verify(
             _JUDGE, SliceUnderReviewMother.of_the_slice()
         )
 
@@ -79,7 +80,9 @@ class TestWhereTheJudgeConversationCanBeFound:
         process = RecordedProcess(HarnessEnvelopeMother.recorded())
         trace = RecordedTrace()
 
-        ClaudeVerifier(process=process, trace=trace).verify(_JUDGE, SliceUnderReviewMother.of_the_slice())
+        ClaudeVerifier(process=process, trace=trace, spend_log=RecordedSpendLog()).verify(
+            _JUDGE, SliceUnderReviewMother.of_the_slice()
+        )
 
         assert [(call.slice_id, call.step, call.session) for call in trace.calls] == [
             (SliceUnderReviewMother.SLICE_ID, Step.VERIFY, HarnessEnvelopeMother.SESSION_OF_THE_JUDGE)
@@ -91,9 +94,35 @@ class TestWhereTheJudgeConversationCanBeFound:
         trace = RecordedTrace()
 
         with pytest.raises(InvalidVerdictError):
-            ClaudeVerifier(process=process, trace=trace).verify(_JUDGE, SliceUnderReviewMother.of_the_slice())
+            ClaudeVerifier(process=process, trace=trace, spend_log=RecordedSpendLog()).verify(
+                _JUDGE, SliceUnderReviewMother.of_the_slice()
+            )
 
         assert [call.session for call in trace.calls] == [HarnessEnvelopeMother.SESSION_OF_THE_JUDGE]
+
+
+class TestTheSpendLogOfTheCall:
+    def test_the_session_and_what_it_spent_are_written_down(self) -> None:
+        process = RecordedProcess(HarnessEnvelopeMother.recorded())
+        spend_log = RecordedSpendLog()
+
+        ClaudeVerifier(process=process, trace=RecordedTrace(), spend_log=spend_log).verify(
+            _JUDGE, SliceUnderReviewMother.of_the_slice()
+        )
+
+        assert spend_log.calls == [HarnessCallSpendMother.of_the_judge()]
+
+    def test_a_call_whose_verdict_is_discarded_still_leaves_its_spend_behind(self) -> None:
+        incoherent = JudgeVerdictMother.passing_with(JudgeVerdictMother.high_severity_finding())
+        process = RecordedProcess(HarnessEnvelopeMother.carrying(incoherent))
+        spend_log = RecordedSpendLog()
+
+        with pytest.raises(InvalidVerdictError):
+            ClaudeVerifier(process=process, trace=RecordedTrace(), spend_log=spend_log).verify(
+                _JUDGE, SliceUnderReviewMother.of_the_slice()
+            )
+
+        assert [call.session for call in spend_log.calls] == [HarnessEnvelopeMother.SESSION_OF_THE_JUDGE]
 
 
 class TestWhenTheJudgeAnswersSomethingIncoherent:
@@ -102,7 +131,9 @@ class TestWhenTheJudgeAnswersSomethingIncoherent:
         process = RecordedProcess(HarnessEnvelopeMother.carrying(incoherent))
 
         with pytest.raises(InvalidVerdictError) as rejection:
-            ClaudeVerifier(process=process, trace=RecordedTrace()).verify(_JUDGE, SliceUnderReviewMother.of_the_slice())
+            ClaudeVerifier(process=process, trace=RecordedTrace(), spend_log=RecordedSpendLog()).verify(
+                _JUDGE, SliceUnderReviewMother.of_the_slice()
+            )
 
         assert rejection.value.spend == HarnessSpendMother.of_the_judge_call()
 
@@ -111,7 +142,7 @@ class TestWhatTheHarnessDeniedTheJudge:
     def test_a_denied_read_comes_back_with_the_verdict_so_nobody_has_to_reopen_the_envelope(self) -> None:
         process = RecordedProcess(HarnessEnvelopeMother.denying_a_read())
 
-        verification = ClaudeVerifier(process=process, trace=RecordedTrace()).verify(
+        verification = ClaudeVerifier(process=process, trace=RecordedTrace(), spend_log=RecordedSpendLog()).verify(
             _JUDGE, SliceUnderReviewMother.of_the_slice()
         )
 
@@ -120,7 +151,7 @@ class TestWhatTheHarnessDeniedTheJudge:
     def test_the_verdict_is_still_the_judges_because_a_denied_read_is_not_a_veto(self) -> None:
         process = RecordedProcess(HarnessEnvelopeMother.denying_a_read(JudgeVerdictMother.passing()))
 
-        verification = ClaudeVerifier(process=process, trace=RecordedTrace()).verify(
+        verification = ClaudeVerifier(process=process, trace=RecordedTrace(), spend_log=RecordedSpendLog()).verify(
             _JUDGE, SliceUnderReviewMother.of_the_slice()
         )
 
@@ -129,7 +160,7 @@ class TestWhatTheHarnessDeniedTheJudge:
     def test_an_envelope_with_no_denials_leaves_nothing_to_warn_about(self) -> None:
         process = RecordedProcess(HarnessEnvelopeMother.recorded())
 
-        verification = ClaudeVerifier(process=process, trace=RecordedTrace()).verify(
+        verification = ClaudeVerifier(process=process, trace=RecordedTrace(), spend_log=RecordedSpendLog()).verify(
             _JUDGE, SliceUnderReviewMother.of_the_slice()
         )
 

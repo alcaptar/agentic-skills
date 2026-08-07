@@ -8,3 +8,4 @@ class Subcommand(StrEnum):
     EXPLAIN = "explain"
     RUN = "run"
     READ = "read"
+    SPEND = "spend"
