@@ -6,6 +6,7 @@ import shutil
 import sys
 import tempfile
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 
@@ -20,6 +21,7 @@ from slice_runner.infrastructure.cli import Cli
 from slice_runner.infrastructure.exit_code import ExitCode
 from slice_runner.infrastructure.implementer_invocation import ImplementerInvocation
 from slice_runner.infrastructure.judge_invocation import JudgeInvocation
+from slice_runner.infrastructure.local_call_spend_log import LocalCallSpendLog
 from slice_runner.infrastructure.local_call_trace import LocalCallTrace
 from slice_runner.infrastructure.understanding_invocation import UnderstandingInvocation
 from slice_runner.tests.argv import Argv
@@ -27,11 +29,16 @@ from slice_runner.tests.doubles import Answer, RealExceptTheJudge, TimingOutProc
 from slice_runner.tests.git_repo import Git
 from slice_runner.tests.mothers.conversation_transcript_mother import ConversationTranscriptMother
 from slice_runner.tests.mothers.gh_conversation_mother import GhConversationMother
+from slice_runner.tests.mothers.harness_call_spend_mother import HarnessCallSpendMother
+from slice_runner.tests.mothers.harness_spend_mother import HarnessSpendMother
 from slice_runner.tests.mothers.judge_output_mother import HarnessEnvelopeMother, JudgeVerdictMother
 from slice_runner.tests.mothers.repo_mother import RepoMother
 from slice_runner.tests.mothers.run_mother import RunMother
 from slice_runner.tests.mothers.transition_request_mother import TransitionRequestMother
 from slice_runner.tests.run_invocation import RunInvocation
+
+if TYPE_CHECKING:
+    from slice_runner.domain.call_spend_log import HarnessCallSpend
 
 _SLICE = "slice-01"
 _IMPLEMENTER_PAYLOAD = "implementer-two-paths"
@@ -372,6 +379,77 @@ class TestTheCommandThatPrintsAConversation:
     ) -> None:
         with pytest.raises(SystemExit):
             Cli.parser().parse_args(["read", "--repo", self._REPO, "--slice", self._SLICE, "--step", "deploy"])
+
+        assert "invalid choice" in capsys.readouterr().err
+
+
+class TestTheCommandThatSumsSpendByRole:
+    _SLICE = "slice-05"
+
+    @pytest.fixture(autouse=True)
+    def toolbox(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
+
+    def _traced_and_spent(self, *, step: Step, call: HarnessCallSpend) -> None:
+        LocalCallTrace().record(HarnessCall(slice_id=self._SLICE, step=step, session=call.session))
+        LocalCallSpendLog().record(call)
+
+    def test_the_spend_of_a_traced_call_is_printed_as_json(self, capsys: pytest.CaptureFixture[str]) -> None:
+        self._traced_and_spent(step=Step.IMPLEMENT, call=HarnessCallSpendMother.of_the_implementer())
+
+        code = Cli.spend(slice_id=self._SLICE, step=Step.IMPLEMENT)
+
+        assert code == ExitCode.OK
+        printed = json.loads(capsys.readouterr().out)
+        assert printed["cost_usd"] == pytest.approx(HarnessSpendMother.of_the_implementer_call().cost_usd)
+        assert printed["calls"] == 1
+
+    def test_a_slice_and_step_never_traced_prints_nothing_measured_instead_of_failing(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        code = Cli.spend(slice_id=self._SLICE, step=Step.IMPLEMENT)
+
+        assert code == ExitCode.OK
+        assert json.loads(capsys.readouterr().out)["calls"] == 0
+
+    def test_main_wires_the_parsed_arguments_into_spend(self, capsys: pytest.CaptureFixture[str]) -> None:
+        self._traced_and_spent(step=Step.IMPLEMENT, call=HarnessCallSpendMother.of_the_implementer())
+
+        code = Cli.main(["spend", "--slice", self._SLICE, "--step", str(Step.IMPLEMENT)])
+
+        assert code == ExitCode.OK
+        printed = json.loads(capsys.readouterr().out)
+        assert printed["cost_usd"] == pytest.approx(HarnessSpendMother.of_the_implementer_call().cost_usd)
+
+    def test_the_split_between_implementing_and_judging_is_answered_by_two_calls_with_no_subtraction_by_hand(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        self._traced_and_spent(step=Step.IMPLEMENT, call=HarnessCallSpendMother.of_the_implementer())
+        self._traced_and_spent(step=Step.VERIFY, call=HarnessCallSpendMother.of_the_judge())
+
+        implementer_code = Cli.spend(slice_id=self._SLICE, step=Step.IMPLEMENT)
+        implementer_cost = json.loads(capsys.readouterr().out)["cost_usd"]
+        judge_code = Cli.spend(slice_id=self._SLICE, step=Step.VERIFY)
+        judge_cost = json.loads(capsys.readouterr().out)["cost_usd"]
+
+        assert implementer_code == ExitCode.OK
+        assert judge_code == ExitCode.OK
+        assert implementer_cost == pytest.approx(HarnessSpendMother.of_the_implementer_call().cost_usd)
+        assert judge_cost == pytest.approx(HarnessSpendMother.of_the_judge_call().cost_usd)
+
+    def test_the_slice_has_no_default_because_a_guessed_one_sums_the_wrong_calls(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        with pytest.raises(SystemExit):
+            Cli.parser().parse_args(["spend", "--step", str(Step.IMPLEMENT)])
+
+        assert "the following arguments are required: --slice" in capsys.readouterr().err
+
+    def test_a_step_nobody_declared_is_refused_instead_of_being_forwarded(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        with pytest.raises(SystemExit):
+            Cli.parser().parse_args(["spend", "--slice", self._SLICE, "--step", "deploy"])
 
         assert "invalid choice" in capsys.readouterr().err
 

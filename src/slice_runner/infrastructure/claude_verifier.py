@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from slice_runner.domain.call_spend_log import HarnessCallSpend
 from slice_runner.domain.call_trace import HarnessCall
 from slice_runner.domain.step import Step
 from slice_runner.domain.verification import Verification
@@ -11,6 +12,7 @@ from slice_runner.infrastructure.judge_invocation import JudgeInvocation
 from slice_runner.infrastructure.verdict_payload import VerdictPayload
 
 if TYPE_CHECKING:
+    from slice_runner.domain.call_spend_log import CallSpendLog
     from slice_runner.domain.call_trace import CallTrace
     from slice_runner.domain.judge import Judge
     from slice_runner.domain.slice_under_review import SliceUnderReview
@@ -18,20 +20,23 @@ if TYPE_CHECKING:
 
 
 class ClaudeVerifier(Verifier):
-    def __init__(self, *, process: Process, trace: CallTrace) -> None:
+    def __init__(self, *, process: Process, trace: CallTrace, spend_log: CallSpendLog) -> None:
         self._process = process
         self._trace = trace
+        self._spend_log = spend_log
 
     def verify(self, judge: Judge, review: SliceUnderReview) -> Verification:
         invocation = JudgeInvocation(judge=judge, review=review)
         output = self._process.run(invocation.argv, stdin=invocation.text)
         envelope = HarnessOutput.from_process(output)
         self._trace.record(HarnessCall(slice_id=review.slice_id, step=Step.VERIFY, session=envelope.session_id))
+        spend = envelope.to_domain()
+        self._spend_log.record(HarnessCallSpend(session=envelope.session_id, spend=spend))
         with envelope.measuring():
             verdict = VerdictPayload.from_dict(envelope.structured_output).to_domain()
 
         return Verification(
             verdict=verdict,
-            spend=envelope.to_domain(),
+            spend=spend,
             denied_reads=tuple(denial.denied_action for denial in envelope.permission_denials),
         )
