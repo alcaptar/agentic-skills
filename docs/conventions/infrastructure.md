@@ -264,9 +264,19 @@ importar**: un smoke que solo importe el modulo lo da por bueno. Lo evita
   marca como `dangling` toda subissue del checklist que GitHub cerro con un `Run` todavia abierto, y
   `ConductSlice` la resuelve antes de conducir la slice elegida -si la pull request de su rama esta
   mergeada escribe la fila durable como `MERGED` y retira la etiqueta que hubiera; si no, la deja intacta-.
-- **La ruta del script sale de `CLAUDE_CONFIG_DIR`, no del repo** (`ClaudeConfig`, el objeto del
-  bullet de arriba): la slice puede vivir en otro repo, donde no hay `skills/` del que colgar una ruta
-  relativa.
+- **La ruta del script sale del propio paquete (`MetricsInvocation.PROGRAM_ROOT`), ni del repo de la
+  slice ni de `CLAUDE_CONFIG_DIR`.** Del repo de la slice no puede salir porque la slice puede vivir en
+  otro, donde no hay `skills/` del que colgar una ruta relativa -ese motivo sigue en pie-. Y de
+  `CLAUDE_CONFIG_DIR` **dejo** de salir porque ahi manda un symlink que apunta a donde alguien decida:
+  el dia que `~/.claude/skills/slice-runner` se repunto a un repo archivado, el programa quedo llamando
+  a una copia congelada del script y **el primer cambio que el propio programa hizo en `metrics.py` lo
+  rompio** -argumentos no reconocidos, run muerto sin escribir fila-. El script viaja con el programa
+  porque **es del programa**: los flags que manda y los que el script acepta son un solo contrato, y un
+  contrato no puede tener sus dos mitades en repos distintos.
+
+  Lo que si sigue saliendo de `ClaudeConfig` es lo que de verdad es convencion de Claude y no del
+  programa: las skills que forman la vara (`LocalSkillLibrary`), el rastro de las llamadas
+  (`LocalCallTrace`) y las transcripciones (`LocalConversationLog`).
 - Un codigo de salida distinto de cero **es un dato**, no una excepcion: se lanza el proceso con
   `check=False` y el adaptador interpreta, porque el motivo esta en `stderr` y una excepcion lo borra.
 - **Ninguna llamada a un proceso externo se lanza sin tope, y el tope no lo elige el adaptador.**

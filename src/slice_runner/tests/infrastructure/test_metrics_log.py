@@ -31,19 +31,20 @@ class TheRecord:
 
 
 class TestWhereTheDurableLogIsWrittenFrom:
-    def test_the_script_is_looked_up_through_the_configuration_variable_of_the_toolbox(
+    def test_the_script_ships_with_the_program_so_it_never_drifts_from_what_the_program_sends(self) -> None:
+        script = MetricsInvocation(closed=ClosedSliceMother.merged()).script
+
+        assert script.exists()
+        assert script == MetricsInvocation.PROGRAM_ROOT / "skills" / "slice-runner" / "scripts" / "metrics.py"
+
+    def test_the_toolbox_configuration_cannot_move_it_because_a_symlink_may_point_anywhere(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
 
-        assert MetricsInvocation(closed=ClosedSliceMother.merged()).script == (
-            tmp_path / "skills" / "slice-runner" / "scripts" / "metrics.py"
-        )
+        assert tmp_path not in MetricsInvocation(closed=ClosedSliceMother.merged()).script.parents
 
-    def test_it_is_not_looked_up_inside_the_repo_because_the_slice_may_live_in_another_one(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
+    def test_it_is_not_looked_up_inside_the_repo_of_the_slice_because_it_may_live_in_another_one(self) -> None:
         closed = ClosedSliceMother.merged()
 
         assert closed.repo not in str(MetricsInvocation(closed=closed).script)
