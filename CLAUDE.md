@@ -30,7 +30,20 @@ porque nadie la cargaba antes de escribir. Una convencion que no se lee no mide 
 | Adaptadores, modelos de frontera, entrypoints | `docs/conventions/infrastructure.md` |
 | Tests, mothers, dobles, marcadores, contratos entre `.md` | `docs/conventions/testing.md` |
 | Ramas, commits, pull requests, merge | `docs/conventions/git-workflow.md` |
+| Una convencion de `docs/conventions/` | `docs/conventions/como-se-escribe.md` |
 | Una skill, un script de skill o un agente | las dos skills del apartado siguiente |
+
+### Quien lee cada cosa
+
+No todo lo que vive en `docs/` mide lo mismo ni se lo lee el mismo. Confundirlo es lo que hace que al
+implementador le lleguen de golpe las reglas del codigo, el flujo de trabajo de una persona y la
+historia del proyecto.
+
+| Que es | Donde vive | Quien lo lee |
+|---|---|---|
+| **La vara del codigo** | `code-style`, `architecture`, `domain`, `application`, `infrastructure`, `testing` | El implementador antes de escribir y el juez antes de bloquear. Es lo unico que viaja en las fuentes de convencion de un issue |
+| **Como se trabaja aqui** | `git-workflow.md`, este `CLAUDE.md` | Tu y yo en sesion. **No** el implementador: tiene prohibido tocar `git` |
+| **Por que es asi** | `docs/design-notes.md` y las pull requests mergeadas | Quien necesita no re-derivar una decision. Nunca es vara de nada |
 
 ### Jerarquia de autoridad
 
