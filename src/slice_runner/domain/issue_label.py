@@ -39,7 +39,14 @@ class IssueLabel(StrEnum):
         match step:
             case Step.AWAIT_MERGE:
                 return cls.AWAITING_MERGE
-            case Step.IMPLEMENT | Step.RUN_CONTROLS | Step.VERIFY | Step.OPEN_PULL_REQUEST | Step.AWAIT_CI:
+            case (
+                Step.UNDERSTAND
+                | Step.IMPLEMENT
+                | Step.RUN_CONTROLS
+                | Step.VERIFY
+                | Step.OPEN_PULL_REQUEST
+                | Step.AWAIT_CI
+            ):
                 return cls.IN_PROGRESS
 
     @classmethod

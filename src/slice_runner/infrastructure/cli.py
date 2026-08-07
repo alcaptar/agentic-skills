@@ -39,10 +39,12 @@ from slice_runner.domain.exceptions import (
     UnreadableRunError,
     UnresolvableRepoOrBaseError,
 )
+from slice_runner.domain.halt import Halt
 from slice_runner.domain.state_machine import StateMachine
 from slice_runner.domain.step import Step
 from slice_runner.infrastructure.claude_deploy_watch import ClaudeDeployWatch
 from slice_runner.infrastructure.claude_implementer import ClaudeImplementer
+from slice_runner.infrastructure.claude_understanding import ClaudeUnderstanding
 from slice_runner.infrastructure.claude_verifier import ClaudeVerifier
 from slice_runner.infrastructure.conducted_slice_payload import ConductedSlicePayload
 from slice_runner.infrastructure.conversation_report import ConversationReport
@@ -69,10 +71,10 @@ from slice_runner.infrastructure.subcommand import Subcommand
 from slice_runner.infrastructure.system_clock import SystemClock
 from slice_runner.infrastructure.transition_payload import TransitionPayload
 from slice_runner.infrastructure.transition_request_payload import TransitionRequestPayload
-from slice_runner.infrastructure.understanding_comment import UnderstandingComment
 from slice_runner.infrastructure.verdict_payload import VerdictPayload
 
 if TYPE_CHECKING:
+    from slice_runner.application.actions.conduct_slice import ConductSliceResult
     from slice_runner.infrastructure.process import Process
 
 
@@ -239,9 +241,21 @@ class Cli:
         except self.STOPS as error:
             return self._why_the_run_stopped(error)
 
+        self._warn_about_the_draft_pull_request(conducted)
         print(json.dumps(ConductedSlicePayload.from_domain(conducted).to_contract(), ensure_ascii=False))
 
         return ExitCode.of_the_halt(halt=conducted.halt, state=conducted.state)
+
+    @staticmethod
+    def _warn_about_the_draft_pull_request(conducted: ConductSliceResult) -> None:
+        if conducted.halt is not Halt.WAIT_EXHAUSTED or conducted.step is not Step.AWAIT_MERGE:
+            return
+
+        print(
+            f"pull request #{conducted.pull_request} was opened as a draft; take it out of draft for the merge "
+            "to happen, reinvoking alone will not move it",
+            file=sys.stderr,
+        )
 
     def _why_the_run_stopped(self, error: Exception) -> ExitCode:
         match error:
@@ -293,7 +307,7 @@ class Cli:
                 forum=forum,
                 clock=SystemClock(),
                 metrics=MetricsScriptLog(process=self._process),
-                understanding=UnderstandingComment(),
+                understanding=ClaudeUnderstanding(process=self._process, trace=LocalCallTrace()),
                 pull_request=SlicePullRequest(),
                 deploy_watch=ClaudeDeployWatch(process=self._process),
                 events=StderrEventLog(),

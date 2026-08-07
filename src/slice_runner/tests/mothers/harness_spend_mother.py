@@ -11,3 +11,7 @@ class HarnessSpendMother:
     @staticmethod
     def of_the_judge_call() -> HarnessSpend:
         return HarnessSpend.of_a_call(cost_usd=0.051877, turns=5, duration_ms=29337)
+
+    @staticmethod
+    def of_the_understanding_call() -> HarnessSpend:
+        return HarnessSpend.of_a_call(cost_usd=0.021415, turns=3, duration_ms=14208)

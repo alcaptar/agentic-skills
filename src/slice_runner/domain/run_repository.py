@@ -31,3 +31,6 @@ class RunRepository(ABC):
 
     @abstractmethod
     def pause_for_alignment(self, *, repo: str, issue: int, remove: IssueLabel | None) -> None: ...
+
+    @abstractmethod
+    def flag_draft_pull_request(self, *, repo: str, issue: int, pull_request: int) -> None: ...

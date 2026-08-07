@@ -169,13 +169,13 @@ importar**: un smoke que solo importe el modulo lo da por bueno. Lo evita
   `LocalCallTrace` -el adaptador del puerto `CallTrace` (`domain/call_trace.py`,
   ver `docs/conventions/architecture.md`)- anexa una linea por
   llamada -slice, paso y el `session_id` que trae el sobre- a `~/.claude/slice-runner/trace/calls.jsonl`, y quienes
-  lo llaman son `ClaudeImplementer` y `ClaudeVerifier`, en cuanto el sobre parsea y **antes** del bloque
-  `measuring()`. Dos motivos, y el segundo es el que cierra la decision:
+  lo llaman son `ClaudeUnderstanding`, `ClaudeImplementer` y `ClaudeVerifier`, en cuanto el sobre parsea y
+  **antes** del bloque `measuring()`. Dos motivos, y el segundo es el que cierra la decision:
 
   1. **El unico sitio que ve el sobre de todas las llamadas es el adaptador.** Una llamada que muere dentro
      de `measuring()` -veredicto incoherente, permiso denegado, informe invalido- es justo la conversacion
      que se quiere leer, y en aplicacion no queda nada de ella: no hay `Verification` ni `Implementation`, y
-     el `MeasuredCallError` solo lleva el gasto. Grabar en la frontera cubre las dos llamadas del run, el
+     el `MeasuredCallError` solo lleva el gasto. Grabar en la frontera cubre las tres llamadas del run, el
      `verify` suelto y tambien los descartes.
   2. **Al caso de uso ya no le cabe, y eso dice lo mismo.** Con un puerto mas suelto, `VerifySlice` pasa a
      seis dependencias y salta `PLR0913`; las dos salidas que **no** valen son relajar el linter y

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import TYPE_CHECKING
 
 import pytest
@@ -8,7 +9,12 @@ from slice_runner.domain.budgets import Budgets
 from slice_runner.domain.ci_status import CiStatus
 from slice_runner.domain.discard_cause import DiscardCause
 from slice_runner.domain.event_status import EventStatus
-from slice_runner.domain.exceptions import DirtyIndexError, NoPullRequestError, NoSliceLeftError
+from slice_runner.domain.exceptions import (
+    DirtyIndexError,
+    InvalidUnderstandingReportError,
+    NoPullRequestError,
+    NoSliceLeftError,
+)
 from slice_runner.domain.halt import Halt
 from slice_runner.domain.harness_spend import HarnessSpend
 from slice_runner.domain.issue_label import IssueLabel
@@ -52,6 +58,28 @@ class TestConductSliceStartingANewRun:
             repo=Conductor.REPO, issue=_SUBISSUE, understanding=Conductor.UNDERSTANDING
         )
 
+    def test_the_harness_asked_for_the_understanding_is_given_the_subissue_the_parent_and_where_it_runs(self) -> None:
+        conductor = self._conductor()
+        chosen = SelectSliceResultMother.about_to_start()
+
+        conductor.conduct()
+
+        conductor.understanding.write.assert_called_once_with(
+            subissue=chosen.subissue, parent=chosen.parent, repo=Conductor.REPO, worktree=Conductor.WORKTREE
+        )
+
+    def test_a_call_that_leaves_no_usable_understanding_stops_before_anything_is_written_or_branched(self) -> None:
+        conductor = self._conductor()
+        conductor.understanding.write.side_effect = InvalidUnderstandingReportError("blank text")
+
+        with pytest.raises(InvalidUnderstandingReportError):
+            conductor.conduct()
+
+        assert conductor.repository.write_understanding.call_count == 0
+        assert conductor.repository.pause_for_alignment.call_count == 0
+        assert conductor.branches.create.call_count == 0
+        assert conductor.repository.write_run.call_count == 0
+
     def test_the_invocation_that_asks_for_alignment_writes_no_code_at_all(self) -> None:
         conductor = self._conductor()
 
@@ -93,7 +121,9 @@ class TestConductSliceStartingANewRun:
         conductor.conduct()
 
         conductor.repository.write_run.assert_called_once_with(
-            repo=Conductor.REPO, issue=_SUBISSUE, run=RunMother.implementing()
+            repo=Conductor.REPO,
+            issue=_SUBISSUE,
+            run=replace(RunMother.implementing(), spend=HarnessSpendMother.of_the_understanding_call()),
         )
 
     def test_a_pause_that_never_lands_persists_no_run_so_the_next_invocation_cannot_skip_the_gate(self) -> None:
@@ -911,6 +941,36 @@ class TestConductSliceWhenThePullRequestWasClosedWithoutMerging:
             Conductor.PULL_REQUEST,
         )
         assert conductor.metrics.record.call_count == 0
+
+
+class TestConductSliceWaitingForTheMerge:
+    @staticmethod
+    def _conductor(*, budgets: Budgets | None = None) -> Conductor:
+        return Conductor(chosen=SelectSliceResultMother.resumed_at(RunMother.awaiting_merge()), budgets=budgets)
+
+    def test_a_merge_that_never_arrives_flags_the_subissue_that_its_pull_request_is_still_draft(self) -> None:
+        conductor = self._conductor(budgets=Budgets(total_wait_seconds=30))
+        conductor.forum.pull_request_state.return_value = PullRequestState.OPEN
+
+        result = conductor.conduct()
+
+        assert result.halt is Halt.WAIT_EXHAUSTED
+        conductor.repository.flag_draft_pull_request.assert_called_once_with(
+            repo=Conductor.REPO, issue=_SUBISSUE, pull_request=Conductor.PULL_REQUEST
+        )
+
+    def test_a_ci_wait_that_is_exhausted_flags_nothing_because_the_pull_request_is_not_awaiting_a_merge_yet(
+        self,
+    ) -> None:
+        conductor = Conductor(
+            chosen=SelectSliceResultMother.resumed_at(RunMother.about_to_ask_the_ci()),
+            budgets=Budgets(total_wait_seconds=30),
+        )
+        conductor.ci.status.return_value = CiStatus.PENDING
+
+        conductor.conduct()
+
+        assert conductor.repository.flag_draft_pull_request.call_count == 0
 
 
 class TestConductSliceWaitingForTheCi:

@@ -14,7 +14,13 @@ from slice_runner.domain.control_status import ControlStatus
 from slice_runner.domain.discard_cause import DiscardCause
 from slice_runner.domain.event import Event
 from slice_runner.domain.event_status import EventStatus
-from slice_runner.domain.exceptions import DirtyIndexError, MeasuredCallError, NoPullRequestError, NoSliceLeftError
+from slice_runner.domain.exceptions import (
+    DirtyIndexError,
+    ImpossibleTransitionError,
+    MeasuredCallError,
+    NoPullRequestError,
+    NoSliceLeftError,
+)
 from slice_runner.domain.halt import Halt
 from slice_runner.domain.harness_spend import HarnessSpend
 from slice_runner.domain.issue_label import IssueLabel
@@ -221,12 +227,14 @@ class ConductSlice:
         if precheck is not PrecheckOutcome.CLEAR:
             return self._ending(progress, Halt.PRECHECKS_BLOCKED, precheck=precheck)
 
-        self._repository.write_understanding(
+        understanding = self._understanding.write(
+            subissue=progress.subissue,
+            parent=progress.parent,
             repo=progress.params.repo,
-            issue=progress.subissue.number,
-            understanding=self._understanding.write(
-                subissue=progress.subissue, parent=progress.parent, repo=progress.params.repo
-            ),
+            worktree=progress.params.worktree,
+        )
+        self._repository.write_understanding(
+            repo=progress.params.repo, issue=progress.subissue.number, understanding=understanding.text
         )
         self._repository.pause_for_alignment(
             repo=progress.params.repo, issue=progress.subissue.number, remove=progress.label
@@ -234,9 +242,10 @@ class ConductSlice:
         self._branches.create(
             worktree=progress.params.worktree, name=progress.subissue.branch, base=progress.params.base
         )
-        self._writing(progress, run=progress.run)
+        aligned = replace(progress, spends=(understanding.spend,))
+        self._writing(aligned, run=replace(aligned.run, spend=understanding.spend))
 
-        return self._ending(progress, Halt.AWAITING_ALIGNMENT, precheck=precheck)
+        return self._ending(aligned, Halt.AWAITING_ALIGNMENT, precheck=precheck)
 
     def _conducting(self, progress: ConductSliceProgress) -> ConductSliceResult:
         while True:
@@ -251,10 +260,20 @@ class ConductSlice:
             if transition.wait_seconds > 0:
                 progress = self._waiting(progress, transition.wait_seconds)
                 if self._budgets.wait_exhausted(progress.waited_seconds):
-                    return self._ending(progress, Halt.WAIT_EXHAUSTED)
+                    return self._exhausted(progress)
+
+    def _exhausted(self, progress: ConductSliceProgress) -> ConductSliceResult:
+        if progress.run.step is Step.AWAIT_MERGE:
+            self._repository.flag_draft_pull_request(
+                repo=progress.params.repo, issue=progress.subissue.number, pull_request=self._pull_request_of(progress)
+            )
+
+        return self._ending(progress, Halt.WAIT_EXHAUSTED)
 
     def _stepping(self, progress: ConductSliceProgress) -> SteppedSlice | HaltedSlice:
         match progress.run.step:
+            case Step.UNDERSTAND:
+                raise ImpossibleTransitionError(f"no persisted run steps on `{Step.UNDERSTAND}`, so none is conducted")
             case Step.IMPLEMENT:
                 return self._implementing(progress)
             case Step.RUN_CONTROLS:
