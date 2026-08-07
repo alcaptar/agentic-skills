@@ -17,8 +17,10 @@ Este repo es el intento de arreglar eso con **estructura en vez de confianza**:
 - **Trabajo troceado en rebanadas verticales** (*slices*) pequenas y entregables, con **todo el estado
   en un issue de GitHub**: los subagentes que hacen el trabajo nacen y mueren en cada slice -ahi el
   contexto si es desechable-, y como no queda nada en la sesion, puedes tirarla y abrir otra entre
-  slices en vez de compactar. Lo que no se limpia solo es el contexto del **orquestador**, que vive en
-  tu sesion: eso lo decides tu (ver "El contexto" mas abajo).
+  slices en vez de compactar. En el flujo anterior, con la skill `/slice-runner`, lo que no se limpiaba
+  solo era el contexto del **orquestador**, que vivia en tu sesion: eso lo decidias tu (ver "El
+  contexto" mas abajo). En el flujo que conduce hoy una slice, el programa corre como proceso aparte y
+  no acumula nada en tu sesion.
 - **El que implementa no verifica.** Dos subagentes distintos, con instrucciones distintas, y el
   verificador es adversarial y no puede ejecutar nada (no tiene `Bash`): su unico trabajo es juzgar.
 - **Lo mecanico lo deciden scripts, no el juicio de un agente.** Si es una regla exacta (¿esta verde
@@ -44,19 +46,22 @@ flowchart TD
         spec["<b>/slice-spec</b><br/>brainstorming + troceo vertical"]
     end
 
-    spec -->|crea| issue[("<b>Issue de GitHub</b><br/>1 feature = 1 issue<br/>spec + estado de cada slice<br/><i>unica fuente de verdad</i>")]
+    spec -->|crea| issue[("<b>Issue de GitHub</b><br/>1 issue padre + 1 subissue por slice<br/><i>unica fuente de verdad</i>")]
 
-    issue -->|"lee la siguiente slice"| runner
+    issue -->|"elige la siguiente subissue ejecutable"| runner
 
-    subgraph runner_phase["2 - Ejecutar una slice"]
-        runner["<b>/slice-runner</b><br/>orquestador"]
-        impl["subagente<br/><b>implementador</b><br/>TDD por capa"]
-        ctrl{{"controles deterministas<br/>lint / tipos / tests<br/><i>controles.py</i>"}}
-        verif["subagente<br/><b>slice-verifier</b><br/>adversarial, sin Bash"]
-        pr["Pull Request<br/><i>Part of #N</i>"]
-        ci{{"integracion continua<br/><i>controles.py ci-status</i>"}}
+    subgraph runner_phase["2 - Conducir una slice (programa)"]
+        runner["<b>slice-runner run</b><br/>programa"]
+        align{{"<b>ALINEAR</b><br/>entendimiento + respuesta<br/>de la persona: go / review / not-yet"}}
+        impl["claude -p<br/><b>implementador</b><br/>TDD por capa"]
+        ctrl{{"controles deterministas<br/>lint / tipos / tests"}}
+        verif["claude -p<br/><b>juez</b><br/>adversarial, sin Bash"]
+        pr["Pull Request<br/><i>Closes #&lt;subissue&gt;</i>"]
+        ci{{"integracion continua"}}
 
-        runner --> impl --> ctrl
+        runner --> align
+        align -->|"review: corrige y vuelve a mostrar"| align
+        align -->|go| impl --> ctrl
         ctrl -->|rojo| impl
         ctrl -->|verde| verif
         verif -->|FALLA| impl
@@ -67,11 +72,11 @@ flowchart TD
     ci -->|verde| gate1
 
     gate1{{"<b>MERGE: decide la persona</b>"}}
-    gate1 -->|mergeada| watch
+    gate1 -->|"mergeada, cierra la subissue"| watch
 
     subgraph watch_phase["3 - Vigilar el despliegue"]
-        watch["<b>deploy-watch</b><br/>se encadena solo, read-only"]
-        core{{"veredicto go / no-go<br/><i>deploy_core.py</i>"}}
+        watch["<b>deploy-watch</b><br/>encadenado por el programa, read-only"]
+        core{{"veredicto go / no-go"}}
         watch --> core
     end
 
@@ -79,10 +84,11 @@ flowchart TD
     core -->|no-go| rca["agente <b>sre</b><br/>analisis de causa raiz<br/>+ rollback REDACTADO"]
     rca --> gate2{{"<b>ROLLBACK: lo lanzas tu</b>"}}
 
-    runner -.->|"escribe estado<br/>en cada transicion"| issue
+    runner -.->|"etiqueta la subissue<br/>en cada transicion"| issue
     core -.->|"comenta el veredicto"| issue
 
     style issue fill:#fff3cd,stroke:#856404,stroke-width:3px
+    style align fill:#ffe8cc,stroke:#b35c00,stroke-width:2px
     style gate1 fill:#f8d7da,stroke:#721c24,stroke-width:3px
     style gate2 fill:#f8d7da,stroke:#721c24,stroke-width:3px
     style verif fill:#d1ecf1,stroke:#0c5460
@@ -90,17 +96,27 @@ flowchart TD
     style rca fill:#d1ecf1,stroke:#0c5460
 ```
 
-Lo que hay que leer del diagrama: **el issue es el bus** por el que se comunican las tres skills (no
-se pasan ficheros ni memoria de sesion), los rombos son **decisiones deterministas de scripts** (no
-opiniones de un agente), las cajas azules son **subagentes de contexto desechable**, y las dos rojas
-son los unicos puntos donde para y decides tu.
+Lo que hay que leer del diagrama: **el issue padre y su subissue son el bus** entre el programa y quien
+lo invoca (no se pasan ficheros ni memoria de sesion), los rombos son **decisiones deterministas** (los
+controles, el veredicto del juez, el estado de la integracion continua), las cajas azules son **llamadas
+sin estado al harness** (`claude -p`, no un subagente que viva en tu sesion), la naranja es la **pausa de
+alineacion** -el programa espera tu `go`, un `review` con una correccion, o nada todavia- y las dos rojas
+son los **unicos puntos donde para y decides tu**: mergear, y si el despliegue sale mal, el rollback.
+
+Este es el flujo que conduce hoy `uv run slice-runner run` (detalle en "El paso que ya es un programa").
+Tambien existe un flujo anterior, orquestado a mano por la skill `/slice-runner` con los subagentes
+`agents/slice-implementer.md` y `agents/slice-verifier.md`: sigue instalable (ver "Instalacion"), pero ya
+no es lo que conduce una slice, y difiere justo en lo que ve quien revisa la pull request -como
+referencia el issue-: el flujo con la skill escribe `Part of #N` porque una feature es un solo issue con
+todas sus slices dentro; el flujo del programa escribe `Closes #<subissue>` porque cada slice es su
+propia subissue y GitHub la cierra sola al mergear.
 
 ## Las piezas
 
 | Pieza | Que es | Para que |
 |---|---|---|
 | `skills/slice-spec/SKILL.md` | Skill de autoria | Convierte una idea en una spec bien formada y **crea el issue**. Envuelve `superpowers:brainstorming` para el diseno; el troceo lo lleva su propio cerebro (`skills/slice-spec/references/slicing.md`). Modo `validate` para auditar una spec existente. No escribe codigo. |
-| `skills/slice-runner/SKILL.md` | Skill orquestadora | Ejecuta **una** slice de punta a punta: alinear, implementar, controlar, verificar, abrir PR, esperar integracion continua verde, y **parar**. No mergea. |
+| `skills/slice-runner/SKILL.md` | Skill orquestadora (flujo anterior, ver "El paso que ya es un programa") | Ejecuta **una** slice de punta a punta: alinear, implementar, controlar, verificar, abrir PR, esperar integracion continua verde, y **parar**. No mergea. |
 | `agents/slice-implementer.md` | Definicion de subagente | El implementador. Su metodologia -ciclo TDD, exencion de capa, integridad de tests preexistentes, refactor tras cada verde, instrumentar la senal- va en su *system prompt*, no relatada por el orquestador: no se puede parafrasear ni saltar un item, y no cuesta contexto de la sesion. Tiene `Bash` porque correr el ciclo y los controles es su cometido. |
 | `agents/slice-verifier.md` | Definicion de subagente | El juez adversarial. Su rubrica va en el *system prompt* (verbatim en cada invocacion, no parafraseada) y sus herramientas son `Read, Grep, Glob, Skill`: **sin `Bash`**, asi que su incapacidad de ejecutar controles es estructural, no una promesa. |
 | `skills/deploy-watch/SKILL.md` | Skill de post-merge | Vigila el despliegue en produccion, read-only. Orquesta por tick las skills de observabilidad que haya (Prometheus, Elasticsearch, logs de Google Cloud, Sentry...) segun el radio de impacto del cambio. Nunca ejecuta rollback: lo redacta. |
@@ -110,16 +126,19 @@ son los unicos puntos donde para y decides tu.
 | `skills/slice-runner/scripts/metrics.py` | Registro durable | Telemetria del loop (veredicto, reintentos de controles / de verificacion / de integracion continua, descartes del juez) en `~/.claude/slice-runner/metrics.jsonl`, fuera del repo. Sirve para decidir cuando subir de nivel de autonomia. |
 | `skills/deploy-watch/scripts/deploy_core.py` | Nucleo puro | La decision go/no-go: umbrales relativos a baseline, confirmacion sostenida, scorecard, veredicto. La toma el codigo, no la impresion del agente. |
 | `skills/deploy-watch/references/monitoring.md`, `skills/slice-spec/references/slicing.md`, `skills/slice-spec/references/observabilidad.md` | Documentos de referencia | Conocimiento cargado bajo demanda: que senales mirar y como leerlas, como trocear, y como decidir la observabilidad de una slice. |
-| `src/slice_runner/` | Programa orquestador | El trozo del pipeline que ya **no** es un agente: `verify`, que calcula el diff de la slice, se lo pasa **dentro del prompt** al juez -invocado como una llamada sin estado, `claude -p` con el esquema del veredicto- y emite el veredicto por salida estandar con su codigo de salida (tabla en "El paso que ya es un programa"); y `explain`, que contesta que paso viene despues de un resultado y cuando se agota un presupuesto, sin montar un run. Capas separadas (`domain/`, `application/`, `infrastructure/`) y tests co-localizados. El *por que* de esta forma esta en `docs/superpowers/specs/2026-07-31-orquestador-como-programa-design.md`. |
+| `src/slice_runner/` | Programa orquestador | El trozo del pipeline que ya **no** es un agente: `run` conduce una slice de punta a punta; `verify`, que calcula el diff de la slice, se lo pasa **dentro del prompt** al juez -invocado como una llamada sin estado, `claude -p` con el esquema del veredicto- y emite el veredicto por salida estandar con su codigo de salida (tabla en "El paso que ya es un programa"); `explain` contesta que paso viene despues de un resultado y cuando se agota un presupuesto, sin montar un run; y `read` abre la conversacion grabada de una llamada concreta. Cada llamada al harness deja su rastro en `src/slice_runner/infrastructure/local_call_trace.py` y cada veredicto de `verify` en `src/slice_runner/infrastructure/local_corpus.py`, los dos escritos fuera del repo (ver "El paso que ya es un programa"). Capas separadas (`domain/`, `application/`, `infrastructure/`) y tests co-localizados. El *por que* de esta forma esta en `docs/superpowers/specs/2026-07-31-orquestador-como-programa-design.md`. |
 | `docs/` | Memoria del proyecto | `conventions/` (la vara de cada capa, cargada a demanda: la tabla de enrutado esta en `CLAUDE.md`), `design-notes.md` (cada decision y su porque, para no re-derivarlo), `research-agent-loops.md` (research citado), `maturity-map.md` (donde encaja el pipeline), `12-factor.md` (auditoria contra los 12 factores + el spike que mide si `claude -p` sirve de agente sin estado), `docs/superpowers/specs/` (un design-doc por cambio). |
 | `tests/` | Unit tests offline | La logica pura se cubre en **dos arboles**: aqui la de los scripts -cuerpo del issue, controles, metricas, nucleo del deploy- y los **contratos duplicados a proposito** entre skills; en `src/slice_runner/tests/`, co-localizada dentro del paquete, la de `src/slice_runner/`. |
 | `smoke/` | Smoke test real | Lo que los unit tests no pueden cubrir: la entrada/salida real contra `gh` y la integracion continua de GitHub Actions, con una fixture autocontenida y las recetas para provocar cada camino de fallo. Ver `smoke/README.md`. |
 
 ### Como interactuan (el contrato entre piezas)
 
-- **El issue es la unica interfaz entre skills.** `slice-spec` lo escribe; `slice-runner` lo lee, elige
-  una slice y reescribe **solo su linea** en cada transicion; `deploy-watch` comenta el veredicto. No
-  hay estado local, ni ledger, ni panel: nada que se desincronice o que haya que descartar.
+- **El issue es la unica interfaz entre skills y programa.** `slice-spec` lo escribe. En el flujo
+  anterior, la skill `/slice-runner` lo lee, elige una slice y reescribe **solo su linea** en cada
+  transicion; en el flujo que conduce hoy una slice, el programa etiqueta la subissue en cada
+  transicion (ver el diagrama de "El flujo de un cambio"). `deploy-watch` comenta el veredicto en los
+  dos flujos. No hay estado local, ni ledger, ni panel: nada que se desincronice o que haya que
+  descartar.
 - **El issue tambien declara la vara.** Sus secciones `## Fuentes de convencion` y `## Controles`
   (descubiertas por los helpers, **confirmadas por una persona**) son lo que fija con que se mide este
   repo. En tiempo de ejecucion ningun agente abre un `Makefile`: si esas secciones faltan,
@@ -141,18 +160,27 @@ son los unicos puntos donde para y decides tu.
 
 ## Como se arranca un ciclo
 
-Solo hay dos comandos, y el segundo se repite:
+El primer paso es siempre el mismo, en los dos flujos: `/slice-spec` disena, trocea y crea el issue,
+una vez por feature. Lo que cambia es como se conduce cada slice despues:
 
 ```
 /slice-spec              # una vez por feature: disena, trocea y crea el issue
-/slice-runner #42        # una vez por slice: la ejecuta hasta CI verde y para
+
+# despues, elige uno:
+uv run slice-runner run 42 --repo <org>/<repo> --base master   # hoy: programa, una invocacion por slice
+/slice-runner #42                                              # flujo anterior: skill, una sesion por slice
 ```
 
-Lo que hay que decidir a mano no es ninguno de los dos, es **donde cortas la sesion**: una sesion por
-slice. `/slice-spec` en la suya, y cada `/slice-runner` en una nueva. No es ceremonia -es que el
-orquestador vive en tu sesion y acumula el run entero (ver "El contexto")-, y es seguro porque **todo
-el estado esta en el issue**: al arrancar re-lee el issue, ve que slices estan mergeadas y coge la
-siguiente. Nada viaja en la conversacion.
+Lo que sigue en esta seccion -la sesion por slice, el aviso de compactar, `/loop`- describe el **flujo
+anterior** con la skill `/slice-runner`, porque es el que necesita que decidas donde cortas la sesion.
+El programa no vive en tu sesion (ver "El paso que ya es un programa" y "El contexto"), asi que nada de
+esto le aplica: se lanza y para solo donde le toca.
+
+Con la skill, lo que hay que decidir a mano no es ninguno de los dos comandos, es **donde cortas la
+sesion**: una sesion por slice. `/slice-spec` en la suya, y cada `/slice-runner` en una nueva. No es
+ceremonia -es que el orquestador vive en tu sesion y acumula el run entero (ver "El contexto")-, y es
+seguro porque **todo el estado esta en el issue**: al arrancar re-lee el issue, ve que slices estan
+mergeadas y coge la siguiente. Nada viaja en la conversacion.
 
 ```
 sesion 1:  /slice-spec        -> issue #42 con la spec y las N slices
@@ -176,6 +204,16 @@ estado; el estado vive en la subissue, asi que una invocacion interrumpida se re
 `--slice` se nombra la slice concreta a conducir en vez de dejar que el programa elija la siguiente,
 lo que permite repartir el trabajo entre varios worktrees; pedir una que no existe en el issue o que no
 es ejecutable falla en cerrado, sin tocar nada.
+
+#### Comandos
+
+| Subcomando | Para que sirve | Ejemplo |
+|---|---|---|
+| `run` | Conduce la siguiente slice ejecutable del issue de punta a punta -alinear, implementar, controlar, verificar, abrir la pull request, esperar la integracion continua- y para donde diga el estado. `--slice` nombra una slice concreta en vez de dejar que el programa elija. | `uv run slice-runner run 38 --repo alcaptar/agentic-skills --base master` |
+| `verify` | Juzga lo que hay staged contra el branch-point de la base y emite el veredicto por salida estandar (o el motivo de no tenerlo, por salida de error). | `uv run slice-runner verify --repo . --base master --slice slice-01` |
+| `explain` | Contesta que paso viene despues de un resultado, y cuando se agota un presupuesto, sin montar un run: es una funcion pura sobre el estado que le llega por entrada estandar. | `echo '{"run": {"step": "run-controls", "control_retries": 2}, "outcome": "failed"}' \| uv run slice-runner explain` |
+| `read` | Abre la conversacion grabada de una llamada concreta del rastro y la emite legible por salida estandar, para que la lea una persona. | `uv run slice-runner read --repo . --slice slice-04 --step implement` |
+| `spend` | Suma lo que gasto el harness en las llamadas que sirvieron un paso de una slice (coste, turnos, duracion, numero de llamadas) y lo emite como JSON. | `uv run slice-runner spend --slice slice-04 --step implement` |
 
 ```bash
 uv run slice-runner run 38 --repo alcaptar/agentic-skills --base master
@@ -261,6 +299,11 @@ donde estaba. El motivo de los dos numeros esta en `docs/conventions/domain.md`.
 que la secuencia no describe **no cae en una rama generica**: sale por `4`.
 
 ## Ejemplo: una feature de punta a punta
+
+Este ejemplo narra el flujo mas antiguo, con la skill `/slice-runner` orquestando los subagentes a mano
+en tu propia sesion (sigue instalable, ver "Instalacion"). Hoy una slice la conduce el programa
+(`uv run slice-runner run`, seccion anterior); la diferencia que se nota desde fuera es la pull request,
+que ahi lleva `Closes #<subissue>` en vez del `Part of #42` que usa este ejemplo.
 
 Supongamos que hoy se pueden crear pedidos con cantidad negativa y el stock queda en negativo sin que
 nadie se entere.
@@ -349,6 +392,11 @@ issue tiene el estado, asi que abrir otra no cuesta nada.
 
 ## El contexto
 
+Esta seccion describe el **flujo anterior**, con la skill `/slice-runner` orquestando a mano en tu
+sesion. En el flujo que conduce hoy una slice, el programa (`uv run slice-runner run`) ya corre fuera
+de la sesion -es un proceso aparte, no una skill que viva en tu conversacion-, asi que nada de lo que
+sigue le aplica.
+
 De las tres skills, la unica que vive en tu sesion es el **orquestador** de `slice-runner`: lee el
 issue, lanza los subagentes, corre los controles y espera la CI. Todo lo caro esta deliberadamente
 **fuera** de el -el output de build va a disco y solo se reenvian rutas; las convenciones, el diff y el
@@ -365,9 +413,12 @@ a `skills/slice-runner/references/por-que.md`, que solo se carga para cambiar la
 metodologia del implementador se fue a su propio agente en vez de redactarla el orquestador en cada
 invocacion. Unas 5.000 palabras menos de contexto por slice.
 
-Lo que **no** esta hecho: sacar al orquestador de tu sesion, que es la unica forma de que el
-aislamiento deje de depender de que tu abras sesion nueva. Pendiente, con sus dos decisiones abiertas,
-al final de `docs/design-notes.md`.
+Sacar al orquestador de la sesion por completo -lo que en su momento quedo pendiente dentro de la skill,
+al final de `docs/design-notes.md`- no se resolvio recortando mas la skill: se resolvio
+reemplazandola. El programa (`uv run slice-runner run`, ver "El paso que ya es un programa") es esa
+salida, hecha como proceso aparte en vez de como skill mas ligera; conducir una slice hoy ya no depende
+de que abras sesion nueva. Lo que sigue vivo de esta seccion es la parte historica: por que la skill,
+mientras fue el flujo que conducia una slice, nunca dejo de vivir en tu sesion.
 
 ## Instalacion
 
@@ -375,6 +426,10 @@ al final de `docs/design-notes.md`.
 `~/.claude/agents/` apuntan por symlink, asi que se editan versionados y siguen activos en Claude
 Code. Ambos directorios son **de usuario**, no de proyecto: valen en cualquier repo donde invoques
 `slice-runner`.
+
+Esto hace falta para las skills -`/slice-spec` (disena y crea el issue en los dos flujos) y el flujo mas
+antiguo con `/slice-runner` y sus agentes-. Conducir una slice con el programa (`uv run slice-runner
+run`, ver "El paso que ya es un programa") no instala nada por symlink: basta con estar en este repo.
 
 ```bash
 ln -s "$PWD/skills/slice-spec" ~/.claude/skills/slice-spec
@@ -414,8 +469,9 @@ cambio de los scripts desde una rama creada en `origin/master`, corres los de `o
 - Convenciones del repo como vara de medir principal.
 - Estado del run en el **issue de GitHub**; el registro duradero son el issue y las pull requests
   mergeadas, no ficheros de estado.
-- La pull request solo lleva el codigo de la slice (conventional commits, `name` como scope,
-  `Part of #N`).
+- La pull request solo lleva el codigo de la slice (conventional commits, `name` como scope): `Part of
+  #N` en el flujo con la skill `/slice-runner`, `Closes #<subissue>` en el flujo que conduce el
+  programa.
 - Control humano en los puntos de riesgo: merge y rollback.
 
 ## Desarrollo
