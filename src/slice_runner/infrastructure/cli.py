@@ -48,6 +48,7 @@ from slice_runner.infrastructure.gh_run_repository import GhCommandFailedError, 
 from slice_runner.infrastructure.git_branches import GitBranches, GitCommandFailedError
 from slice_runner.infrastructure.git_diff_reader import GitDiffReader
 from slice_runner.infrastructure.git_workspace import GitWorkspace
+from slice_runner.infrastructure.local_call_trace import LocalCallTrace
 from slice_runner.infrastructure.local_control_runner import LocalControlRunner
 from slice_runner.infrastructure.local_corpus import LocalCorpus
 from slice_runner.infrastructure.local_process import LocalProcess
@@ -216,7 +217,7 @@ class Cli:
             use_cases=ConductSliceUseCases(
                 select=SelectSlice(repository=repository),
                 prechecks=RunPrechecks(branches=branches, forum=forum),
-                implement=ImplementSlice(implementer=ClaudeImplementer(process=self._process)),
+                implement=ImplementSlice(implementer=ClaudeImplementer(process=self._process, trace=LocalCallTrace())),
                 stage=StageSlice(workspace=workspace),
                 verify=self._action(),
                 deliver=DeliverSlice(workspace=workspace, forum=forum),
@@ -241,7 +242,7 @@ class Cli:
     def _action(self) -> VerifySlice:
         return VerifySlice(
             reader=GitDiffReader(process=self._process),
-            verifier=ClaudeVerifier(process=self._process),
+            verifier=ClaudeVerifier(process=self._process, trace=LocalCallTrace()),
             judge=SliceVerifierJudge.adversarial(),
             skills=LocalSkillLibrary(),
             corpus=LocalCorpus(),

@@ -30,7 +30,7 @@ class HarnessOutput(ContractModel):
     num_turns: int
     permission_denials: tuple[PermissionDenial, ...] = ()
     result: object = None
-    session_id: object = None
+    session_id: str
     stop_reason: object = None
     subtype: object = None
     terminal_reason: object = None
