@@ -39,16 +39,11 @@ class IssueLabel(StrEnum):
     @classmethod
     def _of_the_open_step(cls, step: Step) -> IssueLabel:
         match step:
+            case Step.UNDERSTAND:
+                return cls.AWAITING_ALIGNMENT
             case Step.AWAIT_MERGE:
                 return cls.AWAITING_MERGE
-            case (
-                Step.UNDERSTAND
-                | Step.IMPLEMENT
-                | Step.RUN_CONTROLS
-                | Step.VERIFY
-                | Step.OPEN_PULL_REQUEST
-                | Step.AWAIT_CI
-            ):
+            case Step.IMPLEMENT | Step.RUN_CONTROLS | Step.VERIFY | Step.OPEN_PULL_REQUEST | Step.AWAIT_CI:
                 return cls.IN_PROGRESS
 
     @classmethod

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 from slice_runner.application.actions.deliver_slice import DeliverSliceParams
 from slice_runner.application.actions.implement_slice import ImplementSliceParams
@@ -17,7 +17,6 @@ from slice_runner.domain.event import Event
 from slice_runner.domain.event_status import EventStatus
 from slice_runner.domain.exceptions import (
     DirtyIndexError,
-    ImpossibleTransitionError,
     MeasuredCallError,
     NoPullRequestError,
     NoSliceLeftError,
@@ -214,7 +213,7 @@ class ConductSlice:
         if chosen.subissue.run is not None and chosen.subissue.run.step is not Step.UNDERSTAND:
             return self._conducting(progress)
         if chosen.subissue.label is IssueLabel.AWAITING_ALIGNMENT:
-            return self._responding_to_alignment(progress)
+            return self._conducting(replace(progress, run=replace(progress.run, step=Step.UNDERSTAND)))
 
         return self._aligning(progress)
 
@@ -239,20 +238,14 @@ class ConductSlice:
             worktree=progress.params.worktree, name=progress.subissue.branch, base=progress.params.base
         )
 
-        return self._ending(published, Halt.AWAITING_ALIGNMENT, precheck=precheck)
+        return self._conducting(replace(published, label=IssueLabel.AWAITING_ALIGNMENT))
 
-    def _responding_to_alignment(self, progress: ConductSliceProgress) -> ConductSliceResult:
+    def _awaiting_alignment(self, progress: ConductSliceProgress) -> SteppedSlice:
         response = self._repository.read_alignment_response(repo=progress.params.repo, issue=progress.subissue.number)
-        match response.kind:
-            case AlignmentResponseKind.NOT_YET:
-                return self._ending(progress, Halt.AWAITING_ALIGNMENT)
-            case AlignmentResponseKind.REVIEW:
-                revised = self._publishing_the_understanding(progress, correction=response.correction)
-                return self._ending(revised, Halt.AWAITING_ALIGNMENT)
-            case AlignmentResponseKind.GO:
-                started = replace(progress, run=replace(progress.run, step=Step.IMPLEMENT))
-                self._writing(started, run=started.run)
-                return self._conducting(started)
+        if response.kind is AlignmentResponseKind.REVIEW:
+            progress = self._publishing_the_understanding(progress, correction=response.correction)
+
+        return SteppedSlice(progress=progress, outcome=Outcome.of_the_alignment(response.kind))
 
     def _publishing_the_understanding(self, progress: ConductSliceProgress, *, correction: str) -> ConductSliceProgress:
         understanding = self._understanding.write(
@@ -263,15 +256,13 @@ class ConductSlice:
             correction=correction,
         )
         published = replace(progress, spends=(*progress.spends, understanding.spend))
-        self._persisting_the_understanding(published)
+        run = replace(published.run, step=Step.UNDERSTAND, spend=published.spend)
+        self._writing(published, run=run)
         self._repository.write_understanding(
             repo=progress.params.repo, issue=progress.subissue.number, understanding=understanding.text
         )
 
-        return published
-
-    def _persisting_the_understanding(self, progress: ConductSliceProgress) -> None:
-        self._writing(progress, run=replace(progress.run, step=Step.UNDERSTAND, spend=progress.spend))
+        return replace(published, run=run)
 
     def _conducting(self, progress: ConductSliceProgress) -> ConductSliceResult:
         while True:
@@ -298,14 +289,30 @@ class ConductSlice:
 
     def _stepping(self, progress: ConductSliceProgress) -> SteppedSlice | HaltedSlice:
         match progress.run.step:
+            case Step.UNDERSTAND | Step.IMPLEMENT | Step.RUN_CONTROLS | Step.VERIFY:
+                return self._stepping_while_producing(progress, progress.run.step)
+            case Step.OPEN_PULL_REQUEST | Step.AWAIT_CI | Step.AWAIT_MERGE:
+                return self._stepping_while_delivering(progress, progress.run.step)
+
+    def _stepping_while_producing(
+        self,
+        progress: ConductSliceProgress,
+        step: Literal[Step.UNDERSTAND, Step.IMPLEMENT, Step.RUN_CONTROLS, Step.VERIFY],
+    ) -> SteppedSlice:
+        match step:
             case Step.UNDERSTAND:
-                raise ImpossibleTransitionError(f"no persisted run steps on `{Step.UNDERSTAND}`, so none is conducted")
+                return self._awaiting_alignment(progress)
             case Step.IMPLEMENT:
                 return self._implementing(progress)
             case Step.RUN_CONTROLS:
                 return self._running_the_controls(progress)
             case Step.VERIFY:
                 return self._judging(progress)
+
+    def _stepping_while_delivering(
+        self, progress: ConductSliceProgress, step: Literal[Step.OPEN_PULL_REQUEST, Step.AWAIT_CI, Step.AWAIT_MERGE]
+    ) -> SteppedSlice | HaltedSlice:
+        match step:
             case Step.OPEN_PULL_REQUEST:
                 return self._opening_the_pull_request(progress)
             case Step.AWAIT_CI:

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-from typing import TYPE_CHECKING, NoReturn
+from typing import TYPE_CHECKING, Literal, NoReturn
 
 from slice_runner.domain.exceptions import ImpossibleTransitionError
 from slice_runner.domain.outcome import Outcome
@@ -19,8 +19,6 @@ class StateMachine:
     budgets: Budgets
 
     def after(self, run: Run, outcome: Outcome) -> Transition:
-        if run.step is Step.UNDERSTAND:
-            self._impossible(run, outcome)
         if outcome is Outcome.OVER_BUDGET:
             return self._closed(run, RunState.ABORTED_BUDGET)
 
@@ -28,20 +26,46 @@ class StateMachine:
 
     def _after_the_step_of(self, run: Run, outcome: Outcome) -> Transition:
         match run.step:
+            case Step.UNDERSTAND | Step.IMPLEMENT | Step.RUN_CONTROLS | Step.VERIFY:
+                return self._after_producing(run, outcome, run.step)
+            case Step.OPEN_PULL_REQUEST | Step.AWAIT_CI | Step.AWAIT_MERGE:
+                return self._after_delivering(run, outcome, run.step)
+
+    def _after_producing(
+        self,
+        run: Run,
+        outcome: Outcome,
+        step: Literal[Step.UNDERSTAND, Step.IMPLEMENT, Step.RUN_CONTROLS, Step.VERIFY],
+    ) -> Transition:
+        match step:
             case Step.UNDERSTAND:
-                self._impossible(run, outcome)
+                return self._after_the_alignment_pause(run, outcome)
             case Step.IMPLEMENT:
                 return self._after_implementing(run, outcome)
             case Step.RUN_CONTROLS:
                 return self._after_the_controls(run, outcome)
             case Step.VERIFY:
                 return self._after_the_judge(run, outcome)
+
+    def _after_delivering(
+        self, run: Run, outcome: Outcome, step: Literal[Step.OPEN_PULL_REQUEST, Step.AWAIT_CI, Step.AWAIT_MERGE]
+    ) -> Transition:
+        match step:
             case Step.OPEN_PULL_REQUEST:
                 return self._after_the_pull_request(run, outcome)
             case Step.AWAIT_CI:
                 return self._after_asking_the_ci(run, outcome)
             case Step.AWAIT_MERGE:
                 return self._after_asking_for_the_merge(run, outcome)
+
+    def _after_the_alignment_pause(self, run: Run, outcome: Outcome) -> Transition:
+        match outcome:
+            case Outcome.DONE:
+                return self._moving_to(run, Step.IMPLEMENT)
+            case Outcome.PENDING:
+                return self._ticking(run)
+            case _:
+                self._impossible(run, outcome)
 
     def _after_implementing(self, run: Run, outcome: Outcome) -> Transition:
         if outcome is Outcome.DONE:
