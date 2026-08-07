@@ -23,3 +23,4 @@ class Assignment:
     controls: Controls
     findings: tuple[Finding, ...] = ()
     control_logs: tuple[Path, ...] = ()
+    hygiene_refusal: str = ""

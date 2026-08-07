@@ -13,6 +13,8 @@ class HarnessTurn:
     slice_id: str
     step: Step
     number: int
+    tool: str
+    target: str | None
 
 
 class TurnLog(ABC):

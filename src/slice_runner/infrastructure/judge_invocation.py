@@ -4,6 +4,7 @@ import json
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar
 
+from slice_runner.infrastructure.counted_lines import CountedLines
 from slice_runner.infrastructure.verdict_payload import VerdictPayload
 
 if TYPE_CHECKING:
@@ -52,24 +53,21 @@ class JudgeInvocation:
                 f"- slice: {review.slice_id}",
                 f"- ruta del repo: {review.repo}",
                 f"- senal: {review.signal}",
-                *self._counted("criterios de aceptacion", review.criteria),
-                *self._counted(
+                *CountedLines.of("criterios de aceptacion", review.criteria),
+                *CountedLines.of(
                     "fuentes de convencion", tuple(f"{source.kind}: {source.path}" for source in review.sources)
                 ),
-                *self._counted(
+                *CountedLines.of(
                     "checklist de slices del issue",
                     tuple(f"[{entry.state}] {entry.title}" for entry in review.checklist),
                 ),
-                *self._counted("ficheros que toca la slice", review.diff.files),
-                *self._counted(
+                *CountedLines.of("ficheros que toca la slice", review.diff.files),
+                *CountedLines.of(
                     "directorios que puedes leer", tuple(str(directory) for directory in self.judge.readable)
                 ),
             ]
         )
 
-    @staticmethod
-    def _counted(heading: str, entries: tuple[str, ...]) -> list[str]:
-        return [f"- {heading} ({len(entries)}):", *(f"  - {entry}" for entry in entries)]
 
     @property
     def _diff(self) -> str:

@@ -121,12 +121,16 @@ importar**: un smoke que solo importe el modulo lo da por bueno. Lo evita
   al final es lo que evita que un delimitador tenga que sobrevivir a su propio contenido -en el juez, el
   diff es literalmente lo ultimo del prompt-.
 
-  Las dos invocaciones llevan **su propio `_counted`** -el par "encabezado con cuantos son" mas una linea
-  por entrada- en vez de compartirlo, por el mismo motivo por el que `ClaudeConfig` no existio hasta que
-  tuvo tres consumidores (bullet siguiente): lo que comparten no es una regla del programa sino la forma
-  de una lista, cada prompt es un contrato con un agente distinto y **nada exige que se parezcan**, asi
-  que extraerlas hoy fijaria un parecido que no es invariante. Con un tercer prompt se extrae, y esa
-  condicion ya se ha cobrado una vez, asi que no es una promesa que nadie piense cumplir.
+  Las tres invocaciones comparten **`CountedLines`** -el par "encabezado con cuantos son" mas una linea
+  por entrada-. **Vivio duplicada en dos a proposito**, por el mismo motivo por el que `ClaudeConfig` no
+  existio hasta tener tres consumidores: lo que comparten no es una regla del programa sino la forma de
+  una lista, cada prompt es un contrato con un agente distinto y nada exige que se parezcan, asi que
+  extraerla con dos habria fijado un parecido que no era invariante. El texto anterior declaraba que
+  **con un tercer prompt se extrae**; el entendimiento fue ese tercero y la condicion se cumplio, aunque
+  no sola: el juez veto la slice con severidad `alta` citando esta misma linea.
+
+  Que se cumpliera importa mas que la regla concreta. Una condicion escrita que luego nadie ejecuta
+  ensena que este fichero es opinion; esta lleva dos veces disparando.
 
   **Hay dos invocadores del juez y solo uno llena esos campos.** `ConductSlice._judging` los llena
   enteros -senal, criterios y fuentes de la slice, y el checklist del issue-, porque el conductor tiene

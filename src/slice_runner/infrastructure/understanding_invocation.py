@@ -4,6 +4,7 @@ import json
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar
 
+from slice_runner.infrastructure.counted_lines import CountedLines
 from slice_runner.infrastructure.understanding_brief import UnderstandingBrief
 from slice_runner.infrastructure.understanding_report_payload import UnderstandingReportPayload
 
@@ -62,8 +63,8 @@ class UnderstandingInvocation:
                 f"- ruta del repo: {self.worktree}",
                 f"- intencion: {subissue.intention}",
                 f"- senal: {subissue.signal}",
-                *self._counted("criterios de aceptacion", subissue.criteria),
-                *self._counted(
+                *CountedLines.of("criterios de aceptacion", subissue.criteria),
+                *CountedLines.of(
                     "fuentes de convencion", tuple(f"{source.kind}: {source.path}" for source in self.parent.sources)
                 ),
                 *self._controls,
@@ -79,10 +80,7 @@ class UnderstandingInvocation:
         if controls.exemption_reason is not None:
             return [f"- controles del repo: ninguno - {controls.exemption_reason}"]
 
-        return cls._counted(
+        return CountedLines.of(
             "controles del repo", tuple(f"{control.name}: {control.command}" for control in controls.commands)
         )
 
-    @staticmethod
-    def _counted(heading: str, entries: tuple[str, ...]) -> list[str]:
-        return [f"- {heading} ({len(entries)}):", *(f"  - {entry}" for entry in entries)]

@@ -116,6 +116,37 @@ class TestWhatOfTheHarnessIsWritten:
 
         assert not argv.contains("--coste-tokens")
 
+    def test_the_cache_read_tokens_travel_next_to_the_rest_of_what_the_harness_measured(self) -> None:
+        argv = TheRecord.of(ClosedSliceMother.merged_measuring(HarnessSpendMother.of_the_judge_call()))
+
+        assert argv.value_of("--tokens-cache") == "15510"
+
+    def test_the_model_the_harness_declares_travels_and_not_the_alias_the_program_requested(self) -> None:
+        argv = TheRecord.of(ClosedSliceMother.merged_measuring(HarnessSpendMother.of_the_implementer_call()))
+
+        assert argv.values_of("--modelo") == ["claude-sonnet-5"]
+
+    def test_a_slice_that_used_more_than_one_model_writes_every_one_of_them(self) -> None:
+        argv = TheRecord.of(
+            ClosedSliceMother.merged_measuring(
+                HarnessSpendMother.of_the_implementer_call(), HarnessSpendMother.of_the_judge_call()
+            )
+        )
+
+        assert argv.values_of("--modelo") == ["claude-haiku-4-5-20251001", "claude-sonnet-5"]
+
+    def test_with_nothing_measured_no_model_or_cache_figure_is_written(self) -> None:
+        argv = TheRecord.of(ClosedSliceMother.merged_measuring_nothing())
+
+        assert [flag for flag in ("--modelo", "--tokens-cache") if argv.contains(flag)] == []
+
+
+class TestWhatVariantIsWritten:
+    def test_every_record_the_program_builds_names_the_variant_that_is_conducting_the_slice(self) -> None:
+        argv = TheRecord.of(ClosedSliceMother.merged())
+
+        assert argv.value_of("--variante") == MetricsInvocation.VARIANT
+
 
 class TestWhatTheRunAlreadyCounted:
     def test_the_retries_of_implementing_are_the_sum_of_the_three_ways_back_to_that_step(self) -> None:

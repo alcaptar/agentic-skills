@@ -612,6 +612,26 @@ class TestConductSliceWhenTheControlsComeBackRed:
         assert conductor.controls.run.call_count == 0
         assert result.state is RunState.BLOCKED_CONTROLS
 
+    def test_the_reason_the_index_was_refused_reaches_the_next_implementer_so_it_does_not_repeat_it(self) -> None:
+        conductor = self._conductor(budgets=Budgets(control_retries=1))
+        conductor.stage.execute.side_effect = [DirtyIndexError("src/leftover.py (not-declared)"), None]
+
+        conductor.conduct()
+
+        ordered = [call.args[0].hygiene_refusal for call in conductor.implement.execute.call_args_list]
+        assert ordered[0] == ""
+        assert "src/leftover.py (not-declared)" in ordered[1]
+
+    def test_the_refusal_does_not_travel_to_a_round_whose_controls_did_run(self) -> None:
+        conductor = self._conductor(budgets=Budgets(control_retries=2))
+        conductor.stage.execute.side_effect = [DirtyIndexError("src/leftover.py (not-declared)"), None, None]
+        conductor.controls.run.side_effect = [ControlOutcomeMother.red(), ControlOutcomeMother.green()]
+
+        conductor.conduct()
+
+        ordered = [call.args[0].hygiene_refusal for call in conductor.implement.execute.call_args_list]
+        assert ordered[2] == ""
+
     def test_the_exhausted_control_budget_closes_the_run_writes_its_label_and_records_the_row(self) -> None:
         conductor = self._conductor(budgets=Budgets(control_retries=0))
         conductor.controls.run.return_value = ControlOutcomeMother.red()

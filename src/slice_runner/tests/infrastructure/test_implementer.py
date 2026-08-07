@@ -150,6 +150,16 @@ class TestTheSliceDataThatTravelsWithTheBrief:
             "- logs de los controles en rojo (1):\n  - /tmp/slice-runner/logs/lint.log"
         )
 
+    def test_a_round_refused_for_a_dirty_index_says_so_and_names_the_files_that_were_not_declared(self) -> None:
+        sent = self._sent(AssignmentMother.of_a_round_after_a_dirty_index())
+
+        assert "la vuelta anterior no llego a medirse" in sent
+        assert "src/leftover.py (not-declared)" in sent
+        assert "declara en tu informe TODO fichero que toques" in sent
+
+    def test_a_round_that_measured_carries_no_refusal_because_there_was_nothing_to_refuse(self) -> None:
+        assert "no llego a medirse" not in self._sent(AssignmentMother.of_the_first_round())
+
     def test_a_repo_exempt_from_controls_carries_its_reason_and_no_command_to_run(self) -> None:
         assert "- controles del repo: ninguno - la integracion continua solo publica en master\n" in self._sent(
             AssignmentMother.of_a_repo_exempt_from_controls()
@@ -225,7 +235,7 @@ class TestTheTraceOfTheCall:
 
 
 class TestTheTurnsObservedWhileTheCallIsInFlight:
-    def test_every_assistant_line_of_a_real_streamed_call_is_observed_in_order(self) -> None:
+    def test_every_tool_use_of_a_real_streamed_call_is_observed_in_order_with_the_tool_and_its_target(self) -> None:
         process = StreamingProcess(HarnessEnvelopeMother.streamed())
         turns = RecordedTurnLog()
 
@@ -233,13 +243,20 @@ class TestTheTurnsObservedWhileTheCallIsInFlight:
             AssignmentMother.of_the_first_round()
         )
 
-        assert [(turn.slice_id, turn.step, turn.number) for turn in turns.turns] == [
-            ("slice-05", Step.IMPLEMENT, 1),
-            ("slice-05", Step.IMPLEMENT, 2),
-            ("slice-05", Step.IMPLEMENT, 3),
-            ("slice-05", Step.IMPLEMENT, 4),
-            ("slice-05", Step.IMPLEMENT, 5),
+        assert [(turn.slice_id, turn.step, turn.number, turn.tool, turn.target) for turn in turns.turns] == [
+            ("slice-05", Step.IMPLEMENT, 1, "Write", "/private/tmp/stream-capture2/repo/hello.py"),
+            ("slice-05", Step.IMPLEMENT, 2, "StructuredOutput", None),
         ]
+
+    def test_thinking_and_text_blocks_are_not_observed_because_they_name_no_tool(self) -> None:
+        process = StreamingProcess(HarnessEnvelopeMother.streamed())
+        turns = RecordedTurnLog()
+
+        ClaudeImplementer(process=process, trace=RecordedTrace(), turns=turns).implement(
+            AssignmentMother.of_the_first_round()
+        )
+
+        assert len(turns.turns) == 2
 
     def test_lines_that_are_not_an_assistant_turn_are_not_observed(self) -> None:
         process = StreamingProcess('{"type":"system","subtype":"init"}\n' + HarnessEnvelopeMother.streamed())
@@ -249,7 +266,7 @@ class TestTheTurnsObservedWhileTheCallIsInFlight:
             AssignmentMother.of_the_first_round()
         )
 
-        assert len(turns.turns) == 5
+        assert len(turns.turns) == 2
 
     def test_a_line_that_is_not_json_at_all_is_skipped_instead_of_raising(self) -> None:
         process = StreamingProcess("not json\n" + HarnessEnvelopeMother.streamed())
@@ -259,7 +276,25 @@ class TestTheTurnsObservedWhileTheCallIsInFlight:
             AssignmentMother.of_the_first_round()
         )
 
-        assert len(turns.turns) == 5
+        assert len(turns.turns) == 2
+
+    def test_a_tool_use_block_whose_shape_this_program_cannot_read_is_skipped_instead_of_aborting_the_call(
+        self,
+    ) -> None:
+        unreadable = json.dumps(
+            {
+                "type": "assistant",
+                "message": {"content": [{"type": "tool_use", "id": "x", "name": "Write", "input": "not-a-dict"}]},
+            }
+        )
+        process = StreamingProcess(unreadable + "\n" + HarnessEnvelopeMother.streamed())
+        turns = RecordedTurnLog()
+
+        ClaudeImplementer(process=process, trace=RecordedTrace(), turns=turns).implement(
+            AssignmentMother.of_the_first_round()
+        )
+
+        assert len(turns.turns) == 2
 
 
 class TestANonEmptyPermissionDenialsFailsTheCall:

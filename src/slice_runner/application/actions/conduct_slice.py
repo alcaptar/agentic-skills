@@ -95,6 +95,7 @@ class ConductSliceProgress:
     spends: tuple[HarnessSpend, ...] = field(default=())
     control_logs: tuple[Path, ...] = field(default=())
     control_rounds: int = 0
+    hygiene_refusal: str = ""
     pull_request: int | None = None
     waited_seconds: int = 0
     discard_cause: DiscardCause | None = None
@@ -298,6 +299,7 @@ class ConductSlice:
                 parent=progress.parent,
                 findings=progress.findings_of_the_last_round,
                 control_logs=progress.control_logs,
+                hygiene_refusal=progress.hygiene_refusal,
             )
         )
 
@@ -313,10 +315,13 @@ class ConductSlice:
     def _running_the_controls(self, progress: ConductSliceProgress) -> SteppedSlice:
         try:
             self._stage.execute(StageSliceParams(worktree=progress.params.worktree, paths=progress.paths))
-        except DirtyIndexError:
-            return SteppedSlice(progress=replace(progress, control_logs=()), outcome=Outcome.FAILED)
+        except DirtyIndexError as refusal:
+            return SteppedSlice(
+                progress=replace(progress, control_logs=(), hygiene_refusal=str(refusal)),
+                outcome=Outcome.FAILED,
+            )
 
-        round_progress = replace(progress, control_rounds=progress.control_rounds + 1)
+        round_progress = replace(progress, control_rounds=progress.control_rounds + 1, hygiene_refusal="")
         outcomes = self._ran_controls(round_progress)
         red = tuple(
             outcome.log for outcome in outcomes if outcome.status is ControlStatus.RED and outcome.log is not None

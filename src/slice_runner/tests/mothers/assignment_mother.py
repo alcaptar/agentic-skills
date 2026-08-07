@@ -38,5 +38,12 @@ class AssignmentMother:
         return replace(cls.of_the_first_round(), control_logs=(ControlOutcomeMother.LOG,))
 
     @classmethod
+    def of_a_round_after_a_dirty_index(cls) -> Assignment:
+        return replace(
+            cls.of_the_first_round(),
+            hygiene_refusal="the staged index is not what the implementer reported: src/leftover.py (not-declared)",
+        )
+
+    @classmethod
     def of_a_repo_exempt_from_controls(cls) -> Assignment:
         return replace(cls.of_the_first_round(), controls=ParentIssueMother.with_exempt_controls().controls)

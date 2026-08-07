@@ -607,7 +607,10 @@ def test_the_record_the_program_builds_is_one_the_metrics_cli_accepts(tmp_path: 
         "coste_usd": closed.spend.cost_usd,
         "turnos": closed.spend.turns,
         "duracion_ms": closed.spend.duration_ms,
+        "tokens_cache": closed.spend.cache_read_tokens,
     }
+    assert row["modelos"] == list(closed.spend.models)
+    assert row["variante"] == MetricsInvocation.VARIANT
     assert row["descartes_verify_causa"] == str(DurableDiscardCause.FAILED_CALL)
 
 
