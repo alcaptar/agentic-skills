@@ -196,6 +196,19 @@ su conversacion. Es lo que permite abrir la conversacion de una llamada concreta
 `~/.claude/projects/`, una por sesion- sin adivinar por marcas de tiempo entre decenas de ficheros. Tambien
 append-only y tambien fuera del repo, y por el mismo motivo.
 
+`read` es quien la abre:
+
+```bash
+uv run slice-runner read --repo . --slice slice-04 --step implement
+```
+
+Parte de ese rastro -nunca de una busqueda por marca de tiempo- para encontrar la sesion, y de ahi lee
+directamente la conversacion grabada por Claude Code: cuantos turnos tuvo, que herramienta uso cada uno,
+que leyo de vuelta y que decidio en texto, con el gasto en tokens de la conversacion entera. Lo emite como
+texto legible por salida estandar, no JSON -es para que lo lea una persona, no otro programa-. Sin una
+llamada de ese paso en el rastro, o sin la conversacion todavia en disco, sale por `4`: no hay nada que
+abrir con lo que se le paso.
+
 El codigo de salida es el contrato con quien lo invoca:
 
 | | Que significa |
@@ -204,7 +217,7 @@ El codigo de salida es el contrato con quien lo invoca:
 | `1` | FALLA: el juez veta la slice |
 | `2` | No hay veredicto de fiar: un proceso del run no se pudo lanzar, o el juez devolvio un veredicto incoherente |
 | `3` | No hay nada que juzgar: el indice esta vacio (¿falto el `git add`?) |
-| `4` | Error de uso: el repo o la base no resuelven, falta un argumento, o el issue o el estado que se quiere leer no se pueden leer |
+| `4` | Error de uso: el repo o la base no resuelven, falta un argumento, el issue o el estado que se quiere leer no se pueden leer, o `read` no encuentra la conversacion pedida |
 | `5` | `run`: la slice cerro **sin** mergear (controles, juez, integracion continua o presupuesto). Hay que mirar el issue; reinvocar sin tocar nada repite el cierre |
 | `6` | `run`: la slice espera a una persona (pausa de alineacion). Reinvocar no sirve hasta que alguien conteste |
 | `7` | `run`: se agoto la espera con el run todavia abierto. Reinvocar es exactamente lo que toca |

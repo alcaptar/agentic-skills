@@ -88,3 +88,19 @@ class LaggingSearchIndexError(ValueError):
 
 class NoSliceLeftError(LookupError):
     pass
+
+
+class NoConversationRecordedError(LookupError):
+    pass
+
+
+class UnreadableCallTraceError(ValueError):
+    pass
+
+
+class ConversationNotFoundError(OSError):
+    pass
+
+
+class UnreadableConversationError(ValueError):
+    pass

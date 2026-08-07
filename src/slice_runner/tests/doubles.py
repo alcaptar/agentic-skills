@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, ClassVar
 from unittest.mock import Mock, create_autospec
 
-from slice_runner.infrastructure.call_trace import CallTrace
+from slice_runner.domain.call_trace import CallTrace
 from slice_runner.infrastructure.judge_invocation import JudgeInvocation
 from slice_runner.infrastructure.process import (
     Process,
@@ -19,7 +19,8 @@ from slice_runner.tests.real_process import Real
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from slice_runner.infrastructure.call_trace import HarnessCall
+    from slice_runner.domain.call_trace import HarnessCall
+    from slice_runner.domain.step import Step
     from slice_runner.infrastructure.turn_log import HarnessTurn
 
 
@@ -213,6 +214,9 @@ class RecordedTrace(CallTrace):
 
     def record(self, call: HarnessCall) -> None:
         self.calls.append(call)
+
+    def sessions_of(self, *, slice_id: str, step: Step) -> tuple[str, ...]:
+        return tuple(call.session for call in self.calls if call.slice_id == slice_id and call.step == step)
 
 
 class RecordedTurnLog(TurnLog):

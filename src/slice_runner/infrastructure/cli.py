@@ -17,16 +17,19 @@ from slice_runner.application.actions.deliver_slice import DeliverSlice
 from slice_runner.application.actions.implement_slice import ImplementSlice
 from slice_runner.application.actions.stage_slice import StageSlice
 from slice_runner.application.actions.verify_slice import VerifySlice, VerifySliceParams
+from slice_runner.application.queries.read_conversation import ReadConversation, ReadConversationParams
 from slice_runner.application.queries.run_prechecks import RunPrechecks
 from slice_runner.application.queries.select_slice import SelectSlice
 from slice_runner.domain.budgets import Budgets
 from slice_runner.domain.exceptions import (
     BranchMismatchError,
+    ConversationNotFoundError,
     DiffNotReadableError,
     ImpossibleTransitionError,
     InvalidHarnessOutputError,
     LaggingSearchIndexError,
     MeasuredCallError,
+    NoConversationRecordedError,
     NoPullRequestError,
     NoSliceLeftError,
     ProtectedBranchError,
@@ -37,10 +40,12 @@ from slice_runner.domain.exceptions import (
     UnresolvableRepoOrBaseError,
 )
 from slice_runner.domain.state_machine import StateMachine
+from slice_runner.domain.step import Step
 from slice_runner.infrastructure.claude_deploy_watch import ClaudeDeployWatch
 from slice_runner.infrastructure.claude_implementer import ClaudeImplementer
 from slice_runner.infrastructure.claude_verifier import ClaudeVerifier
 from slice_runner.infrastructure.conducted_slice_payload import ConductedSlicePayload
+from slice_runner.infrastructure.conversation_report import ConversationReport
 from slice_runner.infrastructure.exit_code import ExitCode
 from slice_runner.infrastructure.gh_ci import GhCi
 from slice_runner.infrastructure.gh_forum import GhForum
@@ -50,6 +55,7 @@ from slice_runner.infrastructure.git_diff_reader import GitDiffReader
 from slice_runner.infrastructure.git_workspace import GitWorkspace
 from slice_runner.infrastructure.local_call_trace import LocalCallTrace
 from slice_runner.infrastructure.local_control_runner import LocalControlRunner
+from slice_runner.infrastructure.local_conversation_log import LocalConversationLog
 from slice_runner.infrastructure.local_corpus import LocalCorpus
 from slice_runner.infrastructure.local_process import LocalProcess
 from slice_runner.infrastructure.local_skill_library import LocalSkillLibrary
@@ -125,6 +131,8 @@ class Cli:
                         slice_id=arguments.slice_id,
                     )
                 )
+            case Subcommand.READ:
+                return cls.read(repo=arguments.repo, slice_id=arguments.slice_id, step=Step(arguments.step))
 
     @classmethod
     def parser(cls) -> argparse.ArgumentParser:
@@ -160,6 +168,13 @@ class Cli:
             help="identifier of the one slice to conduct, e.g. `slice-01`; without it, the next runnable one is chosen",
         )
 
+        read = subcommands.add_parser(
+            Subcommand.READ, help="print the conversation of the last call that served a slice's step, as text"
+        )
+        read.add_argument("--repo", required=True, help="path of the slice's repo, as it was when the call ran")
+        read.add_argument("--slice", dest="slice_id", required=True, help="identifier of the slice to read")
+        read.add_argument("--step", required=True, choices=[str(x) for x in Step], help="step whose call is read")
+
         return parser
 
     @classmethod
@@ -171,6 +186,23 @@ class Cli:
             return cls._reported(f"there is no transition to explain: {error}", ExitCode.USAGE_ERROR)
 
         print(json.dumps(TransitionPayload.from_domain(transition).to_contract(), ensure_ascii=False))
+
+        return ExitCode.OK
+
+    @classmethod
+    def read(cls, *, repo: str, slice_id: str, step: Step) -> int:
+        try:
+            result = ReadConversation(trace=LocalCallTrace(), log=LocalConversationLog()).execute(
+                ReadConversationParams(repo=repo, slice_id=slice_id, step=step)
+            )
+        except (NoConversationRecordedError, ConversationNotFoundError) as error:
+            return cls._reported(f"there is no conversation to read: {error}", ExitCode.USAGE_ERROR)
+
+        print(
+            ConversationReport(
+                slice_id=slice_id, step=step, session=result.session, conversation=result.conversation
+            ).rendered()
+        )
 
         return ExitCode.OK
 

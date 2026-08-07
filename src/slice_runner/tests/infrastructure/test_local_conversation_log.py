@@ -1,0 +1,128 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+import pytest
+
+from slice_runner.domain.exceptions import ConversationNotFoundError, UnreadableConversationError
+from slice_runner.infrastructure.claude_config import ClaudeConfig
+from slice_runner.infrastructure.local_conversation_log import LocalConversationLog
+from slice_runner.tests.mothers.conversation_transcript_mother import ConversationTranscriptMother
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+_REPO = "/Users/someone/repos/the-slice"
+_WARNING_EXCERPT = (
+    "\x1b[1m\x1b[33mwarning\x1b[39m\x1b[0m\x1b[1m:\x1b[0m \x1b[1m`VIRTUAL_ENV=/Users/acapdev/repos/agentic-skills/"
+    ".venv` does not match the project environment path `.venv` and will be ignored; use `--active` to target "
+    "the active environment instead\x1b[0m Using CPython \x1b[36m3.14.3\x1b[39m\x1b[36m\x1b[39m Creating virtual "
+    "environment at: \x1b[36m.venv\x1b[39m \x1b[36m\x1b[1mBuilding\x1b[0m\x1b[39m agentic-skills\x1b[2m @ "
+    "file:///Users/acapdev/repos/as-turnos\x1b[0m \x1b[32m\x1b[1mBuilt\x1b[0m\x1b[39m agentic-skills\x1b[2m @ "
+    "file:///Users/acapdev/repos/as-turnos\x1b[0m \x1b[2mI"
+)
+
+
+class WithARecordedConversation:
+    @pytest.fixture(autouse=True)
+    def transcript(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
+        ConversationTranscriptMother.written_under(tmp_path, repo=_REPO)
+
+
+class TestTheTurnsOfARecordedConversation(WithARecordedConversation):
+    def test_every_assistant_line_is_counted_as_a_turn_even_a_thinking_only_one(self) -> None:
+        conversation = LocalConversationLog().read(session=ConversationTranscriptMother.SESSION, repo=_REPO)
+
+        assert [turn.number for turn in conversation.turns] == [1, 2, 3, 4]
+
+    def test_the_text_a_turn_said_is_kept_as_what_it_decided(self) -> None:
+        conversation = LocalConversationLog().read(session=ConversationTranscriptMother.SESSION, repo=_REPO)
+
+        assert conversation.turns[0].text == "Now let's confirm RED before implementing:"
+
+    def test_a_turn_with_no_text_because_it_only_carried_a_tool_call_or_thinking_has_none(self) -> None:
+        conversation = LocalConversationLog().read(session=ConversationTranscriptMother.SESSION, repo=_REPO)
+
+        assert conversation.turns[1].text == ""
+        assert conversation.turns[2].text == ""
+
+    def test_the_tool_a_turn_called_is_kept_with_its_input_as_the_summary(self) -> None:
+        conversation = LocalConversationLog().read(session=ConversationTranscriptMother.SESSION, repo=_REPO)
+
+        called = conversation.turns[1].tool_calls
+        assert len(called) == 1
+        assert called[0].name == "Bash"
+        assert "uv run pytest src/slice_runner/tests/infrastructure/test_local_process.py" in called[0].summary
+
+    def test_the_result_of_the_tool_call_is_kept_as_what_it_read(self) -> None:
+        conversation = LocalConversationLog().read(session=ConversationTranscriptMother.SESSION, repo=_REPO)
+
+        assert conversation.turns[1].tool_calls[0].result == _WARNING_EXCERPT
+        assert conversation.turns[3].tool_calls[0].result == "18: process_timeout_seconds: int = 3600"
+
+    def test_a_thinking_only_turn_has_no_tool_call(self) -> None:
+        conversation = LocalConversationLog().read(session=ConversationTranscriptMother.SESSION, repo=_REPO)
+
+        assert conversation.turns[2].tool_calls == ()
+
+
+class TestTheSpendOfARecordedConversation(WithARecordedConversation):
+    def test_the_usage_of_every_distinct_message_is_summed_only_once_even_if_it_is_split_across_lines(self) -> None:
+        conversation = LocalConversationLog().read(session=ConversationTranscriptMother.SESSION, repo=_REPO)
+
+        spend = conversation.spend
+        assert (spend.input_tokens, spend.output_tokens) == (4, 450)
+        assert (spend.cache_creation_tokens, spend.cache_read_tokens) == (3752, 418026)
+
+
+class TestWhereTheConversationLives:
+    def test_the_repo_path_is_encoded_by_replacing_every_slash_with_a_dash(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
+        ConversationTranscriptMother.written_under(tmp_path, repo=_REPO)
+
+        conversation = LocalConversationLog().read(session=ConversationTranscriptMother.SESSION, repo=_REPO)
+
+        assert len(conversation.turns) == 4
+
+    def test_a_session_never_recorded_under_that_repo_is_refused_instead_of_guessing(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
+
+        with pytest.raises(ConversationNotFoundError):
+            LocalConversationLog().read(session="never-recorded", repo=_REPO)
+
+
+class TestAnUnreadableTranscript:
+    def test_a_line_that_is_not_json_is_refused_instead_of_silently_dropped(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
+        session = "broken-session"
+        encoded = _REPO.rstrip("/").replace("/", "-")
+        destination = tmp_path / "projects" / encoded / f"{session}.jsonl"
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_text("not json at all\n", encoding="utf-8")
+
+        with pytest.raises(UnreadableConversationError):
+            LocalConversationLog().read(session=session, repo=_REPO)
+
+    def test_a_tool_use_block_whose_input_is_not_an_object_is_refused_instead_of_stringified(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
+        session = "broken-session"
+        encoded = _REPO.rstrip("/").replace("/", "-")
+        destination = tmp_path / "projects" / encoded / f"{session}.jsonl"
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        line = (
+            '{"type":"assistant","message":{"id":"msg_1","content":'
+            '[{"type":"tool_use","id":"toolu_1","name":"Bash","input":"not an object"}],"usage":{}}}'
+        )
+        destination.write_text(f"{line}\n", encoding="utf-8")
+
+        with pytest.raises(UnreadableConversationError):
+            LocalConversationLog().read(session=session, repo=_REPO)

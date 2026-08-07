@@ -7,3 +7,4 @@ class Subcommand(StrEnum):
     VERIFY = "verify"
     EXPLAIN = "explain"
     RUN = "run"
+    READ = "read"

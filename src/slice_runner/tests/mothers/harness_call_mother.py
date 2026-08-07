@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from typing import ClassVar
 
+from slice_runner.domain.call_trace import HarnessCall
 from slice_runner.domain.step import Step
-from slice_runner.infrastructure.call_trace import HarnessCall
 from slice_runner.tests.mothers.judge_output_mother import HarnessEnvelopeMother
 
 

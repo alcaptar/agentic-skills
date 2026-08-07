@@ -2,18 +2,18 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from slice_runner.domain.call_trace import HarnessCall
 from slice_runner.domain.step import Step
 from slice_runner.domain.verification import Verification
 from slice_runner.domain.verifier import Verifier
-from slice_runner.infrastructure.call_trace import HarnessCall
 from slice_runner.infrastructure.harness_output import HarnessOutput
 from slice_runner.infrastructure.judge_invocation import JudgeInvocation
 from slice_runner.infrastructure.verdict_payload import VerdictPayload
 
 if TYPE_CHECKING:
+    from slice_runner.domain.call_trace import CallTrace
     from slice_runner.domain.judge import Judge
     from slice_runner.domain.slice_under_review import SliceUnderReview
-    from slice_runner.infrastructure.call_trace import CallTrace
     from slice_runner.infrastructure.process import Process
 
 
