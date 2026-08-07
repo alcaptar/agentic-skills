@@ -20,6 +20,7 @@ from slice_runner.application.actions.verify_slice import VerifySlice, VerifySli
 from slice_runner.application.queries.read_conversation import ReadConversation, ReadConversationParams
 from slice_runner.application.queries.run_prechecks import RunPrechecks
 from slice_runner.application.queries.select_slice import SelectSlice
+from slice_runner.application.queries.spend_of_step import SpendOfStep, SpendOfStepParams
 from slice_runner.domain.budgets import Budgets
 from slice_runner.domain.exceptions import (
     BranchMismatchError,
@@ -55,6 +56,7 @@ from slice_runner.infrastructure.gh_run_repository import GhCommandFailedError, 
 from slice_runner.infrastructure.git_branches import GitBranches, GitCommandFailedError
 from slice_runner.infrastructure.git_diff_reader import GitDiffReader
 from slice_runner.infrastructure.git_workspace import GitWorkspace
+from slice_runner.infrastructure.local_call_spend_log import LocalCallSpendLog
 from slice_runner.infrastructure.local_call_trace import LocalCallTrace
 from slice_runner.infrastructure.local_control_runner import LocalControlRunner
 from slice_runner.infrastructure.local_conversation_log import LocalConversationLog
@@ -65,6 +67,7 @@ from slice_runner.infrastructure.metrics_script_log import MetricsNotRecordedErr
 from slice_runner.infrastructure.process import ProcessNotRunnableError, ProcessTimedOutError
 from slice_runner.infrastructure.slice_pull_request import SlicePullRequest
 from slice_runner.infrastructure.slice_verifier_judge import SliceVerifierJudge
+from slice_runner.infrastructure.spend_payload import SpendPayload
 from slice_runner.infrastructure.stderr_event_log import StderrEventLog
 from slice_runner.infrastructure.stderr_turn_log import StderrTurnLog
 from slice_runner.infrastructure.subcommand import Subcommand
@@ -135,6 +138,8 @@ class Cli:
                 )
             case Subcommand.READ:
                 return cls.read(repo=arguments.repo, slice_id=arguments.slice_id, step=Step(arguments.step))
+            case Subcommand.SPEND:
+                return cls.spend(slice_id=arguments.slice_id, step=Step(arguments.step))
 
     @classmethod
     def parser(cls) -> argparse.ArgumentParser:
@@ -177,6 +182,12 @@ class Cli:
         read.add_argument("--slice", dest="slice_id", required=True, help="identifier of the slice to read")
         read.add_argument("--step", required=True, choices=[str(x) for x in Step], help="step whose call is read")
 
+        spend = subcommands.add_parser(
+            Subcommand.SPEND, help="add up what the harness spent on the calls that served a slice's step"
+        )
+        spend.add_argument("--slice", dest="slice_id", required=True, help="identifier of the slice to add up")
+        spend.add_argument("--step", required=True, choices=[str(x) for x in Step], help="step whose calls are summed")
+
         return parser
 
     @classmethod
@@ -205,6 +216,15 @@ class Cli:
                 slice_id=slice_id, step=step, session=result.session, conversation=result.conversation
             ).rendered()
         )
+
+        return ExitCode.OK
+
+    @classmethod
+    def spend(cls, *, slice_id: str, step: Step) -> int:
+        spend = SpendOfStep(trace=LocalCallTrace(), spend_log=LocalCallSpendLog()).execute(
+            SpendOfStepParams(slice_id=slice_id, step=step)
+        )
+        print(json.dumps(SpendPayload.from_domain(spend).to_contract(), ensure_ascii=False))
 
         return ExitCode.OK
 
@@ -293,7 +313,12 @@ class Cli:
                 select=SelectSlice(repository=repository),
                 prechecks=RunPrechecks(branches=branches, forum=forum),
                 implement=ImplementSlice(
-                    implementer=ClaudeImplementer(process=self._process, trace=LocalCallTrace(), turns=StderrTurnLog())
+                    implementer=ClaudeImplementer(
+                        process=self._process,
+                        trace=LocalCallTrace(),
+                        turns=StderrTurnLog(),
+                        spend_log=LocalCallSpendLog(),
+                    )
                 ),
                 stage=StageSlice(workspace=workspace),
                 verify=self._action(),
@@ -307,7 +332,9 @@ class Cli:
                 forum=forum,
                 clock=SystemClock(),
                 metrics=MetricsScriptLog(process=self._process),
-                understanding=ClaudeUnderstanding(process=self._process, trace=LocalCallTrace()),
+                understanding=ClaudeUnderstanding(
+                    process=self._process, trace=LocalCallTrace(), spend_log=LocalCallSpendLog()
+                ),
                 pull_request=SlicePullRequest(),
                 deploy_watch=ClaudeDeployWatch(process=self._process),
                 events=StderrEventLog(),
@@ -319,7 +346,7 @@ class Cli:
     def _action(self) -> VerifySlice:
         return VerifySlice(
             reader=GitDiffReader(process=self._process),
-            verifier=ClaudeVerifier(process=self._process, trace=LocalCallTrace()),
+            verifier=ClaudeVerifier(process=self._process, trace=LocalCallTrace(), spend_log=LocalCallSpendLog()),
             judge=SliceVerifierJudge.adversarial(),
             skills=LocalSkillLibrary(),
             corpus=LocalCorpus(),

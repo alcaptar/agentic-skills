@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from slice_runner.domain.call_spend_log import HarnessCallSpend
 from slice_runner.domain.call_trace import HarnessCall
 from slice_runner.domain.exceptions import InvalidUnderstandingReportError
 from slice_runner.domain.step import Step
@@ -12,6 +13,7 @@ from slice_runner.infrastructure.understanding_invocation import UnderstandingIn
 from slice_runner.infrastructure.understanding_report_payload import UnderstandingReportPayload
 
 if TYPE_CHECKING:
+    from slice_runner.domain.call_spend_log import CallSpendLog
     from slice_runner.domain.call_trace import CallTrace
     from slice_runner.domain.parent_issue import ParentIssue
     from slice_runner.domain.sub_issue import SubIssue
@@ -19,19 +21,22 @@ if TYPE_CHECKING:
 
 
 class ClaudeUnderstanding(UnderstandingWriter):
-    def __init__(self, *, process: Process, trace: CallTrace) -> None:
+    def __init__(self, *, process: Process, trace: CallTrace, spend_log: CallSpendLog) -> None:
         self._process = process
         self._trace = trace
+        self._spend_log = spend_log
 
     def write(self, *, subissue: SubIssue, parent: ParentIssue, repo: str, worktree: str) -> Understanding:
         invocation = UnderstandingInvocation(subissue=subissue, parent=parent, repo=repo, worktree=worktree)
         output = self._process.run(invocation.argv, stdin=invocation.text, cwd=invocation.cwd)
         envelope = HarnessOutput.from_process(output)
         self._trace.record(HarnessCall(slice_id=subissue.slice_id, step=Step.UNDERSTAND, session=envelope.session_id))
+        spend = envelope.to_domain()
+        self._spend_log.record(HarnessCallSpend(session=envelope.session_id, spend=spend))
         with envelope.measuring():
             text = self._usable_text(envelope)
 
-        return Understanding(text=text, spend=envelope.to_domain())
+        return Understanding(text=text, spend=spend)
 
     @staticmethod
     def _usable_text(envelope: HarnessOutput) -> str:

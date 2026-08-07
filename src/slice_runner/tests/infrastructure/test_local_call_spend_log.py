@@ -1,0 +1,152 @@
+from __future__ import annotations
+
+import json
+from typing import TYPE_CHECKING
+
+import pytest
+
+from slice_runner.domain.exceptions import UnreadableCallSpendLogError
+from slice_runner.domain.harness_spend import HarnessSpend
+from slice_runner.infrastructure.call_spend_payload import CallSpendPayload
+from slice_runner.infrastructure.claude_config import ClaudeConfig
+from slice_runner.infrastructure.local_call_spend_log import LocalCallSpendLog
+from slice_runner.tests.mothers.harness_call_spend_mother import HarnessCallSpendMother
+from slice_runner.tests.mothers.harness_spend_mother import HarnessSpendMother
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+
+class WrittenLedger:
+    @staticmethod
+    def records_under(root: Path) -> list[dict[str, object]]:
+        ledger = root / "slice-runner" / "trace" / "spend.jsonl"
+
+        return [json.loads(line) for line in ledger.read_text(encoding="utf-8").splitlines()]
+
+
+class WithTheLedgerOutOfTheRealHome:
+    @pytest.fixture(autouse=True)
+    def ledger_root(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
+
+
+class TestWhatIsWrittenDownOfACall(WithTheLedgerOutOfTheRealHome):
+    def test_a_call_is_written_as_its_session_and_what_the_harness_spent_on_it(self, tmp_path: Path) -> None:
+        call = HarnessCallSpendMother.of_the_implementer()
+
+        LocalCallSpendLog().record(call)
+
+        assert WrittenLedger.records_under(tmp_path) == [
+            {
+                "session": call.session,
+                "spend": {
+                    "cost_usd": call.spend.cost_usd,
+                    "turns": call.spend.turns,
+                    "duration_ms": call.spend.duration_ms,
+                    "calls": call.spend.calls,
+                    "models": list(call.spend.models),
+                    "cache_read_tokens": call.spend.cache_read_tokens,
+                },
+            }
+        ]
+
+
+class TestTheLedgerOnlyGrows(WithTheLedgerOutOfTheRealHome):
+    def test_the_two_calls_of_a_slice_are_both_kept_so_the_judge_does_not_overwrite_the_implementer(
+        self, tmp_path: Path
+    ) -> None:
+        ledger = LocalCallSpendLog()
+
+        ledger.record(HarnessCallSpendMother.of_the_implementer())
+        ledger.record(HarnessCallSpendMother.of_the_judge())
+
+        assert [record["session"] for record in WrittenLedger.records_under(tmp_path)] == [
+            HarnessCallSpendMother.of_the_implementer().session,
+            HarnessCallSpendMother.of_the_judge().session,
+        ]
+
+
+class TestAddingUpTheSpendOfSomeSessions(WithTheLedgerOutOfTheRealHome):
+    def test_the_spend_of_a_single_session_asked_for_is_returned(self, tmp_path: Path) -> None:
+        ledger = LocalCallSpendLog()
+        ledger.record(HarnessCallSpendMother.of_the_implementer())
+
+        found = ledger.spend_of((HarnessCallSpendMother.of_the_implementer().session,))
+
+        assert found == HarnessSpendMother.of_the_implementer_call()
+
+    def test_a_session_not_asked_for_is_left_out_of_the_sum(self, tmp_path: Path) -> None:
+        ledger = LocalCallSpendLog()
+        ledger.record(HarnessCallSpendMother.of_the_implementer())
+        ledger.record(HarnessCallSpendMother.of_the_judge())
+
+        found = ledger.spend_of((HarnessCallSpendMother.of_the_implementer().session,))
+
+        assert found == HarnessSpendMother.of_the_implementer_call()
+
+    def test_the_sessions_of_several_calls_are_added_together_so_a_role_split_needs_no_manual_subtraction(
+        self, tmp_path: Path
+    ) -> None:
+        ledger = LocalCallSpendLog()
+        ledger.record(HarnessCallSpendMother.of_the_implementer())
+        ledger.record(HarnessCallSpendMother.of_the_judge())
+
+        found = ledger.spend_of(
+            (HarnessCallSpendMother.of_the_implementer().session, HarnessCallSpendMother.of_the_judge().session)
+        )
+
+        assert found == HarnessSpend.summing(
+            [HarnessSpendMother.of_the_implementer_call(), HarnessSpendMother.of_the_judge_call()]
+        )
+
+    def test_no_session_matching_returns_nothing_measured_instead_of_a_zero(self, tmp_path: Path) -> None:
+        ledger = LocalCallSpendLog()
+        ledger.record(HarnessCallSpendMother.of_the_implementer())
+
+        found = ledger.spend_of(("session-never-recorded",))
+
+        assert found == HarnessSpend.nothing()
+
+    def test_a_ledger_never_written_returns_nothing_instead_of_failing(self, tmp_path: Path) -> None:
+        found = LocalCallSpendLog().spend_of((HarnessCallSpendMother.of_the_implementer().session,))
+
+        assert found == HarnessSpend.nothing()
+
+    def test_a_line_that_is_not_json_is_refused_instead_of_being_skipped_in_silence(self, tmp_path: Path) -> None:
+        ledger = tmp_path / "slice-runner" / "trace" / "spend.jsonl"
+        ledger.parent.mkdir(parents=True)
+        ledger.write_text("not json\n", encoding="utf-8")
+
+        with pytest.raises(UnreadableCallSpendLogError):
+            LocalCallSpendLog().spend_of((HarnessCallSpendMother.of_the_implementer().session,))
+
+    def test_a_line_this_program_did_not_write_is_refused_instead_of_being_skipped_in_silence(
+        self, tmp_path: Path
+    ) -> None:
+        ledger = tmp_path / "slice-runner" / "trace" / "spend.jsonl"
+        ledger.parent.mkdir(parents=True)
+        ledger.write_text(json.dumps({"session": "some-session"}) + "\n", encoding="utf-8")
+
+        with pytest.raises(UnreadableCallSpendLogError):
+            LocalCallSpendLog().spend_of((HarnessCallSpendMother.of_the_implementer().session,))
+
+
+class TestReadingBackWhatWasWritten:
+    def test_a_line_written_by_this_program_is_read_back_as_the_same_call(self) -> None:
+        written = CallSpendPayload.from_call(HarnessCallSpendMother.of_the_judge())
+
+        read_back = CallSpendPayload.from_dict(written.to_contract())
+
+        assert read_back == written
+
+
+class TestWhereTheLedgerLives:
+    def test_the_directory_is_created_when_it_is_not_there_so_the_first_call_is_not_lost(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path / "never-used-before"))
+
+        LocalCallSpendLog().record(HarnessCallSpendMother.of_the_judge())
+
+        assert (tmp_path / "never-used-before" / "slice-runner" / "trace" / "spend.jsonl").exists()

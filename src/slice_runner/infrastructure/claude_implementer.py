@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING, ClassVar
 
+from slice_runner.domain.call_spend_log import HarnessCallSpend
 from slice_runner.domain.call_trace import HarnessCall
 from slice_runner.domain.exceptions import PermissionDeniedError, UnreadableConversationError
 from slice_runner.domain.implementation import Implementation
@@ -16,16 +17,18 @@ from slice_runner.infrastructure.turn_log import HarnessTurn
 
 if TYPE_CHECKING:
     from slice_runner.domain.assignment import Assignment
+    from slice_runner.domain.call_spend_log import CallSpendLog
     from slice_runner.domain.call_trace import CallTrace
     from slice_runner.infrastructure.process import Process
     from slice_runner.infrastructure.turn_log import TurnLog
 
 
 class ClaudeImplementer(Implementer):
-    def __init__(self, *, process: Process, trace: CallTrace, turns: TurnLog) -> None:
+    def __init__(self, *, process: Process, trace: CallTrace, turns: TurnLog, spend_log: CallSpendLog) -> None:
         self._process = process
         self._trace = trace
         self._turns = turns
+        self._spend_log = spend_log
 
     def implement(self, assignment: Assignment) -> Implementation:
         invocation = ImplementerInvocation(assignment=assignment)
@@ -33,11 +36,13 @@ class ClaudeImplementer(Implementer):
         output = self._process.run(invocation.argv, stdin=invocation.text, cwd=invocation.cwd, on_line=watch)
         envelope = HarnessOutput.from_process(output)
         self._trace.record(HarnessCall(slice_id=assignment.slice_id, step=Step.IMPLEMENT, session=envelope.session_id))
+        spend = envelope.to_domain()
+        self._spend_log.record(HarnessCallSpend(session=envelope.session_id, spend=spend))
         with envelope.measuring():
             self._reject_denials(envelope)
             report = ImplementationReportPayload.from_dict(envelope.structured_output)
 
-        return Implementation(paths=report.to_domain(), left_out=tuple(report.left_out), spend=envelope.to_domain())
+        return Implementation(paths=report.to_domain(), left_out=tuple(report.left_out), spend=spend)
 
     @staticmethod
     def _reject_denials(envelope: HarnessOutput) -> None:

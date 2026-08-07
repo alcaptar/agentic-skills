@@ -7,7 +7,8 @@ import pytest
 from slice_runner.domain.exceptions import InvalidUnderstandingReportError
 from slice_runner.domain.step import Step
 from slice_runner.infrastructure.claude_understanding import ClaudeUnderstanding
-from slice_runner.tests.doubles import RecordedProcess, RecordedTrace
+from slice_runner.tests.doubles import RecordedProcess, RecordedSpendLog, RecordedTrace
+from slice_runner.tests.mothers.harness_call_spend_mother import HarnessCallSpendMother
 from slice_runner.tests.mothers.harness_spend_mother import HarnessSpendMother
 from slice_runner.tests.mothers.judge_output_mother import HarnessEnvelopeMother
 from slice_runner.tests.mothers.parent_issue_mother import ParentIssueMother
@@ -22,8 +23,15 @@ _RECORDED = "implementer-two-paths"
 
 class Writing:
     @staticmethod
-    def understood(process: RecordedProcess, *, trace: RecordedTrace | None = None) -> Understanding:
-        return ClaudeUnderstanding(process=process, trace=trace or RecordedTrace()).write(
+    def understood(
+        process: RecordedProcess,
+        *,
+        trace: RecordedTrace | None = None,
+        spend_log: RecordedSpendLog | None = None,
+    ) -> Understanding:
+        return ClaudeUnderstanding(
+            process=process, trace=trace or RecordedTrace(), spend_log=spend_log or RecordedSpendLog()
+        ).write(
             subissue=SubIssueMother.pending(),
             parent=ParentIssueMother.with_sources_and_controls(),
             repo=UnderstandingInvocationMother.REPO,
@@ -96,3 +104,20 @@ class TestWhereTheConversationCanBeFound:
             Writing.understood(Writing.carrying("   "), trace=trace)
 
         assert [call.session for call in trace.calls] == [HarnessEnvelopeMother.SESSION_OF_THE_IMPLEMENTER]
+
+
+class TestTheSpendLogOfTheCall:
+    def test_the_session_and_what_it_spent_are_written_down(self) -> None:
+        spend_log = RecordedSpendLog()
+
+        Writing.understood(Writing.carrying("asi entiendo la slice"), spend_log=spend_log)
+
+        assert spend_log.calls == [HarnessCallSpendMother.of_the_implementer()]
+
+    def test_a_call_whose_report_is_rejected_still_leaves_its_spend_behind(self) -> None:
+        spend_log = RecordedSpendLog()
+
+        with pytest.raises(InvalidUnderstandingReportError):
+            Writing.understood(Writing.carrying("   "), spend_log=spend_log)
+
+        assert [call.session for call in spend_log.calls] == [HarnessEnvelopeMother.SESSION_OF_THE_IMPLEMENTER]
