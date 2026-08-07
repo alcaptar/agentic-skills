@@ -333,7 +333,7 @@ class Cli:
                 clock=SystemClock(),
                 metrics=MetricsScriptLog(process=self._process),
                 understanding=ClaudeUnderstanding(
-                    process=self._process, trace=LocalCallTrace(), spend_log=LocalCallSpendLog()
+                    process=self._process, trace=LocalCallTrace(), turns=StderrTurnLog(), spend_log=LocalCallSpendLog()
                 ),
                 pull_request=SlicePullRequest(),
                 deploy_watch=ClaudeDeployWatch(process=self._process),
@@ -346,7 +346,9 @@ class Cli:
     def _action(self) -> VerifySlice:
         return VerifySlice(
             reader=GitDiffReader(process=self._process),
-            verifier=ClaudeVerifier(process=self._process, trace=LocalCallTrace(), spend_log=LocalCallSpendLog()),
+            verifier=ClaudeVerifier(
+                process=self._process, trace=LocalCallTrace(), turns=StderrTurnLog(), spend_log=LocalCallSpendLog()
+            ),
             judge=SliceVerifierJudge.adversarial(),
             skills=LocalSkillLibrary(),
             corpus=LocalCorpus(),

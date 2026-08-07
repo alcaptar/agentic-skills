@@ -8,6 +8,7 @@ from slice_runner.domain.step import Step
 from slice_runner.domain.verification import Verification
 from slice_runner.domain.verifier import Verifier
 from slice_runner.infrastructure.harness_output import HarnessOutput
+from slice_runner.infrastructure.harness_turn_watch import HarnessTurnWatch
 from slice_runner.infrastructure.judge_invocation import JudgeInvocation
 from slice_runner.infrastructure.verdict_payload import VerdictPayload
 
@@ -17,17 +18,20 @@ if TYPE_CHECKING:
     from slice_runner.domain.judge import Judge
     from slice_runner.domain.slice_under_review import SliceUnderReview
     from slice_runner.infrastructure.process import Process
+    from slice_runner.infrastructure.turn_log import TurnLog
 
 
 class ClaudeVerifier(Verifier):
-    def __init__(self, *, process: Process, trace: CallTrace, spend_log: CallSpendLog) -> None:
+    def __init__(self, *, process: Process, trace: CallTrace, turns: TurnLog, spend_log: CallSpendLog) -> None:
         self._process = process
         self._trace = trace
+        self._turns = turns
         self._spend_log = spend_log
 
     def verify(self, judge: Judge, review: SliceUnderReview) -> Verification:
         invocation = JudgeInvocation(judge=judge, review=review)
-        output = self._process.run(invocation.argv, stdin=invocation.text)
+        watch = HarnessTurnWatch(turns=self._turns, slice_id=review.slice_id, step=Step.VERIFY)
+        output = self._process.run(invocation.argv, stdin=invocation.text, on_line=watch)
         envelope = HarnessOutput.from_process(output)
         self._trace.record(HarnessCall(slice_id=review.slice_id, step=Step.VERIFY, session=envelope.session_id))
         spend = envelope.to_domain()

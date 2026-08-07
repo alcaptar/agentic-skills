@@ -7,7 +7,13 @@ import pytest
 from slice_runner.domain.exceptions import InvalidUnderstandingReportError
 from slice_runner.domain.step import Step
 from slice_runner.infrastructure.claude_understanding import ClaudeUnderstanding
-from slice_runner.tests.doubles import RecordedProcess, RecordedSpendLog, RecordedTrace
+from slice_runner.tests.doubles import (
+    RecordedProcess,
+    RecordedSpendLog,
+    RecordedTrace,
+    RecordedTurnLog,
+    StreamingProcess,
+)
 from slice_runner.tests.mothers.harness_call_spend_mother import HarnessCallSpendMother
 from slice_runner.tests.mothers.harness_spend_mother import HarnessSpendMother
 from slice_runner.tests.mothers.judge_output_mother import HarnessEnvelopeMother
@@ -17,6 +23,7 @@ from slice_runner.tests.mothers.understanding_invocation_mother import Understan
 
 if TYPE_CHECKING:
     from slice_runner.domain.understanding import Understanding
+    from slice_runner.infrastructure.process import Process
 
 _RECORDED = "implementer-two-paths"
 
@@ -24,14 +31,18 @@ _RECORDED = "implementer-two-paths"
 class Writing:
     @staticmethod
     def understood(
-        process: RecordedProcess,
+        process: Process,
         *,
         trace: RecordedTrace | None = None,
+        turns: RecordedTurnLog | None = None,
         spend_log: RecordedSpendLog | None = None,
         correction: str = "",
     ) -> Understanding:
         return ClaudeUnderstanding(
-            process=process, trace=trace or RecordedTrace(), spend_log=spend_log or RecordedSpendLog()
+            process=process,
+            trace=trace or RecordedTrace(),
+            turns=turns or RecordedTurnLog(),
+            spend_log=spend_log or RecordedSpendLog(),
         ).write(
             subissue=SubIssueMother.pending(),
             parent=ParentIssueMother.with_sources_and_controls(),
@@ -130,3 +141,17 @@ class TestTheSpendLogOfTheCall:
             Writing.understood(Writing.carrying("   "), spend_log=spend_log)
 
         assert [call.session for call in spend_log.calls] == [HarnessEnvelopeMother.SESSION_OF_THE_IMPLEMENTER]
+
+
+class TestTheTurnsObservedWhileTheCallIsInFlight:
+    def test_every_tool_use_of_a_real_streamed_call_is_observed_labelled_with_the_understand_step(self) -> None:
+        process = StreamingProcess(HarnessEnvelopeMother.streamed())
+        turns = RecordedTurnLog()
+
+        with pytest.raises(InvalidUnderstandingReportError):
+            Writing.understood(process, turns=turns)
+
+        assert [(turn.slice_id, turn.step, turn.number, turn.tool) for turn in turns.turns] == [
+            (SubIssueMother.pending().slice_id, Step.UNDERSTAND, 1, "Write"),
+            (SubIssueMother.pending().slice_id, Step.UNDERSTAND, 2, "StructuredOutput"),
+        ]

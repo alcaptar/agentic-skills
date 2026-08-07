@@ -40,8 +40,11 @@ class TestWhatTheJudgeIsGranted:
     def test_the_mcp_servers_are_bounded(self, argv: Argv) -> None:
         assert argv.contains("--strict-mcp-config")
 
-    def test_the_json_envelope_of_the_harness_is_asked_for(self, argv: Argv) -> None:
-        assert argv.value_of("--output-format") == "json"
+    def test_the_streamed_envelope_of_the_harness_is_asked_for_so_its_turns_can_be_watched_as_they_happen(
+        self, argv: Argv
+    ) -> None:
+        assert argv.value_of("--output-format") == "stream-json"
+        assert argv.contains("--verbose")
 
     def test_the_schema_that_travels_is_the_one_the_payload_generates_and_not_another(self, argv: Argv) -> None:
         assert json.loads(argv.value_of("--json-schema")) == VerdictPayload.json_schema()
