@@ -21,9 +21,9 @@ Sin excepcion, y sin `cast`: un `cast` no comprueba, solo calla a `mypy`.
   el otro lado cambio de forma y nuestras suposiciones pueden estar viejas.
 - `frozen=True` y `populate_by_name=False`: se entra por el `alias`, que es el nombre del contrato, y
   no por el nombre del campo.
-- **Un `alias` por campo, y de ahi salen las tres cosas**: el `--json-schema` que se le manda al juez,
-  la validacion de lo que devuelve, y el JSON que emite la interfaz de linea de comandos. Antes eran
-  tres copias cosidas a mano y existia un test de contrato solo para que no divergieran.
+- **Un `alias` por campo, y de ahi sale todo lo que ve el otro lado**: el esquema que se le manda, la
+  validacion de lo que devuelve y el JSON que emite la interfaz de linea de comandos. Un contrato que
+  se escribe mas de una vez necesita un test solo para que sus copias no divergan.
 - La conversion al dominio vive en el modelo: `from_domain(cls, entity) -> Self` para entrar,
   `to_domain(self)` para salir. **Nunca un helper de mapeo en el caso de uso.**
 - Un `ValidationError` de Pydantic no sale de la capa: se traduce a la excepcion del dominio que el
@@ -87,56 +87,48 @@ importar**: un smoke que solo importe el modulo lo da por bueno. Lo evita
   que solo el flujo viejo necesita, y a pasar el veredicto por un validador que Pydantic ya hacia
   redundante -de `valida_veredicto` solo quedaba util un invariante, que ahora vive en `Verdict`, donde
   le toca-. **Acoplar el flujo nuevo al viejo para ahorrar duplicacion sale mas caro que la
-  duplicacion**, porque el viejo esta condenado: el rango del diff son tres flags y su motivo esta en
-  las convenciones, no en el codigo del script.
+  duplicacion**, porque el viejo esta condenado: lo que comparten son un punado de flags cuyo motivo
+  esta en las convenciones, no en el codigo del script.
 - **El juez es un objeto, no un prompt suelto.** `Judge(rubric, tools, readable)` es un value object del
   dominio y agrupa **todo lo que define al juez**; quien lo construye con la rubrica de este repo es
   `src/slice_runner/infrastructure/slice_verifier_judge.py`, y el entrypoint lo inyecta al caso de uso.
   La forma viene del agente raiz de `roman_expert/chat_agents` en
   `mercadona/mo.staff.django-playground`, y **sustituye a un `PromptProvider`** que solo devolvia texto:
-  con la rubrica detras de un puerto, las herramientas como constante de `JudgeInvocation` y los
-  directorios legibles derivados del repo dentro del `argv`, lo que definia al juez vivia en tres capas y
-  nada obligaba a que cuadrase -la rubrica ordenaba cargar skills que el juez no podia leer, y el
-  veredicto salia igual de limpio-. Un puerto para un valor constante era indireccion; el invariante
-  necesitaba un objeto.
+  con la rubrica, las herramientas y los directorios legibles repartidos por capas distintas, nada
+  obligaba a que cuadrasen -la rubrica podia ordenar cargar lo que el juez no puede leer, y el veredicto
+  salia igual de limpio-. Un puerto para un valor constante era indireccion; el invariante necesitaba un
+  objeto.
 - **El texto de la rubrica se queda en infraestructura**, no en la factoria de aplicacion como en el chat
   de agentes de ese repo: aqui el prompt es lo que se le manda a **un ejecutable concreto** por su
   entrada estandar, con su esquema y sus flags, y cambia con la receta medida contra `claude -p`. Que la
   capa que conoce el harness sea la misma que redacta lo que el harness recibe es lo que evita que
   aplicacion tenga opinion sobre el transporte. `agents/slice-verifier.md` es del **flujo viejo** y se
-  queda congelado: el programa no lo lee. Son dos copias de la rubrica a proposito, con la del programa
-  diciendo la verdad sobre lo que el programa manda.
+  queda congelado: el programa no lo lee. Son copias a proposito, con la del programa diciendo la verdad
+  sobre lo que el programa manda.
 - **La metodologia del implementador tiene la misma duplicacion declarada, por el mismo motivo.**
   `SliceImplementerBrief` (`src/slice_runner/infrastructure/slice_implementer_brief.py`) es lo que el
   programa le manda a `claude -p` por su entrada estandar, con su propio `TOOLS` y su propio texto de
   metodologia. `agents/slice-implementer.md` es del **flujo viejo** y se queda congelado igual que
-  `agents/slice-verifier.md`: el programa no lo lee. Son dos copias del brief a proposito, con la del
-  programa diciendo la verdad sobre lo que el programa manda.
+  `agents/slice-verifier.md`: el programa no lo lee. Son copias a proposito, con la del programa
+  diciendo la verdad sobre lo que el programa manda.
 - **Lo que no cambia entre invocaciones es constante; los datos de la slice los compone la invocacion.**
   `SliceImplementerBrief.TEXT` y la rubrica de `SliceVerifierJudge` son texto fijo, y `## Datos de la
   slice` y `## Datos del run` los redactan `ImplementerInvocation` y `JudgeInvocation` a partir del
   `Assignment` y del `SliceUnderReview` que reciben. **Aplicacion no compone texto de prompt**: pasa
   objetos del dominio y es la frontera la que decide como se escriben, por el mismo motivo por el que el
-  texto fijo vive aqui. Y los dos prompts **cierran con el dato**, nunca con la metodologia: lo variable
+  texto fijo vive aqui. Y un prompt **cierra con el dato**, nunca con la metodologia: lo variable
   al final es lo que evita que un delimitador tenga que sobrevivir a su propio contenido -en el juez, el
   diff es literalmente lo ultimo del prompt-.
 
-  Las tres invocaciones comparten **`CountedLines`** -el par "encabezado con cuantos son" mas una linea
-  por entrada-. **Vivio duplicada en dos a proposito**, por el mismo motivo por el que `ClaudeConfig` no
-  existio hasta tener tres consumidores: lo que comparten no es una regla del programa sino la forma de
-  una lista, cada prompt es un contrato con un agente distinto y nada exige que se parezcan, asi que
-  extraerla con dos habria fijado un parecido que no era invariante. El texto anterior declaraba que
-  **con un tercer prompt se extrae**; el entendimiento fue ese tercero y la condicion se cumplio, aunque
-  no sola: el juez veto la slice con severidad `alta` citando esta misma linea.
+  **La forma de una lista se extrae cuando deja de ser un parecido y pasa a ser invariante.** Cada prompt
+  es un contrato con un agente distinto y nada exige que se parezcan, asi que compartir la forma entre dos
+  puede ser coincidencia; cuando la repite un consumidor mas, ya no lo es. Vale igual para lo que sale de
+  la herramienta y no del programa -donde vive la configuracion de Claude Code, por ejemplo-: no es una
+  regla nuestra, asi que vive en un objeto propio y no colgada de uno de los adaptadores.
 
-  Que se cumpliera importa mas que la regla concreta. Una condicion escrita que luego nadie ejecuta
-  ensena que este fichero es opinion; esta lleva dos veces disparando.
-
-  **Hay dos invocadores del juez y solo uno llena esos campos.** `ConductSlice._judging` los llena
-  enteros -senal, criterios y fuentes de la slice, y el checklist del issue-, porque el conductor tiene
-  el issue delante. `Cli._params`, el del subcomando `verify` suelto, construye el `VerifySliceParams`
-  con `signal=""` y las tres tuplas a cero porque por el `argv` solo recibe repo, base e identificador,
-  y ese sigue siendo un camino vivo -es como se juzga un diff a mano, sin montar un run-. La
+  **Un invocador que no tiene issue delante no llena los mismos campos que el conductor.** Juzgar un diff
+  a mano, sin montar un run, es un camino vivo: por el `argv` solo llegan repo, base e identificador, asi
+  que la senal y las tuplas de la slice entran vacias. La
   consecuencia es que un `verify` suelto emite `- criterios de aceptacion (0):`, y **eso no es un
   transitorio que caduque**: es lo que significa juzgar sin issue. Por eso la rubrica **describe la
   carga en vez de prometerla llena**: dice que los campos viajan siempre, que pueden venir vacios y que
@@ -146,13 +138,10 @@ importar**: un smoke que solo importe el modulo lo da por bueno. Lo evita
   `VerifySliceParams` a proposito, que es lo que obligo al conductor a llenarlos en vez de heredar el
   vacio en silencio.
 - **La raiz de configuracion de la herramienta la resuelve `ClaudeConfig`** (`CLAUDE_CONFIG_DIR`, o
-  `~/.claude` expandido, con la variable vacia tratada como ausente). La comparten `LocalSkillLibrary`
-  -que lee los dos arboles de la vara-, `MetricsInvocation` -que resuelve la ruta del script del
-  registro durable- y `LocalCallTrace` -que resuelve donde vive el rastro de las llamadas-, porque lo que
-  comparten no es una regla del programa sino **la convencion de Claude
-  Code sobre donde vive su configuracion**: de ahi que viva en un objeto propio y no colgada de uno de
-  los adaptadores. Se extrajo al aparecer el tercer consumidor, que es la condicion que la
-  duplicacion anterior se habia puesto a si misma. **`LocalCorpus` se queda con su copia**, y eso es
+  `~/.claude` expandido, con la variable vacia tratada como ausente). La comparte todo adaptador que
+  necesite saber donde vive esa configuracion, porque lo que comparten no es una regla del programa sino
+  **la convencion de Claude Code**: de ahi que viva en un objeto propio y no colgada de uno de los
+  adaptadores. **`LocalCorpus` se queda con su copia**, y eso es
   deuda declarada y abierta, no precedente: migrarla obliga a renombrar la constante por la que **todos**
   los tests que ejecutan una verificacion mantienen la suite fuera del home real, que es mas superficie
   tocada de la que ha pedido ninguna slice; se hace entera cuando se toque ese adaptador, no a medias.
@@ -179,10 +168,10 @@ importar**: un smoke que solo importe el modulo lo da por bueno. Lo evita
   1. **El unico sitio que ve el sobre de todas las llamadas es el adaptador.** Una llamada que muere dentro
      de `measuring()` -veredicto incoherente, permiso denegado, informe invalido- es justo la conversacion
      que se quiere leer, y en aplicacion no queda nada de ella: no hay `Verification` ni `Implementation`, y
-     el `MeasuredCallError` solo lleva el gasto. Grabar en la frontera cubre las tres llamadas del run, el
+     el `MeasuredCallError` solo lleva el gasto. Grabar en la frontera cubre todas las llamadas del run, el
      `verify` suelto y tambien los descartes.
   2. **Al caso de uso ya no le cabe, y eso dice lo mismo.** Con un puerto mas suelto, `VerifySlice` pasa a
-     seis dependencias y salta `PLR0913`; las dos salidas que **no** valen son relajar el linter y
+     suficientes dependencias para saltar `PLR0913`; las salidas que **no** valen son relajar el linter y
      empaquetarle los argumentos, que es del conductor y solo de el (ver `docs/conventions/application.md`).
      Que el linter lo cace ahi es la senal de que escribir el rastro es de la capa que ve el sobre, no de la
      que orquesta.
@@ -217,7 +206,7 @@ importar**: un smoke que solo importe el modulo lo da por bueno. Lo evita
   programa: trae mas campos de los que `read_alignment_response` consume (`author`,
   `authorAssociation`, `createdAt`, `id`, `includesCreatedEdit`, `isMinimized`, `minimizedReason`,
   `reactionGroups`, `url`, `viewerDidAuthor`), al contrario que `GhLabelPayload`, cuyo export real trae
-  exactamente los cuatro campos que declara. `GhCommentsPayload.comments` se queda en
+  exactamente los campos que declara. `GhCommentsPayload.comments` se queda en
   `tuple[dict[str, object], ...]` sin tipar cada elemento contra un `BaseModel`, y
   `GhCommentPayload.from_dict` proyecta a mano solo `body` antes de validar, igual que
   `TranscriptMessage.content`.
@@ -225,12 +214,12 @@ importar**: un smoke que solo importe el modulo lo da por bueno. Lo evita
   proposito.** `MetricsScriptLog` implementa el puerto `MetricsLog` invocando el script por el puerto
   `Process`, no importandolo: el programa no importa nada de `skills/` (arriba), y ademas el formato del
   log -que sobrevive a los runs y tiene historico escrito- sigue teniendo **un solo escritor**.
-  Consecuencia aceptada: los tres vocabularios del cierre existen dos veces -en ingles dentro del programa
+  Consecuencia aceptada: los vocabularios del cierre existen dos veces -en ingles dentro del programa
   (`RunState`, `DiscardCause`) y con las palabras del log en la frontera (`DurableVerdict`, `DurableCi`,
   `DurableDiscardCause`, en `metrics_invocation.py`)-, con un `match`
   exhaustivo entre las dos, como `IssueLabel.of`: un cierre nuevo rompe en `mypy` en vez de caer en una
   rama generica, y un run que **no** ha cerrado lanza `RunNotClosedError` en vez de escribir una fila. La
-  duplicacion la **mide** `tests/test_skill_contracts.py`, que compara los tres conjuntos y ademas pasa el
+  duplicacion la **mide** `tests/test_skill_contracts.py`, que compara los conjuntos de ambos lados y ademas pasa el
   argv que construye el programa por el `argparse` del script: un flag renombrado solo se veria al cerrar
   una slice, que es justo el momento en que un fallo pierde la fila.
 - **El programa no escribe ningun numero que no venga del harness.** Del sobre salen coste en dolares,
@@ -238,8 +227,8 @@ importar**: un smoke que solo importe el modulo lo da por bueno. Lo evita
   porque no son dato del harness: hay puerto de reloj (`Clock.now`, que sella cada evento del run), pero lo
   que ese reloj lee es del programa y no de lo que la llamada costo. De ahi que el gasto sea un value object que
   distingue "todavia no se ha medido nada" de "cero medido" (`HarnessSpend.measured`): con nada medido, los
-  tres flags no viajan y el script no escribe la clave. Y **todas** las llamadas cuentan, tambien las que
-  acaban en excepcion -si no, una fila con tres descartes escribiria un coste sistematicamente por debajo-:
+  esos flags no viajan y el script no escribe la clave. Y **todas** las llamadas cuentan, tambien las que
+  acaban en excepcion -si no, una fila con varios descartes escribiria un coste sistematicamente por debajo-:
   una vez parseado el sobre, `HarnessOutput.measuring()` cuelga el gasto de la llamada de cualquier
   `MeasuredCallError` que salga del bloque (veredicto incoherente, `is_error`, permiso denegado, informe
   invalido), y solo esa capa puede hacerlo porque es la unica que ve el sobre. Si el sobre **no** llego a
@@ -315,7 +304,7 @@ importar**: un smoke que solo importe el modulo lo da por bueno. Lo evita
      tiene historico escrito y necesita un solo escritor, asi que la copia seria un segundo escritor del mismo
      fichero. Clasificar la respuesta de `gh` no escribe nada ni recuerda nada entre llamadas: es una funcion
      pura, y de una funcion pura la copia solo puede divergir en la regla. Esa divergencia es la que mide
-     `tests/test_skill_contracts.py`, comparando los cinco estados y los tres conjuntos de `bucket`.
+     `tests/test_skill_contracts.py`, comparando los estados y los conjuntos de `bucket` de ambos lados.
   2. **El codigo de salida de `gh pr checks` no se usa: se clasifica el `stdout`.** `gh` sale distinto de cero
      con checks en rojo, con checks pendientes y con una pull request que no existe, asi que el codigo no
      distingue "rojo" de "todavia no" de "no consta". El bullet de arriba dice que un codigo distinto de cero
@@ -347,9 +336,9 @@ importar**: un smoke que solo importe el modulo lo da por bueno. Lo evita
   en el idioma del issue, no identificadores. Y `gh pr create` va siempre con `--draft`, porque el merge lo
   decide una persona (ver `CLAUDE.md`).
 
-  **Diverge del paso 8 en cuatro cosas, y las cuatro son deliberadas.** Al contrario que la duplicacion de
+  **Diverge del paso 8, y cada divergencia es deliberada.** Al contrario que la duplicacion de
   los prefijos prohibidos -que `tests/test_skill_contracts.py` mide-, **esta no tiene test de contrato**: no
-  hay vocabulario que extraer de un cuerpo en prosa, asi que estos cuatro parrafos son lo unico que la
+  hay vocabulario que extraer de un cuerpo en prosa, asi que estos parrafos son lo unico que la
   sostiene y hay que moverlos a mano cuando se mueva el paso 8.
 
   1. **Cierra con `Closes #<N>` donde el paso 8 pone `Part of #<N>`.** En el formato nuevo hay **una
@@ -420,7 +409,7 @@ importar**: un smoke que solo importe el modulo lo da por bueno. Lo evita
   `README.md`** -que un test de contrato compara con el `IntEnum`-, se anaden al final y no se
   reordenan.
 - **Un codigo por decision de quien invoca, no uno por excepcion.** La vara para decidir si hace falta
-  uno nuevo es: ¿que hace distinto quien lo recibe? De ahi salen los seis de `run`: el run cerro
+  uno nuevo es: ¿que hace distinto quien lo recibe? De ahi salen los de `run`: el run cerro
   mergeado (`OK`, sigue la siguiente slice), cerro sin mergear (`RUN_UNMERGED`, hay que mirar el issue),
   espera a una persona (`AWAITING_ALIGNMENT`, reinvocar no sirve), se agoto la espera con el run vivo
   (`WAIT_EXHAUSTED`, reinvocar es justo lo que toca), los prechecks lo pararon (`PRECHECKS_BLOCKED`) y la
@@ -432,16 +421,16 @@ importar**: un smoke que solo importe el modulo lo da por bueno. Lo evita
   persistido sigue bueno" cae en `RUN_INTERRUPTED` -`gh`, `git`, el foro ilegible, el registro durable-
   y no en un codigo por clase de excepcion.
 
-  **`PROCESS_TIMED_OUT` es el septimo, y sale de esa misma vara, no de tener una excepcion mas.** Una
+  **`PROCESS_TIMED_OUT` sale de esa misma vara, no de tener una excepcion mas.** Una
   llamada muerta en su tope no se reinvoca a ciegas -volveria a pagar el tope entero-, asi que la decision
-  de quien invoca es distinta de la de `RUN_INTERRUPTED`, donde reinvocar es lo que toca. Es el unico codigo
-  que emiten **los dos** subcomandos: `verify` tampoco lo colapsa en `NO_USABLE_VERDICT`, porque "el juez
+  de quien invoca es distinta de la de `RUN_INTERRUPTED`, donde reinvocar es lo que toca. Lo emite todo
+  subcomando que lance un proceso: `verify` tampoco lo colapsa en `NO_USABLE_VERDICT`, porque "el juez
   no dejo veredicto" y "una llamada se colgo" se arreglan mirando sitios distintos. Y lo mapean `verify` y
   `run` -no `main`- porque el `Process` lo inyecta el constructor: mapearlo arriba lo dejaria sin costura
   con la que probarlo.
 
   **Y por eso el reparto de `run` vive en `_why_the_run_stopped` y no en una cadena de `except`.** Con
-  siete grupos, la cadena pasaba de los seis `return` que mide `PLR0911`; el `match` sobre la excepcion
+  tantos grupos, la cadena pasaba del tope de `return` que mide `PLR0911`; el `match` sobre la excepcion
   deja el reparto entero en un sitio y **la rama generica es `RUN_INTERRUPTED` a proposito**, que es
   literalmente la regla del parrafo de arriba: lo que no tiene codigo propio significa "el mundo fallo, el
   estado persistido sigue bueno". Lo que puede llegar lo acota `Cli.STOPS`, y lo que no este ahi sigue

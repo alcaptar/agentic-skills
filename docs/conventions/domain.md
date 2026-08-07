@@ -71,12 +71,12 @@ etiqueta de GitHub que escribe la frontera (`infrastructure/gh_run_repository.py
 par sin regla no cae en una rama generica, rompe en `mypy` en cuanto se anade un cierre o un paso sin
 proyectarlo-. El contrato ya esta medido, no pendiente: `tests/test_skill_contracts.py` comprueba que
 todo cierre de `RunState` distinto de `MERGED` (que no lleva etiqueta porque cierra GitHub el issue solo,
-via `Closes` de la pull request) proyecta a una de las diez etiquetas del vocabulario, y que ninguna
-etiqueta del vocabulario carece de fuente -sale de una proyeccion del traductor, o es una de fuente
-manual-. Hay dos etiquetas de fuente manual: `estado:pendiente`, que escribe una persona a mano al crear
-la subissue, y `estado:esperando-alineacion`, que escribe `GhRunRepository.pause_for_alignment` antes de que
-exista ningun `Run` -la pausa de alineacion ocurre fuera de cualquier `(state, step)` que `IssueLabel.of`
-pueda conocer, asi que no hay cierre del que proyectarla-.
+via `Closes` de la pull request) proyecta a una etiqueta del vocabulario, y que ninguna etiqueta del
+vocabulario carece de fuente -sale de una proyeccion del traductor, o es de fuente manual-. Una etiqueta
+de fuente manual es la que se escribe fuera de cualquier `(state, step)` que `IssueLabel.of` pueda
+conocer: la que pone una persona al crear la subissue, y la de la pausa de alineacion, que se escribe
+antes de que exista ningun `Run`. Una etiqueta nueva sin proyeccion ni fuente manual declarada pone
+`make check` en rojo.
 
 **`CiStatus` es la tercera copia declarada del mismo tipo.** `domain/ci_status.py` repite en ingles el
 vocabulario `EstadoCI` de `skills/slice-runner/scripts/controles.py` (`verde`, `rojo`, `pendiente`,
@@ -84,8 +84,8 @@ vocabulario `EstadoCI` de `skills/slice-runner/scripts/controles.py` (`verde`, `
 sus prefijos, y por el mismo motivo: el programa **no importa nada de `skills/`**. Los dos traductores al
 vocabulario con el que se interroga a `StateMachine` viven del lado del destino, como `IssueLabel.of`:
 `Outcome.of_the_ci(status)` y `Outcome.of_the_verdict(verdict)`, los dos con `match` exhaustivo y sin rama
-generica, para que la regla no acabe siendo un `if` de quien conduce el run. Como las otras dos copias, esta
-**esta medida**: `tests/test_skill_contracts.py` empareja los cinco miembros de `CiStatus` con los cinco de
+generica, para que la regla no acabe siendo un `if` de quien conduce el run. Como las otras copias, esta
+**esta medida**: `tests/test_skill_contracts.py` empareja los miembros de `CiStatus` con los de
 `EstadoCI` **por significado y no por cadena** -uno esta en ingles y el otro en castellano, asi que comparar
 los valores pondria `green` frente a `verde` y fallaria con el contrato sano-, de modo que anadir o quitar un
 estado en un solo lado pone `make check` en rojo. El emparejamiento se escribe una vez en el propio test,
@@ -94,7 +94,7 @@ porque es lo unico de esta duplicacion que no se puede derivar de ninguno de los
 **La higiene del indice es politica, y sus prefijos prohibidos son una duplicacion declarada mas.**
 `StagedHygiene.of(staged=..., declared=...)` (`domain/staged_hygiene.py`) devuelve las ofensas
 -`HygieneOffence`, con el path y su `HygieneBreach`- de lo que hay en el indice frente a lo que el
-implementador declaro, y la tupla vacia es el indice limpio. Tres decisiones que no son deriva:
+implementador declaro, y la tupla vacia es el indice limpio. Las decisiones que no son deriva:
 
 - **Un artefacto prohibido lo es aunque este declarado.** `StagedHygiene.FORBIDDEN_PREFIXES` es un
   backstop, no una regla mas del allow-list: si lo pudiera levantar quien declara las rutas, no
@@ -122,10 +122,11 @@ implementador declaro, y la tupla vacia es el indice limpio. Tres decisiones que
   `tests/test_skill_contracts.py` compara los dos conjuntos, asi que anadir un prefijo en un solo lado
   pone `make check` en rojo.
 
-Cinco decisiones mas de `StateMachine` y de los `Budgets` que le entran no son deriva, y estan aqui para
-que no se "arreglen" hacia el lado facil:
+Las decisiones de `StateMachine` y de los `Budgets` que le entran tampoco son deriva, y estan aqui para
+que no se "arreglen" hacia el lado facil. **Los numeros de este apartado no son censo del codigo: son la
+regla**, medidos y con su motivo, y por eso se escriben.
 
-- **La separacion minima entre ticks es una sola, para los tres tipos de tick.** La prosa solo pone
+- **La separacion minima entre ticks es una sola, para todos los tipos de tick.** La prosa solo pone
   numero donde la cuenta es load-bearing -la ventana de gracia de la integracion continua-, y deja los
   demas en "ticks acotados con un timeout razonable". Un segundo campo para el tick del merge seria un
   numero que nadie ha medido; el que hay sale de un caso real medido en dos pull requests, asi que
@@ -148,8 +149,8 @@ que no se "arreglen" hacia el lado facil:
   hora los despeja a los dos con margen, que es lo que se le pide a un backstop -ponerlo bajo no ahorra
   nada, mata un control sano a mitad-.
 
-  **Es un solo numero para las tres clases de llamada** -el harness, los controles y los `git`/`gh`-, por
-  el mismo motivo que la separacion entre ticks es una sola: un campo por clase serian dos numeros que
+  **Es un solo numero para todas las clases de llamada** -el harness, los controles y los `git`/`gh`-, por
+  el mismo motivo que la separacion entre ticks es una sola: un campo por clase serian numeros que
   nadie ha medido. Consecuencia aceptada: un `gh` colgado tarda una hora en morir, cuando por su
   naturaleza sobraban segundos. Sigue siendo acotado, que es lo que el tope existe para garantizar.
 - **El descarte del juez -devolver algo que no es su veredicto- no tiene presupuesto propio.** Es fiel a
