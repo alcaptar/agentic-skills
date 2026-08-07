@@ -19,8 +19,13 @@ class UnderstandingInvocationMother:
             parent=ParentIssueMother.with_sources_and_controls(),
             repo=cls.REPO,
             worktree=cls.WORKTREE,
+            correction="",
         )
 
     @classmethod
     def of_a_repo_exempt_from_controls(cls) -> UnderstandingInvocation:
         return replace(cls.of_the_chosen_slice(), parent=ParentIssueMother.with_exempt_controls())
+
+    @classmethod
+    def carrying_a_correction(cls, correction: str) -> UnderstandingInvocation:
+        return replace(cls.of_the_chosen_slice(), correction=correction)

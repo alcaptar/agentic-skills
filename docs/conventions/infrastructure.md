@@ -212,6 +212,15 @@ importar**: un smoke que solo importe el modulo lo da por bueno. Lo evita
   `LocalConversationLog._decoded_lines` deja de tragar `json.JSONDecodeError` en silencio y lanza la
   misma excepcion, igual que `LocalCallTrace._decoded`: una linea que no es JSON es corrupcion, no una
   variante mas de un vocabulario abierto.
+- **`GhCommentPayload` recibe el mismo tratamiento que `LocalConversationLog`, por el mismo motivo.**
+  El objeto `Comment` que devuelve `gh issue view --json comments` no es un contrato que fije este
+  programa: trae mas campos de los que `read_alignment_response` consume (`author`,
+  `authorAssociation`, `createdAt`, `id`, `includesCreatedEdit`, `isMinimized`, `minimizedReason`,
+  `reactionGroups`, `url`, `viewerDidAuthor`), al contrario que `GhLabelPayload`, cuyo export real trae
+  exactamente los cuatro campos que declara. `GhCommentsPayload.comments` se queda en
+  `tuple[dict[str, object], ...]` sin tipar cada elemento contra un `BaseModel`, y
+  `GhCommentPayload.from_dict` proyecta a mano solo `body` antes de validar, igual que
+  `TranscriptMessage.content`.
 - **El registro durable lo escribe `metrics.py` como subproceso, y su vocabulario esta duplicado a
   proposito.** `MetricsScriptLog` implementa el puerto `MetricsLog` invocando el script por el puerto
   `Process`, no importandolo: el programa no importa nada de `skills/` (arriba), y ademas el formato del

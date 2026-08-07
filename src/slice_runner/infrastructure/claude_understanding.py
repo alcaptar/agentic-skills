@@ -26,8 +26,12 @@ class ClaudeUnderstanding(UnderstandingWriter):
         self._trace = trace
         self._spend_log = spend_log
 
-    def write(self, *, subissue: SubIssue, parent: ParentIssue, repo: str, worktree: str) -> Understanding:
-        invocation = UnderstandingInvocation(subissue=subissue, parent=parent, repo=repo, worktree=worktree)
+    def write(
+        self, *, subissue: SubIssue, parent: ParentIssue, repo: str, worktree: str, correction: str
+    ) -> Understanding:
+        invocation = UnderstandingInvocation(
+            subissue=subissue, parent=parent, repo=repo, worktree=worktree, correction=correction
+        )
         output = self._process.run(invocation.argv, stdin=invocation.text, cwd=invocation.cwd)
         envelope = HarnessOutput.from_process(output)
         self._trace.record(HarnessCall(slice_id=subissue.slice_id, step=Step.UNDERSTAND, session=envelope.session_id))

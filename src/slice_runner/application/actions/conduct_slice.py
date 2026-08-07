@@ -9,6 +9,7 @@ from slice_runner.application.actions.stage_slice import StageSliceParams
 from slice_runner.application.actions.verify_slice import VerifySliceParams
 from slice_runner.application.queries.run_prechecks import RunPrechecksParams
 from slice_runner.application.queries.select_slice import SelectSliceParams
+from slice_runner.domain.alignment_response_kind import AlignmentResponseKind
 from slice_runner.domain.closed_slice import ClosedSlice
 from slice_runner.domain.control_status import ControlStatus
 from slice_runner.domain.discard_cause import DiscardCause
@@ -210,8 +211,10 @@ class ConductSlice:
         of_the_subissue = Prechecks.of_the_subissue(chosen.subissue)
         if of_the_subissue is not PrecheckOutcome.CLEAR:
             return self._ending(progress, Halt.PRECHECKS_BLOCKED, precheck=of_the_subissue)
-        if chosen.subissue.run is not None:
+        if chosen.subissue.run is not None and chosen.subissue.run.step is not Step.UNDERSTAND:
             return self._conducting(progress)
+        if chosen.subissue.label is IssueLabel.AWAITING_ALIGNMENT:
+            return self._responding_to_alignment(progress)
 
         return self._aligning(progress)
 
@@ -228,25 +231,47 @@ class ConductSlice:
         if precheck is not PrecheckOutcome.CLEAR:
             return self._ending(progress, Halt.PRECHECKS_BLOCKED, precheck=precheck)
 
-        understanding = self._understanding.write(
-            subissue=progress.subissue,
-            parent=progress.parent,
-            repo=progress.params.repo,
-            worktree=progress.params.worktree,
-        )
-        self._repository.write_understanding(
-            repo=progress.params.repo, issue=progress.subissue.number, understanding=understanding.text
-        )
+        published = self._publishing_the_understanding(progress, correction="")
         self._repository.pause_for_alignment(
             repo=progress.params.repo, issue=progress.subissue.number, remove=progress.label
         )
         self._branches.create(
             worktree=progress.params.worktree, name=progress.subissue.branch, base=progress.params.base
         )
-        aligned = replace(progress, spends=(understanding.spend,))
-        self._writing(aligned, run=replace(aligned.run, spend=understanding.spend))
 
-        return self._ending(aligned, Halt.AWAITING_ALIGNMENT, precheck=precheck)
+        return self._ending(published, Halt.AWAITING_ALIGNMENT, precheck=precheck)
+
+    def _responding_to_alignment(self, progress: ConductSliceProgress) -> ConductSliceResult:
+        response = self._repository.read_alignment_response(repo=progress.params.repo, issue=progress.subissue.number)
+        match response.kind:
+            case AlignmentResponseKind.NOT_YET:
+                return self._ending(progress, Halt.AWAITING_ALIGNMENT)
+            case AlignmentResponseKind.REVIEW:
+                revised = self._publishing_the_understanding(progress, correction=response.correction)
+                return self._ending(revised, Halt.AWAITING_ALIGNMENT)
+            case AlignmentResponseKind.GO:
+                started = replace(progress, run=replace(progress.run, step=Step.IMPLEMENT))
+                self._writing(started, run=started.run)
+                return self._conducting(started)
+
+    def _publishing_the_understanding(self, progress: ConductSliceProgress, *, correction: str) -> ConductSliceProgress:
+        understanding = self._understanding.write(
+            subissue=progress.subissue,
+            parent=progress.parent,
+            repo=progress.params.repo,
+            worktree=progress.params.worktree,
+            correction=correction,
+        )
+        published = replace(progress, spends=(*progress.spends, understanding.spend))
+        self._persisting_the_understanding(published)
+        self._repository.write_understanding(
+            repo=progress.params.repo, issue=progress.subissue.number, understanding=understanding.text
+        )
+
+        return published
+
+    def _persisting_the_understanding(self, progress: ConductSliceProgress) -> None:
+        self._writing(progress, run=replace(progress.run, step=Step.UNDERSTAND, spend=progress.spend))
 
     def _conducting(self, progress: ConductSliceProgress) -> ConductSliceResult:
         while True:

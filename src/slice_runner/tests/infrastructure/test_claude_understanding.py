@@ -28,6 +28,7 @@ class Writing:
         *,
         trace: RecordedTrace | None = None,
         spend_log: RecordedSpendLog | None = None,
+        correction: str = "",
     ) -> Understanding:
         return ClaudeUnderstanding(
             process=process, trace=trace or RecordedTrace(), spend_log=spend_log or RecordedSpendLog()
@@ -36,6 +37,7 @@ class Writing:
             parent=ParentIssueMother.with_sources_and_controls(),
             repo=UnderstandingInvocationMother.REPO,
             worktree=UnderstandingInvocationMother.WORKTREE,
+            correction=correction,
         )
 
     @staticmethod
@@ -50,6 +52,13 @@ class TestWhereTheProcessRuns:
         Writing.understood(process)
 
         assert process.cwd == UnderstandingInvocationMother.WORKTREE
+
+    def test_a_correction_travels_on_standard_input_so_the_writer_rewrites_around_it(self) -> None:
+        process = Writing.carrying("asi entiendo la slice, ya corregida")
+
+        Writing.understood(process, correction="la senal no esta exenta, hay que medirla")
+
+        assert "la senal no esta exenta, hay que medirla" in process.stdin
 
 
 class TestTheUnderstandingOfARecordedCall:
