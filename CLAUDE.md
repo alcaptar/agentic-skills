@@ -44,6 +44,7 @@ historia del proyecto.
 | **La vara del codigo** | `code-style`, `architecture`, `domain`, `application`, `infrastructure`, `testing` | El implementador antes de escribir y el juez antes de bloquear. Es lo unico que viaja en las fuentes de convencion de un issue |
 | **Como se trabaja aqui** | `git-workflow.md`, este `CLAUDE.md` | Tu y yo en sesion. **No** el implementador: tiene prohibido tocar `git` |
 | **Por que es asi** | `docs/design-notes.md` y las pull requests mergeadas | Quien necesita no re-derivar una decision. Nunca es vara de nada |
+| **Lo que se leyo un dia** | `docs/12-factor.md`, `docs/maturity-map.md`, `docs/research-agent-loops.md`, `docs/superpowers/specs/` | Quien quiera saber de donde salio una decision. **Fechado: no se actualiza**, y lo que cite puede estar ya retirado |
 
 ### Jerarquia de autoridad
 

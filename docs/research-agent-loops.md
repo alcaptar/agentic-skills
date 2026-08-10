@@ -1,5 +1,9 @@
 # Loops autónomos de agentes de código: qué se ha descubierto
 
+> **Bibliografia, no vara de medir.** Resume lo que otros han publicado y medido, con sus fuentes.
+> No describe este repo ni lo gobierna; se cita desde `docs/design-notes.md` cuando una decision se
+> apoya en algo de aqui.
+
 Research sobre el estado del arte de los loops autónomos para el flujo **spec -> slice -> implementar -> PR -> CI verde**. Cubre cuatro dimensiones: resultados y lecciones reales, verificación y calidad, coste y economía, y seguridad y guardrails; más una comparativa de frameworks.
 
 ## Nota metodológica (leer primero)
