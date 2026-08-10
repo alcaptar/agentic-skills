@@ -263,15 +263,17 @@ echo '{"run": {"step": "run-controls", "control_retries": 2}, "outcome": "failed
 
 ```json
 {"run": {"step": "run-controls", "control_retries": 2, "hygiene_retries": 0, "verify_retries": 0,
- "ci_retries": 0, "indeterminate_ticks": 0, "verify_discards": 0}, "state": "blocked-controls", "wait_seconds": 0}
+ "correction_retries": 0, "ci_retries": 0, "indeterminate_ticks": 0, "verify_discards": 0},
+ "state": "blocked-controls", "wait_seconds": 0}
 ```
 
 La respuesta trae **el run entero** (con los contadores ya gastados), el estado en el que queda -`open`
 mientras siga vivo, y si no, el cierre concreto- y **cuantos segundos hay que esperar** antes del
 proximo tick, para que el numero de la ventana de gracia no lo decida quien tickea. Los presupuestos son
-dos reintentos de controles, dos de verificacion, uno de integracion continua roja, y 3 ticks
-indeterminados consecutivos con 30 s o mas entre tick y tick. Por encima de todos ellos hay dos topes que
-no cuentan intentos sino gasto: **25 $ de harness por slice**, que cierra el run como abortado y es el
+dos reintentos de controles, dos de verificacion del veto del juez, dos de correcciones que el juez pide
+sin vetar -presupuesto propio, agotarlo entrega igual y no cierra la slice-, uno de integracion continua
+roja, y 3 ticks indeterminados consecutivos con 30 s o mas entre tick y tick. Por encima de todos ellos
+hay dos topes que no cuentan intentos sino gasto: **25 $ de harness por slice**, que cierra el run como abortado y es el
 backstop del unico bucle sin cierre propio -el descarte de un veredicto incoherente, que no gasta reintento
 porque no se toco el codigo-, y **30 minutos de espera**, que terminan la invocacion dejando el run abierto
 donde estaba. El motivo de los dos numeros esta en `docs/conventions/domain.md`. Un par (paso, resultado)

@@ -176,13 +176,13 @@ class TestWhatVariantIsWritten(WithTheLedgerOutOfTheRealHome):
 
 
 class TestWhatTheRunAlreadyCounted(WithTheLedgerOutOfTheRealHome):
-    def test_the_retries_of_implementing_are_the_sum_of_the_four_ways_back_to_that_step(self, tmp_path: Path) -> None:
+    def test_the_retries_of_implementing_are_the_sum_of_the_five_ways_back_to_that_step(self, tmp_path: Path) -> None:
         run = RunMother.that_went_back_for_every_reason()
 
         LocalMetricsLog(clock=self.frozen_at()).record(ClosedSliceMother.merged_after_going_back_for_every_reason())
 
         assert WrittenMetricsLog.row_under(tmp_path)["reintentos_implement"] == (
-            run.control_retries + run.hygiene_retries + run.verify_retries + run.ci_retries
+            run.control_retries + run.hygiene_retries + run.verify_retries + run.correction_retries + run.ci_retries
         )
 
     def test_each_kind_of_retry_also_travels_on_its_own_so_the_sum_can_be_read_apart(self, tmp_path: Path) -> None:
@@ -196,6 +196,20 @@ class TestWhatTheRunAlreadyCounted(WithTheLedgerOutOfTheRealHome):
             run.verify_retries,
             run.ci_retries,
         )
+
+    def test_the_retries_a_veto_spent_travel_apart_from_the_ones_a_round_of_corrections_spent(
+        self, tmp_path: Path
+    ) -> None:
+        run = RunMother.that_went_back_for_every_reason()
+
+        LocalMetricsLog(clock=self.frozen_at()).record(ClosedSliceMother.merged_after_going_back_for_every_reason())
+
+        row = WrittenMetricsLog.row_under(tmp_path)
+        assert (row["reintentos_verify"], row["reintentos_correcciones"]) == (
+            run.verify_retries,
+            run.correction_retries,
+        )
+        assert row["reintentos_verify"] != row["reintentos_correcciones"]
 
     def test_the_findings_travel_counted_by_severity_and_not_as_a_single_total(self, tmp_path: Path) -> None:
         LocalMetricsLog(clock=self.frozen_at()).record(

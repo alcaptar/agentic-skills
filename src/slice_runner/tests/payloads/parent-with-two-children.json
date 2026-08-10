@@ -4,5 +4,6 @@
     "completed": 1,
     "percentCompleted": 50,
     "total": 2
-  }
+  },
+  "state": "OPEN"
 }

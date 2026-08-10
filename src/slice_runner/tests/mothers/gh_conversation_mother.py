@@ -48,13 +48,21 @@ class GhConversationMother:
     @classmethod
     def parent_of_one_slice(cls) -> str:
         return json.dumps(
-            {"body": _PARENT_BODY, "subIssuesSummary": {"completed": 0, "percentCompleted": 0, "total": 1}}
+            {
+                "body": _PARENT_BODY,
+                "subIssuesSummary": {"completed": 0, "percentCompleted": 0, "total": 1},
+                "state": IssueState.OPEN.value,
+            }
         )
 
     @classmethod
     def parent_of_two_slices(cls) -> str:
         return json.dumps(
-            {"body": _PARENT_BODY, "subIssuesSummary": {"completed": 0, "percentCompleted": 0, "total": 2}}
+            {
+                "body": _PARENT_BODY,
+                "subIssuesSummary": {"completed": 0, "percentCompleted": 0, "total": 2},
+                "state": IssueState.OPEN.value,
+            }
         )
 
     @classmethod
@@ -178,6 +186,7 @@ class GhConversationMother:
             "control_retries": run.control_retries,
             "hygiene_retries": run.hygiene_retries,
             "verify_retries": run.verify_retries,
+            "correction_retries": run.correction_retries,
             "ci_retries": run.ci_retries,
             "indeterminate_ticks": run.indeterminate_ticks,
             "verify_discards": run.verify_discards,

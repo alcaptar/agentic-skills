@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 from unittest.mock import Mock, create_autospec
 
+from slice_runner.application.actions.close_parent import CloseParent
 from slice_runner.application.actions.conduct_slice import (
     ConductSlice,
     ConductSliceParams,
@@ -66,6 +67,7 @@ class Conductor:
         self.stage = self._doubling(StageSlice, execute=None)
         self.verify = self._doubling(VerifySlice, execute=VerificationMother.passing())
         self.deliver = self._doubling(DeliverSlice, execute=self.PULL_REQUEST)
+        self.close = self._doubling(CloseParent, execute=None)
         self.repository: Mock = create_autospec(RunRepository, spec_set=True, instance=True)
         self.repository.read_alignment_response.return_value = AlignmentResponse(kind=AlignmentResponseKind.NOT_YET)
         self.repository.read_understanding.return_value = self.UNDERSTANDING
@@ -107,6 +109,7 @@ class Conductor:
                 stage=self.stage,
                 verify=self.verify,
                 deliver=self.deliver,
+                close=self.close,
             ),
             ports=ConductSlicePorts(
                 repository=self.repository,

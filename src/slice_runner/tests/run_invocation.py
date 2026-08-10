@@ -21,7 +21,7 @@ class RunInvocation:
         parent: str = GhConversationMother.parent_of_one_slice(),
     ) -> None:
         self.process = AnsweringByArgv(
-            Answer(to=("gh", "issue", "view", "body,subIssuesSummary"), stdout=parent),
+            Answer(to=("gh", "issue", "view", "body,subIssuesSummary,state"), stdout=parent),
             Answer(to=("gh", "issue", "list"), stdout=children),
             *answers,
             Answer(to=("gh", "issue", "view", "body"), stdout=GhConversationMother.body_of_the_subissue()),
