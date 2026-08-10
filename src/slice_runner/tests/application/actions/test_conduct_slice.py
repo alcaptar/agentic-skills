@@ -5,6 +5,7 @@ from unittest.mock import Mock
 
 import pytest
 
+from slice_runner.application.actions.close_parent import CloseParentParams
 from slice_runner.domain.alignment import Alignment
 from slice_runner.domain.alignment_response import AlignmentResponse
 from slice_runner.domain.alignment_response_kind import AlignmentResponseKind
@@ -455,6 +456,23 @@ class TestConductSliceClosingAMergeMissedBetweenInvocations:
         assert conductor.metrics.record.call_count == 0
         assert conductor.repository.remove_label.call_count == 0
 
+    def test_a_dangling_subissue_whose_pull_request_merged_also_asks_to_close_the_parent_of_this_issue(self) -> None:
+        dangling = SubIssueMother.dangling()
+        conductor = self._conductor(dangling=(dangling,))
+
+        conductor.conduct()
+
+        conductor.close.execute.assert_any_call(CloseParentParams(repo=Conductor.REPO, issue=Conductor.ISSUE))
+
+    def test_a_dangling_subissue_whose_pull_request_closed_without_merging_asks_to_close_nothing(self) -> None:
+        dangling = SubIssueMother.dangling()
+        conductor = self._conductor(dangling=(dangling,))
+        conductor.forum.pull_request_state.return_value = PullRequestState.CLOSED
+
+        conductor.conduct()
+
+        assert conductor.close.execute.call_count == 0
+
 
 class TestConductSliceWhenTheNamedSliceCannotBeSelected:
     @staticmethod
@@ -786,6 +804,30 @@ class TestConductSliceChainingDeployWatchAfterAMerge:
         conductor.conduct()
 
         assert conductor.deploy_watch.watch.call_count == 0
+
+
+class TestConductSliceClosingTheParentAfterAMerge:
+    @staticmethod
+    def _conductor() -> Conductor:
+        return Conductor(chosen=SelectSliceResultMother.resumed_at(RunMother.awaiting_merge()))
+
+    def test_a_merged_run_asks_to_close_the_parent_of_the_issue_this_slice_belongs_to(self) -> None:
+        conductor = self._conductor()
+
+        conductor.conduct()
+
+        conductor.close.execute.assert_called_once_with(CloseParentParams(repo=Conductor.REPO, issue=Conductor.ISSUE))
+
+    def test_a_close_that_does_not_merge_the_slice_asks_to_close_nothing(self) -> None:
+        conductor = Conductor(
+            chosen=SelectSliceResultMother.resumed_at(RunMother.implementing()), budgets=Budgets(hygiene_retries=0)
+        )
+        conductor.stage.execute.side_effect = DirtyIndexError("src/leftover.py (not-declared)")
+
+        result = conductor.conduct()
+
+        assert result.state is RunState.BLOCKED_HYGIENE
+        assert conductor.close.execute.call_count == 0
 
 
 class TestConductSliceWhenTheControlsComeBackRed:

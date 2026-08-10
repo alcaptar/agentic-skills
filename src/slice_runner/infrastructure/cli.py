@@ -7,6 +7,7 @@ import tempfile
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
+from slice_runner.application.actions.close_parent import CloseParent
 from slice_runner.application.actions.conduct_slice import (
     ConductSlice,
     ConductSliceParams,
@@ -326,6 +327,7 @@ class Cli:
                 stage=StageSlice(workspace=workspace),
                 verify=self._action(),
                 deliver=DeliverSlice(workspace=workspace, forum=forum),
+                close=CloseParent(repository=repository),
             ),
             ports=ConductSlicePorts(
                 repository=repository,

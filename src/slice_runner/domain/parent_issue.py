@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from slice_runner.domain.controls import Controls
+    from slice_runner.domain.issue_state import IssueState
     from slice_runner.domain.source import Source
 
 
@@ -14,3 +15,4 @@ class ParentIssue:
     sources: tuple[Source, ...]
     controls: Controls
     subissue_count: int
+    state: IssueState

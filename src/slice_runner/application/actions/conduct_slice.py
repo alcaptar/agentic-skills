@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Literal
 
+from slice_runner.application.actions.close_parent import CloseParentParams
 from slice_runner.application.actions.deliver_slice import DeliverSliceParams
 from slice_runner.application.actions.implement_slice import ImplementSliceParams
 from slice_runner.application.actions.stage_slice import StageSliceParams
@@ -37,6 +38,7 @@ from slice_runner.domain.step import Step
 if TYPE_CHECKING:
     from pathlib import Path
 
+    from slice_runner.application.actions.close_parent import CloseParent
     from slice_runner.application.actions.deliver_slice import DeliverSlice
     from slice_runner.application.actions.implement_slice import ImplementSlice
     from slice_runner.application.actions.stage_slice import StageSlice
@@ -143,6 +145,7 @@ class ConductSliceUseCases:
     stage: StageSlice
     verify: VerifySlice
     deliver: DeliverSlice
+    close: CloseParent
 
 
 @dataclass(frozen=True, kw_only=True, slots=True)
@@ -175,6 +178,7 @@ class ConductSlice:
         self._stage = use_cases.stage
         self._verify = use_cases.verify
         self._deliver = use_cases.deliver
+        self._close = use_cases.close
         self._repository = ports.repository
         self._branches = ports.branches
         self._controls = ports.controls
@@ -534,6 +538,7 @@ class ConductSlice:
         label = subissue.label
         if label is not None:
             self._repository.remove_label(repo=params.repo, issue=subissue.number, remove=label)
+        self._close.execute(CloseParentParams(repo=params.repo, issue=params.issue))
 
     def _reporting(self, progress: ConductSliceProgress, transition: Transition) -> None:
         self._events.emit(
@@ -568,10 +573,12 @@ class ConductSlice:
                 discard_cause=progress.discard_cause,
             )
         )
-        if state is RunState.MERGED and not progress.subissue.signal_is_exempt:
-            self._deploy_watch.watch(
-                worktree=progress.params.worktree, repo=progress.params.repo, signal=progress.subissue.signal
-            )
+        if state is RunState.MERGED:
+            self._close.execute(CloseParentParams(repo=progress.params.repo, issue=progress.params.issue))
+            if not progress.subissue.signal_is_exempt:
+                self._deploy_watch.watch(
+                    worktree=progress.params.worktree, repo=progress.params.repo, signal=progress.subissue.signal
+                )
 
         return self._ending(progress, Halt.RUN_CLOSED, state=state)
 

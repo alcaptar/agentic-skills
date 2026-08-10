@@ -65,7 +65,12 @@ class TestReadingTheParent:
         argv = Argv(process.calls[0].argv)
         assert process.calls[0].argv[:4] == ["gh", "issue", "view", "43"]
         assert argv.value_of("--repo") == _REPO
-        assert argv.value_of("--json") == "body,subIssuesSummary"
+        assert argv.value_of("--json") == "body,subIssuesSummary,state"
+
+    def test_the_state_of_the_issue_becomes_the_state_of_the_parent(self) -> None:
+        parent = GhRunRepository(process=self._process()).read_parent(repo=_REPO, issue=43, slice_repo=None)
+
+        assert parent.state is IssueState.OPEN
 
     def test_the_intention_is_the_text_of_its_own_section(self) -> None:
         parent = GhRunRepository(process=self._process()).read_parent(repo=_REPO, issue=43, slice_repo=None)
@@ -107,7 +112,11 @@ class TestReadingTheParent:
 
     @staticmethod
     def _process_with_body(body: str) -> ScriptedProcess:
-        payload = {"body": body, "subIssuesSummary": {"completed": 0, "percentCompleted": 0, "total": 1}}
+        payload = {
+            "body": body,
+            "subIssuesSummary": {"completed": 0, "percentCompleted": 0, "total": 1},
+            "state": "OPEN",
+        }
 
         return ScriptedProcess(ProcessOutput(code=0, stdout=json.dumps(payload), stderr=""))
 
@@ -769,6 +778,27 @@ class TestFlaggingADraftPullRequest:
 
         with pytest.raises(GhCommandFailedError, match="HTTP 422"):
             GhRunRepository(process=process).flag_draft_pull_request(repo=_REPO, issue=45, pull_request=61)
+
+
+class TestClosingTheParent:
+    def test_a_single_call_closes_the_issue_and_leaves_why_as_its_comment(self) -> None:
+        process = ScriptedProcess(ProcessOutput(code=0, stdout="", stderr=""))
+
+        GhRunRepository(process=process).close_parent(repo=_REPO, issue=43, subissue_count=4)
+
+        assert len(process.calls) == 1
+        argv = Argv(process.calls[0].argv)
+        assert process.calls[0].argv[:4] == ["gh", "issue", "close", "43"]
+        assert argv.value_of("--repo") == _REPO
+        assert argv.value_of("--comment") == (
+            "Las 4 subissue(s) de esta feature estan todas cerradas, asi que esta feature se cierra con ellas."
+        )
+
+    def test_a_non_zero_exit_raises_with_the_stderr_it_carried(self) -> None:
+        process = ScriptedProcess(ProcessOutput(code=1, stdout="", stderr="authentication required"))
+
+        with pytest.raises(GhCommandFailedError, match="authentication required"):
+            GhRunRepository(process=process).close_parent(repo=_REPO, issue=43, subissue_count=4)
 
 
 class TestGhFailuresAreInterpretedNotSwallowed:

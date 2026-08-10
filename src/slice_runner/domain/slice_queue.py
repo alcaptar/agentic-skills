@@ -34,6 +34,10 @@ class SliceQueue:
     def dangling(cls, children: tuple[SubIssue, ...]) -> tuple[SubIssue, ...]:
         return tuple(child for child in children if cls._left_dangling(child))
 
+    @classmethod
+    def all_delivered(cls, children: tuple[SubIssue, ...]) -> bool:
+        return bool(children) and all(child.state is IssueState.CLOSED for child in children)
+
     @staticmethod
     def _left_dangling(child: SubIssue) -> bool:
         return child.state is IssueState.CLOSED and child.run is not None and child.label is not None

@@ -41,3 +41,6 @@ class RunRepository(ABC):
 
     @abstractmethod
     def flag_draft_pull_request(self, *, repo: str, issue: int, pull_request: int) -> None: ...
+
+    @abstractmethod
+    def close_parent(self, *, repo: str, issue: int, subissue_count: int) -> None: ...
