@@ -232,15 +232,26 @@ class ConductSlice:
         if precheck is not PrecheckOutcome.CLEAR:
             return self._ending(progress, Halt.PRECHECKS_BLOCKED, precheck=precheck)
 
-        published = self._publishing_the_understanding(progress, correction="")
+        marked = self._marked_in_progress(progress)
+        published = self._publishing_the_understanding(marked, correction="")
         self._repository.pause_for_alignment(
-            repo=progress.params.repo, issue=progress.subissue.number, remove=progress.label
+            repo=progress.params.repo, issue=progress.subissue.number, remove=published.label
         )
         self._branches.create(
             worktree=progress.params.worktree, name=progress.subissue.branch, base=progress.params.base
         )
 
         return self._conducting(replace(published, label=IssueLabel.AWAITING_ALIGNMENT))
+
+    def _marked_in_progress(self, progress: ConductSliceProgress) -> ConductSliceProgress:
+        if progress.label is IssueLabel.IN_PROGRESS:
+            return progress
+
+        self._repository.write_label(
+            repo=progress.params.repo, issue=progress.subissue.number, remove=progress.label, add=IssueLabel.IN_PROGRESS
+        )
+
+        return replace(progress, label=IssueLabel.IN_PROGRESS)
 
     def _awaiting_alignment(self, progress: ConductSliceProgress) -> SteppedSlice:
         response = self._repository.read_alignment_response(repo=progress.params.repo, issue=progress.subissue.number)
