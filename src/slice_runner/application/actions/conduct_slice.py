@@ -6,17 +6,16 @@ from typing import TYPE_CHECKING, Literal
 from slice_runner.application.actions.close_parent import CloseParentParams
 from slice_runner.application.actions.deliver_slice import DeliverSliceParams
 from slice_runner.application.actions.implement_slice import ImplementSliceParams
+from slice_runner.application.actions.record_closure import RecordClosureParams
+from slice_runner.application.actions.record_step import RecordStepParams
 from slice_runner.application.actions.stage_slice import StageSliceParams
 from slice_runner.application.actions.verify_slice import VerifySliceParams
 from slice_runner.application.queries.run_prechecks import RunPrechecksParams
 from slice_runner.application.queries.select_slice import SelectSliceParams
 from slice_runner.domain.alignment import Alignment
 from slice_runner.domain.alignment_response_kind import AlignmentResponseKind
-from slice_runner.domain.closed_slice import ClosedSlice
 from slice_runner.domain.control_status import ControlStatus
 from slice_runner.domain.discard_cause import DiscardCause
-from slice_runner.domain.event import Event
-from slice_runner.domain.event_status import EventStatus
 from slice_runner.domain.exceptions import (
     DirtyIndexError,
     MeasuredCallError,
@@ -41,6 +40,8 @@ if TYPE_CHECKING:
     from slice_runner.application.actions.close_parent import CloseParent
     from slice_runner.application.actions.deliver_slice import DeliverSlice
     from slice_runner.application.actions.implement_slice import ImplementSlice
+    from slice_runner.application.actions.record_closure import RecordClosure
+    from slice_runner.application.actions.record_step import RecordStep
     from slice_runner.application.actions.stage_slice import StageSlice
     from slice_runner.application.actions.verify_slice import VerifySlice
     from slice_runner.application.queries.run_prechecks import RunPrechecks
@@ -52,10 +53,8 @@ if TYPE_CHECKING:
     from slice_runner.domain.control_outcome import ControlOutcome
     from slice_runner.domain.control_runner import ControlRunner
     from slice_runner.domain.deploy_watch import DeployWatch
-    from slice_runner.domain.event_log import EventLog
     from slice_runner.domain.finding import Finding
     from slice_runner.domain.forum import Forum
-    from slice_runner.domain.metrics_log import MetricsLog
     from slice_runner.domain.parent_issue import ParentIssue
     from slice_runner.domain.pull_request_writer import PullRequestWriter
     from slice_runner.domain.reported_path import ReportedPath
@@ -146,6 +145,8 @@ class ConductSliceUseCases:
     verify: VerifySlice
     deliver: DeliverSlice
     close: CloseParent
+    record_step: RecordStep
+    record_closure: RecordClosure
 
 
 @dataclass(frozen=True, kw_only=True, slots=True)
@@ -156,11 +157,9 @@ class ConductSlicePorts:
     ci: Ci
     forum: Forum
     clock: Clock
-    metrics: MetricsLog
     understanding: UnderstandingWriter
     pull_request: PullRequestWriter
     deploy_watch: DeployWatch
-    events: EventLog
 
 
 class ConductSlice:
@@ -179,17 +178,17 @@ class ConductSlice:
         self._verify = use_cases.verify
         self._deliver = use_cases.deliver
         self._close = use_cases.close
+        self._record_step = use_cases.record_step
+        self._record_closure = use_cases.record_closure
         self._repository = ports.repository
         self._branches = ports.branches
         self._controls = ports.controls
         self._ci = ports.ci
         self._forum = ports.forum
         self._clock = ports.clock
-        self._metrics = ports.metrics
         self._understanding = ports.understanding
         self._pull_request = ports.pull_request
         self._deploy_watch = ports.deploy_watch
-        self._events = ports.events
         self._machine = machine
         self._budgets = budgets
 
@@ -295,8 +294,7 @@ class ConductSlice:
             if isinstance(stepped, HaltedSlice):
                 return self._ending(stepped.progress, stepped.halt)
             transition = self._machine.after(stepped.progress.run, stepped.outcome)
-            progress = self._persisted(stepped.progress, transition)
-            self._reporting(progress, transition)
+            progress = self._recorded(stepped.progress, transition)
             if transition.state is not RunState.OPEN:
                 return self._closing(progress, transition.state)
             if transition.wait_seconds > 0:
@@ -493,25 +491,20 @@ class ConductSlice:
 
         return opened
 
-    def _persisted(self, progress: ConductSliceProgress, transition: Transition) -> ConductSliceProgress:
-        run = replace(transition.run, spend=progress.spend)
-        if run != progress.run:
-            self._writing(progress, run=run)
-        label = IssueLabel.of(state=transition.state, step=run.step)
-        if label is progress.label:
-            return replace(progress, run=run)
-        if label is None:
-            if progress.label is not None:
-                self._repository.remove_label(
-                    repo=progress.params.repo, issue=progress.subissue.number, remove=progress.label
-                )
-            return replace(progress, run=run, label=None)
-
-        self._repository.write_label(
-            repo=progress.params.repo, issue=progress.subissue.number, remove=progress.label, add=label
+    def _recorded(self, progress: ConductSliceProgress, transition: Transition) -> ConductSliceProgress:
+        recorded = self._record_step.execute(
+            RecordStepParams(
+                repo=progress.params.repo,
+                issue=progress.subissue.number,
+                slice_id=progress.subissue.slice_id,
+                current=progress.run,
+                label=progress.label,
+                transition=transition,
+                spend=progress.spend,
+            )
         )
 
-        return replace(progress, run=run, label=label)
+        return replace(progress, run=recorded.run, label=recorded.label)
 
     def _closing_a_merge_missed_between_invocations(self, params: ConductSliceParams, subissue: SubIssue) -> None:
         run = subissue.run
@@ -525,31 +518,20 @@ class ConductSlice:
         ):
             return
 
-        self._metrics.record(
-            ClosedSlice(
+        self._record_closure.execute(
+            RecordClosureParams(
                 repo=params.repo,
                 slice_id=subissue.slice_id,
                 name=subissue.name,
                 state=RunState.MERGED,
                 run=run,
-                spends=(run.spend,) if run.spend.measured else (),
+                spends=(run.spend,),
             )
         )
         label = subissue.label
         if label is not None:
             self._repository.remove_label(repo=params.repo, issue=subissue.number, remove=label)
         self._close.execute(CloseParentParams(repo=params.repo, issue=params.issue))
-
-    def _reporting(self, progress: ConductSliceProgress, transition: Transition) -> None:
-        self._events.emit(
-            Event(
-                slice_id=progress.subissue.slice_id,
-                step=transition.run.step,
-                at=self._clock.now(),
-                spend=progress.spend,
-                status=EventStatus.of_the_transition(transition),
-            )
-        )
 
     def _writing(self, progress: ConductSliceProgress, *, run: Run) -> None:
         self._repository.write_run(repo=progress.params.repo, issue=progress.subissue.number, run=run)
@@ -560,8 +542,8 @@ class ConductSlice:
         return replace(progress, waited_seconds=progress.waited_seconds + seconds)
 
     def _closing(self, progress: ConductSliceProgress, state: RunState) -> ConductSliceResult:
-        self._metrics.record(
-            ClosedSlice(
+        self._record_closure.execute(
+            RecordClosureParams(
                 repo=progress.params.repo,
                 slice_id=progress.subissue.slice_id,
                 name=progress.subissue.name,
