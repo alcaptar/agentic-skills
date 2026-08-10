@@ -15,6 +15,7 @@ from slice_runner.infrastructure.process import (
     ProcessOutput,
     ProcessTimedOutError,
 )
+from slice_runner.infrastructure.tool_use_recorder import ToolUseRecorder
 from slice_runner.infrastructure.turn_log import TurnLog
 from slice_runner.tests.real_process import Real
 
@@ -239,3 +240,19 @@ class RecordedSpendLog(CallSpendLog):
 
     def spend_of(self, sessions: tuple[str, ...]) -> HarnessSpend:
         return HarnessSpend.summing(call.spend for call in self.calls if call.session in sessions)
+
+
+@dataclass(frozen=True, kw_only=True, slots=True)
+class RecordedToolUseCall:
+    slice_id: str
+    step: Step
+    session: str
+    repo: str
+
+
+class RecordedToolUseRecorder(ToolUseRecorder):
+    def __init__(self) -> None:
+        self.calls: list[RecordedToolUseCall] = []
+
+    def record_after(self, *, slice_id: str, step: Step, session: str, repo: str) -> None:
+        self.calls.append(RecordedToolUseCall(slice_id=slice_id, step=step, session=session, repo=repo))

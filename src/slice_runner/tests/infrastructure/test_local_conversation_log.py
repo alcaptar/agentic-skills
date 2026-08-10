@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from typing import TYPE_CHECKING
 
 import pytest
@@ -74,6 +75,56 @@ class TestTheSpendOfARecordedConversation(WithARecordedConversation):
         spend = conversation.spend
         assert (spend.input_tokens, spend.output_tokens) == (4, 450)
         assert (spend.cache_creation_tokens, spend.cache_read_tokens) == (3752, 418026)
+
+
+class TestThePathATurnTouched:
+    @staticmethod
+    def _conversation_with(tool_name: str, tool_input: dict[str, object], *, tmp_path: Path) -> Path:
+        session = "path-session"
+        encoded = _REPO.rstrip("/").replace("/", "-")
+        destination = tmp_path / "projects" / encoded / f"{session}.jsonl"
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        line = json.dumps(
+            {
+                "type": "assistant",
+                "message": {
+                    "id": "msg_1",
+                    "content": [{"type": "tool_use", "id": "toolu_1", "name": tool_name, "input": tool_input}],
+                    "usage": {},
+                },
+            }
+        )
+        destination.write_text(f"{line}\n", encoding="utf-8")
+
+        return destination
+
+    def test_a_read_tool_use_carries_the_file_it_read(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
+        self._conversation_with("Read", {"file_path": "src/x.py"}, tmp_path=tmp_path)
+
+        conversation = LocalConversationLog().read(session="path-session", repo=_REPO)
+
+        assert conversation.turns[0].tool_calls[0].path == "src/x.py"
+
+    def test_a_glob_tool_use_carries_the_path_it_searched(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
+        self._conversation_with("Glob", {"path": "src", "pattern": "*.py"}, tmp_path=tmp_path)
+
+        conversation = LocalConversationLog().read(session="path-session", repo=_REPO)
+
+        assert conversation.turns[0].tool_calls[0].path == "src"
+
+    def test_a_bash_tool_use_carries_no_path_because_a_command_is_not_a_file(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
+        self._conversation_with("Bash", {"command": "ls"}, tmp_path=tmp_path)
+
+        conversation = LocalConversationLog().read(session="path-session", repo=_REPO)
+
+        assert conversation.turns[0].tool_calls[0].path is None
 
 
 class TestWhereTheConversationLives:

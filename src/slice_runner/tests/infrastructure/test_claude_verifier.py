@@ -10,6 +10,7 @@ from slice_runner.infrastructure.judge_invocation import JudgeInvocation
 from slice_runner.tests.doubles import (
     RecordedProcess,
     RecordedSpendLog,
+    RecordedToolUseRecorder,
     RecordedTrace,
     RecordedTurnLog,
     StreamingProcess,
@@ -28,7 +29,11 @@ class TestTheVerdictOfARecordedCall:
         process = RecordedProcess(HarnessEnvelopeMother.recorded(recorded))
 
         verification = ClaudeVerifier(
-            process=process, trace=RecordedTrace(), turns=RecordedTurnLog(), spend_log=RecordedSpendLog()
+            process=process,
+            trace=RecordedTrace(),
+            turns=RecordedTurnLog(),
+            spend_log=RecordedSpendLog(),
+            tool_uses=RecordedToolUseRecorder(),
         ).verify(JudgeMother.adversarial(), SliceUnderReviewMother.of_the_slice())
 
         assert verification.verdict.ruling is Ruling.FAIL
@@ -38,7 +43,11 @@ class TestTheVerdictOfARecordedCall:
         process = RecordedProcess(HarnessEnvelopeMother.recorded())
 
         verification = ClaudeVerifier(
-            process=process, trace=RecordedTrace(), turns=RecordedTurnLog(), spend_log=RecordedSpendLog()
+            process=process,
+            trace=RecordedTrace(),
+            turns=RecordedTurnLog(),
+            spend_log=RecordedSpendLog(),
+            tool_uses=RecordedToolUseRecorder(),
         ).verify(JudgeMother.adversarial(), SliceUnderReviewMother.of_the_slice())
 
         first = verification.verdict.findings[0]
@@ -51,7 +60,11 @@ class TestHowTheJudgeIsCalled:
         process = RecordedProcess(HarnessEnvelopeMother.recorded())
 
         ClaudeVerifier(
-            process=process, trace=RecordedTrace(), turns=RecordedTurnLog(), spend_log=RecordedSpendLog()
+            process=process,
+            trace=RecordedTrace(),
+            turns=RecordedTurnLog(),
+            spend_log=RecordedSpendLog(),
+            tool_uses=RecordedToolUseRecorder(),
         ).verify(_JUDGE, review)
 
         assert process.stdin == JudgeInvocation(judge=_JUDGE, review=review).text
@@ -61,7 +74,11 @@ class TestHowTheJudgeIsCalled:
         process = RecordedProcess(HarnessEnvelopeMother.recorded())
 
         ClaudeVerifier(
-            process=process, trace=RecordedTrace(), turns=RecordedTurnLog(), spend_log=RecordedSpendLog()
+            process=process,
+            trace=RecordedTrace(),
+            turns=RecordedTurnLog(),
+            spend_log=RecordedSpendLog(),
+            tool_uses=RecordedToolUseRecorder(),
         ).verify(JudgeMother.adversarial(), SliceUnderReviewMother.of_the_slice())
 
         assert process.calls == 1
@@ -77,7 +94,11 @@ class TestWhatTheJudgeCallCost:
         process = RecordedProcess(HarnessEnvelopeMother.recorded())
 
         verification = ClaudeVerifier(
-            process=process, trace=RecordedTrace(), turns=RecordedTurnLog(), spend_log=RecordedSpendLog()
+            process=process,
+            trace=RecordedTrace(),
+            turns=RecordedTurnLog(),
+            spend_log=RecordedSpendLog(),
+            tool_uses=RecordedToolUseRecorder(),
         ).verify(_JUDGE, SliceUnderReviewMother.of_the_slice())
 
         assert verification.spend == HarnessSpendMother.of_the_judge_call()
@@ -88,9 +109,13 @@ class TestWhereTheJudgeConversationCanBeFound:
         process = RecordedProcess(HarnessEnvelopeMother.recorded())
         trace = RecordedTrace()
 
-        ClaudeVerifier(process=process, trace=trace, turns=RecordedTurnLog(), spend_log=RecordedSpendLog()).verify(
-            _JUDGE, SliceUnderReviewMother.of_the_slice()
-        )
+        ClaudeVerifier(
+            process=process,
+            trace=trace,
+            turns=RecordedTurnLog(),
+            spend_log=RecordedSpendLog(),
+            tool_uses=RecordedToolUseRecorder(),
+        ).verify(_JUDGE, SliceUnderReviewMother.of_the_slice())
 
         assert [(call.slice_id, call.step, call.session) for call in trace.calls] == [
             (SliceUnderReviewMother.SLICE_ID, Step.VERIFY, HarnessEnvelopeMother.SESSION_OF_THE_JUDGE)
@@ -102,9 +127,13 @@ class TestWhereTheJudgeConversationCanBeFound:
         trace = RecordedTrace()
 
         with pytest.raises(InvalidVerdictError):
-            ClaudeVerifier(process=process, trace=trace, turns=RecordedTurnLog(), spend_log=RecordedSpendLog()).verify(
-                _JUDGE, SliceUnderReviewMother.of_the_slice()
-            )
+            ClaudeVerifier(
+                process=process,
+                trace=trace,
+                turns=RecordedTurnLog(),
+                spend_log=RecordedSpendLog(),
+                tool_uses=RecordedToolUseRecorder(),
+            ).verify(_JUDGE, SliceUnderReviewMother.of_the_slice())
 
         assert [call.session for call in trace.calls] == [HarnessEnvelopeMother.SESSION_OF_THE_JUDGE]
 
@@ -114,9 +143,13 @@ class TestTheSpendLogOfTheCall:
         process = RecordedProcess(HarnessEnvelopeMother.recorded())
         spend_log = RecordedSpendLog()
 
-        ClaudeVerifier(process=process, trace=RecordedTrace(), turns=RecordedTurnLog(), spend_log=spend_log).verify(
-            _JUDGE, SliceUnderReviewMother.of_the_slice()
-        )
+        ClaudeVerifier(
+            process=process,
+            trace=RecordedTrace(),
+            turns=RecordedTurnLog(),
+            spend_log=spend_log,
+            tool_uses=RecordedToolUseRecorder(),
+        ).verify(_JUDGE, SliceUnderReviewMother.of_the_slice())
 
         assert spend_log.calls == [HarnessCallSpendMother.of_the_judge()]
 
@@ -126,11 +159,56 @@ class TestTheSpendLogOfTheCall:
         spend_log = RecordedSpendLog()
 
         with pytest.raises(InvalidVerdictError):
-            ClaudeVerifier(process=process, trace=RecordedTrace(), turns=RecordedTurnLog(), spend_log=spend_log).verify(
-                _JUDGE, SliceUnderReviewMother.of_the_slice()
-            )
+            ClaudeVerifier(
+                process=process,
+                trace=RecordedTrace(),
+                turns=RecordedTurnLog(),
+                spend_log=spend_log,
+                tool_uses=RecordedToolUseRecorder(),
+            ).verify(_JUDGE, SliceUnderReviewMother.of_the_slice())
 
         assert [call.session for call in spend_log.calls] == [HarnessEnvelopeMother.SESSION_OF_THE_JUDGE]
+
+
+class TestTheToolUseRecordingOfTheCall:
+    def test_the_recorder_is_asked_for_the_slice_step_session_and_repo_of_the_call(self) -> None:
+        process = RecordedProcess(HarnessEnvelopeMother.recorded())
+        tool_uses = RecordedToolUseRecorder()
+
+        ClaudeVerifier(
+            process=process,
+            trace=RecordedTrace(),
+            turns=RecordedTurnLog(),
+            spend_log=RecordedSpendLog(),
+            tool_uses=tool_uses,
+        ).verify(_JUDGE, SliceUnderReviewMother.of_the_slice())
+
+        assert [(call.slice_id, call.step, call.session, call.repo) for call in tool_uses.calls] == [
+            (
+                SliceUnderReviewMother.SLICE_ID,
+                Step.VERIFY,
+                HarnessEnvelopeMother.SESSION_OF_THE_JUDGE,
+                SliceUnderReviewMother.REPO,
+            )
+        ]
+
+    def test_a_call_whose_verdict_is_discarded_is_recorded_too_because_that_conversation_is_the_one_to_read(
+        self,
+    ) -> None:
+        incoherent = JudgeVerdictMother.passing_with(JudgeVerdictMother.high_severity_finding())
+        process = RecordedProcess(HarnessEnvelopeMother.carrying(incoherent))
+        tool_uses = RecordedToolUseRecorder()
+
+        with pytest.raises(InvalidVerdictError):
+            ClaudeVerifier(
+                process=process,
+                trace=RecordedTrace(),
+                turns=RecordedTurnLog(),
+                spend_log=RecordedSpendLog(),
+                tool_uses=tool_uses,
+            ).verify(_JUDGE, SliceUnderReviewMother.of_the_slice())
+
+        assert [call.session for call in tool_uses.calls] == [HarnessEnvelopeMother.SESSION_OF_THE_JUDGE]
 
 
 class TestWhenTheJudgeAnswersSomethingIncoherent:
@@ -140,7 +218,11 @@ class TestWhenTheJudgeAnswersSomethingIncoherent:
 
         with pytest.raises(InvalidVerdictError) as rejection:
             ClaudeVerifier(
-                process=process, trace=RecordedTrace(), turns=RecordedTurnLog(), spend_log=RecordedSpendLog()
+                process=process,
+                trace=RecordedTrace(),
+                turns=RecordedTurnLog(),
+                spend_log=RecordedSpendLog(),
+                tool_uses=RecordedToolUseRecorder(),
             ).verify(_JUDGE, SliceUnderReviewMother.of_the_slice())
 
         assert rejection.value.spend == HarnessSpendMother.of_the_judge_call()
@@ -151,7 +233,11 @@ class TestWhatTheHarnessDeniedTheJudge:
         process = RecordedProcess(HarnessEnvelopeMother.denying_a_read())
 
         verification = ClaudeVerifier(
-            process=process, trace=RecordedTrace(), turns=RecordedTurnLog(), spend_log=RecordedSpendLog()
+            process=process,
+            trace=RecordedTrace(),
+            turns=RecordedTurnLog(),
+            spend_log=RecordedSpendLog(),
+            tool_uses=RecordedToolUseRecorder(),
         ).verify(_JUDGE, SliceUnderReviewMother.of_the_slice())
 
         assert verification.denied_reads == (f"Read {HarnessEnvelopeMother.DENIED_READ}",)
@@ -160,7 +246,11 @@ class TestWhatTheHarnessDeniedTheJudge:
         process = RecordedProcess(HarnessEnvelopeMother.denying_a_read(JudgeVerdictMother.passing()))
 
         verification = ClaudeVerifier(
-            process=process, trace=RecordedTrace(), turns=RecordedTurnLog(), spend_log=RecordedSpendLog()
+            process=process,
+            trace=RecordedTrace(),
+            turns=RecordedTurnLog(),
+            spend_log=RecordedSpendLog(),
+            tool_uses=RecordedToolUseRecorder(),
         ).verify(_JUDGE, SliceUnderReviewMother.of_the_slice())
 
         assert verification.verdict.ruling is Ruling.PASS
@@ -169,7 +259,11 @@ class TestWhatTheHarnessDeniedTheJudge:
         process = RecordedProcess(HarnessEnvelopeMother.recorded())
 
         verification = ClaudeVerifier(
-            process=process, trace=RecordedTrace(), turns=RecordedTurnLog(), spend_log=RecordedSpendLog()
+            process=process,
+            trace=RecordedTrace(),
+            turns=RecordedTurnLog(),
+            spend_log=RecordedSpendLog(),
+            tool_uses=RecordedToolUseRecorder(),
         ).verify(_JUDGE, SliceUnderReviewMother.of_the_slice())
 
         assert verification.denied_reads == ()
@@ -181,9 +275,13 @@ class TestTheTurnsObservedWhileTheCallIsInFlight:
         turns = RecordedTurnLog()
 
         with pytest.raises(InvalidVerdictError):
-            ClaudeVerifier(process=process, trace=RecordedTrace(), turns=turns, spend_log=RecordedSpendLog()).verify(
-                _JUDGE, SliceUnderReviewMother.of_the_slice()
-            )
+            ClaudeVerifier(
+                process=process,
+                trace=RecordedTrace(),
+                turns=turns,
+                spend_log=RecordedSpendLog(),
+                tool_uses=RecordedToolUseRecorder(),
+            ).verify(_JUDGE, SliceUnderReviewMother.of_the_slice())
 
         assert [(turn.slice_id, turn.step, turn.number, turn.tool) for turn in turns.turns] == [
             (SliceUnderReviewMother.SLICE_ID, Step.VERIFY, 1, "Write"),

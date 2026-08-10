@@ -13,7 +13,12 @@ class ConversationMother:
                     number=2,
                     text="",
                     tool_calls=(
-                        ToolCall(name="Bash", summary='{"command": "uv run pytest -x"}', result="1 failed, 0 passed"),
+                        ToolCall(
+                            name="Bash",
+                            summary='{"command": "uv run pytest -x"}',
+                            result="1 failed, 0 passed",
+                            path=None,
+                        ),
                     ),
                 ),
             ),
