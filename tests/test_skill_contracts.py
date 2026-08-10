@@ -655,13 +655,18 @@ def test_the_verdicts_and_severities_in_the_rubric_are_the_ones_the_program_acce
 _UNSCANNED = {
     "docs/superpowers/specs": "registro fechado, no se actualiza",
     "skills/slice-spec/references/observabilidad.md": "documenta rutas de otros repos",
+    "playground/tasks": "entrada congelada de un experimento, no se actualiza",
 }
-"""Two files are not scanned at all, each for a reason about what the file IS.
+"""Three places are not scanned at all, each for a reason about what the file IS.
 
 `docs/superpowers/specs` holds dated design records: they describe the tree as it was on their
 date and are deliberately never updated, so a path they cite going away is correct, not a defect.
 `observabilidad.md` is a reference doc about OTHER repos -- every path in it belongs to a
 Mercadona tree (mo.pypi.monitoring, mercadona.online.gke), not to this one.
+`playground/tasks` holds the frozen input of each experiment: the copies of the conventions a
+variant hands to the model are what that run was measured against, so updating them when the tree
+moves would destroy the only thing that makes the numbers comparable -- a rerun would no longer be
+the same experiment. A path going stale there is the point, not a defect.
 """
 
 _EXEMPT = {
