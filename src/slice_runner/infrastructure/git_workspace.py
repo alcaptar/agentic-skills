@@ -14,7 +14,17 @@ class GitWorkspace(Workspace):
         self._process = process
 
     def stage(self, *, worktree: str, paths: tuple[str, ...]) -> None:
-        self._git(worktree, "add", "--", *paths)
+        already_gone = self._deletions_already_staged(worktree)
+        pending = tuple(path for path in paths if path not in already_gone)
+        if not pending:
+            return
+
+        self._git(worktree, "add", "--", *pending)
+
+    def _deletions_already_staged(self, worktree: str) -> frozenset[str]:
+        listing = self._git(worktree, "diff", "--cached", "--name-only", "--diff-filter=D")
+
+        return frozenset(line for line in listing.splitlines() if line.strip())
 
     def staged(self, *, worktree: str) -> tuple[str, ...]:
         listing = self._git(worktree, "diff", "--cached", "--name-only")
