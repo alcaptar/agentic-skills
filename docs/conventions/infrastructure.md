@@ -198,9 +198,9 @@ importar**: un smoke que solo importe el modulo lo da por bueno. Lo evita
   `DurableDiscardCause`, en `metrics_invocation.py`)-, con un `match`
   exhaustivo entre las dos, como `IssueLabel.of`: un cierre nuevo rompe en `mypy` en vez de caer en una
   rama generica, y un run que **no** ha cerrado lanza `RunNotClosedError` en vez de escribir una fila. La
-  duplicacion la **mide** `tests/test_skill_contracts.py`, que compara los conjuntos de ambos lados y ademas pasa el
-  argv que construye el programa por el `argparse` del script: un flag renombrado solo se veria al cerrar
-  una slice, que es justo el momento en que un fallo pierde la fila.
+  duplicacion la **mide** `test_metrics_bridge_contract.py`, que compara los conjuntos de ambos lados y
+  ademas pasa el argv que construye el programa por el `argparse` del script: un flag renombrado solo se
+  veria al cerrar una slice, que es justo el momento en que un fallo pierde la fila.
 - **El programa no escribe ningun numero que no venga del harness.** Del sobre salen coste en dolares,
   turnos y duracion, sumados por slice; `--duracion-s` (reloj de pared) y `--coste-tokens` **no se pasan**,
   porque no son dato del harness: hay puerto de reloj (`Clock.now`, que sella cada evento del run), pero lo

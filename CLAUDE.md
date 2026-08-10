@@ -154,7 +154,9 @@ como implementar o que juzga el verificador: la metodologia del implementador en
 make check   # ruff + mypy strict + pytest; todo verde antes de dar nada por terminado
 ```
 
-Cubre tambien los `.md`: hay contratos escritos dos veces a proposito y tests que los comparan. El
-detalle, los targets sueltos, el marcador `integration` y el reparto de los dos arboles de test estan en
-`docs/conventions/testing.md`. El estado del run vive en el issue de GitHub, asi que no hay panel ni
+Cubre tambien los `.md`: hay contratos escritos dos veces a proposito, tests que los comparan, e
+invariantes del pipeline -como el tope por llamada a un proceso externo- que escanean el arbol en vez de
+comparar dos copias de una misma prosa. El detalle, los targets sueltos, el marcador `integration` y el
+reparto de los dos arboles de test (y, dentro de `tests/`, el reparto por lo que cada fichero mide) estan
+en `docs/conventions/testing.md`. El estado del run vive en el issue de GitHub, asi que no hay panel ni
 estado local que verificar; la entrada/salida contra `gh` la valida el smoke real (`smoke/README.md`).

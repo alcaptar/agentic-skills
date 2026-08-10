@@ -35,7 +35,7 @@ maquina. Escribir en `tmp_path` no entra.
 | | Que cubre |
 |---|---|
 | `src/slice_runner/tests/` | El programa. Co-localizado dentro del paquete, espejando las capas. |
-| `tests/` | Los scripts de `skills/` y los **contratos entre `.md`**, que no tienen paquete donde vivir. |
+| `tests/` | Los scripts de `skills/` y los contratos que no tienen paquete donde vivir -entre el programa y su documentacion, entre dos vocabularios del propio dominio, el puente con `metrics.py`, y los invariantes que escanean el arbol-. |
 
 Lo compartido por los dos arboles vive en `src/slice_runner/tests/`:
 `git_repo.py` -la clase `Git`, con la rama base, el helper de `git` y el repo recien inicializado- y
@@ -134,53 +134,75 @@ real es lo unico que se esta midiendo.
 - **Antes de anadir un test, comprobar si el comportamiento ya esta cubierto.** Solo entra si aporta
   una dimension distinta.
 
-## Los contratos entre los `.md`
+## Los contratos de `tests/`, repartidos por lo que miden
 
-`make check` **tambien cubre los `.md`**, no solo el codigo. `tests/test_skill_contracts.py` compara los
-contratos que hoy estan escritos dos veces:
+`make check` **tambien cubre los `.md`**, no solo el codigo, pero no todo lo que vive en `tests/` mide
+lo mismo, y cada cosa vive en el fichero que le corresponde -asi lo que dependa de un consumidor
+condenado se retira sin tocar los demas-:
 
-- veredictos de `metrics.py`
-- el vocabulario del log durable y el argv de `record`, entre el programa y `metrics.py`
-- las herramientas que `src/slice_runner/` concede al juez vs las que declara su prompt
-- las claves del hallazgo en la rubrica vs los `alias` de `FindingPayload`
-- los veredictos y las severidades de la rubrica vs los que el programa acepta
-- el criterio de degradacion sin subagentes, duplicado a proposito en `slice-runner` y `deploy-watch`
+- **`test_skill_contracts.py`**: los contratos entre el programa y su documentacion viva -las skills,
+  la rubrica del juez, el `README.md`-. Compara:
+  - las herramientas que `src/slice_runner/` concede al juez vs las que declara su prompt
+  - las claves del hallazgo en la rubrica vs los `alias` de `FindingPayload`
+  - los veredictos y las severidades de la rubrica vs los que el programa acepta
+  - el ejemplo, las reglas duras y el checklist de `validate` de `slice-spec/SKILL.md` entre si, y
+    contra lo que el programa (`ParentBody`, `SubissueBody`, `GhRunRepository`, `IssueLabel`) lee
+  - la ventana de gracia de la integracion continua, escrita en `Budgets` y en la prosa que la cita
+  - el nombre del ejecutable instalado, igual en `pyproject.toml` y en cada doc que dice como lanzarlo
+  - los codigos de salida del `README.md` vs `ExitCode`
 
-Cada test **extrae** el vocabulario de ambos lados y los compara, asi que reescribir las dos copias a la
-vez pasa y tocar solo una falla. Si editas una skill y `make check` se pone rojo ahi, es que has movido
-una mitad del contrato: mueve la otra.
+  Cada test **extrae** el vocabulario de ambos lados y los compara, asi que reescribir las dos copias a
+  la vez pasa y tocar solo una falla. Si editas una skill y `test_skill_contracts.py` se pone rojo, es
+  que has movido una mitad del contrato: mueve la otra.
 
-Mide ademas dos cosas que no son dos copias de un vocabulario, sino una convencion contra el arbol:
+- **`test_domain_vocabulary_contracts.py`**: dos contratos del dominio del programa consigo mismo, sin
+  ningun documento de por medio -que todo cierre de `RunState` distinto de `MERGED` proyecta a una
+  etiqueta de `IssueLabel`, y que ninguna etiqueta del vocabulario carece de fuente (ver
+  `docs/conventions/domain.md`)-.
 
-**Que ninguna llamada a un proceso externo se lanza sin tope**
-(`test_no_call_to_an_external_process_is_launched_without_a_cap`). Recorre el arbol sintactico de todo
-`.py` que git siga en `src/slice_runner/`, `skills/*/scripts/`, `smoke/fixture/` y `tests/`, y falla por
-cada llamada sin `timeout`. El programa lo cumple por construccion -lanza todo por el puerto `Process`, y
-el tope se aplica en `LocalProcess`-, pero eso vale mientras nadie lance un proceso por su cuenta, y **la
-prosa de `docs/conventions/infrastructure.md` no puede impedirlo**: cuando el tope estaba escrito solo
-para las skills, quien juzgaba el programa no tenia con que fallarlo. Cazo cuatro llamadas de
-`controles.py` y cuatro helpers de test, uno de ellos el que hace cumplir esta misma regla.
+- **`test_metrics_bridge_contract.py`**: el ultimo puente con `metrics.py`, declarado en
+  `docs/conventions/infrastructure.md` -los veredictos del vocabulario durable del programa vs los de
+  `metrics.py`, y el argv que construye el programa pasado por el `argparse` real del script-.
 
-**El alcance es "toda llamada", asi que ni el arbol de test ni la forma de lanzar quedan fuera.** Los dos
-son el mismo fallo: una vara que solo mira donde ya se cumple no mide nada.
+- **`test_pipeline_invariants.py`**: cuatro invariantes que escanean el arbol en vez de comparar dos
+  copias de la misma prosa:
 
-- **`tests/` entra igual que el codigo.** Un helper de test que se cuelga cuelga `make check`, que es la
-  vara entera del repo, y ademas es donde vivia el propio helper que hace cumplir la regla. Los tres que
-  quedaban sin tope no se capan con un numero suyo: se lanzan por donde ya hay uno -`Git.run` para el
-  `git`, `Real.process()` para los dos que arrancan un ejecutable-, que es lo mismo que impide que cada
-  llamada elija su presupuesto.
-- **Cuenta como lanzar un proceso `subprocess.run/call/check_call/check_output/Popen` y `os.system/popen`**,
-  no solo el `subprocess.run` que este repo escribe hoy: keyear en la costumbre deja pasar las otras cinco
-  formas sin tope ninguno. `Popen` y las dos de `os` **no aceptan `timeout`**, asi que no tienen forma
-  capada y cuentan siempre como sin tope; quien necesite una de verdad, que la justifique al llegar.
+  **Que ninguna llamada a un proceso externo se lanza sin tope**
+  (`test_no_call_to_an_external_process_is_launched_without_a_cap`). Recorre el arbol sintactico de todo
+  `.py` que git siga en `src/slice_runner/`, `skills/*/scripts/`, `smoke/fixture/` y `tests/`, y falla por
+  cada llamada sin `timeout`. El programa lo cumple por construccion -lanza todo por el puerto `Process`,
+  y el tope se aplica en `LocalProcess`-, pero eso vale mientras nadie lance un proceso por su cuenta, y
+  **la prosa de `docs/conventions/infrastructure.md` no puede impedirlo**: cuando el tope estaba escrito
+  solo para las skills, quien juzgaba el programa no tenia con que fallarlo.
 
-Comprueba ademas que **toda ruta de este repo citada en los `.md` existe**
-(`test_every_repo_path_cited_in_the_docs_still_exists`). Aqui no se enlaza con markdown: se citan rutas
-en backticks, asi que lo que se valida es el token. Solo entran los que empiezan por un directorio de
-primer nivel del repo, lo que deja fuera por construccion los nombres sueltos (`metrics.py`), las
-rutas de otros repos y los patrones de rama (`slice/NN-name`). Dos ficheros no se escanean, cada uno por
-lo que **es**: `docs/superpowers/specs/` (registro fechado, describe el arbol de su dia) y
-`skills/slice-spec/references/observabilidad.md` (documenta rutas de repos ajenos).
+  **El alcance es "toda llamada", asi que ni el arbol de test ni la forma de lanzar quedan fuera.** Los
+  dos son el mismo fallo: una vara que solo mira donde ya se cumple no mide nada.
+
+  - **`tests/` entra igual que el codigo.** Un helper de test que se cuelga cuelga `make check`, que es
+    la vara entera del repo, y ademas es donde vivia el propio helper que hace cumplir la regla. Los tres
+    que quedaban sin tope no se capan con un numero suyo: se lanzan por donde ya hay uno -`Git.run` para
+    el `git`, `Real.process()` para los dos que arrancan un ejecutable-, que es lo mismo que impide que
+    cada llamada elija su presupuesto.
+  - **Cuenta como lanzar un proceso `subprocess.run/call/check_call/check_output/Popen` y
+    `os.system/popen`**, no solo el `subprocess.run` que este repo escribe hoy: keyear en la costumbre
+    deja pasar las otras cinco formas sin tope ninguno. `Popen` y las dos de `os` **no aceptan
+    `timeout`**, asi que no tienen forma capada y cuentan siempre como sin tope; quien necesite una de
+    verdad, que la justifique al llegar. Lo pin `test_the_scan_counts_as_uncapped_every_way_of_launching_a_process_not_only_subprocess_run`,
+    que fija sobre una fuente sintetica que las seis formas cuentan y no solo la que escribe hoy.
+
+  Comprueba ademas que **toda ruta de este repo citada en los `.md` existe**
+  (`test_every_repo_path_cited_in_the_docs_still_exists`). Aqui no se enlaza con markdown: se citan
+  rutas en backticks, asi que lo que se valida es el token. Solo entran los que empiezan por un
+  directorio de primer nivel del repo, lo que deja fuera por construccion los nombres sueltos
+  (`metrics.py`), las rutas de otros repos y los patrones de rama (`slice/NN-name`). Tres entradas no se
+  escanean, cada una por lo que **es**: `docs/superpowers/specs/` (registro fechado, describe el arbol
+  de su dia), `skills/slice-spec/references/observabilidad.md` (documenta rutas de repos ajenos) y
+  `playground/tasks/` (entrada congelada de un experimento, no se actualiza).
+
+  Y que **el fixture del smoke se lintea con la misma vara que la raiz**
+  (`test_the_smoke_fixture_is_linted_with_the_same_yardstick_as_the_repo`): el mismo `select` de
+  `[tool.ruff.lint]`, porque la fixture es el arbol que el runner slicea de verdad en el smoke, y una
+  vara mas laja ahi le daria un pase que no vale nada.
 
 ## Antipatrones
 

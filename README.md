@@ -456,11 +456,12 @@ skills. Si sondeas un cambio de los scripts desde una rama creada en `origin/mas
 make check   # ruff + mypy strict + pytest; todo verde antes de dar nada por terminado
 ```
 
-Cubre tambien los `.md`, no solo el codigo: `tests/test_skill_contracts.py` compara los contratos que
-estan escritos dos veces a proposito (motivos de bloqueo, veredictos, el JSON del verificador, el
-criterio de degradacion) extrayendo el vocabulario de ambos lados, y comprueba que **toda ruta de
-este repo citada en los `.md` existe**. Si editas una skill y eso se pone rojo, has movido una mitad
-del contrato.
+Cubre tambien los `.md`, no solo el codigo, repartido por lo que cada fichero mide:
+`test_skill_contracts.py` compara los contratos entre el programa y su documentacion viva -veredictos,
+el JSON del verificador, la rubrica del juez- extrayendo el vocabulario de ambos lados, y
+`test_pipeline_invariants.py` comprueba que **toda ruta de este repo citada en los `.md` existe** y que
+ninguna llamada a un proceso externo se lanza sin tope. Si editas una skill y eso se pone rojo, has
+movido una mitad del contrato. El reparto entero, en `docs/conventions/testing.md`.
 
 El toolchain lo gestiona `uv`, asi que no hay que instalar nada a mano; lanzalo siempre por ahi,
 porque el programa de `src/` depende de `pydantic` y los scripts de `skills/` son stdlib puro. Las
