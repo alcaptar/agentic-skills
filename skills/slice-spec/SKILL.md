@@ -188,7 +188,7 @@ SENAL: prometheus min_over_time(application_stock_actual[10m]) < 0 dispara la al
   commit. Un titulo que no empiece por `slice-NN` no se puede leer y para el run.
 - Type opcional para conventional commits: `slice-03 (refactor: extraer-repo): ...`. Sin type ⇒ `feat`.
   No hace falta declarar la lista de types validos: el commit lo redacta el agente (sabe conventional
-  commits) y su unico control determinista es la higiene del diff (`controles.py pr-hygiene`).
+  commits) y su unico control determinista es la higiene del diff que aplica el programa al stagear.
 - **El estado macro es una etiqueta, nunca una marca en el texto.** Toda subissue nace con
   `estado:pendiente` y `slice-runner` la mueve escribiendo etiquetas (`estado:en-curso`,
   `estado:esperando-merge`, `bloqueada:controles`, `abortada:presupuesto`...); mergeada es GitHub

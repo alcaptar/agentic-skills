@@ -105,24 +105,21 @@ son los **unicos puntos donde para y decides tu**: mergear, y si el despliegue s
 
 Este es el flujo que conduce hoy `uv run slice-runner run` (detalle en "El paso que ya es un programa"),
 siempre contra el formato **padre mas una subissue por slice** que crea `slice-spec`. Hubo un flujo
-anterior, orquestado a mano por la skill `/slice-runner` con los subagentes `agents/slice-implementer.md`
-y `agents/slice-verifier.md`, sobre un formato mas viejo -un solo issue con un checklist de slices dentro,
+anterior, orquestado a mano por la skill `/slice-runner` con dos subagentes definidos -slice-implementer
+y slice-verifier-, sobre un formato mas viejo -un solo issue con un checklist de slices dentro,
 donde la pull request referenciaba con `Part of #N`-: ese flujo ya no vive en este repo. La skill que lo
 conducia esta congelada en `alcaptar/agentic-skills-legacy` (ver "Instalacion" para donde apunta el
-symlink hoy); los dos agentes se quedan aqui porque el programa no los usa. El programa, en cambio,
-siempre escribe `Closes #<subissue>` porque cada slice es su propia subissue y GitHub la cierra sola al
-mergear.
+symlink hoy), y los dos agentes se retiraron de aqui con ella: el programa nunca los uso, y tiene su
+propia metodologia y su propia rubrica (ver `docs/conventions/infrastructure.md`). El programa, en
+cambio, siempre escribe `Closes #<subissue>` porque cada slice es su propia subissue y GitHub la cierra
+sola al mergear.
 
 ## Las piezas
 
 | Pieza | Que es | Para que |
 |---|---|---|
 | `skills/slice-spec/SKILL.md` | Skill de autoria | Convierte una idea en una spec bien formada y **crea el issue padre mas una subissue por slice**. Envuelve `superpowers:brainstorming` para el diseno; el troceo lo lleva su propio cerebro (`skills/slice-spec/references/slicing.md`). Modo `validate` para auditar una spec existente. No escribe codigo. |
-| `agents/slice-implementer.md` | Definicion de subagente | El implementador del flujo anterior con la skill `/slice-runner` (ver "El flujo de un cambio"). Su metodologia -ciclo TDD, exencion de capa, integridad de tests preexistentes, refactor tras cada verde, instrumentar la senal- va en su *system prompt*, no relatada por un orquestador: no se puede parafrasear ni saltar un item. Tiene `Bash` porque correr el ciclo y los controles es su cometido. |
-| `agents/slice-verifier.md` | Definicion de subagente | El juez adversarial del flujo anterior con la skill `/slice-runner`. Su rubrica va en el *system prompt* (verbatim en cada invocacion, no parafraseada) y sus herramientas son `Read, Grep, Glob, Skill`: **sin `Bash`**, asi que su incapacidad de ejecutar controles es estructural, no una promesa. |
 | `skills/deploy-watch/SKILL.md` | Skill de post-merge | Vigila el despliegue en produccion, read-only. Orquesta por tick las skills de observabilidad que haya (Prometheus, Elasticsearch, logs de Google Cloud, Sentry...) segun el radio de impacto del cambio. Nunca ejecuta rollback: lo redacta. |
-| `skills/slice-runner/scripts/controles.py` | Script determinista | Cinco subcomandos: `controles` (ejecutar los comandos declarados; el log va a disco), `pr-hygiene` (que el diff staged solo tenga los ficheros de la slice), `diff-bundle` (materializar el diff para el juez, que no puede calcularlo), `ci-status` (estado de la integracion continua en un tiro) y `verify-verdict` (validar la forma del veredicto y contar severidades). |
-| `skills/slice-runner/scripts/issue_body.py` | Script determinista | Nucleo puro de parseo/reescritura del cuerpo del issue + interfaz de linea de comandos (`show`, `set-estado`). Fail-closed: si el issue viene vacio no escribe, porque un `edit` a ciegas borraria la spec entera. |
 | `skills/slice-runner/scripts/discover_controles.py` / `discover_conventions.py` | Helpers de descubrimiento | Los usa `slice-spec` para **proponer** los controles y las fuentes de convencion del repo. Descubren y no deciden: confirma la persona. |
 | `skills/slice-runner/scripts/metrics.py` | Registro durable | Telemetria del loop (veredicto, reintentos de controles / de verificacion / de integracion continua, descartes del juez) en `~/.claude/slice-runner/metrics.jsonl`, fuera del repo. Sirve para decidir cuando subir de nivel de autonomia. |
 | `skills/deploy-watch/scripts/deploy_core.py` | Nucleo puro | La decision go/no-go: umbrales relativos a baseline, confirmacion sostenida, scorecard, veredicto. La toma el codigo, no la impresion del agente. |
@@ -415,32 +412,19 @@ instala nada por symlink: basta con estar en este repo. **Y la rama en la que es
 corre**: `uv run slice-runner run` es el entrypoint de `src/slice_runner/`, asi que ejecutas el programa
 tal como esta en la rama donde estes parado, no en `origin/master` ni en ninguna otra.
 
-El flujo anterior -la skill `/slice-runner` orquestando a mano los subagentes
-`agents/slice-implementer.md` y `agents/slice-verifier.md`- ya no vive en este repo: esta congelado en
-`alcaptar/agentic-skills-legacy`. Si lo sigues necesitando, el symlink de esa skill apunta ahi en vez de
-a `$PWD/skills/slice-runner`:
+El flujo anterior -la skill `/slice-runner` orquestando a mano dos subagentes definidos
+(slice-implementer y slice-verifier)- ya no vive en este repo: esta congelado en
+`alcaptar/agentic-skills-legacy`, con su propia copia de los dos agentes. Si lo sigues necesitando, el
+symlink de esa skill apunta ahi en vez de a `$PWD/skills/slice-runner`:
 
 ```bash
 ln -s /ruta/a/agentic-skills-legacy/skills/slice-runner ~/.claude/skills/slice-runner
 ```
 
-Los dos agentes se quedan en **este** repo -el programa no los usa, pero la skill legacy si- asi que
-siguen instalandose desde aqui:
-
-```bash
-ln -s "$PWD/agents/slice-implementer.md" ~/.claude/agents/slice-implementer.md
-ln -s "$PWD/agents/slice-verifier.md" ~/.claude/agents/slice-verifier.md
-```
-
-No son opcionales para la skill legacy: sin ellos, `subagent_type: slice-implementer` o
-`slice-verifier` no resuelven y esa skill para con `bloqueada: sin-subagentes`.
-
-> **Gotcha verificado (2026-07-27): las skills se releen, los agentes no.** Editar un `SKILL.md`
-> cambia el comportamiento en la sesion en curso; editar una definicion de `agents/` **no**. El
-> registro de agentes se cachea al primer load, asi que la sesion sigue usando la definicion vieja:
-> se comprobo lanzando el verificador tras reescribirlo y viendo que citaba campos de su system prompt
-> anterior y usaba una herramienta que la version nueva ya no declara. **Tras tocar un agente hay que
-> abrir sesion nueva antes de probarlo**, o el smoke valida la version equivocada sin avisar.
+Los dos agentes se retiraron de **este** repo: el programa no los usaba, y quien los citaba era la
+skill anterior, que ya no vive aqui. Su metodologia y su rubrica viven hoy en el programa
+(`src/slice_runner/infrastructure/slice_implementer_brief.py` y `slice_verifier_judge.py`, ver
+`docs/conventions/infrastructure.md`).
 
 Otra consecuencia del symlink: **la rama en la que estas decide que codigo corre**, tambien para las
 skills. Si sondeas un cambio de los scripts desde una rama creada en `origin/master`, corres los de

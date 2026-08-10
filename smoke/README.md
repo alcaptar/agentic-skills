@@ -82,18 +82,6 @@ CI verde marcar la slice `esperando-merge` en el issue.
 
 Sigue el estado en vivo **desde el propio issue en GitHub** (se actualiza en cada transicion).
 
-## Antes de smokear un agente definido: sesion nueva
-
-Si has tocado `agents/slice-verifier.md` o `agents/slice-implementer.md`, **abre una sesion nueva de
-Claude Code antes de probarlo**. El registro de agentes se cachea al primer load y no relee ediciones (a
-diferencia de las skills, que si se releen). Si no, el smoke valida la definicion vieja y no avisa de
-nada.
-
-Comprobacion rapida de que estas smokeando la version que crees: pon en el prompt de invocacion algo
-que solo la version nueva pueda saber, o al reves, mira si el agente cita campos o nombres de regla que
-ya borraste. En el smoke del 2026-07-27 se detecto asi: el agente reclamaba un campo `Base ref` que la
-version en disco ya no declaraba, y usaba `Bash`, que ya no estaba en su `tools`.
-
 ## Criterio de "smoke OK"
 
 - El commit y el titulo de PR son conventional commits con el name como scope:
@@ -155,9 +143,9 @@ El camino feliz se dispara solo: la fixture esta preparada para pasar y basta co
 caminos de fallo hay que **provocarlos**, y ninguna de las cuatro provocaciones se parece a las otras,
 asi que quedan escritas aqui para no volver a deducirlas cada vez. Lo que este fichero no repite es el
 contrato: los estados y los presupuestos de reintentos los declaraba el `SKILL.md` del runner (retirado;
-ver `CLAUDE.md`), y la lista de motivos validos vive en `skills/slice-runner/scripts/issue_body.py`
-(`MotivoBloqueada`), que los valida al escribir en el issue. Aqui esta solo **como se provoca cada uno**
-y **que rastro debe quedar**.
+ver `CLAUDE.md`), y la lista de motivos validos vivia en `issue_body.py` (`MotivoBloqueada`), tambien
+retirado ya con el flujo viejo. Aqui esta solo **como se provoca cada uno** y **que rastro debe
+quedar**.
 
 **Ojo con la version de los scripts que estas sondeando.** `~/.claude/skills/slice-runner/` es un
 symlink al arbol de trabajo de este repo, asi que la rama en la que estas **decide que codigo corre**. Si

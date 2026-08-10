@@ -94,15 +94,14 @@ importar**: un smoke que solo importe el modulo lo da por bueno. Lo evita
   de agentes de ese repo: aqui el prompt es lo que se le manda a **un ejecutable concreto** por su
   entrada estandar, con su esquema y sus flags, y cambia con la receta medida contra `claude -p`. Que la
   capa que conoce el harness sea la misma que redacta lo que el harness recibe es lo que evita que
-  aplicacion tenga opinion sobre el transporte. `agents/slice-verifier.md` es del **flujo viejo** y se
-  queda congelado: el programa no lo lee. Son copias a proposito, con la del programa diciendo la verdad
-  sobre lo que el programa manda.
-- **La metodologia del implementador tiene la misma duplicacion declarada, por el mismo motivo.**
+  aplicacion tenga opinion sobre el transporte. `SliceVerifierJudge` es la unica fuente de esa rubrica:
+  el `agents/slice-verifier.md` del **flujo viejo** se retiro porque nada lo leia -el programa nunca lo
+  leyo, y la skill que lo citaba ya no vive aqui-, asi que no hay dos copias que mantener sincronizadas.
+- **La metodologia del implementador vive solo aqui, por el mismo motivo.**
   `SliceImplementerBrief` (`src/slice_runner/infrastructure/slice_implementer_brief.py`) es lo que el
   programa le manda a `claude -p` por su entrada estandar, con su propio `TOOLS` y su propio texto de
-  metodologia. `agents/slice-implementer.md` es del **flujo viejo** y se queda congelado igual que
-  `agents/slice-verifier.md`: el programa no lo lee. Son copias a proposito, con la del programa
-  diciendo la verdad sobre lo que el programa manda.
+  metodologia. El `agents/slice-implementer.md` del flujo viejo se retiro por la misma razon que
+  `agents/slice-verifier.md`: el programa no lo leia.
 - **Lo que no cambia entre invocaciones es constante; los datos de la slice los compone la invocacion.**
   `SliceImplementerBrief.TEXT` y la rubrica de `SliceVerifierJudge` son texto fijo, y `## Datos de la
   slice` y `## Datos del run` los redactan `ImplementerInvocation` y `JudgeInvocation` a partir del
@@ -256,22 +255,16 @@ importar**: un smoke que solo importe el modulo lo da por bueno. Lo evita
   media respuesta no es una respuesta, y devolver un `ProcessOutput` con un `stdout` truncado es
   exactamente como un veredicto a medias pasaria por veredicto. No hay reintento aqui: reintentar es
   politica, y esta capa no la decide (ver antipatrones).
-- **`GhCi` clasifica la respuesta de `gh pr checks`, y su clasificador es una copia declarada del de
-  `skills/slice-runner/scripts/controles.py`.** Tres decisiones que no son deriva, y estan escritas aqui para
-  que no se "arreglen" hacia el lado facil mas adelante:
+- **`GhCi` clasifica la respuesta de `gh pr checks`.** El clasificador fue durante un tiempo una copia
+  declarada del de `controles.py`, retirado ya con el flujo viejo -no
+  quedaba dos veces para divergir-. Dos decisiones sobre `GhCi` que no son deriva, y estan escritas aqui
+  para que no se "arreglen" hacia el lado facil mas adelante:
 
-  1. **Se duplica el clasificador en vez de invocar el subcomando `ci-status` del script como subproceso.** El
-     programa no importa nada de `skills/` (arriba), y el precedente de lanzar un script por subproceso
-     -`MetricsScriptLog` con `metrics.py`- existe por un motivo que **aqui no aplica**: el registro durable
-     tiene historico escrito y necesita un solo escritor, asi que la copia seria un segundo escritor del mismo
-     fichero. Clasificar la respuesta de `gh` no escribe nada ni recuerda nada entre llamadas: es una funcion
-     pura, y de una funcion pura la copia solo puede divergir en la regla. Esa divergencia es la que mide
-     `tests/test_skill_contracts.py`, comparando los estados y los conjuntos de `bucket` de ambos lados.
-  2. **El codigo de salida de `gh pr checks` no se usa: se clasifica el `stdout`.** `gh` sale distinto de cero
+  1. **El codigo de salida de `gh pr checks` no se usa: se clasifica el `stdout`.** `gh` sale distinto de cero
      con checks en rojo, con checks pendientes y con una pull request que no existe, asi que el codigo no
      distingue "rojo" de "todavia no" de "no consta". El bullet de arriba dice que un codigo distinto de cero
      es un dato; aqui es un dato que **no dice nada**, y el unico que decide es la salida.
-  3. **Un `ValidationError` cae en `CiStatus.UNKNOWN` en vez de en una excepcion**, al contrario que la regla
+  2. **Un `ValidationError` cae en `CiStatus.UNKNOWN` en vez de en una excepcion**, al contrario que la regla
      general de la capa. Vale **porque el vocabulario del puerto ya tiene el miembro que significa "no se pudo
      medir"**: lanzar seria inventar un segundo camino para lo que `UNKNOWN` ya dice, y quien conduce el run
      tendria que traducirlo de vuelta a ese mismo miembro. Justo por eso **no es permiso general para tragarse
@@ -395,8 +388,9 @@ importar**: un smoke que solo importe el modulo lo da por bueno. Lo evita
 - `extra="ignore"` en un modelo de frontera. **Una clave desconocida tiene que romper.**
 - `strict=True` a nivel de modelo.
 - Un `ValidationError` de Pydantic escapando de la capa.
-- Duplicar en el programa una regla que ya vive en `controles.py` **sin declararlo con su motivo** en la
-  seccion de adaptadores: la duplicacion declarada es la decision de esta capa, la silenciosa es el fallo.
+- Duplicar en el programa una regla que ya vive en un script de `skills/` **sin declararlo con su
+  motivo** en la seccion de adaptadores: la duplicacion declarada es la decision de esta capa, la
+  silenciosa es el fallo.
 - `check=True` al lanzar un proceso cuyo `stderr` lleva el motivo del fallo.
 - **Lanzar un proceso sin `timeout`**, o lanzarlo con uno que el propio adaptador se inventa en vez de
   recibirlo en los `Budgets`. Una llamada sin tope cuelga el run entero sin diagnostico y sin coste

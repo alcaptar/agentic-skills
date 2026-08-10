@@ -60,10 +60,7 @@ Estos ficheros preceden a las convenciones actuales. **No los imites al escribir
 siquiera como "ejemplo del repo":
 
 - `skills/slice-runner/scripts/` y `skills/deploy-watch/scripts/` — en castellano y llenos de
-  docstrings. Y una de esas docstrings, la de `skills/slice-runner/scripts/controles.py`, es una de las
-  copias en prosa del numero de la ventana de gracia de la integracion continua -el numero vive en
-  `src/slice_runner/domain/budgets.py` y las tres copias escritas las compara
-  `tests/test_skill_contracts.py`-, asi que borrarla a ciegas tira un contrato.
+  docstrings.
 - `tests/` — todavia function-based y en castellano.
 
 `src/slice_runner/` es el primero que cumple las convenciones enteras: **ese es el ejemplo**. La
@@ -137,20 +134,18 @@ Estos no son convenciones de codigo: son las invariantes del pipeline, y valen e
   (comandos, rama, controles, PR, CI), medido con la vara de **ese** repo (su subseccion `### org/repo`
   en las fuentes de convencion). La feature sigue siendo un solo issue padre, con su subissue por slice.
 
-## Tras tocar un agente definido
+## Donde vive la metodologia del implementador y la rubrica del juez
 
-`agents/slice-implementer.md` y `agents/slice-verifier.md` no se releen en caliente: el registro de
-agentes se cachea al primer load de la sesion, al contrario que las skills. Si editas uno, **la sesion
-en curso sigue usando la version vieja**. Para probarlo hace falta sesion nueva; si no, el smoke valida
-la definicion equivocada en silencio.
+`agents/slice-implementer.md` y `agents/slice-verifier.md` eran agentes definidos del flujo viejo (la
+skill `/slice-runner`, retirada). Se retiraron de este repo porque no les quedaba consumidor: la skill
+que los citaba ya no vive aqui, y el programa nunca los leyo. Su rastro sigue vivo en
+`alcaptar/agentic-skills-legacy` (ver "Instalacion" en `README.md`).
 
-Los dos son la mitad de "el que implementa no verifica", y hoy conviven dos flujos con esa misma
-regla resuelta en sitios distintos. En el flujo viejo (el agente), la metodologia del implementador
-vive en su system prompt y **no** se relata desde `slice-runner`. En el flujo nuevo (el programa), la
-posee `src/slice_runner/infrastructure/slice_implementer_brief.py`: es lo que el programa le manda a
-`claude -p`, igual que la rubrica del juez vive en `slice_verifier_judge.py` (ver
-`docs/conventions/infrastructure.md`). Si anades una regla de como implementar, va en el agente o en
-el brief segun el flujo que toques; si es un dato del run, va en el paso 5.
+El programa lleva su propia metodologia y su propia rubrica, y es donde va cualquier regla nueva sobre
+como implementar o que juzga el verificador: la metodologia del implementador en
+`src/slice_runner/infrastructure/slice_implementer_brief.py` -es lo que el programa le manda a
+`claude -p`- y la rubrica del juez en `slice_verifier_judge.py` (ver
+`docs/conventions/infrastructure.md`). Si es un dato del run y no una regla, va en el paso 5.
 
 ## Como se mide un cambio
 

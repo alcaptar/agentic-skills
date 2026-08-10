@@ -7,9 +7,9 @@ el agente lo filtre y la persona lo confirme. El juicio y la confirmacion no viv
 este helper solo evita que el agente invente comandos o asuma un toolchain.
 
 `slice-spec` compone: discover_candidates (aqui) -> el agente propone el mapeo
-`nombre: comando` -> la persona confirma -> `issue_body.set_controles` escribe la seccion
-`## Controles` del issue. A partir de ahi `slice-runner` solo lee: ningun agente vuelve a
-abrir un `Makefile` en tiempo de run.
+`nombre: comando` -> la persona confirma -> se escribe la seccion `## Controles` del issue.
+A partir de ahi `slice-runner` solo lee: ningun agente vuelve a abrir un `Makefile` en
+tiempo de run.
 
 El `Makefile` va primero a proposito: en muchos repos todo corre en Docker via `make` y
 lanzar `pytest`/`ruff`/`mypy` directos fallaria.

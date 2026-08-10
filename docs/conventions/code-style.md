@@ -39,8 +39,8 @@ el diff-.
 
 Solo lo que es **dato de un contrato** y no codigo: los valores del veredicto del juez
 (`PASA`/`FALLA`, `alta`/`media`/`baja`) y las claves de su JSON (`regla`, `evidencia`...), porque los
-fija la rubrica de `agents/slice-verifier.md`, los valida `skills/slice-runner/scripts/controles.py`,
-y traducirlos rompe el contrato en vez de renombrar una variable.
+fija la rubrica de `SliceVerifierJudge` (`src/slice_runner/infrastructure/slice_verifier_judge.py`), la
+valida `VerdictPayload`, y traducirlos rompe el contrato en vez de renombrar una variable.
 
 **Clave del contrato no es nombre de campo**: los campos van en ingles y la traduccion vive en el
 `alias` del modelo de frontera. Ver `docs/conventions/infrastructure.md`.
@@ -54,7 +54,7 @@ castellano: una convencion escrita donde nadie la carga antes de escribir no mid
 - Siempre al inicio del fichero, **nunca** dentro de funciones, metodos o clases.
 - Agrupados: (1) stdlib, (2) terceros, (3) modulos del proyecto. Separados por linea en blanco. Lo
   ordena `I` (isort) en `ruff`, y `known-first-party` declara los scripts que se importan por nombre
-  (`controles`, `issue_body`...) para que no se mezclen con las dependencias de terceros.
+  (`metrics`, `discover_conventions`...) para que no se mezclen con las dependencias de terceros.
 - Los imports usados solo en anotaciones van en un bloque `if TYPE_CHECKING:` al final del bloque,
   con el mismo orden interno. El bloque solo se introduce si hay imports que sean solo-tipos.
 

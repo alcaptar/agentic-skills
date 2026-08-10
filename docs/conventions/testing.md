@@ -139,15 +139,12 @@ real es lo unico que se esta midiendo.
 `make check` **tambien cubre los `.md`**, no solo el codigo. `tests/test_skill_contracts.py` compara los
 contratos que hoy estan escritos dos veces:
 
-- motivos de `bloqueada:` en `SKILL.md` vs `issue_body.py`
 - veredictos de `metrics.py`
 - el vocabulario del log durable y el argv de `record`, entre el programa y `metrics.py`
-- el JSON del verificador en `agents/` y en `slice-runner`
 - las herramientas que `src/slice_runner/` concede al juez vs las que declara su prompt
 - las claves del hallazgo en la rubrica vs los `alias` de `FindingPayload`
 - los veredictos y las severidades de la rubrica vs los que el programa acepta
 - el criterio de degradacion sin subagentes, duplicado a proposito en `slice-runner` y `deploy-watch`
-- los prefijos de artefacto prohibido de `controles.py` vs los de `StagedHygiene` en el programa
 
 Cada test **extrae** el vocabulario de ambos lados y los compara, asi que reescribir las dos copias a la
 vez pasa y tocar solo una falla. Si editas una skill y `make check` se pone rojo ahi, es que has movido
@@ -180,7 +177,7 @@ son el mismo fallo: una vara que solo mira donde ya se cumple no mide nada.
 Comprueba ademas que **toda ruta de este repo citada en los `.md` existe**
 (`test_every_repo_path_cited_in_the_docs_still_exists`). Aqui no se enlaza con markdown: se citan rutas
 en backticks, asi que lo que se valida es el token. Solo entran los que empiezan por un directorio de
-primer nivel del repo, lo que deja fuera por construccion los nombres sueltos (`controles.py`), las
+primer nivel del repo, lo que deja fuera por construccion los nombres sueltos (`metrics.py`), las
 rutas de otros repos y los patrones de rama (`slice/NN-name`). Dos ficheros no se escanean, cada uno por
 lo que **es**: `docs/superpowers/specs/` (registro fechado, describe el arbol de su dia) y
 `skills/slice-spec/references/observabilidad.md` (documenta rutas de repos ajenos).

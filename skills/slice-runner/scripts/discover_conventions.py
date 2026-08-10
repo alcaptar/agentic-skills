@@ -8,7 +8,7 @@ una ubicacion fija (`docs/conventions/` + `CLAUDE.md`), que fue la causa raiz qu
 mecanismo corrige.
 
 `slice-spec` compone: discover_candidates (aqui) -> el agente filtra/propone -> el
-humano confirma -> `issue_body.set_fuentes` escribe los punteros en el issue.
+humano confirma -> la seccion `## Fuentes de convencion` se escribe en el issue.
 
 Determinista y offline: solo lee el arbol de ficheros, no habla con `gh`. Se testea con
 un arbol de prueba (tmp_path).
@@ -18,9 +18,30 @@ from __future__ import annotations
 
 import os
 import re
+from dataclasses import dataclass
+from enum import StrEnum
 from pathlib import Path
 
-from issue_body import Fuente, TipoFuente
+
+class TipoFuente(StrEnum):
+    """`doc` es convencion declarativa (CLAUDE.md, docs de reglas); `skill`, skill de proyecto."""
+
+    DOC = "doc"
+    SKILL = "skill"
+
+
+@dataclass(frozen=True, kw_only=True, slots=True)
+class Fuente:
+    """Un puntero a una fuente de convencion de un repo.
+
+    `ruta` es la ruta relativa al repo. `repo` es el repo al que aplica: `None` = el repo del
+    issue (el de la app).
+    """
+
+    tipo: str
+    ruta: str
+    repo: str | None = None
+
 
 _NOISE_DIRS = frozenset(
     {
