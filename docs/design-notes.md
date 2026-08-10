@@ -158,6 +158,18 @@ mide. Las reglas que salen de estas decisiones siguen en su capa.
   ya pagada en vez de impedir la siguiente. Con el implementador fijando Sonnet la muestra crecio con
   **8.77 y 13.75 $**, bastante por debajo del rango de Opus, lo que confirma que fijar el modelo barato
   abarata la slice tipica sin tocar el backstop. El techo subio a 50 $ **sin tocar que se cuenta**.
+- **Los reintentos del juez, y por que se repartieron en vez de recortarse.** La intuicion era que llegar
+  al segundo reintento significa un problema que ninguna vuelta arregla -una convencion mal escrita, un
+  criterio mal definido- y que por tanto sobra. Medido sobre el corpus, es al reves: de las cuatro
+  secuencias que llegaron a gastar los dos, **en tres el segundo reintento convirtio un veto que habria
+  cerrado la slice en algo entregable**, y una necesito ademas un tercero. Con esa muestra no es
+  concluyente, pero desaconseja recortar. Lo que si es solido es el reparto de las 60 verificaciones
+  registradas: **21 vetos, 26 correcciones que no bloquean y 13 limpias**, o sea que el 43% de las vueltas
+  que pagaba el presupuesto no impedian entregar nada -y ademas no convergian: hay secuencias que
+  devuelven los mismos hallazgos dos veces seguidas-. De ahi que las dos causas dejaran de compartir
+  contador, que es la misma regla que ya separaba la higiene de los controles. La reconstruccion se hizo
+  por bloques consecutivos del mismo identificador de slice, que es lo unico posible mientras el corpus no
+  tenga identidad ni instante por fila.
 
 ### El descarte de aprobacion pagada, y por que hay dos comprobaciones de coste
 
