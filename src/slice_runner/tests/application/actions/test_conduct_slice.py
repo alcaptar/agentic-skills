@@ -94,23 +94,53 @@ class TestConductSliceStartingANewRun:
         assert conductor.implement.execute.call_count == 0
         assert result.halt is Halt.WAIT_EXHAUSTED
 
-    def test_the_run_pauses_on_the_label_the_subissue_already_carried(self) -> None:
+    def test_the_run_pauses_on_the_in_progress_label_it_wrote_when_selected_not_the_one_the_subissue_carried(
+        self,
+    ) -> None:
         conductor = self._conductor()
 
         conductor.conduct()
 
         conductor.repository.pause_for_alignment.assert_called_once_with(
-            repo=Conductor.REPO, issue=_SUBISSUE, remove=IssueLabel.PENDING
+            repo=Conductor.REPO, issue=_SUBISSUE, remove=IssueLabel.IN_PROGRESS
         )
 
-    def test_a_subissue_with_no_label_yet_pauses_without_asking_gh_to_remove_one_that_is_not_there(self) -> None:
+    def test_a_subissue_with_no_label_yet_is_marked_in_progress_without_asking_gh_to_remove_one_that_is_not_there(
+        self,
+    ) -> None:
         conductor = Conductor(chosen=SelectSliceResultMother.about_to_start(subissue=SubIssueMother.unlabelled()))
 
         conductor.conduct()
 
-        conductor.repository.pause_for_alignment.assert_called_once_with(
-            repo=Conductor.REPO, issue=_SUBISSUE, remove=None
+        conductor.repository.write_label.assert_any_call(
+            repo=Conductor.REPO, issue=_SUBISSUE, remove=None, add=IssueLabel.IN_PROGRESS
         )
+        conductor.repository.pause_for_alignment.assert_called_once_with(
+            repo=Conductor.REPO, issue=_SUBISSUE, remove=IssueLabel.IN_PROGRESS
+        )
+
+    def test_selecting_a_slice_marks_the_subissue_in_progress_before_the_understanding_call(self) -> None:
+        conductor = self._conductor()
+        manager = Mock()
+        manager.attach_mock(conductor.repository.write_label, "write_label")
+        manager.attach_mock(conductor.understanding.write, "understand")
+
+        conductor.conduct()
+
+        assert [call[0] for call in manager.mock_calls][:2] == ["write_label", "understand"]
+        conductor.repository.write_label.assert_any_call(
+            repo=Conductor.REPO, issue=_SUBISSUE, remove=IssueLabel.PENDING, add=IssueLabel.IN_PROGRESS
+        )
+
+    def test_reinvoking_a_subissue_already_marked_in_progress_does_not_write_the_label_again(self) -> None:
+        conductor = Conductor(
+            chosen=SelectSliceResultMother.about_to_start(subissue=SubIssueMother.carrying(IssueLabel.IN_PROGRESS))
+        )
+
+        conductor.conduct()
+
+        assert conductor.repository.write_label.call_count == 0
+        assert conductor.understanding.write.call_count == 1
 
     def test_the_branch_of_the_slice_is_cut_from_the_declared_base(self) -> None:
         conductor = self._conductor()
