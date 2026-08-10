@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
+from slice_runner.domain.alignment import Alignment
 from slice_runner.domain.exceptions import InvalidUnderstandingReportError
 from slice_runner.domain.step import Step
 from slice_runner.infrastructure.claude_understanding import ClaudeUnderstanding
@@ -36,7 +37,7 @@ class Writing:
         trace: RecordedTrace | None = None,
         turns: RecordedTurnLog | None = None,
         spend_log: RecordedSpendLog | None = None,
-        correction: str = "",
+        alignment: Alignment | None = None,
     ) -> Understanding:
         return ClaudeUnderstanding(
             process=process,
@@ -48,7 +49,7 @@ class Writing:
             parent=ParentIssueMother.with_sources_and_controls(),
             repo=UnderstandingInvocationMother.REPO,
             worktree=UnderstandingInvocationMother.WORKTREE,
-            correction=correction,
+            alignment=alignment or Alignment(),
         )
 
     @staticmethod
@@ -67,7 +68,7 @@ class TestWhereTheProcessRuns:
     def test_a_correction_travels_on_standard_input_so_the_writer_rewrites_around_it(self) -> None:
         process = Writing.carrying("asi entiendo la slice, ya corregida")
 
-        Writing.understood(process, correction="la senal no esta exenta, hay que medirla")
+        Writing.understood(process, alignment=Alignment(correction="la senal no esta exenta, hay que medirla"))
 
         assert "la senal no esta exenta, hay que medirla" in process.stdin
 

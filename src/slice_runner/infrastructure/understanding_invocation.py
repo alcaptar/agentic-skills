@@ -9,6 +9,7 @@ from slice_runner.infrastructure.understanding_brief import UnderstandingBrief
 from slice_runner.infrastructure.understanding_report_payload import UnderstandingReportPayload
 
 if TYPE_CHECKING:
+    from slice_runner.domain.alignment import Alignment
     from slice_runner.domain.controls import Controls
     from slice_runner.domain.parent_issue import ParentIssue
     from slice_runner.domain.sub_issue import SubIssue
@@ -23,7 +24,7 @@ class UnderstandingInvocation:
     parent: ParentIssue
     repo: str
     worktree: str
-    correction: str
+    alignment: Alignment
 
     @property
     def cwd(self) -> str:
@@ -49,14 +50,29 @@ class UnderstandingInvocation:
     @property
     def text(self) -> str:
         sections = [UnderstandingBrief.TEXT, "", self._slice_data]
-        if self.correction.strip():
+        if self.alignment.agreed.strip():
+            sections.extend(["", self._agreed])
+        if self.alignment.correction.strip():
             sections.extend(["", self._correction])
 
         return "\n".join(sections)
 
     @property
+    def _agreed(self) -> str:
+        return "\n".join(
+            [
+                "## Lo acordado hasta ahora",
+                "",
+                "Es el entendimiento que ya se publico, con las correcciones anteriores dentro. Reescribelo",
+                "entero aplicando la correccion nueva, y **conserva lo demas**: lo que no se corrige sigue acordado.",
+                "",
+                self.alignment.agreed,
+            ]
+        )
+
+    @property
     def _correction(self) -> str:
-        return "\n".join(["## Correccion pedida", "", self.correction])
+        return "\n".join(["## Correccion pedida", "", self.alignment.correction])
 
     @property
     def _slice_data(self) -> str:

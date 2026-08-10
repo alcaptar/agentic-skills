@@ -19,6 +19,9 @@ class RunRepository(ABC):
     def read_children(self, *, repo: str, parent: int, expected: int) -> tuple[SubIssue, ...]: ...
 
     @abstractmethod
+    def read_understanding(self, *, repo: str, issue: int) -> str: ...
+
+    @abstractmethod
     def read_alignment_response(self, *, repo: str, issue: int) -> AlignmentResponse: ...
 
     @abstractmethod

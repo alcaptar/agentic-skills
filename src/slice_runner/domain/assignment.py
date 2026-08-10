@@ -24,3 +24,4 @@ class Assignment:
     findings: tuple[Finding, ...] = ()
     control_logs: tuple[Path, ...] = ()
     hygiene_refusal: str = ""
+    understanding: str = ""

@@ -95,3 +95,26 @@ class TestTheSliceDataThatTravelsWithTheBrief:
         text = UnderstandingInvocationMother.carrying_a_correction("la senal no esta exenta, hay que medirla").text
 
         assert text.endswith("## Correccion pedida\n\nla senal no esta exenta, hay que medirla")
+
+
+class TestWhatWasAlreadyAgreedInEarlierRounds:
+    @staticmethod
+    def _text(agreed: str, correction: str) -> str:
+        return UnderstandingInvocationMother.carrying_what_was_already_agreed(agreed, correction).text
+
+    def test_a_second_round_carries_what_the_first_one_agreed_so_the_new_correction_does_not_erase_it(self) -> None:
+        text = self._text("el contador vive en Run", "y el tope arranca en 1")
+
+        assert "## Lo acordado hasta ahora" in text
+        assert "el contador vive en Run" in text
+
+    def test_it_says_out_loud_that_what_is_not_corrected_stays_agreed(self) -> None:
+        assert "lo que no se corrige sigue acordado" in self._text("lo de antes", "lo nuevo")
+
+    def test_what_was_agreed_comes_before_the_correction_so_the_newest_data_still_closes_the_prompt(self) -> None:
+        text = self._text("lo de antes", "lo nuevo")
+
+        assert text.index("## Lo acordado hasta ahora") < text.index("## Correccion pedida")
+
+    def test_a_first_round_carries_no_section_because_nothing_was_agreed_yet(self) -> None:
+        assert "Lo acordado hasta ahora" not in UnderstandingInvocationMother.of_the_chosen_slice().text

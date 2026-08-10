@@ -575,6 +575,34 @@ class TestWritingTheUnderstanding:
             GhRunRepository(process=process).write_understanding(repo=_REPO, issue=45, understanding="x")
 
 
+class TestReadingBackWhatWasAgreed:
+    @staticmethod
+    def _process(bodies: list[str]) -> ScriptedProcess:
+        template = GhResponseMother.subissue_comments()[0]
+        payload = {"comments": [{**template, "body": body} for body in bodies]}
+
+        return ScriptedProcess(ProcessOutput(code=0, stdout=json.dumps(payload), stderr=""))
+
+    def test_what_comes_back_is_the_understanding_without_the_instructions_that_were_added_to_publish_it(
+        self,
+    ) -> None:
+        process = self._process([UnderstandingComment.rendered("el contador vive en Run")])
+
+        assert GhRunRepository(process=process).read_understanding(repo=_REPO, issue=45) == "el contador vive en Run"
+
+    def test_the_last_one_published_wins_because_a_review_republishes_it_corrected(self) -> None:
+        process = self._process(
+            [UnderstandingComment.rendered("el primero"), "-REVIEW usa Run", UnderstandingComment.rendered("el ultimo")]
+        )
+
+        assert GhRunRepository(process=process).read_understanding(repo=_REPO, issue=45) == "el ultimo"
+
+    def test_a_subissue_without_any_understanding_comes_back_empty_instead_of_raising(self) -> None:
+        process = self._process(["un comentario cualquiera", "-GO"])
+
+        assert GhRunRepository(process=process).read_understanding(repo=_REPO, issue=45) == ""
+
+
 class TestReadingTheAlignmentResponse:
     @staticmethod
     def _process(bodies: list[str]) -> ScriptedProcess:

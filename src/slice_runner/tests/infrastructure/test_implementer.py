@@ -175,6 +175,36 @@ class TestTheSliceDataThatTravelsWithTheBrief:
         )
 
 
+class TestTheAgreedUnderstandingThatTravelsWithTheBrief:
+    @staticmethod
+    def _sent(assignment: Assignment) -> str:
+        process = RecordedProcess(HarnessEnvelopeMother.recorded(_RECORDED))
+
+        ClaudeImplementer(
+            process=process, trace=RecordedTrace(), turns=RecordedTurnLog(), spend_log=RecordedSpendLog()
+        ).implement(assignment)
+
+        return process.stdin
+
+    def test_what_the_person_agreed_to_travels_even_when_nobody_corrected_it(self) -> None:
+        sent = self._sent(AssignmentMother.of_the_first_round_with_an_agreed_understanding())
+
+        assert AssignmentMother.UNDERSTANDING in sent
+
+    def test_it_says_the_conventions_and_the_criteria_win_so_it_does_not_read_as_an_order_to_transcribe(self) -> None:
+        sent = self._sent(AssignmentMother.of_the_first_round_with_an_agreed_understanding())
+
+        assert "las convenciones del repo y los criterios de aceptacion ganan" in sent
+
+    def test_it_closes_the_prompt_so_the_variable_part_stays_last(self) -> None:
+        assert self._sent(AssignmentMother.of_the_first_round_with_an_agreed_understanding()).endswith(
+            AssignmentMother.UNDERSTANDING
+        )
+
+    def test_a_slice_conducted_without_an_alignment_carries_no_section_instead_of_an_empty_one(self) -> None:
+        assert "\n## Entendimiento acordado\n" not in self._sent(AssignmentMother.of_the_first_round())
+
+
 class TestTheReportOfARecordedCall:
     def test_both_paths_of_the_recorded_call_arrive_labelled(self) -> None:
         process = RecordedProcess(HarnessEnvelopeMother.recorded(_RECORDED))

@@ -115,3 +115,17 @@ class TestImplementSlice:
         action.execute(replace(self._params(), hygiene_refusal="src/leftover.py (not-declared)"))
 
         assert self._assigned(implementer).hygiene_refusal == "src/leftover.py (not-declared)"
+
+    def test_what_the_person_agreed_to_in_the_alignment_is_assigned_so_the_round_is_ruled_by_it(
+        self, action: ImplementSlice, implementer: Mock
+    ) -> None:
+        action.execute(replace(self._params(), understanding="el contador vive en Run, no en el conductor"))
+
+        assert self._assigned(implementer).understanding == "el contador vive en Run, no en el conductor"
+
+    def test_a_slice_conducted_without_an_alignment_assigns_no_understanding_at_all(
+        self, action: ImplementSlice, implementer: Mock
+    ) -> None:
+        action.execute(self._params())
+
+        assert self._assigned(implementer).understanding == ""

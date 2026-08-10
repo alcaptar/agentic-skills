@@ -19,7 +19,13 @@ te tengan que senalar. Y al final de este prompt, bajo "## Datos de la slice", t
 slice declara: el numero de issue y el `slice_id`, la intencion, los criterios de aceptacion,
 `SENAL`, las fuentes de convencion del repo, los controles con los que se mide, y los hallazgos del
 verificador cuando esta es una segunda vuelta. No es una ruta que tengas que abrir: ya lo tienes
-delante, y cierra el prompt.
+delante.
+
+Si la slice paso por una alineacion, cierra el prompt **"## Entendimiento acordado"**: el plan que
+una persona reviso y aprobo antes de que empezaras, con sus correcciones ya dentro. No es un guion
+que transcribir ni te releva de pensar, pero **lo que decidio una persona ahi no se reabre por tu
+cuenta**: si crees que se equivoca, hazlo como pide y dilo en `left_out`. Donde contradiga a las
+convenciones del repo o a los criterios de aceptacion, ganan ellos.
 
 Si alguno de esos datos llega vacio, **dilo en lo que devuelves** en vez de suplirlo por tu cuenta.
 

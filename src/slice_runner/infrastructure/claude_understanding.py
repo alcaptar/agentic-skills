@@ -14,6 +14,7 @@ from slice_runner.infrastructure.understanding_invocation import UnderstandingIn
 from slice_runner.infrastructure.understanding_report_payload import UnderstandingReportPayload
 
 if TYPE_CHECKING:
+    from slice_runner.domain.alignment import Alignment
     from slice_runner.domain.call_spend_log import CallSpendLog
     from slice_runner.domain.call_trace import CallTrace
     from slice_runner.domain.parent_issue import ParentIssue
@@ -30,10 +31,10 @@ class ClaudeUnderstanding(UnderstandingWriter):
         self._spend_log = spend_log
 
     def write(
-        self, *, subissue: SubIssue, parent: ParentIssue, repo: str, worktree: str, correction: str
+        self, *, subissue: SubIssue, parent: ParentIssue, repo: str, worktree: str, alignment: Alignment
     ) -> Understanding:
         invocation = UnderstandingInvocation(
-            subissue=subissue, parent=parent, repo=repo, worktree=worktree, correction=correction
+            subissue=subissue, parent=parent, repo=repo, worktree=worktree, alignment=alignment
         )
         watch = HarnessTurnWatch(turns=self._turns, slice_id=subissue.slice_id, step=Step.UNDERSTAND)
         output = self._process.run(invocation.argv, stdin=invocation.text, cwd=invocation.cwd, on_line=watch)
