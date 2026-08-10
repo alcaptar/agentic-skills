@@ -16,7 +16,12 @@ class TestWhatTheProgramEmits:
                 "duration_ms": 36315,
                 "calls": 1,
                 "models": ["claude-sonnet-5"],
+                "input_tokens": 13,
+                "output_tokens": 1159,
+                "cache_creation_tokens": 42251,
                 "cache_read_tokens": 241303,
+                "ttft_ms": 5588,
+                "duration_api_ms": 32189,
             },
             "status": "advancing",
         }

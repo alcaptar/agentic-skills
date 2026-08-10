@@ -5,13 +5,16 @@ from typing import TYPE_CHECKING
 
 import pytest
 
+from slice_runner.domain.call_spend_log import HarnessCallSpend
 from slice_runner.domain.exceptions import UnreadableCallSpendLogError
 from slice_runner.domain.harness_spend import HarnessSpend
 from slice_runner.infrastructure.call_spend_payload import CallSpendPayload
 from slice_runner.infrastructure.claude_config import ClaudeConfig
+from slice_runner.infrastructure.harness_output import HarnessOutput
 from slice_runner.infrastructure.local_call_spend_log import LocalCallSpendLog
 from slice_runner.tests.mothers.harness_call_spend_mother import HarnessCallSpendMother
 from slice_runner.tests.mothers.harness_spend_mother import HarnessSpendMother
+from slice_runner.tests.mothers.judge_output_mother import HarnessEnvelopeMother
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -46,7 +49,12 @@ class TestWhatIsWrittenDownOfACall(WithTheLedgerOutOfTheRealHome):
                     "duration_ms": call.spend.duration_ms,
                     "calls": call.spend.calls,
                     "models": list(call.spend.models),
+                    "input_tokens": call.spend.input_tokens,
+                    "output_tokens": call.spend.output_tokens,
+                    "cache_creation_tokens": call.spend.cache_creation_tokens,
                     "cache_read_tokens": call.spend.cache_read_tokens,
+                    "ttft_ms": call.spend.ttft_ms,
+                    "duration_api_ms": call.spend.duration_api_ms,
                 },
             }
         ]
@@ -100,6 +108,23 @@ class TestAddingUpTheSpendOfSomeSessions(WithTheLedgerOutOfTheRealHome):
             [HarnessSpendMother.of_the_implementer_call(), HarnessSpendMother.of_the_judge_call()]
         )
 
+    def test_the_sessions_of_several_calls_add_each_new_token_field_on_its_own_side(self, tmp_path: Path) -> None:
+        ledger = LocalCallSpendLog()
+        ledger.record(HarnessCallSpendMother.of_the_implementer())
+        ledger.record(HarnessCallSpendMother.of_the_judge())
+        implementer = HarnessSpendMother.of_the_implementer_call()
+        judge = HarnessSpendMother.of_the_judge_call()
+
+        found = ledger.spend_of(
+            (HarnessCallSpendMother.of_the_implementer().session, HarnessCallSpendMother.of_the_judge().session)
+        )
+
+        assert (found.input_tokens, found.output_tokens, found.cache_creation_tokens) == (
+            implementer.input_tokens + judge.input_tokens,
+            implementer.output_tokens + judge.output_tokens,
+            implementer.cache_creation_tokens + judge.cache_creation_tokens,
+        )
+
     def test_no_session_matching_returns_nothing_measured_instead_of_a_zero(self, tmp_path: Path) -> None:
         ledger = LocalCallSpendLog()
         ledger.record(HarnessCallSpendMother.of_the_implementer())
@@ -130,6 +155,27 @@ class TestAddingUpTheSpendOfSomeSessions(WithTheLedgerOutOfTheRealHome):
 
         with pytest.raises(UnreadableCallSpendLogError):
             LocalCallSpendLog().spend_of((HarnessCallSpendMother.of_the_implementer().session,))
+
+
+class TestARealEnvelopeReachesTheLedger(WithTheLedgerOutOfTheRealHome):
+    def test_the_tokens_and_the_latencies_a_real_envelope_brings_survive_to_the_durable_ledger(
+        self, tmp_path: Path
+    ) -> None:
+        spend = HarnessOutput.from_dict(HarnessEnvelopeMother.recorded("full-recipe")).to_domain()
+        call = HarnessCallSpend(session=HarnessEnvelopeMother.SESSION_OF_THE_JUDGE, spend=spend)
+        ledger = LocalCallSpendLog()
+
+        ledger.record(call)
+
+        found = ledger.spend_of((call.session,))
+        assert (
+            found.input_tokens,
+            found.output_tokens,
+            found.cache_creation_tokens,
+            found.cache_read_tokens,
+            found.ttft_ms,
+            found.duration_api_ms,
+        ) == (17, 3443, 16547, 15510, 5384, 28905)
 
 
 class TestReadingBackWhatWasWritten:

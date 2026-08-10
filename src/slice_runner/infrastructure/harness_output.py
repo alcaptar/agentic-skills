@@ -23,7 +23,7 @@ class HarnessOutput(ContractModel):
     structured_output: dict[str, object]
 
     api_error_status: object = None
-    duration_api_ms: object = None
+    duration_api_ms: int | None = None
     duration_ms: int
     fast_mode_disabled_reason: object = None
     fast_mode_state: object = None
@@ -37,21 +37,29 @@ class HarnessOutput(ContractModel):
     terminal_reason: object = None
     time_to_request_ms: object = None
     total_cost_usd: float
-    ttft_ms: object = None
+    ttft_ms: int | None = None
     ttft_stream_ms: object = None
     type: object = None
     usage: object = None
     uuid: object = None
 
     def to_domain(self) -> HarnessSpend:
-        return HarnessSpend.of_a_call(
+        return HarnessSpend(
             cost_usd=self.total_cost_usd,
             turns=self.num_turns,
             duration_ms=self.duration_ms,
-            models=tuple(self.model_usage) if self.model_usage else (),
+            calls=1,
+            models=tuple(sorted(self.model_usage)) if self.model_usage else (),
+            input_tokens=sum(entry.input_tokens for entry in self.model_usage.values()) if self.model_usage else 0,
+            output_tokens=sum(entry.output_tokens for entry in self.model_usage.values()) if self.model_usage else 0,
+            cache_creation_tokens=sum(entry.cache_creation_input_tokens for entry in self.model_usage.values())
+            if self.model_usage
+            else 0,
             cache_read_tokens=sum(entry.cache_read_input_tokens for entry in self.model_usage.values())
             if self.model_usage
             else 0,
+            ttft_ms=self.ttft_ms or 0,
+            duration_api_ms=self.duration_api_ms or 0,
         )
 
     @contextmanager
