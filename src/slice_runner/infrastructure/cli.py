@@ -16,6 +16,8 @@ from slice_runner.application.actions.conduct_slice import (
 )
 from slice_runner.application.actions.deliver_slice import DeliverSlice
 from slice_runner.application.actions.implement_slice import ImplementSlice
+from slice_runner.application.actions.record_closure import RecordClosure
+from slice_runner.application.actions.record_step import RecordStep
 from slice_runner.application.actions.stage_slice import StageSlice
 from slice_runner.application.actions.verify_slice import VerifySlice, VerifySliceParams
 from slice_runner.application.queries.read_conversation import ReadConversation, ReadConversationParams
@@ -328,6 +330,8 @@ class Cli:
                 verify=self._action(),
                 deliver=DeliverSlice(workspace=workspace, forum=forum),
                 close=CloseParent(repository=repository),
+                record_step=RecordStep(repository=repository, events=StderrEventLog(), clock=clock),
+                record_closure=RecordClosure(metrics=LocalMetricsLog(clock=clock)),
             ),
             ports=ConductSlicePorts(
                 repository=repository,
@@ -336,7 +340,6 @@ class Cli:
                 ci=GhCi(process=self._process),
                 forum=forum,
                 clock=clock,
-                metrics=LocalMetricsLog(clock=clock),
                 understanding=ClaudeUnderstanding(
                     process=self._process,
                     trace=LocalCallTrace(),
@@ -346,7 +349,6 @@ class Cli:
                 ),
                 pull_request=SlicePullRequest(),
                 deploy_watch=ClaudeDeployWatch(process=self._process),
-                events=StderrEventLog(),
             ),
             machine=StateMachine(budgets=self._budgets),
             budgets=self._budgets,

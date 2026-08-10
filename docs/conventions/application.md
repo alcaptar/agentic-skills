@@ -51,6 +51,25 @@ compone casi todos los puertos del programa. Una action normal sigue listando su
 como el ejemplo de arriba, y un caso de uso que llegue a necesitar el agrupamiento esta diciendo que hace
 demasiado: la respuesta por defecto ahi es partirlo, no empaquetarle los argumentos.
 
+## Dejar constancia no es conducir
+
+**Quien decide el flujo no compone la telemetria.** El caso de uso que orquesta un proceso largo decide
+**cuando** hay que dejar constancia de un paso; **como** se deja constancia -que se persiste para poder
+reanudar, que estado se publica, que se emite, que fila resume el proceso al cerrarse- es de otro caso de
+uso, al que invoca como a cualquiera.
+
+La regla se aplica cuando quien orquesta tendria que **nombrar tipos de telemetria** para construirlos.
+Mientras solo pase datos a un puerto, no hay nada que extraer.
+
+- **Quien compone un registro posee las reglas de que entra en el.** Si un dato no se pudo medir, decidir
+  que no entra -en vez de escribir un cero- es suyo, no de cada llamador: una regla repartida entre los
+  sitios que cierran un proceso acaba escrita en unos y no en otros.
+- **Un puerto compartido no se saca solo porque el registro lo use.** Quien orquesta conserva los puertos
+  que necesita para lo demas; extraerlos enteros obligaria a inventar un caso de uso por cada lectura.
+
+Lo que se gana no es tamano de fichero: es que un cambio en el registro y un cambio en el flujo dejen de
+tocar la misma pieza. La medicion que lo sostiene, en `docs/design-notes.md`.
+
 ## Lo que no hace
 
 - **No traduce a formatos externos.** Devuelve objetos del dominio; quien serializa es la frontera.

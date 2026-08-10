@@ -190,6 +190,29 @@ cuadrasen: la rubrica llego a ordenar cargar skills que el juez no podia leer, y
 de limpio. Un puerto para un valor constante era indireccion; el invariante necesitaba un objeto. La
 forma viene del agente raiz de `roman_expert/chat_agents` en `mercadona/mo.staff.django-playground`.
 
+### El registro de un paso sale del conductor, y por que no se saco mas
+
+`ConductSlice` decidia el flujo del run **y ademas** componia a mano su telemetria: el evento de cada
+transicion y la fila durable de cada cierre, esta ultima en dos sitios distintos. La consecuencia no era
+estetica: cualquier slice que anadiera un campo al registro tenia que entrar en la pieza que decide cuando
+se implementa, cuando se juzga y cuando se cierra.
+
+**El dato que lo decidio fue el reparto de lo pendiente.** De las nueve slices abiertas en ese momento,
+cuatro tocaban el registro (identidad de cada fila, configuracion y tamano del cambio, formato de los
+almacenes, rastro duplicado) y cuatro tocaban la ejecucion y la alineacion (desbloquear un run, indultar un
+hallazgo, pedir cambios sobre la pull request). Partido justo por la mitad, y las dos mitades colisionando
+en el mismo fichero sin tener nada que ver entre si: el paralelismo estaba capado por diseno, no por como
+estuvieran priorizadas.
+
+Se extrajo **solo el registro**, no las cinco responsabilidades que tenia. Sacar tambien la ejecucion de
+cada paso no compraba nada -esos metodos ya delegaban en casos de uso y no escondian logica-, y sacar el
+repositorio del issue habria obligado a inventar un caso de uso por cada lectura, porque la alineacion lo
+necesita para publicar el entendimiento, leer la respuesta y pausar.
+
+**Lo que mide el cambio no son las lineas** -el conductor bajo de 599 a 581, apenas nada- sino que dejo de
+nombrar ningun tipo de telemetria. Y de paso unifico una regla que estaba escrita en uno de los dos cierres
+y no en el otro: un gasto que nunca se midio no entra en la fila, en vez de contar como cero.
+
 ### La forma de una lista, extraida al tercer consumidor
 
 `CountedLines` vivio duplicada a proposito mientras solo la compartian dos prompts: cada uno es un
