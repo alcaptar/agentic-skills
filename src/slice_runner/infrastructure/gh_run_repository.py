@@ -38,7 +38,7 @@ class GhRunRepository(RunRepository):
         self._process = process
 
     def read_parent(self, *, repo: str, issue: int, slice_repo: str | None) -> ParentIssue:
-        output = self._run(["gh", "issue", "view", str(issue), "--repo", repo, "--json", "body,subIssuesSummary"])
+        output = self._run(["gh", "issue", "view", str(issue), "--repo", repo, "--json", "body,subIssuesSummary,state"])
         payload = GhParentViewPayload.from_dict(self._decoded_object(output))
         parsed = ParentBody.parse(payload.body, repo=slice_repo)
 
@@ -47,6 +47,7 @@ class GhRunRepository(RunRepository):
             sources=parsed.sources,
             controls=parsed.controls,
             subissue_count=payload.subissues_summary.total,
+            state=payload.state,
         )
 
     def read_children(self, *, repo: str, parent: int, expected: int) -> tuple[SubIssue, ...]:
@@ -144,6 +145,21 @@ class GhRunRepository(RunRepository):
                 f"La pull request #{pull_request} nace en borrador (`--draft`); hay que sacarla de "
                 "borrador para que el merge pueda ocurrir."
             ),
+        )
+
+    def close_parent(self, *, repo: str, issue: int, subissue_count: int) -> None:
+        self._run(
+            [
+                "gh",
+                "issue",
+                "close",
+                str(issue),
+                "--repo",
+                repo,
+                "--comment",
+                f"Las {subissue_count} subissue(s) de esta feature estan todas cerradas, asi que esta feature "
+                "se cierra con ellas.",
+            ]
         )
 
     @staticmethod
