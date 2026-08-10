@@ -1,5 +1,15 @@
 # Smoke test de slice-runner (real, contra GitHub)
 
+**Todo lo que sigue documenta el flujo anterior**: la skill `/slice-runner` orquestando a mano los
+subagentes `agents/slice-implementer.md` y `agents/slice-verifier.md`, sobre el formato viejo de un
+solo issue con checklist (`Part of #N`). Ese flujo ya no vive en este repo -esta congelado en
+`alcaptar/agentic-skills-legacy`, ver "Instalacion" en `../README.md` para donde apunta hoy el
+symlink de esa skill-, asi que reproducir el "Como ejecutarlo" de mas abajo exige instalarla desde
+ahi. El flujo que conduce hoy una slice (`uv run slice-runner run`, formato padre + subissue con
+`Closes #<subissue>`) no tiene todavia su propio smoke de I/O real contra `gh`; hasta que exista,
+este es el unico smoke de I/O real de este repo y por eso sigue vivo, no porque sea el smoke del
+flujo vigente.
+
 Harness para validar el loop de `slice-runner` de punta a punta **contra GitHub de verdad**: el
 estado del run vive en un issue, asi que el smoke ya no es offline. Es la forma de ganar confianza en
 el "self-verification loop" antes de subir al Nivel 2 (ver `../docs/maturity-map.md`).
@@ -144,10 +154,10 @@ version en disco ya no declaraba, y usaba `Bash`, que ya no estaba en su `tools`
 El camino feliz se dispara solo: la fixture esta preparada para pasar y basta correr el loop. Los cuatro
 caminos de fallo hay que **provocarlos**, y ninguna de las cuatro provocaciones se parece a las otras,
 asi que quedan escritas aqui para no volver a deducirlas cada vez. Lo que este fichero no repite es el
-contrato: los estados, los presupuestos de reintentos y el registro los declara
-`skills/slice-runner/SKILL.md` (pasos 6, 7 y 9), y la lista de motivos validos vive en
-`skills/slice-runner/scripts/issue_body.py` (`MotivoBloqueada`), que los valida al escribir en el
-issue. Aqui esta solo **como se provoca cada uno** y **que rastro debe quedar**.
+contrato: los estados y los presupuestos de reintentos los declaraba el `SKILL.md` del runner (retirado;
+ver `CLAUDE.md`), y la lista de motivos validos vive en `skills/slice-runner/scripts/issue_body.py`
+(`MotivoBloqueada`), que los valida al escribir en el issue. Aqui esta solo **como se provoca cada uno**
+y **que rastro debe quedar**.
 
 **Ojo con la version de los scripts que estas sondeando.** `~/.claude/skills/slice-runner/` es un
 symlink al arbol de trabajo de este repo, asi que la rama en la que estas **decide que codigo corre**. Si

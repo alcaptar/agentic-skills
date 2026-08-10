@@ -103,22 +103,23 @@ sin estado al harness** (`claude -p`, no un subagente que viva en tu sesion), la
 alineacion** -el programa espera tu `go`, un `review` con una correccion, o nada todavia- y las dos rojas
 son los **unicos puntos donde para y decides tu**: mergear, y si el despliegue sale mal, el rollback.
 
-Este es el flujo que conduce hoy `uv run slice-runner run` (detalle en "El paso que ya es un programa").
-Tambien existe un flujo anterior, orquestado a mano por la skill `/slice-runner` con los subagentes
-`agents/slice-implementer.md` y `agents/slice-verifier.md`: sigue instalable (ver "Instalacion"), pero ya
-no es lo que conduce una slice, y difiere justo en lo que ve quien revisa la pull request -como
-referencia el issue-: el flujo con la skill escribe `Part of #N` porque una feature es un solo issue con
-todas sus slices dentro; el flujo del programa escribe `Closes #<subissue>` porque cada slice es su
-propia subissue y GitHub la cierra sola al mergear.
+Este es el flujo que conduce hoy `uv run slice-runner run` (detalle en "El paso que ya es un programa"),
+siempre contra el formato **padre mas una subissue por slice** que crea `slice-spec`. Hubo un flujo
+anterior, orquestado a mano por la skill `/slice-runner` con los subagentes `agents/slice-implementer.md`
+y `agents/slice-verifier.md`, sobre un formato mas viejo -un solo issue con un checklist de slices dentro,
+donde la pull request referenciaba con `Part of #N`-: ese flujo ya no vive en este repo. La skill que lo
+conducia esta congelada en `alcaptar/agentic-skills-legacy` (ver "Instalacion" para donde apunta el
+symlink hoy); los dos agentes se quedan aqui porque el programa no los usa. El programa, en cambio,
+siempre escribe `Closes #<subissue>` porque cada slice es su propia subissue y GitHub la cierra sola al
+mergear.
 
 ## Las piezas
 
 | Pieza | Que es | Para que |
 |---|---|---|
-| `skills/slice-spec/SKILL.md` | Skill de autoria | Convierte una idea en una spec bien formada y **crea el issue**. Envuelve `superpowers:brainstorming` para el diseno; el troceo lo lleva su propio cerebro (`skills/slice-spec/references/slicing.md`). Modo `validate` para auditar una spec existente. No escribe codigo. |
-| `skills/slice-runner/SKILL.md` | Skill orquestadora (flujo anterior, ver "El paso que ya es un programa") | Ejecuta **una** slice de punta a punta: alinear, implementar, controlar, verificar, abrir PR, esperar integracion continua verde, y **parar**. No mergea. |
-| `agents/slice-implementer.md` | Definicion de subagente | El implementador. Su metodologia -ciclo TDD, exencion de capa, integridad de tests preexistentes, refactor tras cada verde, instrumentar la senal- va en su *system prompt*, no relatada por el orquestador: no se puede parafrasear ni saltar un item, y no cuesta contexto de la sesion. Tiene `Bash` porque correr el ciclo y los controles es su cometido. |
-| `agents/slice-verifier.md` | Definicion de subagente | El juez adversarial. Su rubrica va en el *system prompt* (verbatim en cada invocacion, no parafraseada) y sus herramientas son `Read, Grep, Glob, Skill`: **sin `Bash`**, asi que su incapacidad de ejecutar controles es estructural, no una promesa. |
+| `skills/slice-spec/SKILL.md` | Skill de autoria | Convierte una idea en una spec bien formada y **crea el issue padre mas una subissue por slice**. Envuelve `superpowers:brainstorming` para el diseno; el troceo lo lleva su propio cerebro (`skills/slice-spec/references/slicing.md`). Modo `validate` para auditar una spec existente. No escribe codigo. |
+| `agents/slice-implementer.md` | Definicion de subagente | El implementador del flujo anterior con la skill `/slice-runner` (ver "El flujo de un cambio"). Su metodologia -ciclo TDD, exencion de capa, integridad de tests preexistentes, refactor tras cada verde, instrumentar la senal- va en su *system prompt*, no relatada por un orquestador: no se puede parafrasear ni saltar un item. Tiene `Bash` porque correr el ciclo y los controles es su cometido. |
+| `agents/slice-verifier.md` | Definicion de subagente | El juez adversarial del flujo anterior con la skill `/slice-runner`. Su rubrica va en el *system prompt* (verbatim en cada invocacion, no parafraseada) y sus herramientas son `Read, Grep, Glob, Skill`: **sin `Bash`**, asi que su incapacidad de ejecutar controles es estructural, no una promesa. |
 | `skills/deploy-watch/SKILL.md` | Skill de post-merge | Vigila el despliegue en produccion, read-only. Orquesta por tick las skills de observabilidad que haya (Prometheus, Elasticsearch, logs de Google Cloud, Sentry...) segun el radio de impacto del cambio. Nunca ejecuta rollback: lo redacta. |
 | `skills/slice-runner/scripts/controles.py` | Script determinista | Cinco subcomandos: `controles` (ejecutar los comandos declarados; el log va a disco), `pr-hygiene` (que el diff staged solo tenga los ficheros de la slice), `diff-bundle` (materializar el diff para el juez, que no puede calcularlo), `ci-status` (estado de la integracion continua en un tiro) y `verify-verdict` (validar la forma del veredicto y contar severidades). |
 | `skills/slice-runner/scripts/issue_body.py` | Script determinista | Nucleo puro de parseo/reescritura del cuerpo del issue + interfaz de linea de comandos (`show`, `set-estado`). Fail-closed: si el issue viene vacio no escribe, porque un `edit` a ciegas borraria la spec entera. |
@@ -160,40 +161,22 @@ propia subissue y GitHub la cierra sola al mergear.
 
 ## Como se arranca un ciclo
 
-El primer paso es siempre el mismo, en los dos flujos: `/slice-spec` disena, trocea y crea el issue,
-una vez por feature. Lo que cambia es como se conduce cada slice despues:
+El primer paso es siempre el mismo: `/slice-spec` disena, trocea y crea el issue padre mas una subissue
+por slice, una vez por feature. Lo que conduce cada slice despues es el programa:
 
 ```
-/slice-spec              # una vez por feature: disena, trocea y crea el issue
-
-# despues, elige uno:
-uv run slice-runner run 42 --repo <org>/<repo> --base master   # hoy: programa, una invocacion por slice
-/slice-runner #42                                              # flujo anterior: skill, una sesion por slice
+/slice-spec                                                     # una vez por feature: disena, trocea y crea el issue padre + subissues
+uv run slice-runner run 42 --repo <org>/<repo> --base master    # una invocacion por slice
 ```
 
-Lo que sigue en esta seccion -la sesion por slice, el aviso de compactar, `/loop`- describe el **flujo
-anterior** con la skill `/slice-runner`, porque es el que necesita que decidas donde cortas la sesion.
-El programa no vive en tu sesion (ver "El paso que ya es un programa" y "El contexto"), asi que nada de
-esto le aplica: se lanza y para solo donde le toca.
+El programa no vive en tu sesion (ver "El paso que ya es un programa" y "El contexto"): se lanza y para
+solo donde le toca, asi que no hay que decidir donde cortar una sesion ni vigilar el aviso de compactar.
 
-Con la skill, lo que hay que decidir a mano no es ninguno de los dos comandos, es **donde cortas la
-sesion**: una sesion por slice. `/slice-spec` en la suya, y cada `/slice-runner` en una nueva. No es
-ceremonia -es que el orquestador vive en tu sesion y acumula el run entero (ver "El contexto")-, y es
-seguro porque **todo el estado esta en el issue**: al arrancar re-lee el issue, ve que slices estan
-mergeadas y coge la siguiente. Nada viaja en la conversacion.
-
-```
-sesion 1:  /slice-spec        -> issue #42 con la spec y las N slices
-sesion 2:  /slice-runner #42  -> slice-01 -> PR -> CI verde -> [mergeas tu] -> deploy-watch
-sesion 3:  /slice-runner #42  -> slice-02 -> ...
-```
-
-Si en una sesion te salta el aviso de compactar a mitad de slice, la respuesta no es compactar: es
-dejar que la slice termine (o que pare donde este, que el issue lo registra), abrir sesion nueva e
-invocar otra vez. Compactar deja al orquestador decidiendo con el contexto mutilado.
-
-`/loop` sirve para no teclear el comando cada vez, no para higiene de contexto: reinyecta el prompt en
-la **misma** conversacion. Usalo para una tanda corta de slices, no para una feature entera.
+Hubo un flujo anterior donde si importaba: la skill `/slice-runner`, orquestando a mano en tu sesion,
+sobre un formato de issue mas viejo (un solo issue con checklist). Ese flujo esta retirado de este repo y
+congelado en `alcaptar/agentic-skills-legacy` -incluido `/loop`, que solo tenia sentido reinyectando el
+prompt de esa skill en la misma conversacion-. Se documenta por si alguien lo sigue necesitando; no es
+lo que arranca un ciclo hoy.
 
 ### El paso que ya es un programa
 
@@ -299,15 +282,10 @@ que la secuencia no describe **no cae en una rama generica**: sale por `4`.
 
 ## Ejemplo: una feature de punta a punta
 
-Este ejemplo narra el flujo mas antiguo, con la skill `/slice-runner` orquestando los subagentes a mano
-en tu propia sesion (sigue instalable, ver "Instalacion"). Hoy una slice la conduce el programa
-(`uv run slice-runner run`, seccion anterior); la diferencia que se nota desde fuera es la pull request,
-que ahi lleva `Closes #<subissue>` en vez del `Part of #42` que usa este ejemplo.
-
 Supongamos que hoy se pueden crear pedidos con cantidad negativa y el stock queda en negativo sin que
 nadie se entere.
 
-**1. Disenar y crear el issue** (sesion nueva)
+**1. Disenar y crear el issue padre mas una subissue por slice**
 
 ```
 /slice-spec
@@ -317,8 +295,8 @@ nadie se entere.
 ```
 
 La skill hace brainstorming del diseno, propone el troceo vertical, descubre los controles y las
-convenciones del repo (y **te los pregunta** para confirmarlos), y crea el issue. Sale algo asi
--mismo formato que la fixture del smoke, `smoke/fixture/spec.md`-:
+convenciones del repo (y **te los pregunta** para confirmarlos), y crea el issue padre `#42` con una
+subissue por slice. Sale algo asi:
 
 ```markdown
 ## Intencion
@@ -334,60 +312,61 @@ y nadie se entera hasta el recuento fisico.
 - lint: make linting
 - types: make check-types
 - tests: make test
-
-## Slices
-
-- [ ] slice-01 (cantidad-value-object): Value object `Cantidad` que rechaza <= 0 [pendiente]
-      INTENCION: sin el, la regla vive repartida y cada llamador la olvida a su manera
-      ACEPTACION: Cantidad(0) y Cantidad(-1) lanzan ValueError; Cantidad(1) es valida.
-      SENAL: exenta - value object interno sin efecto observable en produccion
-- [ ] slice-02 (rechazar-cantidad-negativa): El endpoint devuelve 422 [pendiente]
-      INTENCION: hoy la API acepta la cantidad negativa y corrompe el stock
-      ACEPTACION: POST /pedidos con cantidad -1 devuelve 422 y no crea el pedido.
-      SENAL: contador orders_rejected_total{reason="invalid_quantity"}
 ```
 
-**2. Ejecutar la primera slice** (sesion nueva)
+Y dos subissues hijas de `#42`, cada una con su etiqueta `estado:pendiente` desde que nace. El titulo
+de la subissue `#43` es `slice-01 (cantidad-value-object): Value object Cantidad que rechaza <= 0`, y su
+cuerpo:
 
-```
-/slice-runner #42
-```
-
-Y hace, sin intervencion: lee el issue -> marca `slice-01` como `[en-curso]` -> **te muestra su
-entendimiento y espera tu go/no-go** -> implementa con TDD -> deja los controles verdes -> lanza el
-verificador adversarial -> commit -> abre la pull request `feat(cantidad-value-object): ...` con
-`Part of #42` -> tickea en background hasta integracion continua verde -> marca la slice
-`[esperando-merge] PR #43` y **para**.
-
-La linea del issue va contando la historia sola:
-
-```
-- [ ] slice-01 (cantidad-value-object): ... [esperando-merge] PR #43
+```markdown
+INTENCION: sin el, la regla vive repartida y cada llamador la olvida a su manera
+ACEPTACION: Cantidad(0) y Cantidad(-1) lanzan ValueError; Cantidad(1) es valida.
+SENAL: exenta - value object interno sin efecto observable en produccion
 ```
 
-Si algo se rompe, la linea lo dice y el loop para en vez de seguir: `bloqueada: controles`,
-`bloqueada: verify`, `bloqueada: ci-roja`, `bloqueada: ci-indeterminada` o `bloqueada:
-sin-subagentes`.
+Y la subissue `#44`, con titulo `slice-02 (rechazar-cantidad-negativa): El endpoint devuelve 422`:
+
+```markdown
+INTENCION: hoy la API acepta la cantidad negativa y corrompe el stock
+ACEPTACION: POST /pedidos con cantidad -1 devuelve 422 y no crea el pedido.
+SENAL: contador orders_rejected_total{reason="invalid_quantity"}
+```
+
+**2. Ejecutar la primera slice**
+
+```
+uv run slice-runner run 42 --repo <org>/<repo> --base master
+```
+
+Y hace, sin intervencion: lee el issue padre y elige la subissue `#43` -> la etiqueta
+`estado:en-curso` -> **te muestra su entendimiento y espera tu go/no-go** -> implementa con TDD -> deja
+los controles verdes -> juzga el diff con `claude -p` -> commit -> abre la pull request
+`feat(cantidad-value-object): ...` con `Closes #43` -> tickea en background hasta integracion continua
+verde -> etiqueta la subissue `estado:esperando-merge` y **para**.
+
+Si algo se rompe, la etiqueta lo dice y el run para en vez de seguir: `bloqueada:controles`,
+`bloqueada:verify`, `bloqueada:ci-roja`, `bloqueada:ci-indeterminada` o `abortada:presupuesto`.
 
 **3. Mergear (tu)**
 
-Revisas la pull request en GitHub y le das a merge. Eso es tuyo, no del pipeline.
+Revisas la pull request en GitHub y le das a merge. Eso es tuyo, no del pipeline. GitHub cierra la
+subissue `#43` sola, porque la pull request lleva `Closes #43`.
 
 **4. El despliegue se vigila solo**
 
-`slice-runner` detecta el merge, marca la slice `[x] ... [mergeada]` y **encadena `deploy-watch`**,
-que arranca sin preguntar nada que pueda inferir: captura baseline, tickea las senales relevantes al
-radio de impacto del cambio, y comenta su veredicto en el issue #42. Si sale degradado, lanza el
-agente `sre` para el analisis de causa raiz y **te redacta el rollback** para que lo lances tu.
+El programa detecta el merge y **encadena `deploy-watch`**, que arranca sin preguntar nada que pueda
+inferir: captura baseline, tickea las senales relevantes al radio de impacto del cambio, y comenta su
+veredicto en la subissue `#43`. Si sale degradado, lanza el agente `sre` para el analisis de causa raiz
+y **te redacta el rollback** para que lo lances tu.
 
-**5. Siguiente slice** (sesion nueva)
+**5. Siguiente slice**
 
 ```
-/slice-runner #42
+uv run slice-runner run 42 --repo <org>/<repo> --base master
 ```
 
-`slice-02`, misma vara. La sesion anterior ya lleva encima el run entero y no hace falta para nada: el
-issue tiene el estado, asi que abrir otra no cuesta nada.
+Elige la subissue `#44` (`slice-02`), misma vara. Cada invocacion es un proceso aparte: no hay sesion
+que arrastrar de una slice a la siguiente, el estado entero esta en el issue padre y sus subissues.
 
 ## El contexto
 
@@ -408,7 +387,7 @@ los mensajes finales de sus agentes. De ahi la regla de la seccion anterior -una
 ahi que compactar a mitad de run sea el caso a evitar y no un inconveniente.
 
 Lo que se ha hecho para que quepa mas en cada sesion (2026-07-31): el relato largo salio del `SKILL.md`
-a `skills/slice-runner/references/por-que.md`, que solo se carga para cambiar la skill, y la
+a un fichero de referencia propio de la skill, que solo se cargaba para cambiar la skill, y la
 metodologia del implementador se fue a su propio agente en vez de redactarla el orquestador en cada
 invocacion. Unas 5.000 palabras menos de contexto por slice.
 
@@ -421,25 +400,40 @@ mientras fue el flujo que conducia una slice, nunca dejo de vivir en tu sesion.
 
 ## Instalacion
 
-**Este repo es la fuente de verdad.** Las skills y el agente viven aqui; `~/.claude/skills/` y
-`~/.claude/agents/` apuntan por symlink, asi que se editan versionados y siguen activos en Claude
-Code. Ambos directorios son **de usuario**, no de proyecto: valen en cualquier repo donde invoques
-`slice-runner`.
-
-Esto hace falta para las skills -`/slice-spec` (disena y crea el issue en los dos flujos) y el flujo mas
-antiguo con `/slice-runner` y sus agentes-. Conducir una slice con el programa (`uv run slice-runner
-run`, ver "El paso que ya es un programa") no instala nada por symlink: basta con estar en este repo.
+**Este repo es la fuente de verdad de lo que sigue vivo aqui.** La skill de autoria vive en este
+repo; `~/.claude/skills/` apunta por symlink, asi que se edita versionada y sigue activa en Claude
+Code. Es un directorio **de usuario**, no de proyecto: vale en cualquier repo donde invoques
+`slice-spec`.
 
 ```bash
 ln -s "$PWD/skills/slice-spec" ~/.claude/skills/slice-spec
-ln -s "$PWD/skills/slice-runner" ~/.claude/skills/slice-runner
 ln -s "$PWD/skills/deploy-watch" ~/.claude/skills/deploy-watch
+```
+
+Conducir una slice con el programa (`uv run slice-runner run`, ver "El paso que ya es un programa") no
+instala nada por symlink: basta con estar en este repo. **Y la rama en la que estas decide que codigo
+corre**: `uv run slice-runner run` es el entrypoint de `src/slice_runner/`, asi que ejecutas el programa
+tal como esta en la rama donde estes parado, no en `origin/master` ni en ninguna otra.
+
+El flujo anterior -la skill `/slice-runner` orquestando a mano los subagentes
+`agents/slice-implementer.md` y `agents/slice-verifier.md`- ya no vive en este repo: esta congelado en
+`alcaptar/agentic-skills-legacy`. Si lo sigues necesitando, el symlink de esa skill apunta ahi en vez de
+a `$PWD/skills/slice-runner`:
+
+```bash
+ln -s /ruta/a/agentic-skills-legacy/skills/slice-runner ~/.claude/skills/slice-runner
+```
+
+Los dos agentes se quedan en **este** repo -el programa no los usa, pero la skill legacy si- asi que
+siguen instalandose desde aqui:
+
+```bash
 ln -s "$PWD/agents/slice-implementer.md" ~/.claude/agents/slice-implementer.md
 ln -s "$PWD/agents/slice-verifier.md" ~/.claude/agents/slice-verifier.md
 ```
 
-Los de los agentes **no son opcionales**: sin ellos, `subagent_type: slice-implementer` o
-`slice-verifier` no resuelven y `slice-runner` para en el paso 3 con `bloqueada: sin-subagentes`.
+No son opcionales para la skill legacy: sin ellos, `subagent_type: slice-implementer` o
+`slice-verifier` no resuelven y esa skill para con `bloqueada: sin-subagentes`.
 
 > **Gotcha verificado (2026-07-27): las skills se releen, los agentes no.** Editar un `SKILL.md`
 > cambia el comportamiento en la sesion en curso; editar una definicion de `agents/` **no**. El
@@ -448,22 +442,21 @@ Los de los agentes **no son opcionales**: sin ellos, `subagent_type: slice-imple
 > anterior y usaba una herramienta que la version nueva ya no declara. **Tras tocar un agente hay que
 > abrir sesion nueva antes de probarlo**, o el smoke valida la version equivocada sin avisar.
 
-Otra consecuencia del symlink: **la rama en la que estas decide que codigo corre**. Si sondeas un
-cambio de los scripts desde una rama creada en `origin/master`, corres los de `origin` y nada avisa.
+Otra consecuencia del symlink: **la rama en la que estas decide que codigo corre**, tambien para las
+skills. Si sondeas un cambio de los scripts desde una rama creada en `origin/master`, corres los de
+`origin` y nada avisa.
 
 ## Principios comunes
 
 - Escritor != verificador, pero el verificador **revisa convenciones y arquitectura, no re-testea**
   (la integracion continua y los criterios de aceptacion gobiernan la correccion) y **no ejecuta
   controles ni ve output de build**: su presupuesto entero es para lo semantico.
-- **Los subagentes son la garantia, no un detalle**: invocar una skill cuenta como pedirlos. Si el
-  entorno los veta, decide **un solo criterio**: ¿se puede declarar la degradacion en el artefacto?
-  Si si, degrada y declaralo ahi; si el artefacto entero significa la garantia perdida, para. De ahi
-  salen las dos respuestas -`slice-runner` **para** (su pull request con PASA seria falsa de forma
-  invisible) y `deploy-watch` **degrada declarandolo** (su veredicto puede decir como se obtuvo, y lo
-  calcula `deploy_core.py`)-, que por eso no son dos reglas sino una. El criterio se escribe **en cada
-  skill**, no en un fichero compartido: se duplica a cambio de que todo quede versionado aqui y cada
-  skill sea autocontenida.
+- **Si el entorno veta un subagente, decide un solo criterio**: ¿se puede declarar la degradacion en el
+  artefacto que se produce? Si si, degrada y declaralo ahi; si el artefacto entero significa la
+  garantia perdida, para. `deploy-watch` **degrada declarandolo** en su veredicto, que lo calcula
+  `deploy_core.py` y no la impresion del agente. El flujo anterior con la skill `/slice-runner` **paraba**
+  en vez de degradar -su pull request con PASA seria falsa de forma invisible-, mismo criterio y
+  artefacto distinto; hoy vive congelado en `alcaptar/agentic-skills-legacy`.
 - Controles de parada objetivos y deterministas.
 - Convenciones del repo como vara de medir principal.
 - Estado del run en el **issue de GitHub**; el registro duradero son el issue y las pull requests

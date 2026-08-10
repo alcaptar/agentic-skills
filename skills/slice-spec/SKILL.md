@@ -18,7 +18,8 @@ el **contrato de formato** (los nombres de slice, los criterios de aceptacion, l
 artefacto compartido entre humano y agente, y **vive en GitHub**: una feature = **un issue padre**
 mas **una subissue por slice**.
 
-Par natural: `/slice-spec` crea el issue padre y sus subissues, `/slice-runner #N` las ejecuta.
+Par natural: `/slice-spec` crea el issue padre y sus subissues, `uv run slice-runner run <N> --repo
+<org>/<repo> --base master` las ejecuta, una invocacion por slice.
 
 Dos modos:
 
@@ -295,8 +296,7 @@ SENAL: prometheus min_over_time(application_stock_actual[10m]) < 0 dispara la al
      (`gh label create estado:pendiente --repo <org>/<repo>`) y reintenta: una subissue sin etiqueta de
      estado es una slice sin estado que nadie puede consultar.
 6. **Cierra** diciendo el numero/URL del padre, las subissues creadas con su numero, y que se ejecuta
-   con `/slice-runner #N` sobre el padre (o `/loop /slice-runner #N` para encadenar todas las slices en
-   Nivel 2).
+   con `uv run slice-runner run <N> --repo <org>/<repo> --base master`, una invocacion por slice.
 
 ## Steps — modo `validate`
 
@@ -363,10 +363,10 @@ trabajo. Ofrece corregirlas. Checklist:
   justificado; cuando una slice sustituye comportamiento en prod, nombra su mecanismo seguro (flag /
   expand-contract).
 
-Si todo cumple: reporta `spec valida` y recuerda que se ejecuta con `/slice-runner`.
+Si todo cumple: reporta `spec valida` y recuerda que se ejecuta con `uv run slice-runner run`.
 
 ## Fin
 
 Reporta: numero/URL del issue padre, las subissues con su numero y su nombre, y el comando para
-ejecutarla (`/slice-runner #N` sobre el padre, o `/loop /slice-runner #N` para Nivel 2). No implementes
-nada: ese es el trabajo de `slice-runner`.
+ejecutarla (`uv run slice-runner run <N> --repo <org>/<repo> --base master`, una invocacion por
+slice). No implementes nada: ese es el trabajo de `slice-runner`.

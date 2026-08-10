@@ -380,11 +380,11 @@ def escribe_diff_bundle(repo: str, base: str, out: str) -> ResultadoBundle:
     no `HEAD`, por dos razones que el primer smoke real dejo claras:
 
     - El tramo final va `git add` -> `pr-hygiene` -> controles -> `diff-bundle` ->
-      verificador -> commit (lo fija `skills/slice-runner/SKILL.md`; aqui se nombra por
-      sus fases y no por su numero de paso, que se desfasa en cuanto el tramo se
-      reordena). Con el commit DESPUES de la verificacion, contra `HEAD` no habria nada
-      que ver. Verificar antes de commitear es lo que permite que un veto del
-      verificador no deje rastro y que la slice siga siendo un solo commit sin
+      verificador -> commit (lo fijaba el `SKILL.md` del runner, hoy retirado; aqui se
+      nombra por sus fases y no por un numero de paso, que se desfasaria en cuanto el
+      tramo se reordene). Con el commit DESPUES de la verificacion, contra `HEAD` no
+      habria nada que ver. Verificar antes de commitear es lo que permite que un veto
+      del verificador no deje rastro y que la slice siga siendo un solo commit sin
       `--amend`.
     - El indice es exactamente lo que sera el commit, asi que el verificador juzga lo
       que ira en la PR y no una aproximacion.
@@ -475,8 +475,8 @@ CI_EXIT = {
 """Exit code por estado, uno por rama del paso 9 para que un tick decida sin parsear JSON.
 
 El 2 esta reservado para error de uso, como en el resto del script. Publico, y no `_CI_EXIT`,
-porque estos numeros los documenta el paso 9 de `SKILL.md`: son contrato con quien invoca, no
-un detalle interno del clasificador.
+porque estos numeros son contrato con quien invoca (los documentaba el paso 9 del `SKILL.md`
+del runner, hoy retirado), no un detalle interno del clasificador.
 """
 
 _CI_BUCKETS_ROJO = frozenset({"fail", "cancel"})
