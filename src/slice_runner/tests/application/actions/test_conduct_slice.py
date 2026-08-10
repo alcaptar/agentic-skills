@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
+from unittest.mock import Mock
 
 import pytest
 
@@ -38,8 +39,6 @@ from slice_runner.tests.mothers.verdict_mother import FindingMother, VerdictMoth
 from slice_runner.tests.mothers.verification_mother import VerificationMother
 
 if TYPE_CHECKING:
-    from unittest.mock import Mock
-
     from slice_runner.domain.closed_slice import ClosedSlice
     from slice_runner.domain.sub_issue import SubIssue
 
@@ -291,6 +290,20 @@ class TestConductSliceRespondingToAlignment:
         )
         assert conductor.implement.execute.call_count == 1
 
+    def test_a_go_moves_the_label_to_in_progress_before_the_implementer_is_asked_to_start(self) -> None:
+        conductor = self._conductor()
+        conductor.repository.read_alignment_response.return_value = AlignmentResponse(kind=AlignmentResponseKind.GO)
+        manager = Mock()
+        manager.attach_mock(conductor.repository.write_label, "write_label")
+        manager.attach_mock(conductor.implement.execute, "implement")
+
+        conductor.conduct()
+
+        assert [call[0] for call in manager.mock_calls][:2] == ["write_label", "implement"]
+        conductor.repository.write_label.assert_any_call(
+            repo=Conductor.REPO, issue=_SUBISSUE, remove=IssueLabel.AWAITING_ALIGNMENT, add=IssueLabel.IN_PROGRESS
+        )
+
     def test_a_go_asks_the_harness_for_no_understanding_of_its_own(self) -> None:
         conductor = self._conductor()
         conductor.repository.read_alignment_response.return_value = AlignmentResponse(kind=AlignmentResponseKind.GO)
@@ -311,6 +324,38 @@ class TestConductSliceRespondingToAlignment:
         conductor.repository.write_run.assert_any_call(
             repo=Conductor.REPO, issue=_SUBISSUE, run=Run(step=Step.IMPLEMENT, spend=spend)
         )
+        assert conductor.implement.execute.call_count == 1
+
+
+class TestConductSliceRespondingToAlignmentWithAMismatchedLabel:
+    @staticmethod
+    def _conductor(*, budgets: Budgets | None = None) -> Conductor:
+        return Conductor(
+            chosen=SelectSliceResultMother.about_to_start(
+                subissue=SubIssueMother.understanding_published_but_relabelled_by_hand()
+            ),
+            budgets=budgets,
+        )
+
+    def test_a_label_moved_by_hand_still_reads_the_pending_response_instead_of_publishing_again(self) -> None:
+        conductor = self._conductor(budgets=Budgets(total_wait_seconds=0))
+        conductor.repository.read_alignment_response.return_value = AlignmentResponse(
+            kind=AlignmentResponseKind.NOT_YET
+        )
+
+        conductor.conduct()
+
+        conductor.repository.read_alignment_response.assert_called_once_with(repo=Conductor.REPO, issue=_SUBISSUE)
+        assert conductor.understanding.write.call_count == 0
+        assert conductor.repository.pause_for_alignment.call_count == 0
+
+    def test_a_go_read_despite_the_mismatched_label_still_starts_implementing(self) -> None:
+        conductor = self._conductor()
+        conductor.repository.read_alignment_response.return_value = AlignmentResponse(kind=AlignmentResponseKind.GO)
+
+        conductor.conduct()
+
+        assert conductor.understanding.write.call_count == 0
         assert conductor.implement.execute.call_count == 1
 
 

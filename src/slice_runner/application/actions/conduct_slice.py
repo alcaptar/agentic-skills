@@ -212,7 +212,7 @@ class ConductSlice:
         of_the_subissue = Prechecks.of_the_subissue(chosen.subissue)
         if of_the_subissue is not PrecheckOutcome.CLEAR:
             return self._ending(progress, Halt.PRECHECKS_BLOCKED, precheck=of_the_subissue)
-        if chosen.subissue.run is not None and chosen.subissue.run.step is not Step.UNDERSTAND:
+        if chosen.subissue.run is not None:
             return self._conducting(progress)
         if chosen.subissue.label is IssueLabel.AWAITING_ALIGNMENT:
             return self._conducting(replace(progress, run=replace(progress.run, step=Step.UNDERSTAND)))
