@@ -68,7 +68,7 @@ class Local{Cosa}({Cosa}):
 ```
 
 - **La ruta del molde no empieza por una carpeta de este repo.** Si empezara por una, el contrato de
-  rutas citadas (`tests/test_skill_contracts.py`) la leeria como una afirmacion sobre el arbol y
+  rutas citadas (`test_pipeline_invariants.py`) la leeria como una afirmacion sobre el arbol y
   fallaria, con razon: en backticks, una ruta de este repo es una promesa de que existe.
 - **El molde no mejora el acierto: ahorra el trabajo de averiguarlo.** Sin el se acierta igual, pero se
   gastan turnos yendo a mirar el arbol para confirmar. Por eso el molde se pone donde el caso es

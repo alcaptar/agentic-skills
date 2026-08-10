@@ -69,7 +69,7 @@ traductor es `IssueLabel.of(state, step)`
 (`domain/issue_label.py`): un `match` exhaustivo sobre el par que proyecta cada cierre de `RunState` a la
 etiqueta de GitHub que escribe la frontera (`infrastructure/gh_run_repository.py`), total o explicito -un
 par sin regla no cae en una rama generica, rompe en `mypy` en cuanto se anade un cierre o un paso sin
-proyectarlo-. El contrato ya esta medido, no pendiente: `tests/test_skill_contracts.py` comprueba que
+proyectarlo-. El contrato ya esta medido, no pendiente: `test_domain_vocabulary_contracts.py` comprueba que
 todo cierre de `RunState` distinto de `MERGED` (que no lleva etiqueta porque cierra GitHub el issue solo,
 via `Closes` de la pull request) proyecta a una etiqueta del vocabulario, y que ninguna etiqueta del
 vocabulario carece de fuente -sale de una proyeccion del traductor, o es de fuente manual-. **De fuente
