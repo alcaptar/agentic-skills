@@ -12,6 +12,9 @@ from slice_runner.tests.mothers.verdict_mother import FindingMother
 
 class AssignmentMother:
     REPO: ClassVar[str] = "/repos/agentic-skills"
+    UNDERSTANDING: ClassVar[str] = (
+        "El precheck de subissue cerrada se llama `SUBISSUE_ALREADY_CLOSED` y corta antes de tocar la rama."
+    )
 
     @classmethod
     def of_the_first_round(cls) -> Assignment:
@@ -47,3 +50,7 @@ class AssignmentMother:
     @classmethod
     def of_a_repo_exempt_from_controls(cls) -> Assignment:
         return replace(cls.of_the_first_round(), controls=ParentIssueMother.with_exempt_controls().controls)
+
+    @classmethod
+    def of_the_first_round_with_an_agreed_understanding(cls) -> Assignment:
+        return replace(cls.of_the_first_round(), understanding=cls.UNDERSTANDING)

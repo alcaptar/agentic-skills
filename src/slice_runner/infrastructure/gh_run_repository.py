@@ -92,12 +92,27 @@ class GhRunRepository(RunRepository):
             stdin=UnderstandingComment.rendered(understanding),
         )
 
+    def read_understanding(self, *, repo: str, issue: int) -> str:
+        published = [
+            body
+            for body in self._comment_bodies(repo=repo, issue=issue)
+            if UnderstandingComment.is_the_understanding(body)
+        ]
+        if not published:
+            return ""
+
+        return UnderstandingComment.written_in(published[-1])
+
     def read_alignment_response(self, *, repo: str, issue: int) -> AlignmentResponse:
+        return AlignmentResponse.of_the_comments(
+            self._after_the_understanding(self._comment_bodies(repo=repo, issue=issue))
+        )
+
+    def _comment_bodies(self, *, repo: str, issue: int) -> tuple[str, ...]:
         output = self._run(["gh", "issue", "view", str(issue), "--repo", repo, "--json", "comments"])
         payload = GhCommentsPayload.from_dict(self._decoded_object(output))
-        bodies = tuple(GhCommentPayload.from_dict(comment).body for comment in payload.comments)
 
-        return AlignmentResponse.of_the_comments(self._after_the_understanding(bodies))
+        return tuple(GhCommentPayload.from_dict(comment).body for comment in payload.comments)
 
     @staticmethod
     def _after_the_understanding(bodies: tuple[str, ...]) -> tuple[str, ...]:

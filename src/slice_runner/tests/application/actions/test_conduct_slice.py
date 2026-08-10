@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
+from slice_runner.domain.alignment import Alignment
 from slice_runner.domain.alignment_response import AlignmentResponse
 from slice_runner.domain.alignment_response_kind import AlignmentResponseKind
 from slice_runner.domain.budgets import Budgets
@@ -71,7 +72,7 @@ class TestConductSliceStartingANewRun:
             parent=chosen.parent,
             repo=Conductor.REPO,
             worktree=Conductor.WORKTREE,
-            correction="",
+            alignment=Alignment(),
         )
 
     def test_a_call_that_leaves_no_usable_understanding_stops_before_anything_is_written_or_branched(self) -> None:
@@ -234,7 +235,7 @@ class TestConductSliceRespondingToAlignment:
             parent=SelectSliceResultMother.about_to_start().parent,
             repo=Conductor.REPO,
             worktree=Conductor.WORKTREE,
-            correction="la senal no esta exenta",
+            alignment=Alignment(agreed=Conductor.UNDERSTANDING, correction="la senal no esta exenta"),
         )
 
     def test_a_review_publishes_the_rewritten_understanding_and_keeps_waiting_until_the_wait_is_spent(self) -> None:

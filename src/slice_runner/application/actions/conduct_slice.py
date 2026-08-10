@@ -9,6 +9,7 @@ from slice_runner.application.actions.stage_slice import StageSliceParams
 from slice_runner.application.actions.verify_slice import VerifySliceParams
 from slice_runner.application.queries.run_prechecks import RunPrechecksParams
 from slice_runner.application.queries.select_slice import SelectSliceParams
+from slice_runner.domain.alignment import Alignment
 from slice_runner.domain.alignment_response_kind import AlignmentResponseKind
 from slice_runner.domain.closed_slice import ClosedSlice
 from slice_runner.domain.control_status import ControlStatus
@@ -96,6 +97,7 @@ class ConductSliceProgress:
     control_logs: tuple[Path, ...] = field(default=())
     control_rounds: int = 0
     hygiene_refusal: str = ""
+    understanding: str = ""
     pull_request: int | None = None
     waited_seconds: int = 0
     discard_cause: DiscardCause | None = None
@@ -243,7 +245,7 @@ class ConductSlice:
     def _awaiting_alignment(self, progress: ConductSliceProgress) -> SteppedSlice:
         response = self._repository.read_alignment_response(repo=progress.params.repo, issue=progress.subissue.number)
         if response.kind is AlignmentResponseKind.REVIEW:
-            progress = self._publishing_the_understanding(progress, correction=response.correction)
+            progress = self._publishing_the_understanding(self._seeded(progress), correction=response.correction)
 
         return SteppedSlice(progress=progress, outcome=Outcome.of_the_alignment(response.kind))
 
@@ -253,9 +255,9 @@ class ConductSlice:
             parent=progress.parent,
             repo=progress.params.repo,
             worktree=progress.params.worktree,
-            correction=correction,
+            alignment=Alignment(agreed=progress.understanding, correction=correction),
         )
-        published = replace(progress, spends=(*progress.spends, understanding.spend))
+        published = replace(progress, spends=(*progress.spends, understanding.spend), understanding=understanding.text)
         run = replace(published.run, step=Step.UNDERSTAND, spend=published.spend)
         self._writing(published, run=run)
         self._repository.write_understanding(
@@ -263,6 +265,14 @@ class ConductSlice:
         )
 
         return replace(published, run=run)
+
+    def _seeded(self, progress: ConductSliceProgress) -> ConductSliceProgress:
+        if progress.understanding:
+            return progress
+
+        agreed = self._repository.read_understanding(repo=progress.params.repo, issue=progress.subissue.number)
+
+        return replace(progress, understanding=agreed)
 
     def _conducting(self, progress: ConductSliceProgress) -> ConductSliceResult:
         while True:
@@ -324,6 +334,8 @@ class ConductSlice:
         if self._budgets.exhausted(progress.spend):
             return SteppedSlice(progress=progress, outcome=Outcome.OVER_BUDGET)
 
+        progress = self._seeded(progress)
+
         implementation = self._implement.execute(
             ImplementSliceParams(
                 worktree=progress.params.worktree,
@@ -332,6 +344,7 @@ class ConductSlice:
                 findings=progress.findings_of_the_last_round,
                 control_logs=progress.control_logs,
                 hygiene_refusal=progress.hygiene_refusal,
+                understanding=progress.understanding,
             )
         )
 

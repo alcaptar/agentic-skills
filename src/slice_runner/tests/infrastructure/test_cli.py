@@ -906,6 +906,10 @@ class TestTheRoundTripAfterARedCiThatStillHasARetryLeft(BlindToTheToolboxOfThisM
                 Answer(to=("gh", "pr", "list", "--state", "open"), stdout=GhConversationMother.the_open_pull_request()),
                 Answer(to=("gh", "pr", "checks"), stdout=GhConversationMother.checks_in_red()),
                 Answer(
+                    to=("gh", "issue", "view", "--json", "comments"),
+                    stdout=json.dumps({"comments": []}),
+                ),
+                Answer(
                     to=(ImplementerInvocation.EXECUTABLE, "bypassPermissions"),
                     stdout=json.dumps(HarnessEnvelopeMother.recorded(_IMPLEMENTER_PAYLOAD)),
                 ),

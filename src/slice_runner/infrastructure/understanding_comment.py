@@ -22,3 +22,7 @@ class UnderstandingComment:
     @classmethod
     def is_the_understanding(cls, body: str) -> bool:
         return cls.MARKER in body
+
+    @classmethod
+    def written_in(cls, body: str) -> str:
+        return body.split(_HOW_TO_RESPOND, maxsplit=1)[0].strip()

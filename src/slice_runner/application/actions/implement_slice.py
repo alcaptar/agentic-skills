@@ -23,6 +23,7 @@ class ImplementSliceParams:
     findings: tuple[Finding, ...] = ()
     control_logs: tuple[Path, ...] = ()
     hygiene_refusal: str = ""
+    understanding: str = ""
 
 
 class ImplementSlice:
@@ -46,4 +47,5 @@ class ImplementSlice:
             findings=params.findings,
             control_logs=params.control_logs,
             hygiene_refusal=params.hygiene_refusal,
+            understanding=params.understanding,
         )

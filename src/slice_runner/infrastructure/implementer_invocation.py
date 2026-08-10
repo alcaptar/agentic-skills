@@ -68,8 +68,25 @@ class ImplementerInvocation:
                 *self._findings,
                 *self._control_logs,
                 *self._hygiene_refusal,
+                *self._understanding,
             ]
         )
+
+    @property
+    def _understanding(self) -> list[str]:
+        agreed = self.assignment.understanding.strip()
+        if not agreed:
+            return []
+
+        return [
+            "",
+            "## Entendimiento acordado",
+            "",
+            "Es el plan que una persona reviso y aprobo antes de que empezaras. Donde lo contradigan,",
+            "las convenciones del repo y los criterios de aceptacion ganan; en lo demas, esto es lo acordado.",
+            "",
+            agreed,
+        ]
 
     @property
     def _controls(self) -> list[str]:
