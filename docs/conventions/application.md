@@ -51,27 +51,24 @@ compone casi todos los puertos del programa. Una action normal sigue listando su
 como el ejemplo de arriba, y un caso de uso que llegue a necesitar el agrupamiento esta diciendo que hace
 demasiado: la respuesta por defecto ahi es partirlo, no empaquetarle los argumentos.
 
-## Dejar constancia de un paso no es conducirlo
+## Dejar constancia no es conducir
 
-El conductor decide **cuando** hay que dejar constancia; **como** se deja no es suyo. Lo que ocurre en cada
-transicion -persistir el run para que la invocacion siguiente reanude, mover la etiqueta del estado macro,
-emitir el evento- vive en `RecordStep`, y componer la fila durable de una slice cerrada vive en
-`RecordClosure`. El conductor los invoca como a cualquier otro caso de uso.
+**Quien decide el flujo no compone la telemetria.** El caso de uso que orquesta un proceso largo decide
+**cuando** hay que dejar constancia de un paso; **como** se deja constancia -que se persiste para poder
+reanudar, que estado se publica, que se emite, que fila resume el proceso al cerrarse- es de otro caso de
+uso, al que invoca como a cualquiera.
 
-El motivo no es el tamano del fichero, que apenas baja: es **quien conoce que**. Mientras el conductor
-componia `Event` y `ClosedSlice` en linea, toda slice que anadiera un campo a la telemetria tenia que
-entrar en la pieza que decide el flujo del run, y dos slices simultaneas -una de metricas y una de
-comportamiento- colisionaban sin tener nada que ver entre si. Hoy el conductor no nombra ningun tipo de
-telemetria.
+La regla se aplica cuando quien orquesta tendria que **nombrar tipos de telemetria** para construirlos.
+Mientras solo pase datos a un puerto, no hay nada que extraer.
 
-Dos consecuencias que no son deriva:
+- **Quien compone un registro posee las reglas de que entra en el.** Si un dato no se pudo medir, decidir
+  que no entra -en vez de escribir un cero- es suyo, no de cada llamador: una regla repartida entre los
+  sitios que cierran un proceso acaba escrita en unos y no en otros.
+- **Un puerto compartido no se saca solo porque el registro lo use.** Quien orquesta conserva los puertos
+  que necesita para lo demas; extraerlos enteros obligaria a inventar un caso de uso por cada lectura.
 
-- **La regla de que un gasto no medido no entra en la fila vive en `RecordClosure`**, no en cada llamador.
-  Estaba escrita en uno de los dos sitios que cerraban una slice y no en el otro, que es como se descubre
-  tarde que una fila cuenta un cero donde no habia medida.
-- **`RunRepository` se queda en el conductor** aunque `RecordStep` tambien lo use. No es duplicidad: la
-  alineacion lo necesita para publicar el entendimiento, leer la respuesta y pausar, y eso no es registrar
-  nada. Sacarlo entero obligaria a inventar un caso de uso por cada lectura del issue.
+Lo que se gana no es tamano de fichero: es que un cambio en el registro y un cambio en el flujo dejen de
+tocar la misma pieza. La medicion que lo sostiene, en `docs/design-notes.md`.
 
 ## Lo que no hace
 
