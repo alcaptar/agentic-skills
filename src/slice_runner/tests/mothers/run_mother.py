@@ -49,6 +49,7 @@ class RunMother:
             control_retries=1,
             hygiene_retries=5,
             verify_retries=2,
+            correction_retries=6,
             ci_retries=3,
             verify_discards=4,
         )

@@ -178,6 +178,7 @@ class GhConversationMother:
             "control_retries": run.control_retries,
             "hygiene_retries": run.hygiene_retries,
             "verify_retries": run.verify_retries,
+            "correction_retries": run.correction_retries,
             "ci_retries": run.ci_retries,
             "indeterminate_ticks": run.indeterminate_ticks,
             "verify_discards": run.verify_discards,
