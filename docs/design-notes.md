@@ -94,6 +94,41 @@ El origen: de 38 hallazgos bloqueantes o medios del dogfooding, **seis eran pros
 listas cerradas que la propia slice invalidaba-, y `infrastructure.md` concentraba 10 de los 18 de
 severidad alta.
 
+## Por donde se le entrega una convencion (lo que se midio)
+
+La pregunta era si las convenciones rinden mas como `.md` que el implementador tiene que leer, o
+inyectadas en el prompt, o dentro de una skill. Se midio con el arnes de `playground/` -tarea fija de
+siete ficheros, cinco repeticiones, quince reglas comprobadas sobre el arbol resultante con el arbol
+sintactico- y **las mismas 565 lineas** entregadas por cuatro canales: ninguno (control), puntero al
+fichero, texto integro en el prompt, y skill del repo.
+
+- **El canal no cambia el cumplimiento: empate.** De las quince reglas, cuatro discriminan -dominio
+  plano, nombres de test largos, usar mother, y no escribir tests unitarios de dominio-. En esas cuatro:
+  puntero **20/20**, inyectado **20/20**, skill **19/20**. No hay razon de eficacia para preferir un
+  canal, asi que la eleccion se decide por coste de mantenimiento y por propiedad, no por rendimiento.
+- **Lo que si pesa es que el documento llegue.** Sin ninguna convencion, esas cuatro reglas caen a
+  **0/5, 0/5, 0/5 y 1/5**. El documento no es decorativo; el canal por el que viaja, si.
+- **Inyectar gasta menos turnos que apuntar, y es la unica diferencia que aguanta.** Inyectado
+  **19,6 turnos [18-21]** frente a puntero **24,0 [22-26]**: los rangos no se solapan, y son los `Read`
+  que uno paga y el otro no. En dolares los cuatro rangos se solapan -0,68 / 0,89 / 0,80 / 0,74- asi que
+  con cinco repeticiones **no se puede afirmar** que ninguno sea mas barato. El puntero es ademas el mas
+  lento (234 s frente a 168-183 s).
+- **Once de las quince reglas se cumplen sin convenciones.** El suelo es alto: o el modelo ya las hace, o
+  vienen del `CLAUDE.md` global de la maquina. El valor de una convencion se concentra en las reglas
+  **contraintuitivas**, y escribir las otras once no esta cambiando nada.
+- **Sin convenciones se gastan mas turnos, no menos** (31 frente a 20-24): el modelo se inventa mas
+  estructura -subcarpetas por tipo, tests de dominio- que luego hay que deshacer.
+
+**Alcance de lo medido, para no estirarlo.** Es la semilla desnuda: un arbol sin codigo vecino. En
+produccion el codigo de alrededor ensena por imitacion y el documento puede anadir menos, y eso lo
+mediria la semilla poblada, que esta construida y sin correr. La tarea son siete ficheros, no los veinte
+de una slice real.
+
+**Y el coste real de medir no es el que se creia.** Cada llamada de este experimento salio a **0,75 $**,
+asi que una tanda de cuatro variantes por cinco repeticiones cuesta unos **15 $**, no los dos que se
+venian citando. Sigue siendo barato frente a una slice -la mas caro registrada, la slice-05 de #117, costo
+**28 $** en 396 turnos- pero ya no es calderilla, y decide cuantas hipotesis se pueden permitir.
+
 ## El programa (`src/slice_runner/`)
 
 Lo que sigue vivia dentro de `docs/conventions/`, mezclado con las reglas. Se movio aqui cuando
