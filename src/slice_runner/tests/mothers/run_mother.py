@@ -43,6 +43,10 @@ class RunMother:
         return Run(step=Step.AWAIT_MERGE)
 
     @staticmethod
+    def awaiting_alignment_after_a_published_correction(correction: str) -> Run:
+        return Run(step=Step.UNDERSTAND, corrected=correction)
+
+    @staticmethod
     def that_went_back_for_every_reason() -> Run:
         return Run(
             step=Step.AWAIT_MERGE,

@@ -16,6 +16,7 @@ Spent = Annotated[int, Field(strict=True, ge=0)]
 
 class RunPayload(ContractModel):
     step: Step
+    corrected: str = ""
     control_retries: Spent = 0
     hygiene_retries: Spent = 0
     verify_retries: Spent = 0
@@ -32,6 +33,7 @@ class RunPayload(ContractModel):
     def from_domain(cls, run: Run) -> Self:
         return cls(
             step=run.step,
+            corrected=run.corrected,
             control_retries=run.control_retries,
             hygiene_retries=run.hygiene_retries,
             verify_retries=run.verify_retries,
@@ -44,6 +46,7 @@ class RunPayload(ContractModel):
     def to_domain(self) -> Run:
         return Run(
             step=self.step,
+            corrected=self.corrected,
             control_retries=self.control_retries,
             hygiene_retries=self.hygiene_retries,
             verify_retries=self.verify_retries,

@@ -12,6 +12,7 @@ if TYPE_CHECKING:
 @dataclass(frozen=True, kw_only=True, slots=True)
 class Run:
     step: Step
+    corrected: str = ""
     control_retries: int = 0
     hygiene_retries: int = 0
     verify_retries: int = 0

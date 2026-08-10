@@ -496,6 +496,7 @@ class TestTheTransitionOfEveryPair:
         assert json.loads(capsys.readouterr().out) == {
             "run": {
                 "step": "implement",
+                "corrected": "",
                 "control_retries": 1,
                 "hygiene_retries": 0,
                 "verify_retries": 0,

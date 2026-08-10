@@ -122,6 +122,19 @@ class TestWhereTheProcessRuns:
 
         assert process.cwd == AssignmentMother.REPO
 
+    def test_the_harness_is_invoked_exactly_once_because_a_retry_is_a_decision_of_whoever_orchestrates(self) -> None:
+        process = RecordedProcess(HarnessEnvelopeMother.recorded(_RECORDED))
+
+        ClaudeImplementer(
+            process=process,
+            trace=RecordedTrace(),
+            turns=RecordedTurnLog(),
+            spend_log=RecordedSpendLog(),
+            tool_uses=RecordedToolUseRecorder(),
+        ).implement(AssignmentMother.of_the_first_round())
+
+        assert process.calls == 1
+
 
 class TestTheSliceDataThatTravelsWithTheBrief:
     @staticmethod
