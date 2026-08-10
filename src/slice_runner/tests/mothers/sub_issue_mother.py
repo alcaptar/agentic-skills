@@ -67,6 +67,10 @@ class SubIssueMother:
         return replace(SubIssueMother.pending(), label=None)
 
     @staticmethod
+    def understanding_published_but_relabelled_by_hand() -> SubIssue:
+        return replace(SubIssueMother.pending(), run=Run(step=Step.UNDERSTAND))
+
+    @staticmethod
     def without_a_declared_intention() -> SubIssue:
         return replace(SubIssueMother.pending(), intention="")
 
