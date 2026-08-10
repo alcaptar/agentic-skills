@@ -29,10 +29,13 @@ git switch master && git pull --ff-only
   mergear; el local es para no descubrirlo en la integracion continua.
   `.github/workflows/smoke-fixture.yml` sigue aparte porque mide otro proyecto (`smoke/fixture/`, con su
   propio lockfile) y si esta filtrado por `paths`.
-- **`git add` con rutas explicitas, nunca `-A` ni `.`** El fallo real que esto evita: un `git add` con
-  un pathspec de un fichero ya borrado **aborta entero** y deja el indice con dos rondas de retraso,
-  mientras la higiene, los controles y el bundle siguen saliendo verdes sobre el indice viejo. Antes de
-  dar un commit por hecho, `git diff --name-only` tiene que salir vacio.
+- **`git add` con rutas explicitas, nunca `-A` ni `.`** Lo que evita es arrastrar al commit lo que nadie
+  declaro; para lo que **no** sirve es para stagear borrados, y la diferencia esta medida: `git add --`
+  con la ruta de un fichero borrado del arbol **si** lo stagea, pero con la de uno que tampoco esta en el
+  indice -tras un `git rm`- **aborta entero**, y con `-A` tambien. Abortado el `add`, el indice se queda
+  con una ronda de retraso mientras la higiene, los controles y el bundle siguen saliendo verdes sobre el
+  indice viejo. **Para borrar, saca el fichero del arbol y deja que el `add` lo recoja**; antes de dar un
+  commit por hecho, `git diff --name-only` tiene que salir vacio.
 - **La integracion continua se comprueba contra el SHA que vas a mergear**, no contra "la rama": un
   `success` heredado del commit anterior se lee igual en la interfaz.
 
