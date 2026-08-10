@@ -112,22 +112,16 @@ class StateMachine:
                 self._impossible(run, outcome)
 
     def _correcting_what_does_not_block(self, run: Run) -> Transition:
-        if self._the_judge_still_has_budget(run):
-            return self._back_to_implementing(run)
+        if run.correction_retries < self.budgets.correction_retries:
+            return self._moving_to(replace(run, correction_retries=run.correction_retries + 1), Step.IMPLEMENT)
 
         return self._moving_to(run, Step.OPEN_PULL_REQUEST)
 
     def _retrying_a_veto(self, run: Run) -> Transition:
-        if self._the_judge_still_has_budget(run):
-            return self._back_to_implementing(run)
+        if run.verify_retries < self.budgets.verify_retries:
+            return self._moving_to(replace(run, verify_retries=run.verify_retries + 1), Step.IMPLEMENT)
 
         return self._closed(run, RunState.BLOCKED_VERIFY)
-
-    def _the_judge_still_has_budget(self, run: Run) -> bool:
-        return run.verify_retries < self.budgets.verify_retries
-
-    def _back_to_implementing(self, run: Run) -> Transition:
-        return self._moving_to(replace(run, verify_retries=run.verify_retries + 1), Step.IMPLEMENT)
 
     def _after_the_pull_request(self, run: Run, outcome: Outcome) -> Transition:
         if outcome is Outcome.DONE:

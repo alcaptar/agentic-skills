@@ -15,6 +15,7 @@ class Run:
     control_retries: int = 0
     hygiene_retries: int = 0
     verify_retries: int = 0
+    correction_retries: int = 0
     ci_retries: int = 0
     indeterminate_ticks: int = 0
     verify_discards: int = 0
@@ -22,4 +23,10 @@ class Run:
 
     @property
     def implement_retries(self) -> int:
-        return self.control_retries + self.hygiene_retries + self.verify_retries + self.ci_retries
+        return (
+            self.control_retries
+            + self.hygiene_retries
+            + self.verify_retries
+            + self.correction_retries
+            + self.ci_retries
+        )

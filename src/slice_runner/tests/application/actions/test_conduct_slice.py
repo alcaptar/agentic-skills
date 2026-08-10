@@ -1013,7 +1013,7 @@ class TestConductSliceWhenTheJudgeSpeaks:
 
     def test_a_pass_that_still_raised_findings_corrects_them_before_delivering(self) -> None:
         raised = FindingMother.with_line()
-        conductor = self._conductor(budgets=Budgets(verify_retries=1))
+        conductor = self._conductor(budgets=Budgets(correction_retries=1))
         conductor.verify.execute.return_value = VerificationMother.ordering_corrections(raised)
 
         conductor.conduct()
@@ -1208,7 +1208,7 @@ class TestConductSliceWhenTheCostOfTheSliceRunsOut:
         assert result.state is RunState.MERGED
 
     def test_a_pass_with_corrections_still_delivers_over_budget_because_delivering_costs_no_harness(self) -> None:
-        conductor = self._judging(budgets=Budgets(slice_cost_usd=0.01, verify_retries=0))
+        conductor = self._judging(budgets=Budgets(slice_cost_usd=0.01, correction_retries=0))
         conductor.verify.execute.return_value = VerificationMother.ordering_corrections(FindingMother.with_line())
 
         result = conductor.conduct()
