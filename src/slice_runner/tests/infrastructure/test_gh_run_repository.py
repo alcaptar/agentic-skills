@@ -259,7 +259,9 @@ class TestReadingTheChildren:
                     '{"step": "verify", "control_retries": 0, "verify_retries": 0, "ci_retries": 0, '
                     '"indeterminate_ticks": 0, "verify_discards": 0, '
                     '"spend": {"cost_usd": 0.3433209, "turns": 9, "duration_ms": 36315, "calls": 1, '
-                    '"models": ["claude-sonnet-5"], "cache_read_tokens": 241303}}\n'
+                    '"models": ["claude-sonnet-5"], "input_tokens": 13, "output_tokens": 1159, '
+                    '"cache_creation_tokens": 42251, "cache_read_tokens": 241303, "ttft_ms": 5588, '
+                    '"duration_api_ms": 32189}}\n'
                     "-->\n"
                 ),
                 "labels": [],
@@ -377,7 +379,9 @@ class TestWritingTheExecutionStateBlock:
             '{"step": "verify", "control_retries": 0, "hygiene_retries": 0, "verify_retries": 0, "ci_retries": 0, '
             '"indeterminate_ticks": 0, "verify_discards": 0, '
             '"spend": {"cost_usd": 0.3433209, "turns": 9, "duration_ms": 36315, "calls": 1, '
-            '"models": ["claude-sonnet-5"], "cache_read_tokens": 241303}}\n'
+            '"models": ["claude-sonnet-5"], "input_tokens": 13, "output_tokens": 1159, '
+            '"cache_creation_tokens": 42251, "cache_read_tokens": 241303, "ttft_ms": 5588, '
+            '"duration_api_ms": 32189}}\n'
             "-->\n"
         )
 

@@ -76,6 +76,45 @@ class TestWhatTheHarnessMeasured:
         assert spend.models == ()
         assert spend.cache_read_tokens == 0
 
+    def test_the_recorded_call_of_the_judge_arrives_with_its_tokens_and_its_latencies(self) -> None:
+        spend = HarnessOutput.from_dict(HarnessEnvelopeMother.recorded("full-recipe")).to_domain()
+
+        assert (
+            spend.input_tokens,
+            spend.output_tokens,
+            spend.cache_creation_tokens,
+            spend.ttft_ms,
+            spend.duration_api_ms,
+        ) == (17, 3443, 16547, 5384, 28905)
+
+    def test_an_envelope_without_model_usage_arrives_with_zero_for_every_new_token_field_too(self) -> None:
+        spend = HarnessOutput.from_dict(HarnessEnvelopeMother.without("modelUsage")).to_domain()
+
+        assert (spend.input_tokens, spend.output_tokens, spend.cache_creation_tokens) == (0, 0, 0)
+
+    def test_an_envelope_without_the_time_to_first_token_arrives_with_zero_instead_of_breaking(self) -> None:
+        spend = HarnessOutput.from_dict(HarnessEnvelopeMother.without("ttft_ms")).to_domain()
+
+        assert spend.ttft_ms == 0
+
+    def test_an_envelope_without_the_api_call_duration_arrives_with_zero_instead_of_breaking(self) -> None:
+        spend = HarnessOutput.from_dict(HarnessEnvelopeMother.without("duration_api_ms")).to_domain()
+
+        assert spend.duration_api_ms == 0
+
+    def test_a_model_usage_entry_missing_one_of_the_new_token_fields_still_parses_with_zero_for_it(self) -> None:
+        recorded = HarnessEnvelopeMother.recorded("full-recipe")
+        model_usage = recorded["modelUsage"]
+        assert isinstance(model_usage, dict)
+        model_id, entry = next(iter(model_usage.items()))
+        assert isinstance(entry, dict)
+        incomplete = {key: value for key, value in entry.items() if key != "outputTokens"}
+        broken = recorded | {"modelUsage": {model_id: incomplete}}
+
+        spend = HarnessOutput.from_dict(broken).to_domain()
+
+        assert spend.output_tokens == 0
+
     def test_a_model_usage_entry_with_a_key_we_do_not_know_is_rejected_instead_of_ignored(self) -> None:
         recorded = HarnessEnvelopeMother.recorded("full-recipe")
         model_usage = recorded["modelUsage"]

@@ -6,10 +6,10 @@ from slice_runner.infrastructure.contract_model import ContractModel
 
 
 class ModelUsageEntry(ContractModel):
-    input_tokens: int = Field(alias="inputTokens")
-    output_tokens: int = Field(alias="outputTokens")
-    cache_read_input_tokens: int = Field(alias="cacheReadInputTokens")
-    cache_creation_input_tokens: int = Field(alias="cacheCreationInputTokens")
+    input_tokens: int = Field(alias="inputTokens", default=0)
+    output_tokens: int = Field(alias="outputTokens", default=0)
+    cache_read_input_tokens: int = Field(alias="cacheReadInputTokens", default=0)
+    cache_creation_input_tokens: int = Field(alias="cacheCreationInputTokens", default=0)
     web_search_requests: int = Field(alias="webSearchRequests")
     cost_usd: float = Field(alias="costUSD")
     context_window: int = Field(alias="contextWindow")

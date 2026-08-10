@@ -15,24 +15,16 @@ class HarnessSpend:
     duration_ms: int = 0
     calls: int = 0
     models: tuple[str, ...] = ()
+    input_tokens: int = 0
+    output_tokens: int = 0
+    cache_creation_tokens: int = 0
     cache_read_tokens: int = 0
+    ttft_ms: int = 0
+    duration_api_ms: int = 0
 
     @classmethod
     def nothing(cls) -> HarnessSpend:
         return cls()
-
-    @classmethod
-    def of_a_call(
-        cls, *, cost_usd: float, turns: int, duration_ms: int, models: tuple[str, ...] = (), cache_read_tokens: int = 0
-    ) -> HarnessSpend:
-        return cls(
-            cost_usd=cost_usd,
-            turns=turns,
-            duration_ms=duration_ms,
-            calls=1,
-            models=tuple(sorted(set(models))),
-            cache_read_tokens=cache_read_tokens,
-        )
 
     @classmethod
     def summing(cls, spends: Iterable[HarnessSpend]) -> HarnessSpend:
@@ -49,5 +41,10 @@ class HarnessSpend:
             duration_ms=self.duration_ms + other.duration_ms,
             calls=self.calls + other.calls,
             models=tuple(sorted(set(self.models) | set(other.models))),
+            input_tokens=self.input_tokens + other.input_tokens,
+            output_tokens=self.output_tokens + other.output_tokens,
+            cache_creation_tokens=self.cache_creation_tokens + other.cache_creation_tokens,
             cache_read_tokens=self.cache_read_tokens + other.cache_read_tokens,
+            ttft_ms=self.ttft_ms + other.ttft_ms,
+            duration_api_ms=self.duration_api_ms + other.duration_api_ms,
         )
