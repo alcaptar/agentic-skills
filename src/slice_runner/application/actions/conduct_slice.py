@@ -259,7 +259,7 @@ class ConductSlice:
 
     def _awaiting_alignment(self, progress: ConductSliceProgress) -> SteppedSlice:
         response = self._repository.read_alignment_response(repo=progress.params.repo, issue=progress.subissue.number)
-        if response.kind is AlignmentResponseKind.REVIEW:
+        if response.kind is AlignmentResponseKind.REVIEW and response.correction != progress.run.corrected:
             progress = self._publishing_the_understanding(self._seeded(progress), correction=response.correction)
 
         return SteppedSlice(progress=progress, outcome=Outcome.of_the_alignment(response.kind))
@@ -273,7 +273,7 @@ class ConductSlice:
             alignment=Alignment(agreed=progress.understanding, correction=correction),
         )
         published = replace(progress, spends=(*progress.spends, understanding.spend), understanding=understanding.text)
-        run = replace(published.run, step=Step.UNDERSTAND, spend=published.spend)
+        run = replace(published.run, step=Step.UNDERSTAND, spend=published.spend, corrected=correction)
         self._writing(published, run=run)
         self._repository.write_understanding(
             repo=progress.params.repo, issue=progress.subissue.number, understanding=understanding.text

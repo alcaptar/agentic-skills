@@ -68,6 +68,13 @@ class TestWhereTheProcessRuns:
 
         assert process.cwd == UnderstandingInvocationMother.WORKTREE
 
+    def test_the_harness_is_invoked_exactly_once_because_a_retry_is_a_decision_of_whoever_orchestrates(self) -> None:
+        process = Writing.carrying("asi entiendo la slice")
+
+        Writing.understood(process)
+
+        assert process.calls == 1
+
     def test_a_correction_travels_on_standard_input_so_the_writer_rewrites_around_it(self) -> None:
         process = Writing.carrying("asi entiendo la slice, ya corregida")
 

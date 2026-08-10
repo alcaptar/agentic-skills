@@ -10,6 +10,7 @@ from slice_runner.infrastructure.call_spend_payload import CallSpendPayload
 from slice_runner.infrastructure.claude_config import ClaudeConfig
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
     from pathlib import Path
 
     from slice_runner.domain.call_spend_log import HarnessCallSpend
@@ -30,9 +31,20 @@ class LocalCallSpendLog(CallSpendLog):
         if not ledger.exists():
             return HarnessSpend.nothing()
 
+        wanted = frozenset(sessions)
         calls = (self._decoded(line) for line in ledger.read_text(encoding="utf-8").splitlines() if line.strip())
 
-        return HarnessSpend.summing(call.spend.to_domain() for call in calls if call.session in sessions)
+        return HarnessSpend.summing(self._once_per_session(calls, wanted=wanted))
+
+    @staticmethod
+    def _once_per_session(calls: Iterator[CallSpendPayload], *, wanted: frozenset[str]) -> Iterator[HarnessSpend]:
+        counted: set[str] = set()
+        for call in calls:
+            if call.session not in wanted or call.session in counted:
+                continue
+            counted.add(call.session)
+
+            yield call.spend.to_domain()
 
     def _ledger(self) -> Path:
         return ClaudeConfig.root().joinpath(*self.LEDGER)

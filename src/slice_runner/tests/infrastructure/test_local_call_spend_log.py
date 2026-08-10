@@ -157,6 +157,33 @@ class TestAddingUpTheSpendOfSomeSessions(WithTheLedgerOutOfTheRealHome):
             LocalCallSpendLog().spend_of((HarnessCallSpendMother.of_the_implementer().session,))
 
 
+class TestASessionDuplicatedInTheLedgerIsCountedOnce(WithTheLedgerOutOfTheRealHome):
+    def test_a_session_written_twice_by_a_stale_reinvocation_is_summed_only_once(self, tmp_path: Path) -> None:
+        ledger = LocalCallSpendLog()
+        call = HarnessCallSpendMother.of_the_implementer()
+        ledger.record(call)
+        ledger.record(call)
+
+        found = ledger.spend_of((call.session,))
+
+        assert found == HarnessSpendMother.of_the_implementer_call()
+
+    def test_a_session_duplicated_on_disk_does_not_inflate_the_sum_of_a_slice_with_other_sessions(
+        self, tmp_path: Path
+    ) -> None:
+        ledger = LocalCallSpendLog()
+        duplicated = HarnessCallSpendMother.of_the_implementer()
+        ledger.record(duplicated)
+        ledger.record(duplicated)
+        ledger.record(HarnessCallSpendMother.of_the_judge())
+
+        found = ledger.spend_of((duplicated.session, HarnessCallSpendMother.of_the_judge().session))
+
+        assert found == HarnessSpend.summing(
+            [HarnessSpendMother.of_the_implementer_call(), HarnessSpendMother.of_the_judge_call()]
+        )
+
+
 class TestARealEnvelopeReachesTheLedger(WithTheLedgerOutOfTheRealHome):
     def test_the_tokens_and_the_latencies_a_real_envelope_brings_survive_to_the_durable_ledger(
         self, tmp_path: Path
