@@ -62,10 +62,10 @@ from slice_runner.infrastructure.local_call_trace import LocalCallTrace
 from slice_runner.infrastructure.local_control_runner import LocalControlRunner
 from slice_runner.infrastructure.local_conversation_log import LocalConversationLog
 from slice_runner.infrastructure.local_corpus import LocalCorpus
+from slice_runner.infrastructure.local_metrics_log import LocalMetricsLog
 from slice_runner.infrastructure.local_process import LocalProcess
 from slice_runner.infrastructure.local_skill_library import LocalSkillLibrary
 from slice_runner.infrastructure.local_tool_use_log import LocalToolUseLog
-from slice_runner.infrastructure.metrics_script_log import MetricsNotRecordedError, MetricsScriptLog
 from slice_runner.infrastructure.process import ProcessNotRunnableError, ProcessTimedOutError
 from slice_runner.infrastructure.slice_pull_request import SlicePullRequest
 from slice_runner.infrastructure.slice_verifier_judge import SliceVerifierJudge
@@ -103,7 +103,6 @@ class Cli:
         RunNotClosedError,
         GhCommandFailedError,
         GitCommandFailedError,
-        MetricsNotRecordedError,
         ProcessNotRunnableError,
     )
 
@@ -309,6 +308,7 @@ class Cli:
         branches = GitBranches(process=self._process)
         forum = GhForum(process=self._process)
         workspace = GitWorkspace(process=self._process)
+        clock = SystemClock()
 
         return ConductSlice(
             use_cases=ConductSliceUseCases(
@@ -333,8 +333,8 @@ class Cli:
                 controls=LocalControlRunner(process=self._process),
                 ci=GhCi(process=self._process),
                 forum=forum,
-                clock=SystemClock(),
-                metrics=MetricsScriptLog(process=self._process),
+                clock=clock,
+                metrics=LocalMetricsLog(clock=clock),
                 understanding=ClaudeUnderstanding(
                     process=self._process,
                     trace=LocalCallTrace(),

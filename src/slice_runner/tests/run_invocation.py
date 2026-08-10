@@ -5,7 +5,6 @@ from typing import TYPE_CHECKING
 from slice_runner.application.actions.conduct_slice import ConductSliceParams
 from slice_runner.domain.budgets import Budgets
 from slice_runner.infrastructure.cli import Cli
-from slice_runner.infrastructure.metrics_invocation import MetricsInvocation
 from slice_runner.tests.doubles import Answer, AnsweringByArgv
 from slice_runner.tests.mothers.gh_conversation_mother import GhConversationMother
 
@@ -28,7 +27,6 @@ class RunInvocation:
             Answer(to=("gh", "issue", "view", "body"), stdout=GhConversationMother.body_of_the_subissue()),
             Answer(to=("gh", "issue", "edit")),
             Answer(to=("gh", "issue", "comment")),
-            Answer(to=(MetricsInvocation.EXECUTABLE, "record")),
         )
 
     def conduct(

@@ -7,7 +7,8 @@ repo/PR y sobreviva a los runs. Este log vive fuera del repo:
 
     ~/.claude/slice-runner/metrics.jsonl   append-only, una linea por slice cerrada
 
-Un script anexa el registro (no la IA redactando prosa) y otro lo agrega. Las cifras
+Lo anexa el programa el mismo, en Python puro y sin lanzar este script como subproceso
+(`LocalMetricsLog`, `docs/conventions/infrastructure.md`); este modulo solo lo agrega. Las cifras
 del reporte son deterministas: tasa de FALLA del verificador, tasa de bloqueo por
 controles, % de slices al primer intento, media de reintentos, tasa de CI roja. Coste en
 tokens NO se mide aqui (sale de la telemetria/OTel de Claude Code): se admite como campo
@@ -15,16 +16,15 @@ opcional best-effort y, si no viene, no se inventa.
 
 Lo que si mide el harness -coste en dolares, turnos, duracion y tokens leidos de cache- entra en
 el grupo `harness`, sumado por slice a lo largo de todas sus llamadas. Los cuatro salen de la misma
-suma, asi que se registran juntos o no se registran: pasar unos y no otros es error de uso, y si no
-vienen la clave `harness` NO se escribe, ni con ceros ni con `null`. Ningun numero de este log se
-estima.
+suma, asi que viajan juntos o no viajan: si no vienen, la clave `harness` no se escribe, ni con
+ceros ni con `null`. Ningun numero de este log se estima.
 
-Con que modelo se hizo la slice tampoco lo estima quien invoca: `--modelo` es lo que el propio
-harness declaro haber usado (repetible, por si una slice uso mas de uno -implementador y juez, o un
-reintento que cambio de modelo-), nunca el alias que se le pidio. Y `--variante` nombra que forma de
+Con que modelo se hizo la slice tampoco lo estima quien escribe: `modelos` es lo que el propio
+harness declaro haber usado (una lista, por si una slice uso mas de uno -implementador y juez, o un
+reintento que cambio de modelo-), nunca el alias que se le pidio. Y `variante` nombra que forma de
 trabajar del pipeline se estaba probando, para poder comparar dos sin rehacer el analisis a mano. Los
 dos son vocabulario abierto -crecen con cada modelo y cada experimento nuevo- y ninguno se escribe si
-no se declara: una fila sin `--modelo` o sin `--variante` se lee como "desconocido" en el reporte, no
+no se declara: una fila sin `modelos` o sin `variante` se lee como "desconocido" en el reporte, no
 como un valor mas del vocabulario.
 
 El log es durable y append-only, asi que los registros viejos no tienen los campos
@@ -38,18 +38,6 @@ del modulo pueda hacer aritmetica sobre campos tipados sin volver a preguntarse 
 tenia el log el mes pasado.
 
 Uso:
-    metrics.py record --repo <repo> --slice slice-01 --name cantidad-vo \\
-        --veredicto PASA --ci green \\
-        --hallazgos-alta 0 --hallazgos-media 1 --hallazgos-baja 2 \\
-        [--hallazgos-ronda-final-alta 0 --hallazgos-ronda-final-media 0 --hallazgos-ronda-final-baja 0] \\
-        --reintentos-implement 0 --reintentos-controles 0 --reintentos-ci 0 \\
-        --reintentos-verify 0 --descartes-verify 0 \\
-        --duracion-s 540 \\
-        [--descartes-verify-causa veredicto-incoherente|llamada-fallida] \\
-        [--coste-usd 1.23 --turnos 42 --duracion-ms 65652 --tokens-cache 15510] \\
-        [--modelo claude-sonnet-5 [--modelo otro-modelo]] [--variante programa] \\
-        [--coste-tokens 12345] [--ts 2026-07-22T10:00:00Z] [--path RUTA]
-
     metrics.py report [--repo <repo>] [--json] [--path RUTA]
 """
 
@@ -58,8 +46,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -130,199 +117,6 @@ Solo se leen (las consume `Fila.from_row`): lo que se emite es siempre la forma 
 
 def _path(arg: str | None) -> Path:
     return Path(arg).expanduser() if arg else DEFAULT_PATH
-
-
-@dataclass(frozen=True, kw_only=True, slots=True)
-class Hallazgos:
-    """Los hallazgos del verificador de una slice, por severidad."""
-
-    alta: int = 0
-    media: int = 0
-    baja: int = 0
-
-    def to_dict(self) -> dict[str, object]:
-        return {"alta": self.alta, "media": self.media, "baja": self.baja}
-
-
-@dataclass(frozen=True, kw_only=True, slots=True)
-class HallazgosRondaFinal:
-    """Los hallazgos del veredicto que cerro la slice, sin los de rondas ya corregidas.
-
-    `Hallazgos` acumula los de **todas** las rondas del verificador -un hallazgo cazado y corregido a
-    mitad tambien ocurrio-, y por eso una fila `PASA` puede traer ahi un `alta` que en realidad se
-    arreglo antes de la ultima ronda. Leida sola, esa fila es indistinguible de la definicion de
-    `veredicto-incoherente`: un `PASA` con un hallazgo `alta`. Este grupo trae solo los de la ronda que
-    de verdad cerro la slice, y en esa ronda un `PASA` con `alta` no puede pasar -lo rechaza `Verdict`
-    antes de llegar aqui-, asi que las dos filas dejan de leerse igual.
-    """
-
-    alta: int = 0
-    media: int = 0
-    baja: int = 0
-
-    def to_dict(self) -> dict[str, object]:
-        return {"alta": self.alta, "media": self.media, "baja": self.baja}
-
-
-@dataclass(frozen=True, kw_only=True, slots=True)
-class Harness:
-    """Lo que midio el harness en una slice, sumado a lo largo de todas sus llamadas.
-
-    Agrupados y no sueltos porque los cuatro salen de la misma suma: separados, una fila no diria
-    de cuantas llamadas es cada numero, y `harness` significa exactamente "esto lo midio el
-    harness", frente a los campos que rellena quien invoca. `tokens_cache` es la causa mecanica
-    de cualquier ahorro que un experimento de reutilizacion de sesion pretenda: sin el, un coste
-    mas bajo no se distingue de una slice que simplemente era mas facil.
-    """
-
-    coste_usd: float
-    turnos: int
-    duracion_ms: int
-    tokens_cache: int
-
-    @staticmethod
-    def from_args(args: argparse.Namespace) -> Harness | None:
-        """El grupo, o `None` si esta slice no trae medicion del harness.
-
-        Que vengan los cuatro o ninguno lo garantiza `_error_de_uso` antes de llegar aqui.
-        """
-        if args.coste_usd is None:
-            return None
-
-        return Harness(
-            coste_usd=args.coste_usd,
-            turnos=args.turnos,
-            duracion_ms=args.duracion_ms,
-            tokens_cache=args.tokens_cache,
-        )
-
-    def to_dict(self) -> dict[str, object]:
-        return {
-            "coste_usd": self.coste_usd,
-            "turnos": self.turnos,
-            "duracion_ms": self.duracion_ms,
-            "tokens_cache": self.tokens_cache,
-        }
-
-
-@dataclass(frozen=True, kw_only=True, slots=True)
-class Registro:
-    """Una linea del log: lo que se sabe de una slice ya cerrada.
-
-    Era un `dict` literal armado dentro de `record` a partir de un `argparse.Namespace`, o sea
-    dos bolsas sin tipar seguidas. Las claves que escribe `to_dict` son el formato del log
-    durable y no cambian: hay historico escrito con ellas.
-
-    `reintentos_verify` y `descartes_verify` son las dos formas de volver a invocar al
-    verificador, separadas a proposito por el mismo motivo por el que `FALLA` y
-    `bloqueada-controles` son veredictos distintos: una es un rechazo semantico del juez y la
-    otra un fallo mecanico del agente. `coste_tokens` se queda en `None` si no se pasa: no se
-    inventa.
-
-    `reintentos_verify` se amplio el 2026-07-31: eran las rondas por `FALLA` y ahora son **todas**
-    las vueltas al paso 5 que decide el juez, incluida la correccion de un hallazgo no bloqueante
-    que la regla del paso 7 manda arreglar. Las filas anteriores a esa fecha **no se marcan y el
-    historico se sigue agregando entero**, decidido asi y no por descuido: lo que este campo mide es
-    la frontera que lo separa de `descartes_verify` -el juez rechazo el codigo, frente a un agente que
-    no aguanto su contrato de salida- y esa frontera no se movio, con lo que las dos epocas cuentan la
-    misma cosa. Marcar la fecha partiria la serie en dos para conservar una distincion que ningun
-    agregado del reporte usa.
-
-    `modelos` y `variante` son vocabulario abierto -crecen con cada modelo del harness y cada
-    experimento de pipeline nuevo- y por eso viajan sueltos y no como un miembro mas de un
-    `StrEnum`: no hay lista cerrada que mantener al dia. Una fila sin ellos no es un tercer valor,
-    es la ausencia del dato -el historico anterior a esta slice, o una invocacion que no los
-    declaro-, y el reporte la agrupa como "desconocido" en vez de mezclarla con un modelo real.
-    """
-
-    ts: str
-    repo: str
-    slice_id: str
-    name: str
-    veredicto: Veredicto
-    ci: Ci
-    hallazgos: Hallazgos
-    hallazgos_ronda_final: HallazgosRondaFinal = field(default_factory=HallazgosRondaFinal)
-    reintentos_implement: int = 0
-    reintentos_controles: int = 0
-    reintentos_ci: int = 0
-    reintentos_verify: int = 0
-    descartes_verify: int = 0
-    duracion_s: int | None = None
-    coste_tokens: int | None = None
-    harness: Harness | None = None
-    descartes_verify_causa: CausaDescarte | None = None
-    modelos: tuple[str, ...] = ()
-    variante: str | None = None
-
-    @staticmethod
-    def from_args(args: argparse.Namespace) -> Registro:
-        return Registro(
-            ts=args.ts or datetime.now(UTC).isoformat(),
-            repo=args.repo,
-            slice_id=args.slice,
-            name=args.name,
-            veredicto=Veredicto(args.veredicto),
-            ci=Ci(args.ci),
-            hallazgos=Hallazgos(
-                alta=args.hallazgos_alta,
-                media=args.hallazgos_media,
-                baja=args.hallazgos_baja,
-            ),
-            hallazgos_ronda_final=HallazgosRondaFinal(
-                alta=args.hallazgos_ronda_final_alta,
-                media=args.hallazgos_ronda_final_media,
-                baja=args.hallazgos_ronda_final_baja,
-            ),
-            reintentos_implement=args.reintentos_implement,
-            reintentos_controles=args.reintentos_controles,
-            reintentos_ci=args.reintentos_ci,
-            reintentos_verify=args.reintentos_verify,
-            descartes_verify=args.descartes_verify,
-            duracion_s=args.duracion_s,
-            coste_tokens=args.coste_tokens,
-            harness=Harness.from_args(args),
-            descartes_verify_causa=(
-                CausaDescarte(args.descartes_verify_causa) if args.descartes_verify_causa else None
-            ),
-            modelos=tuple(args.modelos) if args.modelos else (),
-            variante=args.variante,
-        )
-
-    def to_dict(self) -> dict[str, object]:
-        """Las claves del log durable. Las opcionales que no hay se omiten, no se escriben `null`.
-
-        `duracion_s` y `coste_tokens` si se escriben como `null` porque hay historico con la clave
-        presente y vacia: quitarlas ahora solo anadiria una forma mas que `Fila.from_row` tendria
-        que tolerar. Las nuevas nacen omitiendose, que es lo que distingue "no medido" de "cero".
-        """
-        escrito: dict[str, object] = {
-            "ts": self.ts,
-            "repo": self.repo,
-            "slice_id": self.slice_id,
-            "name": self.name,
-            "veredicto": str(self.veredicto),
-            "ci": str(self.ci),
-            "hallazgos": self.hallazgos.to_dict(),
-            "hallazgos_ronda_final": self.hallazgos_ronda_final.to_dict(),
-            "reintentos_implement": self.reintentos_implement,
-            "reintentos_controles": self.reintentos_controles,
-            "reintentos_ci": self.reintentos_ci,
-            "reintentos_verify": self.reintentos_verify,
-            "descartes_verify": self.descartes_verify,
-            "duracion_s": self.duracion_s,
-            "coste_tokens": self.coste_tokens,
-        }
-        if self.harness is not None:
-            escrito["harness"] = self.harness.to_dict()
-        if self.descartes_verify_causa is not None:
-            escrito["descartes_verify_causa"] = str(self.descartes_verify_causa)
-        if self.modelos:
-            escrito["modelos"] = list(self.modelos)
-        if self.variante is not None:
-            escrito["variante"] = self.variante
-
-        return escrito
 
 
 def _texto(row: dict[str, object], clave: str) -> str:
@@ -458,37 +252,6 @@ class Fila:
             and not self.reintentos_controles
             and not self.reintentos_ci
         )
-
-
-def escribe(registro: Registro, path: Path) -> None:
-    """Anexa el registro al log durable, creando el directorio si hace falta."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a", encoding="utf-8") as fh:
-        fh.write(json.dumps(registro.to_dict(), ensure_ascii=False) + "\n")
-
-
-def _error_de_uso(args: argparse.Namespace) -> str | None:
-    """El mensaje del error de uso de `record`, o `None` si los flags son coherentes.
-
-    Se comprueba antes de escribir porque el log es append-only: una fila con media medicion o con
-    una causa que no atribuye nada se queda ahi para siempre, y el agregado no puede distinguirla
-    de una buena. Los emite `parser.error`, o sea exit 2 y nada escrito, en vez de una excepcion.
-    """
-    gasto = (args.coste_usd, args.turnos, args.duracion_ms, args.tokens_cache)
-    if any(dato is not None for dato in gasto) and any(dato is None for dato in gasto):
-        return "--coste-usd, --turnos, --duracion-ms y --tokens-cache salen de la misma suma: van los cuatro o ninguno"
-    if args.descartes_verify_causa and not args.descartes_verify:
-        return "--descartes-verify-causa sin --descartes-verify: no hay ningun descarte al que atribuirla"
-
-    return None
-
-
-def record(args: argparse.Namespace) -> int:
-    registro = Registro.from_args(args)
-    path = _path(args.path)
-    escribe(registro, path)
-    print(f"registrado: {registro.slice_id} ({registro.name}) -> {path}")
-    return 0
 
 
 def _load(path: Path, repo: str | None) -> list[Fila]:
@@ -779,83 +542,9 @@ def _imprime_grupos(titulo: str, grupos: dict[str, Grupo]) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """CLI de `record` y `report`.
-
-    Los `choices` se escriben como `[str(v) for v in ...]` y no como `list(...)` porque
-    argparse formatea los suyos con `repr` en el mensaje de error, y un
-    `<Veredicto.PASA: 'PASA'>` en un error de uso se lee peor que la cadena.
-    """
+    """CLI de `report`."""
     parser = argparse.ArgumentParser(description="Metricas durables de slice-runner")
     sub = parser.add_subparsers(dest="cmd", required=True)
-
-    rec = sub.add_parser("record", help="anexa un registro por slice cerrada")
-    rec.add_argument("--repo", required=True)
-    rec.add_argument("--slice", required=True, help="slice_id, p. ej. slice-01")
-    rec.add_argument("--name", required=True)
-    rec.add_argument("--veredicto", required=True, choices=[str(v) for v in Veredicto])
-    rec.add_argument("--ci", default=str(Ci.NINGUNA), choices=[str(c) for c in Ci])
-    rec.add_argument("--hallazgos-alta", type=int, default=0)
-    rec.add_argument("--hallazgos-media", type=int, default=0)
-    rec.add_argument("--hallazgos-baja", type=int, default=0)
-    rec.add_argument(
-        "--hallazgos-ronda-final-alta",
-        type=int,
-        default=0,
-        help="hallazgos alta del veredicto que cerro la slice, sin los de rondas ya corregidas",
-    )
-    rec.add_argument("--hallazgos-ronda-final-media", type=int, default=0)
-    rec.add_argument("--hallazgos-ronda-final-baja", type=int, default=0)
-    rec.add_argument("--reintentos-implement", type=int, default=0)
-    rec.add_argument("--reintentos-controles", type=int, default=0)
-    rec.add_argument("--reintentos-ci", type=int, default=0)
-    rec.add_argument(
-        "--reintentos-verify",
-        type=int,
-        default=0,
-        help="rondas de vuelta al paso 5 que decide el juez (rechazo semantico)",
-    )
-    rec.add_argument(
-        "--descartes-verify",
-        type=int,
-        default=0,
-        help="invocaciones del juez descartadas por devolver algo que no era su JSON",
-    )
-    rec.add_argument(
-        "--descartes-verify-causa",
-        default=None,
-        choices=[str(c) for c in CausaDescarte],
-        help="de que clase fueron los descartes; opcional, el flujo viejo no la distingue",
-    )
-    rec.add_argument("--duracion-s", type=int, default=None)
-    rec.add_argument("--coste-tokens", type=int, default=None)
-    rec.add_argument("--coste-usd", type=float, default=None, help="coste en dolares que sumo el harness")
-    rec.add_argument("--turnos", type=int, default=None, help="turnos que sumo el harness")
-    rec.add_argument("--duracion-ms", type=int, default=None, help="duracion en ms que sumo el harness")
-    rec.add_argument(
-        "--tokens-cache",
-        type=int,
-        default=None,
-        help="tokens leidos de cache que sumo el harness; va con --coste-usd/--turnos/--duracion-ms",
-    )
-    rec.add_argument(
-        "--modelo",
-        action="append",
-        default=None,
-        dest="modelos",
-        help="modelo que el harness declaro haber usado; repetible si la slice uso mas de uno",
-    )
-    rec.add_argument(
-        "--variante",
-        default=None,
-        help="forma de trabajar del pipeline que se estaba probando",
-    )
-    rec.add_argument("--ts", default=None, help="ISO ts; default now(UTC)")
-    rec.add_argument(
-        "--path",
-        default=None,
-        help="override del log (default ~/.claude/slice-runner/metrics.jsonl)",
-    )
-    rec.set_defaults(func=record)
 
     rep = sub.add_parser("report", help="agrega el log y calcula las cifras de nivel")
     rep.add_argument("--repo", default=None, help="filtra por repo (default: todos)")
@@ -864,10 +553,6 @@ def main(argv: list[str] | None = None) -> int:
     rep.set_defaults(func=report)
 
     args = parser.parse_args(argv)
-    if args.func is record:
-        problema = _error_de_uso(args)
-        if problema:
-            rec.error(problema)
     resultado: int = args.func(args)
     return resultado
 
