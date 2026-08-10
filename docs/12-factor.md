@@ -11,10 +11,11 @@ sabe por que existe; sin el segundo, la auditoria seria una opinion.
 
 1. **Los factores 1, 4 y 9 ya se cumplen**, y en el 9 el repo va mas alla de lo que el texto pide.
 2. **El factor 2 es la tesis del repo** (prompts como codigo versionado), con un hueco: no hay evals.
-3. **Los factores 2, 3, 5, 6, 8 y 12 presuponen que el loop es tuyo.** Aqui no lo es: el loop es de
-   Claude Code y el orquestador son las ~600 lineas de `skills/slice-runner/SKILL.md`, prosa que un
-   modelo interpreta dentro de la sesion de la persona. **Esa es la causa raiz** del problema de
-   contexto y de casi todos los defectos de abajo.
+3. **Los factores 2, 3, 5, 6, 8 y 12 presuponen que el loop es tuyo.** Aqui no lo era: el loop era el
+   de Claude Code y el orquestador eran las ~600 lineas del `SKILL.md` del runner (retirado; el
+   programa que lo sustituye es `src/slice_runner/`), prosa que un modelo interpretaba dentro de la
+   sesion de la persona. **Esa fue la causa raiz** del problema de contexto y de casi todos los
+   defectos de abajo.
 4. **Los huecos no son doce, son tres**: los factores 5, 6, 8 y 12 apuntan todos al mismo sitio.
 5. El spike valida que `claude -p` es la funcion sin estado que hace falta, **y anade un requisito que
    no estaba previsto**: el aislamiento del implementador hay que decidirlo antes de escribir el
@@ -112,7 +113,7 @@ El criterio de corte por skill es **si el valor esta en la conversacion o en el 
 | Skill | Donde esta su valor | Destino |
 |---|---|---|
 | `skills/slice-spec/SKILL.md` | La conversacion con una persona | Sigue siendo skill. Ser dueno del loop aqui no compra nada y cuesta justo lo que la hace buena |
-| `skills/slice-runner/SKILL.md` | El loop | Programa |
+| `SKILL.md` del runner (retirado) | El loop | Programa (`src/slice_runner/`) |
 | `skills/deploy-watch/SKILL.md` | El loop de ticks, con nucleo puro ya escrito | Programa, o skill fina sobre uno |
 
 Y el coste de la transicion es menor de lo que parece: `controles.py`, `issue_body.py`,
@@ -143,7 +144,7 @@ sobre un diff con una violacion de convencion plantada:
 
 Cuatro de cuatro pasan **el validador que ya existe en el repo**, sin desenvolver prosa ni reinvocar.
 `result` es una cadena con el objeto, consumible tal cual por `controles.py verify-verdict`. Esto ataca
-directamente lo que hoy declara `skills/slice-runner/SKILL.md`: *"el cumplimiento del formato es
+directamente lo que entonces declaraba el `SKILL.md` del runner: *"el cumplimiento del formato es
 estocastico"*. Con el esquema desaparece, y con el probablemente el contador `--descartes-verify`
 entero. Varia el **numero** de hallazgos, no el veredicto, que es la varianza que se espera de un juez.
 

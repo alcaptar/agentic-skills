@@ -62,7 +62,7 @@ siquiera como "ejemplo del repo":
 - `skills/slice-runner/scripts/` y `skills/deploy-watch/scripts/` — en castellano y llenos de
   docstrings. Y una de esas docstrings, la de `skills/slice-runner/scripts/controles.py`, es una de las
   copias en prosa del numero de la ventana de gracia de la integracion continua -el numero vive en
-  `src/slice_runner/domain/budgets.py` y las cinco copias escritas las compara
+  `src/slice_runner/domain/budgets.py` y las tres copias escritas las compara
   `tests/test_skill_contracts.py`-, asi que borrarla a ciegas tira un contrato.
 - `tests/` — todavia function-based y en castellano.
 
@@ -103,10 +103,10 @@ Estos no son convenciones de codigo: son las invariantes del pipeline, y valen e
   diagnostico y sin coste acotado, y la vara que lo caza vive en
   `docs/conventions/infrastructure.md`.
 - **No asumir worktree**: rama normal por defecto; worktree solo al paralelizar slices.
-- **El estado del run vive en el issue de GitHub**: la spec y el estado de cada slice viven en el
-  cuerpo de un issue (una feature = un issue), unica fuente de verdad viva y duradera. No hay estado
-  local (`.slice-runner/`, ledger, panel). El registro duradero son el issue (intencion + estado) y las
-  PRs mergeadas (codigo), no ficheros de estado en el repo.
+- **El estado del run vive en el issue de GitHub**: una feature es un **issue padre** y cada slice una
+  **subissue** suya, que lleva su spec en el cuerpo y su estado macro en la etiqueta. Es la unica fuente
+  de verdad viva y duradera: no hay estado local (`.slice-runner/`, ledger, panel). El registro duradero
+  son el issue (intencion + estado) y las PRs mergeadas (codigo), no ficheros de estado en el repo.
 - **La intencion se declara y viaja**: el issue abre con `## Intencion` (que esta mal hoy) y cada slice
   lleva su linea `INTENCION:` (el coste de no hacerla). De ahi sale el cuerpo de cada PR, que cuenta el
   **por que** en lugar de resumir el codigo -eso ya lo cuenta el diff-. Vara: si borras la slice, ¿que
@@ -135,7 +135,7 @@ Estos no son convenciones de codigo: son las invariantes del pipeline, y valen e
   `skills/slice-spec/references/observabilidad.md`.
 - **Una slice puede vivir en otro repo**: `REPO:` fija el repo destino y **todo** el ciclo ocurre ahi
   (comandos, rama, controles, PR, CI), medido con la vara de **ese** repo (su subseccion `### org/repo`
-  en las fuentes de convencion). El issue sigue siendo uno: una feature = un issue.
+  en las fuentes de convencion). La feature sigue siendo un solo issue padre, con su subissue por slice.
 
 ## Tras tocar un agente definido
 

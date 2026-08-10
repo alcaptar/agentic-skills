@@ -290,22 +290,22 @@ importar**: un smoke que solo importe el modulo lo da por bueno. Lo evita
   `stderr`- y vive donde lo necesito el primer adaptador de `git` que lo tuvo. La unica diferencia es que
   `GitWorkspace` cae al `stdout` cuando el `stderr` viene vacio, porque `git commit` sin nada staged
   explica el motivo por `stdout` y una excepcion sin motivo obliga a reproducirlo a mano.
-- **El cuerpo de la pull request duplica a proposito el formato del paso 8 de
-  `skills/slice-runner/SKILL.md`.** `PullRequestBody` (`infrastructure/pull_request_body.py`) compone los
-  mismos encabezados y en el mismo orden, y es la misma duplicacion declarada que la de la rubrica del juez
-  y la del brief del implementador, por el mismo motivo -el flujo viejo esta condenado y el programa no lee
-  sus `.md`-. Los encabezados se quedan en castellano: son **contenido del artefacto que lee una persona**,
-  en el idioma del issue, no identificadores. Y `gh pr create` va siempre con `--draft`, porque el merge lo
-  decide una persona (ver `CLAUDE.md`).
+- **El cuerpo de la pull request duplica a proposito el formato que en su dia declaraba el paso 8 del
+  `SKILL.md` del runner** (retirado; ver `CLAUDE.md`). `PullRequestBody` (`infrastructure/pull_request_body.py`)
+  compone los mismos encabezados y en el mismo orden, y es la misma duplicacion declarada que la de la
+  rubrica del juez y la del brief del implementador, por el mismo motivo -el flujo viejo esta condenado y
+  el programa no lee sus `.md`-. Los encabezados se quedan en castellano: son **contenido del artefacto
+  que lee una persona**, en el idioma del issue, no identificadores. Y `gh pr create` va siempre con
+  `--draft`, porque el merge lo decide una persona (ver `CLAUDE.md`).
 
-  **Diverge del paso 8, y cada divergencia es deliberada.** Al contrario que la duplicacion de los
-  prefijos prohibidos, **esta no tiene test de contrato**: no hay vocabulario que extraer de un cuerpo en
-  prosa, asi que estos parrafos son lo unico que la sostiene y hay que moverlos a mano cuando se mueva el
-  paso 8.
+  **Diverge del paso 8 que tenia el `SKILL.md` del runner (retirado), y cada divergencia es
+  deliberada.** Al contrario que la duplicacion de los prefijos prohibidos, **esta no tiene test de
+  contrato**: no hay vocabulario que extraer de un cuerpo en prosa, asi que estos parrafos son lo unico
+  que la sostiene.
 
-  1. **Cierra con `Closes #<N>` donde el paso 8 pone `Part of #<N>`.** En el formato nuevo hay **una
-     subissue por slice**, asi que la pull request si cierra su issue; en el viejo el issue es la feature
-     entera y cerrarlo con una slice seria mentir.
+  1. **Cierra con `Closes #<N>` donde el paso 8 ponia `Part of #<N>`.** En el formato nuevo hay **una
+     subissue por slice**, asi que la pull request si cierra su issue; en el viejo el issue era la
+     feature entera y cerrarlo con una slice habria sido mentir.
   2. **No sabe expresar la referencia cross-repo**, porque la subissue le llega como un numero suelto.
      Consecuencia: una slice que viva en otro repo referenciaria ese numero **en el repo de la pull
      request**, que no es donde vive la subissue. No es un olvido: quien conoce los dos repos es quien

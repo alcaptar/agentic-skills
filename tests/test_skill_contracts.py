@@ -25,7 +25,6 @@ from pathlib import Path
 import pytest
 
 import controles
-import issue_body
 import metrics
 from slice_runner.domain.budgets import Budgets
 from slice_runner.domain.ci_status import CiStatus
@@ -56,10 +55,7 @@ from slice_runner.tests.git_repo import Git
 from slice_runner.tests.mothers.closed_slice_mother import ClosedSliceMother
 
 _ROOT = Path(__file__).resolve().parents[1]
-_RUNNER = _ROOT / "skills" / "slice-runner" / "SKILL.md"
 _CONTROLES = _ROOT / "skills" / "slice-runner" / "scripts" / "controles.py"
-_DEPLOY_WATCH = _ROOT / "skills" / "deploy-watch" / "SKILL.md"
-_VERIFIER = _ROOT / "agents" / "slice-verifier.md"
 _SPEC = _ROOT / "skills" / "slice-spec" / "SKILL.md"
 
 
@@ -92,24 +88,6 @@ def _tracked(*patterns: str) -> list[str]:
     """
     out = Git.run(_ROOT, "ls-files", "-z", "--", *patterns)
     return sorted(p for p in out.split("\0") if p)
-
-
-def test_blocked_reasons_written_by_the_runner_are_the_ones_the_parser_knows() -> None:
-    """`bloqueada: X` markers in the runner must be exactly `issue_body.MotivoBloqueada`.
-
-    The runner writes these markers into the issue body; `issue_body` is what reads them back.
-    A reason documented but unknown to the parser makes the slice line unreadable downstream;
-    a reason known to the parser but never written is dead vocabulary. The legacy alias
-    (`puertas`) is deliberately excluded: the parser still accepts it for issues opened before
-    the rename, but the runner must never emit it again.
-    """
-    written = set(re.findall(r"`bloqueada: ([a-z0-9-]+)`", _read(_RUNNER)))
-
-    assert written == set(issue_body.MotivoBloqueada), (
-        f"{_rel(_RUNNER)} and issue_body.MotivoBloqueada disagree on the blocked reasons: "
-        f"only in the skill {sorted(written - set(issue_body.MotivoBloqueada))}, "
-        f"only in the parser {sorted(set(issue_body.MotivoBloqueada) - written)}"
-    )
 
 
 def test_every_runstate_closure_the_translator_is_asked_about_returns_a_label_or_none_only_for_merged() -> None:
@@ -409,27 +387,6 @@ def test_the_validate_mode_reports_every_deviation_with_its_rule_and_where_it_li
     )
 
 
-def test_ci_states_branched_on_by_step_9_are_the_ones_the_script_emits() -> None:
-    """Step 9 branches once per `ci-status` state; the script is what produces them.
-
-    A state the skill never branches on is a run that falls through with no rule; a state
-    the skill invents is a branch that never fires. Both were live risks the moment
-    `ci-status` gained a fifth state that is neither green nor red.
-    """
-    step_9 = re.search(r"^### 9\..*?(?=^### )", _read(_RUNNER), re.MULTILINE | re.DOTALL)
-    assert step_9, f"cannot find step 9 in {_rel(_RUNNER)}"
-
-    branched: set[str] = set()
-    for bullet in re.findall(r"^- \*\*(.+?)\*\*:", step_9.group(0), re.MULTILINE):
-        branched |= set(re.findall(r"`([a-z-]+)`", bullet))
-
-    assert branched == set(controles.EstadoCI), (
-        f"{_rel(_RUNNER)} step 9 and controles.EstadoCI disagree on the CI states: "
-        f"only in the skill {sorted(branched - set(controles.EstadoCI))}, "
-        f"only in the script {sorted(set(controles.EstadoCI) - branched)}"
-    )
-
-
 _CI_STATES_PAIRED = {
     CiStatus.GREEN: controles.EstadoCI.VERDE,
     CiStatus.RED: controles.EstadoCI.ROJO,
@@ -491,9 +448,7 @@ def test_the_ci_buckets_the_program_classifies_are_the_ones_the_script_classifie
 
 
 _GRACE_WINDOW_IS_WRITTEN_IN = (
-    _RUNNER,
     _CONTROLES,
-    _ROOT / "skills" / "slice-runner" / "references" / "por-que.md",
     _ROOT / "docs" / "design-notes.md",
     _ROOT / "README.md",
 )
@@ -512,13 +467,14 @@ def _grace_window(text: str) -> tuple[int, int]:
 def test_the_grace_window_is_the_same_number_wherever_it_is_written() -> None:
     """`CLAUDE.md` calls this a declared duplicate, and until now nothing measured it.
 
-    The number lived in two places on purpose -- step 9 of the runner, which counts the ticks, and
-    the docstring of `ci-status`, which explains why its exit code 4 is one of them -- but it was
-    written in five, and the state machine makes it six, because it is the machine that now decides
-    when the window is spent. Copies of a policy number with no test is how a run closes
-    `bloqueada: ci-indeterminada` after one tick while the prose still promises three. Every surface
-    that states the number is in here: a copy left out is measured by nothing, which is the state
-    this test exists to end.
+    The number lived in two places on purpose -- step 9 of the old skill-driven runner, which
+    counted the ticks, and the docstring of `ci-status`, which explains why its exit code 4 is
+    one of them -- and it grew from there as the program took over: the count now lives in
+    `Budgets`, which is what decides when the window is spent, and the surfaces left in prose are
+    the ones this test still holds to that number. Copies of a policy number with no test is how a
+    run closes `bloqueada: ci-indeterminada` after one tick while the prose still promises three.
+    Every surface that states the number is in here: a copy left out is measured by nothing, which
+    is the state this test exists to end.
     """
     budgets = Budgets()
     written = {_rel(path): _grace_window(_read(path)) for path in _GRACE_WINDOW_IS_WRITTEN_IN}
@@ -545,26 +501,6 @@ def test_the_forbidden_artifacts_are_the_same_ones_in_the_script_and_in_the_prog
     assert script == program, (
         "controles.FORBIDDEN_PREFIXES y StagedHygiene.FORBIDDEN_PREFIXES no prohiben lo mismo: "
         f"solo en el script {sorted(script - program)}, solo en el programa {sorted(program - script)}"
-    )
-
-
-def test_verdicts_the_runner_records_are_the_ones_the_metrics_cli_accepts() -> None:
-    """The `--veredicto <...>` literal in the runner must match `metrics.Veredicto`.
-
-    The runner spells the accepted values inline in the command it tells the agent to run.
-    If they drift, the closing step of a slice fails on an argparse error at the exact moment
-    the run is meant to be recorded -- the one place where a failure loses the data outright.
-    """
-    spelled = re.findall(r"--veredicto <([^>]+)>", _read(_RUNNER))
-    assert len(spelled) == 1, (
-        f"expected exactly one `--veredicto <...>` literal in {_rel(_RUNNER)}, found {len(spelled)}"
-    )
-    documented = set(spelled[0].split("|"))
-
-    assert documented == set(metrics.Veredicto), (
-        f"{_rel(_RUNNER)} and metrics.Veredicto disagree on the recordable verdicts: "
-        f"only in the skill {sorted(documented - set(metrics.Veredicto))}, "
-        f"only in the CLI {sorted(set(metrics.Veredicto) - documented)}"
     )
 
 
@@ -630,27 +566,10 @@ def _json_shape(value: object) -> object:
     return type(value).__name__
 
 
-def _sole_json_block(path: Path) -> object:
-    return _sole_json_block_in(_read(path), where=_rel(path))
-
-
 def _sole_json_block_in(markdown: str, *, where: str = "the program's rubric") -> object:
     blocks = re.findall(r"```json\n(.*?)```", markdown, re.DOTALL)
     assert len(blocks) == 1, f"expected exactly one ```json block in {where}, found {len(blocks)}"
     return json.loads(blocks[0])
-
-
-def test_verifier_verdict_schema_is_identical_in_the_agent_and_in_the_runner() -> None:
-    """The verdict JSON is stated in full in both the agent prompt and the runner.
-
-    The agent's system prompt is what actually produces the object; the runner's copy is what
-    the orchestrator is told to consume. There is no schema validation between them, so a field
-    renamed on one side alone is read as absent on the other and silently ignored.
-    """
-    assert _json_shape(_sole_json_block(_VERIFIER)) == _json_shape(_sole_json_block(_RUNNER)), (
-        f"the verdict JSON in {_rel(_VERIFIER)} and {_rel(_RUNNER)} no longer have the same "
-        f"shape; both copies describe the same contract and must be updated together"
-    )
 
 
 def _granted_tools() -> set[str]:
@@ -777,29 +696,6 @@ def test_the_rubric_describes_the_diff_range_the_program_actually_produces() -> 
     )
 
 
-def test_severity_levels_in_the_verdict_schema_are_the_ones_the_validator_accepts() -> None:
-    """The rubric's severities and the validator's must be the same set.
-
-    `verify-verdict` rejects a severity it does not know, so a level documented in the skill
-    but absent from the script turns a legitimate verdict into a discarded invocation -- and
-    the reverse silently widens what counts as a valid finding.
-    """
-    schema = _sole_json_block(_RUNNER)
-    assert isinstance(schema, dict)
-    hallazgos = schema["hallazgos"]
-    assert isinstance(hallazgos, list)
-    assert hallazgos
-    primero = hallazgos[0]
-    assert isinstance(primero, dict)
-    documented = {s.strip() for s in str(primero["severidad"]).split("|")}
-
-    assert documented == set(controles.Severidad), (
-        f"the verdict schema in {_rel(_RUNNER)} and controles.Severidad disagree: "
-        f"only in the skill {sorted(documented - set(controles.Severidad))}, "
-        f"only in the validator {sorted(set(controles.Severidad) - documented)}"
-    )
-
-
 def _documented_finding() -> dict[str, object]:
     """The single example finding in the rubric, which is where the verdict's fields are stated."""
     schema = _sole_json_block_in(_program_rubric())
@@ -840,54 +736,6 @@ def test_the_verdicts_and_severities_in_the_rubric_are_the_ones_the_program_acce
 
     assert {v.strip() for v in str(schema["veredicto"]).split("|")} == set(Ruling)
     assert {s.strip() for s in str(_documented_finding()["severidad"]).split("|")} == set(Severity)
-
-
-_CRITERION_ANCHOR = "declarar la degradacion en el artefacto"
-"""Short, stable phrase used only to locate the criterion.
-
-The sentence it belongs to is extracted from the files rather than hardcoded here, so rewording
-both copies in step still passes.
-"""
-
-
-def _degradation_criterion(path: Path) -> str:
-    """The bold question that both skills use to decide between degrading and stopping."""
-    questions: list[str] = [
-        question for question in re.findall(r"\*\*(¿[^*]+?\?)\*\*", _read(path)) if _CRITERION_ANCHOR in question
-    ]
-    assert len(questions) == 1, (
-        f"expected exactly one degradation criterion in {_rel(path)}, found {len(questions)}; "
-        f"both skills must state it, because neither loads the other"
-    )
-    return questions[0]
-
-
-def test_both_skills_state_the_same_degradation_criterion_word_for_word() -> None:
-    """`slice-runner` and `deploy-watch` duplicate this criterion on purpose.
-
-    The decision to duplicate accepted drift as its cost, in exchange for each skill being
-    self-contained and versioned in this repo. This test pays that cost off: the two copies are
-    compared against each other, so rewording them together is free and rewording one is not.
-    """
-    assert _degradation_criterion(_RUNNER) == _degradation_criterion(_DEPLOY_WATCH), (
-        f"the degradation criterion has drifted between {_rel(_RUNNER)} and "
-        f"{_rel(_DEPLOY_WATCH)}; it is duplicated deliberately and both copies must say the same"
-    )
-
-
-def test_each_skill_names_the_other_when_declaring_its_side_of_the_criterion() -> None:
-    """The asymmetry (one stops, one degrades) only reads as coherent with the cross-citation.
-
-    Same criterion, different artifact, opposite conclusions. Without each skill pointing at the
-    other, a future reader sees two skills contradicting each other and harmonises them -- almost
-    certainly towards degrading both, which is the side that destroys the guarantee.
-    """
-    assert "deploy-watch" in _read(_RUNNER), (
-        f"{_rel(_RUNNER)} no longer cites deploy-watch; the asymmetry then reads as a bug"
-    )
-    assert "slice-runner" in _read(_DEPLOY_WATCH), (
-        f"{_rel(_DEPLOY_WATCH)} no longer cites slice-runner; the asymmetry then reads as a bug"
-    )
 
 
 def test_every_subcommand_of_both_scripts_accepts_json() -> None:
