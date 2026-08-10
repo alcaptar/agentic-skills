@@ -1,5 +1,8 @@
 # Mapa de madurez: dónde encaja nuestro pipeline
 
+> **Lectura fechada, no vara de medir.** Situa el repo en un modelo externo con los datos del
+> 2026-07-16. No se actualiza: donde diga en que escalon estamos, dice donde estabamos entonces.
+
 Referencia: **"Steps of AI Adoption"**, Boris Cherny (2026-07-16). Modelo de 5 escalones (0 Gated → 4 AI-native) por rol, nº de agentes, cuello de botella, productos y guardrails. Este doc sitúa `slice-runner`/`deploy-watch` en ese mapa.
 
 ## Los escalones (resumen)

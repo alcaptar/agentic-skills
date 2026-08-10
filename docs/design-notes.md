@@ -1,5 +1,9 @@
 # Notas de diseno
 
+> **Registro vivo del porque.** A diferencia de las otras lecturas de `docs/`, este si se sigue
+> ampliando: cada decision entra con su fecha y su motivo para no re-derivarla. No es vara de medir
+> -eso son las convenciones- sino la memoria de como se llego a ellas.
+
 Decisiones tomadas al construir estas skills y el porque, para poder seguir iterando sin re-derivarlo.
 
 ## Contexto

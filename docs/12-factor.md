@@ -1,5 +1,11 @@
 # 12-factor-agents: donde encaja este repo, y que implica
 
+> **Lectura fechada, no vara de medir.** Es la auditoria del repo contra los doce factores tal como
+> estaba el 2026-07-31, mas el spike que la cerro. De aqui salio la decision de convertir el
+> orquestador en un programa, y **ese** es su valor: decir que se pensaba entonces y por que. Lo que
+> cita puede haberse retirado desde entonces -y parte lo esta-; se lee como lo que era ese dia y **no
+> se reescribe** para ponerlo al dia. Lo vigente vive en `README.md` y en `docs/conventions/`.
+
 Referencia: [humanlayer/12-factor-agents](https://github.com/humanlayer/12-factor-agents). Los doce
 factores se leyeron enteros el 2026-07-31, no de memoria; las citas salen de esa lectura.
 
