@@ -22,11 +22,13 @@ _TITLE = "feat(entrega-de-la-slice): commitear solo lo juzgado y abrir la pull r
 
 class TestTheCommandsGitWorkspaceRuns:
     def test_staging_names_every_path_after_a_double_dash_and_never_asks_git_to_pick_them(self) -> None:
-        process = ScriptedProcess(ProcessOutput(code=0, stdout="", stderr=""))
+        process = ScriptedProcess(
+            ProcessOutput(code=0, stdout="", stderr=""), ProcessOutput(code=0, stdout="", stderr="")
+        )
 
         GitWorkspace(process=process).stage(worktree=_WORKTREE, paths=("src/a.py", "src/tests/test_a.py"))
 
-        assert process.calls[0].argv == [
+        assert process.calls[-1].argv == [
             "git",
             "-C",
             _WORKTREE,
@@ -36,7 +38,24 @@ class TestTheCommandsGitWorkspaceRuns:
             "src/tests/test_a.py",
         ]
         for wildcard in ("-A", "--all", ".", "-u", "--update", ":/"):
-            assert wildcard not in process.calls[0].argv
+            assert wildcard not in process.calls[-1].argv
+
+    def test_it_asks_the_index_what_is_already_deleted_before_naming_the_paths_to_add(self) -> None:
+        process = ScriptedProcess(
+            ProcessOutput(code=0, stdout="", stderr=""), ProcessOutput(code=0, stdout="", stderr="")
+        )
+
+        GitWorkspace(process=process).stage(worktree=_WORKTREE, paths=("src/a.py",))
+
+        assert process.calls[0].argv == [
+            "git",
+            "-C",
+            _WORKTREE,
+            "diff",
+            "--cached",
+            "--name-only",
+            "--diff-filter=D",
+        ]
 
     def test_the_index_is_read_against_head_so_it_is_what_the_commit_would_carry(self) -> None:
         process = ScriptedProcess(ProcessOutput(code=0, stdout="", stderr=""))
@@ -99,6 +118,29 @@ class TestGitWorkspaceAgainstARealRepo:
 
         with pytest.raises(GitCommandFailedError, match=re.escape("never-written.py")):
             GitWorkspace(process=Real.process()).stage(worktree=str(repo), paths=("never-written.py",))
+
+    def test_a_deletion_that_already_reached_the_index_does_not_abort_the_rest_of_the_round(
+        self, tmp_path: Path
+    ) -> None:
+        repo = self._repo_with_a_commit(tmp_path / "repo")
+        (repo / "added.py").write_text("y = 2\n", encoding="utf-8")
+        Git.run(repo, "rm", "--quiet", "kept.py")
+        workspace = GitWorkspace(process=Real.process())
+
+        workspace.stage(worktree=str(repo), paths=("added.py", "kept.py"))
+
+        assert workspace.staged(worktree=str(repo)) == ("added.py", "kept.py")
+
+    def test_a_round_whose_every_path_is_an_already_staged_deletion_stages_without_calling_git_add(
+        self, tmp_path: Path
+    ) -> None:
+        repo = self._repo_with_a_commit(tmp_path / "repo")
+        Git.run(repo, "rm", "--quiet", "kept.py")
+        workspace = GitWorkspace(process=Real.process())
+
+        workspace.stage(worktree=str(repo), paths=("kept.py",))
+
+        assert workspace.staged(worktree=str(repo)) == ("kept.py",)
 
     def test_the_branch_a_repo_is_on_is_the_one_it_reports(self, tmp_path: Path) -> None:
         repo = self._repo_with_a_commit(tmp_path / "repo")

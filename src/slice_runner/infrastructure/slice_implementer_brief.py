@@ -52,7 +52,10 @@ esperado -> GREEN minimo -> REFACTOR), incluida su referencia `writing-good-test
 
 ## Lo que NO tocas
 
-- **`git`.** No commitees, no stagees, no cambies de rama.
+- **`git`.** No commitees, no stagees, no cambies de rama. **Para borrar un fichero, sacalo del arbol
+  (`rm`), nunca con `git rm`**: eso lo saca tambien del indice, y a partir de ahi la ruta no existe
+  para quien tiene que stagearla. Un borrado se declara en tu informe como cualquier otra ruta que
+  toques.
 - **Planes y design-docs.** No escribas ninguno.
 
 ## Lo que devuelves
