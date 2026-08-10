@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
-import argparse
 import json
 from typing import TYPE_CHECKING, Any
 
 import pytest
 
 import metrics
-from metrics import CausaDescarte, Ci, Fila, Hallazgos, Registro, Veredicto
+from metrics import CausaDescarte, Ci, Fila, Veredicto
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -65,34 +64,8 @@ def _row(**kw: Any) -> dict[str, Any]:
 
 
 def _escribe_log(path: Path, rows: list[dict[str, object]]) -> None:
-    """Un log JSON por lineas ya escrito, para partir de historico en vez de de `record`."""
+    """Un log JSON por lineas ya escrito, para partir de historico en vez de de un escritor."""
     path.write_text("\n".join(json.dumps(r) for r in rows) + "\n", encoding="utf-8")
-
-
-def _record(path: Path, *extra: str) -> list[str]:
-    """El argv minimo de `record` sobre un log de usar y tirar, mas lo que anada cada test."""
-    return [
-        "record",
-        "--repo",
-        "r",
-        "--slice",
-        "slice-01",
-        "--name",
-        "x",
-        "--veredicto",
-        "PASA",
-        "--ci",
-        "green",
-        "--path",
-        str(path),
-        *extra,
-    ]
-
-
-def _escrita(path: Path) -> dict[str, Any]:
-    """La unica fila que `record` acaba de anexar, tal cual quedo en el log."""
-    fila: dict[str, Any] = json.loads(path.read_text(encoding="utf-8").splitlines()[0])
-    return fila
 
 
 def test_aggregate_primer_intento_excluye_abort() -> None:
@@ -183,70 +156,8 @@ def test_load_filtra_por_repo(tmp_path: Path) -> None:
     assert [f.slice_id for f in metrics._load(p, "a")] == ["s1"]
 
 
-def test_record_report_roundtrip(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    path = tmp_path / "m.jsonl"
-    registro = Registro(
-        ts="2026-01-01T00:00:00Z",
-        repo="r",
-        slice_id="slice-01",
-        name="x",
-        veredicto=Veredicto.PASA,
-        ci=Ci.VERDE,
-        hallazgos=Hallazgos(media=1, baja=2),
-        duracion_s=10,
-    )
-
-    metrics.escribe(registro, path)
-
-    assert metrics.report(argparse.Namespace(repo="r", json=True, path=str(path))) == 0
-    data = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
-    assert data["slices"] == 1
-    assert data["primer_intento_pct"] == 100.0
-
-
-def test_las_claves_del_registro_son_el_formato_del_log_durable() -> None:
-    """El log sobrevive a los runs y hay historico escrito con estas claves.
-
-    Renombrar un campo del dataclass no puede cambiarlas, o el agregado deja de encontrar las
-    filas viejas. Los enums se serializan como su cadena, no como `Veredicto.PASA`.
-    """
-    registro = Registro(
-        ts="2026-01-01T00:00:00Z",
-        repo="r",
-        slice_id="slice-01",
-        name="x",
-        veredicto=Veredicto.PASA,
-        ci=Ci.VERDE,
-        hallazgos=Hallazgos(),
-    )
-
-    escrito = registro.to_dict()
-
-    assert set(escrito) == {
-        "ts",
-        "repo",
-        "slice_id",
-        "name",
-        "veredicto",
-        "ci",
-        "hallazgos",
-        "hallazgos_ronda_final",
-        "reintentos_implement",
-        "reintentos_controles",
-        "reintentos_ci",
-        "reintentos_verify",
-        "descartes_verify",
-        "duracion_s",
-        "coste_tokens",
-    }
-    assert escrito["hallazgos"] == {"alta": 0, "media": 0, "baja": 0}
-    assert escrito["hallazgos_ronda_final"] == {"alta": 0, "media": 0, "baja": 0}
-    assert escrito["veredicto"] == "PASA"
-    assert escrito["ci"] == "green"
-
-
 def test_el_agregado_llega_al_json_de_la_cli_de_report(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    """El resto de los tests de agregacion entran por `_aggregate`/`_load`, que son privadas.
+    """Los tests de agregacion entran por `_aggregate`/`_load`, que son privadas.
 
     Son puras y probarlas asi es lo que las mantiene legibles. El precio es que ninguna comprueba
     el cableado, y `report` es lo que de verdad invoca `SKILL.md`. Esto lo ancla: si el argv
@@ -266,37 +177,6 @@ def test_el_agregado_llega_al_json_de_la_cli_de_report(tmp_path: Path, capsys: p
     data = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
     assert data["slices"] == 1
     assert data["verificador_falla_pct"] == 0.0
-
-
-def test_cli_acepta_bloqueada_controles_y_reintentos_de_controles(tmp_path: Path) -> None:
-    """El camino de cierre nuevo tiene que poder registrarse desde la CLI que documenta SKILL.md.
-
-    Si no, el log miente sobre por que paro la slice.
-    """
-    path = tmp_path / "m.jsonl"
-    code = metrics.main(
-        [
-            "record",
-            "--repo",
-            "r",
-            "--slice",
-            "slice-01",
-            "--name",
-            "x",
-            "--veredicto",
-            "bloqueada-controles",
-            "--ci",
-            "none",
-            "--reintentos-controles",
-            "2",
-            "--path",
-            str(path),
-        ]
-    )
-    assert code == 0
-    row = json.loads(path.read_text(encoding="utf-8").strip())
-    assert row["veredicto"] == "bloqueada-controles"
-    assert row["reintentos_controles"] == 2
 
 
 def test_report_cuenta_el_veredicto_viejo_como_bloqueada_controles(tmp_path: Path) -> None:
@@ -391,155 +271,6 @@ def test_filas_viejas_sin_los_campos_nuevos_se_agregan_igual() -> None:
     agg = metrics._aggregate([Fila.from_row(vieja)])
     assert agg.reintentos_verify_media == 0.0
     assert agg.descartes_verify_pct == 0.0
-
-
-def test_cli_acepta_y_persiste_los_dos_campos(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    path = tmp_path / "m.jsonl"
-    code = metrics.main(
-        [
-            "record",
-            "--repo",
-            "r",
-            "--slice",
-            "slice-01",
-            "--name",
-            "x",
-            "--veredicto",
-            "PASA",
-            "--ci",
-            "green",
-            "--reintentos-verify",
-            "1",
-            "--descartes-verify",
-            "1",
-            "--path",
-            str(path),
-        ]
-    )
-    assert code == 0
-    capsys.readouterr()
-    row = json.loads(path.read_text(encoding="utf-8").splitlines()[0])
-    assert row["reintentos_verify"] == 1
-    assert row["descartes_verify"] == 1
-
-    metrics.main(["report", "--path", str(path)])
-    out = capsys.readouterr().out
-    assert "reintentos verify" in out
-    assert "contrato del juez roto" in out
-
-
-def test_el_gasto_del_harness_se_escribe_como_un_grupo_anidado(tmp_path: Path) -> None:
-    """Los cuatro numeros salen de la misma suma del JSON del harness, asi que viajan juntos.
-
-    Sueltos, la fila no diria de cuantas llamadas es cada uno; agrupados, `harness` significa
-    "esto es lo que midio el harness" y se distingue de los campos que estima quien invoca.
-    """
-    path = tmp_path / "m.jsonl"
-
-    assert (
-        metrics.main(
-            _record(path, "--coste-usd", "0.42", "--turnos", "14", "--duracion-ms", "65652", "--tokens-cache", "15510")
-        )
-        == 0
-    )
-
-    assert _escrita(path)["harness"] == {
-        "coste_usd": 0.42,
-        "turnos": 14,
-        "duracion_ms": 65652,
-        "tokens_cache": 15510,
-    }
-
-
-def test_los_hallazgos_de_la_ronda_final_viajan_aparte_de_los_acumulados(tmp_path: Path) -> None:
-    """Una fila `PASA` con un `alta` acumulado deja de leerse como `veredicto-incoherente`.
-
-    `--hallazgos-alta` acumula los de todas las rondas del verificador, y `Verdict` impide que la
-    ronda final de un `PASA` traiga un `alta` -por eso las dos filas dejan de confundirse: la que de
-    verdad se contradice no puede llegar aqui-.
-    """
-    path = tmp_path / "m.jsonl"
-
-    assert metrics.main(_record(path, "--hallazgos-alta", "1", "--hallazgos-ronda-final-alta", "0")) == 0
-
-    escrita = _escrita(path)
-    assert escrita["hallazgos"]["alta"] == 1
-    assert escrita["hallazgos_ronda_final"]["alta"] == 0
-
-
-def test_sin_pasar_la_ronda_final_se_registra_como_cero_y_no_como_ausente(tmp_path: Path) -> None:
-    path = tmp_path / "m.jsonl"
-
-    assert metrics.main(_record(path)) == 0
-
-    assert _escrita(path)["hallazgos_ronda_final"] == {"alta": 0, "media": 0, "baja": 0}
-
-
-def test_sin_datos_del_harness_no_se_escribe_la_clave(tmp_path: Path) -> None:
-    """Ningun numero se estima: un cero o un `null` no se distinguen de "no lo he medido"."""
-    path = tmp_path / "m.jsonl"
-
-    assert metrics.main(_record(path)) == 0
-
-    assert "harness" not in _escrita(path)
-
-
-def test_pasar_un_dato_del_harness_y_no_los_otros_dos_es_error_de_uso(tmp_path: Path) -> None:
-    """Media suma es un dato que nadie puede interpretar, y no se puede completar inventandolo."""
-    path = tmp_path / "m.jsonl"
-
-    with pytest.raises(SystemExit) as salida:
-        metrics.main(_record(path, "--coste-usd", "0.42"))
-
-    assert salida.value.code == 2
-    assert not path.exists()
-
-
-def test_la_causa_del_descarte_viaja_junto_a_su_contador(tmp_path: Path) -> None:
-    """El contador dice cuantas veces, la causa dice de que clase de fallo se esta hablando.
-
-    Un juez que contesta su JSON con un veredicto que se contradice y una llamada que ni llego a
-    devolver el sobre son cosas distintas, y sin la causa el agregado no puede separarlas.
-    """
-    path = tmp_path / "m.jsonl"
-
-    assert metrics.main(_record(path, "--descartes-verify", "2", "--descartes-verify-causa", "llamada-fallida")) == 0
-
-    fila = _escrita(path)
-    assert (fila["descartes_verify"], fila["descartes_verify_causa"]) == (2, "llamada-fallida")
-
-
-def test_una_causa_sin_descartes_es_error_de_uso(tmp_path: Path) -> None:
-    """No hay descarte al que atribuirla, asi que la fila mentiria sobre lo que paso."""
-    path = tmp_path / "m.jsonl"
-
-    with pytest.raises(SystemExit) as salida:
-        metrics.main(_record(path, "--descartes-verify-causa", "veredicto-incoherente"))
-
-    assert salida.value.code == 2
-    assert not path.exists()
-
-
-def test_los_descartes_sin_causa_se_siguen_aceptando(tmp_path: Path) -> None:
-    """El flujo viejo no sabe la causa y el historico no la trae: exigirla romperia el registro."""
-    path = tmp_path / "m.jsonl"
-
-    assert metrics.main(_record(path, "--descartes-verify", "1")) == 0
-
-    fila = _escrita(path)
-    assert fila["descartes_verify"] == 1
-    assert "descartes_verify_causa" not in fila
-
-
-def test_una_causa_que_no_esta_en_el_vocabulario_no_se_registra(tmp_path: Path) -> None:
-    """El vocabulario es cerrado: una tercera causa inventada haria incomparable el reparto."""
-    path = tmp_path / "m.jsonl"
-
-    with pytest.raises(SystemExit) as salida:
-        metrics.main(_record(path, "--descartes-verify", "1", "--descartes-verify-causa", "se-aburrio"))
-
-    assert salida.value.code == 2
-    assert not path.exists()
 
 
 def test_el_report_promedia_el_coste_en_dolares_de_las_filas_que_lo_traen() -> None:
@@ -688,76 +419,6 @@ def test_las_medidas_del_harness_que_ninguna_fila_trae_se_reportan_como_sin_dato
             assert "sin datos" in linea
 
 
-def test_el_modelo_declarado_por_el_harness_se_persiste(tmp_path: Path) -> None:
-    """`--modelo` es lo que el harness dijo haber usado, nunca el alias que se le pidio."""
-    path = tmp_path / "m.jsonl"
-
-    assert metrics.main(_record(path, "--modelo", "claude-sonnet-5")) == 0
-
-    assert _escrita(path)["modelos"] == ["claude-sonnet-5"]
-
-
-def test_una_slice_que_uso_mas_de_un_modelo_los_guarda_todos_en_vez_de_quedarse_con_uno(tmp_path: Path) -> None:
-    """Implementador y juez -o un reintento que cambio de modelo- pueden no coincidir.
-
-    Quedarse con el primero silenciaria justo el caso que el criterio de aceptacion pide reflejar.
-    """
-    path = tmp_path / "m.jsonl"
-
-    assert metrics.main(_record(path, "--modelo", "claude-sonnet-5", "--modelo", "claude-haiku-4-5-20251001")) == 0
-
-    assert _escrita(path)["modelos"] == ["claude-sonnet-5", "claude-haiku-4-5-20251001"]
-
-
-def test_sin_modelo_declarado_la_clave_no_se_escribe(tmp_path: Path) -> None:
-    """No inventar un modelo cuando no se declaro ninguno: ausente, no una lista vacia visible."""
-    path = tmp_path / "m.jsonl"
-
-    assert metrics.main(_record(path)) == 0
-
-    assert "modelos" not in _escrita(path)
-
-
-def test_la_variante_del_pipeline_se_persiste_cuando_se_declara(tmp_path: Path) -> None:
-    path = tmp_path / "m.jsonl"
-
-    assert metrics.main(_record(path, "--variante", "programa")) == 0
-
-    assert _escrita(path)["variante"] == "programa"
-
-
-def test_sin_variante_declarada_la_clave_no_se_escribe(tmp_path: Path) -> None:
-    path = tmp_path / "m.jsonl"
-
-    assert metrics.main(_record(path)) == 0
-
-    assert "variante" not in _escrita(path)
-
-
-def test_tokens_cache_viaja_con_los_otros_tres_numeros_del_harness(tmp_path: Path) -> None:
-    path = tmp_path / "m.jsonl"
-
-    assert (
-        metrics.main(
-            _record(path, "--coste-usd", "0.42", "--turnos", "14", "--duracion-ms", "65652", "--tokens-cache", "15510")
-        )
-        == 0
-    )
-
-    assert _escrita(path)["harness"]["tokens_cache"] == 15510
-
-
-def test_tokens_cache_sin_los_otros_tres_numeros_del_harness_es_error_de_uso(tmp_path: Path) -> None:
-    """Media suma con `tokens_cache` incluido es exactamente el mismo fallo que sin el."""
-    path = tmp_path / "m.jsonl"
-
-    with pytest.raises(SystemExit) as salida:
-        metrics.main(_record(path, "--tokens-cache", "15510"))
-
-    assert salida.value.code == 2
-    assert not path.exists()
-
-
 def test_una_fila_con_varios_modelos_los_lee_todos_de_la_lista() -> None:
     fila = Fila.from_row(_row(modelos=["claude-sonnet-5", "claude-haiku-4-5-20251001"]))
 
@@ -845,3 +506,17 @@ def test_el_reparto_por_modelo_y_variante_llega_al_json_del_report(
     assert "claude-sonnet-5" in salida
     assert "programa" in salida
     assert "tokens de cache" in salida
+
+
+def test_record_ya_no_es_un_subcomando_porque_lo_escribe_el_programa_el_mismo() -> None:
+    """El ultimo escritor por subproceso se retiro: `report` es el unico camino que queda."""
+    with pytest.raises(SystemExit) as salida:
+        metrics.main(["record", "--repo", "r", "--slice", "slice-01", "--name", "x"])
+
+    assert salida.value.code == 2
+
+
+def test_report_con_un_path_que_no_existe_no_revienta(tmp_path: Path) -> None:
+    code = metrics.main(["report", "--path", str(tmp_path / "no-existe.jsonl")])
+
+    assert code == 0

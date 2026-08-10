@@ -162,7 +162,8 @@ condenado se retira sin tocar los demas-:
 
 - **`test_metrics_bridge_contract.py`**: el ultimo puente con `metrics.py`, declarado en
   `docs/conventions/infrastructure.md` -los veredictos del vocabulario durable del programa vs los de
-  `metrics.py`, y el argv que construye el programa pasado por el `argparse` real del script-.
+  `metrics.py`, y la fila que construye el programa pasada por el lector real del script
+  (`Fila.from_row`)-.
 
 - **`test_pipeline_invariants.py`**: cuatro invariantes que escanean el arbol en vez de comparar dos
   copias de la misma prosa:

@@ -102,6 +102,11 @@ _IMPOSSIBLE: list[tuple[Step, Outcome]] = sorted(
 )
 
 
+@pytest.fixture(autouse=True)
+def _every_run_closes_its_metrics_row_outside_the_real_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path / "durable-metrics"))
+
+
 class BlindToTheToolboxOfThisMachine:
     @pytest.fixture(autouse=True)
     def toolbox_out_of_reach(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

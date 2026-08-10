@@ -189,18 +189,23 @@ importar**: un smoke que solo importe el modulo lo da por bueno. Lo evita
   `tuple[dict[str, object], ...]` sin tipar cada elemento contra un `BaseModel`, y
   `GhCommentPayload.from_dict` proyecta a mano solo `body` antes de validar, igual que
   `TranscriptMessage.content`.
-- **El registro durable lo escribe `metrics.py` como subproceso, y su vocabulario esta duplicado a
-  proposito.** `MetricsScriptLog` implementa el puerto `MetricsLog` invocando el script por el puerto
-  `Process`, no importandolo: el programa no importa nada de `skills/` (arriba), y ademas el formato del
-  log -que sobrevive a los runs y tiene historico escrito- sigue teniendo **un solo escritor**.
-  Consecuencia aceptada: los vocabularios del cierre existen dos veces -en ingles dentro del programa
+- **El registro durable lo escribe el programa el mismo, igual que el rastro, el gasto y el corpus, y su
+  vocabulario sigue duplicado a proposito.** `LocalMetricsLog` implementa el puerto `MetricsLog` con el
+  mismo patron que `LocalCallTrace`/`LocalCallSpendLog`/`LocalCorpus`: sin proceso externo, con
+  `ClaudeConfig.root()` para resolver la raiz y un payload de frontera (`MetricsEntryPayload`, en
+  `infrastructure/metrics_entry_payload.py`) que traduce el dominio a las claves en castellano del log
+  -mismo formato que escribia el flujo viejo, porque el fichero es durable y tiene historico escrito, y
+  `metrics.py` sigue siendo quien lo agrega en `report`-. Antes de esta slice lo escribia `metrics.py`
+  como subproceso; retirar ese puente es lo que cierra la dependencia fisica del programa con un script
+  fuera de su paquete (abajo, `Codigo que NO es referencia` de `CLAUDE.md`). Consecuencia aceptada, y no
+  cambia con el transporte: los vocabularios del cierre existen dos veces -en ingles dentro del programa
   (`RunState`, `DiscardCause`) y con las palabras del log en la frontera (`DurableVerdict`, `DurableCi`,
-  `DurableDiscardCause`, en `metrics_invocation.py`)-, con un `match`
+  `DurableDiscardCause`, en `metrics_entry_payload.py`)-, con un `match`
   exhaustivo entre las dos, como `IssueLabel.of`: un cierre nuevo rompe en `mypy` en vez de caer en una
   rama generica, y un run que **no** ha cerrado lanza `RunNotClosedError` en vez de escribir una fila. La
   duplicacion la **mide** `test_metrics_bridge_contract.py`, que compara los conjuntos de ambos lados y
-  ademas pasa el argv que construye el programa por el `argparse` del script: un flag renombrado solo se
-  veria al cerrar una slice, que es justo el momento en que un fallo pierde la fila.
+  ademas pasa la fila que construye el payload por el lector real del script (`Fila.from_row`): una clave
+  renombrada solo se veria al cerrar una slice, que es justo el momento en que un fallo pierde la fila.
 - **El programa no escribe ningun numero que no venga del harness.** Del sobre salen coste en dolares,
   turnos y duracion, sumados por slice; `--duracion-s` (reloj de pared) y `--coste-tokens` **no se pasan**,
   porque no son dato del harness: hay puerto de reloj (`Clock.now`, que sella cada evento del run), pero lo
@@ -230,16 +235,6 @@ importar**: un smoke que solo importe el modulo lo da por bueno. Lo evita
   siguiente.** Si su pull request esta mergeada, se escribe la fila durable y se retira la etiqueta; si no,
   se deja intacta. Sin eso, un merge hecho entre invocaciones deja el trabajo hecho y sin registrar,
   porque el precheck de subissue cerrada corta antes de llegar a ningun cierre.
-- **La ruta de un script que el programa invoca sale del propio paquete, ni del repo de la slice ni de la
-  configuracion de la herramienta.** Del repo de la slice no puede salir porque la slice puede vivir en
-  otro. Y de la configuracion tampoco, porque ahi manda un symlink que apunta a donde alguien decida: el
-  dia que ese symlink se repunto a un repo archivado, el programa quedo llamando a una copia congelada y
-  **el primer cambio que el propio programa hizo en el script lo rompio**. El script viaja con el programa
-  porque **es del programa**: los flags que manda y los que el script acepta son un solo contrato, y un
-  contrato no puede tener sus dos mitades en repos distintos. Lo que si sale de la configuracion es lo que
-  de verdad es convencion de Claude Code y no del programa: las skills que forman la vara, el rastro de
-  las llamadas y las transcripciones.
-
 - Un codigo de salida distinto de cero **es un dato**, no una excepcion: se lanza el proceso con
   `check=False` y el adaptador interpreta, porque el motivo esta en `stderr` y una excepcion lo borra.
 - **Ninguna llamada a un proceso externo se lanza sin tope, y el tope no lo elige el adaptador.**
