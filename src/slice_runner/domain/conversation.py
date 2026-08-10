@@ -37,6 +37,7 @@ class ToolCall:
     name: str
     summary: str
     result: str | None
+    path: str | None
 
 
 @dataclass(frozen=True, kw_only=True, slots=True)

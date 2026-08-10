@@ -20,15 +20,25 @@ if TYPE_CHECKING:
     from slice_runner.domain.parent_issue import ParentIssue
     from slice_runner.domain.sub_issue import SubIssue
     from slice_runner.infrastructure.process import Process
+    from slice_runner.infrastructure.tool_use_recorder import ToolUseRecorder
     from slice_runner.infrastructure.turn_log import TurnLog
 
 
 class ClaudeUnderstanding(UnderstandingWriter):
-    def __init__(self, *, process: Process, trace: CallTrace, turns: TurnLog, spend_log: CallSpendLog) -> None:
+    def __init__(
+        self,
+        *,
+        process: Process,
+        trace: CallTrace,
+        turns: TurnLog,
+        spend_log: CallSpendLog,
+        tool_uses: ToolUseRecorder,
+    ) -> None:
         self._process = process
         self._trace = trace
         self._turns = turns
         self._spend_log = spend_log
+        self._tool_uses = tool_uses
 
     def write(
         self, *, subissue: SubIssue, parent: ParentIssue, repo: str, worktree: str, alignment: Alignment
@@ -42,6 +52,9 @@ class ClaudeUnderstanding(UnderstandingWriter):
         self._trace.record(HarnessCall(slice_id=subissue.slice_id, step=Step.UNDERSTAND, session=envelope.session_id))
         spend = envelope.to_domain()
         self._spend_log.record(HarnessCallSpend(session=envelope.session_id, spend=spend))
+        self._tool_uses.record_after(
+            slice_id=subissue.slice_id, step=Step.UNDERSTAND, session=envelope.session_id, repo=repo
+        )
         with envelope.measuring():
             text = self._usable_text(envelope)
 

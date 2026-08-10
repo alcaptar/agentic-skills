@@ -49,6 +49,7 @@ from slice_runner.infrastructure.claude_understanding import ClaudeUnderstanding
 from slice_runner.infrastructure.claude_verifier import ClaudeVerifier
 from slice_runner.infrastructure.conducted_slice_payload import ConductedSlicePayload
 from slice_runner.infrastructure.conversation_report import ConversationReport
+from slice_runner.infrastructure.conversation_tool_use_recorder import ConversationToolUseRecorder
 from slice_runner.infrastructure.exit_code import ExitCode
 from slice_runner.infrastructure.gh_ci import GhCi
 from slice_runner.infrastructure.gh_forum import GhForum
@@ -63,6 +64,7 @@ from slice_runner.infrastructure.local_conversation_log import LocalConversation
 from slice_runner.infrastructure.local_corpus import LocalCorpus
 from slice_runner.infrastructure.local_process import LocalProcess
 from slice_runner.infrastructure.local_skill_library import LocalSkillLibrary
+from slice_runner.infrastructure.local_tool_use_log import LocalToolUseLog
 from slice_runner.infrastructure.metrics_script_log import MetricsNotRecordedError, MetricsScriptLog
 from slice_runner.infrastructure.process import ProcessNotRunnableError, ProcessTimedOutError
 from slice_runner.infrastructure.slice_pull_request import SlicePullRequest
@@ -318,6 +320,7 @@ class Cli:
                         trace=LocalCallTrace(),
                         turns=StderrTurnLog(),
                         spend_log=LocalCallSpendLog(),
+                        tool_uses=self._tool_uses(),
                     )
                 ),
                 stage=StageSlice(workspace=workspace),
@@ -333,7 +336,11 @@ class Cli:
                 clock=SystemClock(),
                 metrics=MetricsScriptLog(process=self._process),
                 understanding=ClaudeUnderstanding(
-                    process=self._process, trace=LocalCallTrace(), turns=StderrTurnLog(), spend_log=LocalCallSpendLog()
+                    process=self._process,
+                    trace=LocalCallTrace(),
+                    turns=StderrTurnLog(),
+                    spend_log=LocalCallSpendLog(),
+                    tool_uses=self._tool_uses(),
                 ),
                 pull_request=SlicePullRequest(),
                 deploy_watch=ClaudeDeployWatch(process=self._process),
@@ -347,12 +354,20 @@ class Cli:
         return VerifySlice(
             reader=GitDiffReader(process=self._process),
             verifier=ClaudeVerifier(
-                process=self._process, trace=LocalCallTrace(), turns=StderrTurnLog(), spend_log=LocalCallSpendLog()
+                process=self._process,
+                trace=LocalCallTrace(),
+                turns=StderrTurnLog(),
+                spend_log=LocalCallSpendLog(),
+                tool_uses=self._tool_uses(),
             ),
             judge=SliceVerifierJudge.adversarial(),
             skills=LocalSkillLibrary(),
             corpus=LocalCorpus(),
         )
+
+    @staticmethod
+    def _tool_uses() -> ConversationToolUseRecorder:
+        return ConversationToolUseRecorder(conversations=LocalConversationLog(), tool_use_log=LocalToolUseLog())
 
     @staticmethod
     def _warn_about(denied_reads: tuple[str, ...]) -> None:

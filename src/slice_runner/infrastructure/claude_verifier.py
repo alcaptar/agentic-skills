@@ -18,15 +18,25 @@ if TYPE_CHECKING:
     from slice_runner.domain.judge import Judge
     from slice_runner.domain.slice_under_review import SliceUnderReview
     from slice_runner.infrastructure.process import Process
+    from slice_runner.infrastructure.tool_use_recorder import ToolUseRecorder
     from slice_runner.infrastructure.turn_log import TurnLog
 
 
 class ClaudeVerifier(Verifier):
-    def __init__(self, *, process: Process, trace: CallTrace, turns: TurnLog, spend_log: CallSpendLog) -> None:
+    def __init__(
+        self,
+        *,
+        process: Process,
+        trace: CallTrace,
+        turns: TurnLog,
+        spend_log: CallSpendLog,
+        tool_uses: ToolUseRecorder,
+    ) -> None:
         self._process = process
         self._trace = trace
         self._turns = turns
         self._spend_log = spend_log
+        self._tool_uses = tool_uses
 
     def verify(self, judge: Judge, review: SliceUnderReview) -> Verification:
         invocation = JudgeInvocation(judge=judge, review=review)
@@ -36,6 +46,9 @@ class ClaudeVerifier(Verifier):
         self._trace.record(HarnessCall(slice_id=review.slice_id, step=Step.VERIFY, session=envelope.session_id))
         spend = envelope.to_domain()
         self._spend_log.record(HarnessCallSpend(session=envelope.session_id, spend=spend))
+        self._tool_uses.record_after(
+            slice_id=review.slice_id, step=Step.VERIFY, session=envelope.session_id, repo=review.repo
+        )
         with envelope.measuring():
             verdict = VerdictPayload.from_dict(envelope.structured_output).to_domain()
 

@@ -11,6 +11,7 @@ from slice_runner.infrastructure.claude_understanding import ClaudeUnderstanding
 from slice_runner.tests.doubles import (
     RecordedProcess,
     RecordedSpendLog,
+    RecordedToolUseRecorder,
     RecordedTrace,
     RecordedTurnLog,
     StreamingProcess,
@@ -37,6 +38,7 @@ class Writing:
         trace: RecordedTrace | None = None,
         turns: RecordedTurnLog | None = None,
         spend_log: RecordedSpendLog | None = None,
+        tool_uses: RecordedToolUseRecorder | None = None,
         alignment: Alignment | None = None,
     ) -> Understanding:
         return ClaudeUnderstanding(
@@ -44,6 +46,7 @@ class Writing:
             trace=trace or RecordedTrace(),
             turns=turns or RecordedTurnLog(),
             spend_log=spend_log or RecordedSpendLog(),
+            tool_uses=tool_uses or RecordedToolUseRecorder(),
         ).write(
             subissue=SubIssueMother.pending(),
             parent=ParentIssueMother.with_sources_and_controls(),
@@ -142,6 +145,32 @@ class TestTheSpendLogOfTheCall:
             Writing.understood(Writing.carrying("   "), spend_log=spend_log)
 
         assert [call.session for call in spend_log.calls] == [HarnessEnvelopeMother.SESSION_OF_THE_IMPLEMENTER]
+
+
+class TestTheToolUseRecordingOfTheCall:
+    def test_the_recorder_is_asked_for_the_slice_step_session_and_repo_of_the_call(self) -> None:
+        tool_uses = RecordedToolUseRecorder()
+
+        Writing.understood(Writing.carrying("asi entiendo la slice"), tool_uses=tool_uses)
+
+        assert [(call.slice_id, call.step, call.session, call.repo) for call in tool_uses.calls] == [
+            (
+                SubIssueMother.pending().slice_id,
+                Step.UNDERSTAND,
+                HarnessEnvelopeMother.SESSION_OF_THE_IMPLEMENTER,
+                UnderstandingInvocationMother.REPO,
+            )
+        ]
+
+    def test_a_call_whose_report_is_rejected_is_recorded_too_because_that_conversation_is_the_one_to_read(
+        self,
+    ) -> None:
+        tool_uses = RecordedToolUseRecorder()
+
+        with pytest.raises(InvalidUnderstandingReportError):
+            Writing.understood(Writing.carrying("   "), tool_uses=tool_uses)
+
+        assert [call.session for call in tool_uses.calls] == [HarnessEnvelopeMother.SESSION_OF_THE_IMPLEMENTER]
 
 
 class TestTheTurnsObservedWhileTheCallIsInFlight:

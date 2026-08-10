@@ -112,12 +112,26 @@ class LocalConversationLog(ConversationLog):
 
         return ConversationTurn(number=number, text=text, tool_calls=tool_calls)
 
-    @staticmethod
-    def _tool_call_of(block: dict[str, object], results: dict[str, str]) -> ToolCall:
+    @classmethod
+    def _tool_call_of(cls, block: dict[str, object], results: dict[str, str]) -> ToolCall:
         tool_use = TranscriptToolUseBlock.from_dict(block)
         summary = json.dumps(tool_use.input, ensure_ascii=False)
 
-        return ToolCall(name=tool_use.name, summary=summary, result=results.get(tool_use.id) if tool_use.id else None)
+        return ToolCall(
+            name=tool_use.name,
+            summary=summary,
+            result=results.get(tool_use.id) if tool_use.id else None,
+            path=cls._path_of(tool_use.input),
+        )
+
+    @staticmethod
+    def _path_of(tool_input: dict[str, object]) -> str | None:
+        for key in ("file_path", "path"):
+            value = tool_input.get(key)
+            if isinstance(value, str):
+                return value
+
+        return None
 
     @classmethod
     def _spend_of(cls, lines: list[dict[str, object]]) -> ConversationSpend:

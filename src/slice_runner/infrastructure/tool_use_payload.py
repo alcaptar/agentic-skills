@@ -1,0 +1,35 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Self
+
+from slice_runner.domain.step import Step
+from slice_runner.infrastructure.contract_model import ContractModel
+
+if TYPE_CHECKING:
+    from slice_runner.infrastructure.tool_use_log import HarnessCallToolUse, ToolUse
+
+
+class ToolUsePayload(ContractModel):
+    turn: int
+    tool: str
+    path: str | None = None
+
+    @classmethod
+    def from_domain(cls, use: ToolUse) -> Self:
+        return cls(turn=use.turn, tool=use.tool, path=use.path)
+
+
+class CallToolUsePayload(ContractModel):
+    slice_id: str
+    step: Step
+    session: str
+    uses: tuple[ToolUsePayload, ...]
+
+    @classmethod
+    def from_call(cls, call: HarnessCallToolUse) -> Self:
+        return cls(
+            slice_id=call.slice_id,
+            step=call.step,
+            session=call.session,
+            uses=tuple(ToolUsePayload.from_domain(use) for use in call.uses),
+        )
