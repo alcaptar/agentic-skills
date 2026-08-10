@@ -50,8 +50,9 @@ El agente orquesta el flujo (lanza el **colector** por tick -> `deploy_core` dec
 ### 2. Baseline
 
 - **Empieza por la `SENAL` declarada en el issue** para la slice recien mergeada (si `slice-runner` te
-  la paso, o leela con `issue_body.parse_body`): entra en el set con su criticidad, tal cual. Si dice
-  `exenta`, no hay senal propia y vigilas solo lo generico.
+  la paso, o leela tu mismo del cuerpo del issue: `gh issue view --json body`, la linea `SENAL:` de la
+  slice): entra en el set con su criticidad, tal cual. Si dice `exenta`, no hay senal propia y vigilas
+  solo lo generico.
   Marcala en la config de `deploy_core` con **`declarada: true`** (y su `critical`): es lo que hace que
   el core la trate distinto -si no llega ninguna muestra suya, el veredicto es `inconclusive` en vez de
   `go`-. Sin ese flag, la regla seria prosa que el core no aplica.

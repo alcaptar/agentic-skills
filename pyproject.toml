@@ -1,8 +1,8 @@
 # Este repo es la fuente de verdad de las skills, y ademas empaqueta **un solo** proyecto Python: el
 # programa orquestador de `src/slice_runner/`. Los `.py` de `skills/` NO se empaquetan -son scripts
-# deterministas que la skill invoca con el `python3` de la maquina (`controles.py`, `issue_body.py`,
-# `deploy_core.py`, `metrics.py`, `discover_conventions.py`, `discover_controles.py`)-, asi que
-# `packages` nombra solo `src/slice_runner` y nada mas entra en la rueda.
+# deterministas que la skill invoca con el `python3` de la maquina (`deploy_core.py`, `metrics.py`,
+# `discover_conventions.py`, `discover_controles.py`)-, asi que `packages` nombra solo
+# `src/slice_runner` y nada mas entra en la rueda.
 #
 # El proyecto se instala, y de ahi sale el ejecutable que conduce una slice de punta a punta:
 #
@@ -104,20 +104,18 @@ runtime-evaluated-base-classes = [
 # aqui es lo que hace que la regla refuerce la convencion (stdlib / terceros / propio) en vez
 # de romperla.
 known-first-party = [
-    "controles",
     "deploy_core",
     "discover_controles",
     "discover_conventions",
-    "issue_body",
     "metrics",
     "slice_runner",
 ]
 
 # `S` (flake8-bandit) NO se activa a proposito, y es la unica desviacion del ruleset que
-# prescribe `backend-best-practices`. Sus 7 hallazgos en el repo estan todos en `controles.py`
-# y son inherentes a su cometido -ejecutar los comandos que el repo declara en el issue-:
-# obligaria a sembrar el fichero de `noqa` sin cambiar ni una decision. Y sobre los tests
-# dispara `S101` (usar `assert`) cientos de veces, que en pytest es absurdo.
+# prescribe `backend-best-practices`. Sus hallazgos en `skills/` son inherentes al cometido de esos
+# scripts -ejecutar comandos y procesos externos que el repo declara-: obligaria a sembrar los
+# ficheros de `noqa` sin cambiar ni una decision. Y sobre los tests dispara `S101` (usar `assert`)
+# cientos de veces, que en pytest es absurdo.
 
 [tool.ruff.format]
 quote-style = "double"
@@ -142,6 +140,7 @@ testpaths = ["tests", "src/slice_runner/tests"]
 markers = [
     "integration: lanza un subproceso real (se deselecciona con -m 'not integration')",
 ]
-# controles.py y metrics.py se importan por nombre, via este pythonpath; `src` es lo que hace
-# importable `slice_runner` sin instalar el proyecto.
+# Los scripts de `skills/` (discover_conventions.py, discover_controles.py, metrics.py, deploy_core.py)
+# se importan por nombre, via este pythonpath; `src` es lo que hace importable `slice_runner` sin
+# instalar el proyecto.
 pythonpath = ["src", "skills/slice-runner/scripts", "skills/deploy-watch/scripts"]

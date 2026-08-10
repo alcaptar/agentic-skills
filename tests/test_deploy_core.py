@@ -329,7 +329,7 @@ def test_cli_emite_el_aviso_de_baseline_ruidoso() -> None:
 
 
 def test_cli_exit_2_y_ningun_veredicto_si_la_config_es_invalida() -> None:
-    """Exit 2 = error de uso, como en `controles.py`.
+    """Exit 2 = error de uso, la misma convencion que el resto de scripts deterministas del repo.
 
     Un `inconclusive` aqui haria pasar el despiste de quien invoca por un dato del deploy, que
     es lo unico peor que no responder.

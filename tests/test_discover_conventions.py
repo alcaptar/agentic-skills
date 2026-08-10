@@ -6,8 +6,7 @@ from typing import TYPE_CHECKING
 
 from conftest import escribe
 
-from discover_conventions import discover_candidates
-from issue_body import Fuente
+from discover_conventions import Fuente, discover_candidates
 
 if TYPE_CHECKING:
     from pathlib import Path

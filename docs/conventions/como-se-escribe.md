@@ -4,7 +4,7 @@ Esta es la vara de las varas. Rige para todo `.md` de `docs/conventions/` **y pa
 contrato mida o que un agente lea como vara** -hoy, el `README.md`-. Lo que obliga a mantener un
 documento no es la carpeta en la que vive: es que algo se rompa cuando deje de ser verdad.
 
-Quedan fuera los `.md` del flujo viejo (`skills/`, `agents/`), que son codigo que no es referencia (ver
+Quedan fuera los `.md` del flujo viejo (`skills/`), que son codigo que no es referencia (ver
 `CLAUDE.md`): estan congelados a proposito y reescribirlos no compra nada.
 
 Una convencion la leen dos agentes que no pueden preguntar -el implementador antes de escribir, el

@@ -95,9 +95,9 @@ Razonadas en `pyproject.toml`:
 
 - **`ruff` no formatea los `.md`**: aqui los `.md` son el producto (las skills y sus reference-docs),
   y sus ejemplos se escriben para leerse.
-- **Las reglas `S` (bandit) estan desactivadas**: sus hallazgos viven todos en `controles.py`, donde
-  lanzar procesos es el cometido del fichero, y obligarian a sembrarlo de `noqa` sin cambiar una sola
-  decision.
+- **Las reglas `S` (bandit) estan desactivadas**: sus hallazgos son inherentes al cometido de los
+  scripts de `skills/` que lanzan procesos externos, y obligarian a sembrarlos de `noqa` sin cambiar
+  una sola decision.
 - **`smoke/fixture/pyproject.toml` lleva el mismo `select`** que la raiz: la fixture es el sujeto que
   trocea el runner en el smoke, asi que relajarla ahi le daria al runner un aprobado que no vale. Si
   tocas uno, toca el otro.

@@ -14,9 +14,7 @@ step passes; changing one side alone fails. That is the only drift these tests e
 
 from __future__ import annotations
 
-import argparse
 import ast
-import importlib
 import json
 import re
 import tomllib
@@ -24,19 +22,15 @@ from pathlib import Path
 
 import pytest
 
-import controles
 import metrics
 from slice_runner.domain.budgets import Budgets
-from slice_runner.domain.ci_status import CiStatus
 from slice_runner.domain.discard_cause import DiscardCause
 from slice_runner.domain.issue_label import IssueLabel
 from slice_runner.domain.ruling import Ruling
 from slice_runner.domain.run_state import RunState
 from slice_runner.domain.severity import Severity
-from slice_runner.domain.staged_hygiene import StagedHygiene
 from slice_runner.domain.step import Step
 from slice_runner.infrastructure.exit_code import ExitCode
-from slice_runner.infrastructure.gh_ci import GhCi
 from slice_runner.infrastructure.gh_run_repository import GhRunRepository
 from slice_runner.infrastructure.local_skill_library import LocalSkillLibrary
 from slice_runner.infrastructure.metrics_invocation import (
@@ -55,15 +49,15 @@ from slice_runner.tests.git_repo import Git
 from slice_runner.tests.mothers.closed_slice_mother import ClosedSliceMother
 
 _ROOT = Path(__file__).resolve().parents[1]
-_CONTROLES = _ROOT / "skills" / "slice-runner" / "scripts" / "controles.py"
 _SPEC = _ROOT / "skills" / "slice-spec" / "SKILL.md"
 
 
 _PROGRAM_JUDGE = SliceVerifierJudge.adversarial()
 """The judge the PROGRAM builds, which owns its rubric, its tools and what it may read.
 
-`agents/slice-verifier.md` belongs to the old flow (skill + subagent) and stays frozen; the program
-owns its judge, so every contract about what the program tells the judge is measured against this.
+The old flow's `agents/slice-verifier.md` had no consumer left once the skill that invoked it was
+retired, and is gone; the program owns the judge, so every contract about what it tells the judge is
+measured against this.
 """
 
 
@@ -93,11 +87,11 @@ def _tracked(*patterns: str) -> list[str]:
 def test_every_runstate_closure_the_translator_is_asked_about_returns_a_label_or_none_only_for_merged() -> None:
     """The translator from `RunState` to a GitHub label pays the debt `domain.md` declared.
 
-    `RunState` duplicates, in English, what `issue_body.Estado`/`MotivoBloqueada` already say in
-    Spanish, and nothing compared the two sides until the translator that writes to a subissue
-    existed. `MERGED` is the one closure with no label on purpose -- GitHub closes the issue itself
-    when the pull request merges -- so it is the sole `None` this loop may see; any other closure
-    coming back empty is a step the translator forgot to project.
+    `RunState` duplicated, in English, what `issue_body.Estado`/`MotivoBloqueada` said in Spanish
+    before that script was retired for having no consumer, and nothing compared the two sides until
+    the translator that writes to a subissue existed. `MERGED` is the one closure with no label on
+    purpose -- GitHub closes the issue itself when the pull request merges -- so it is the sole `None`
+    this loop may see; any other closure coming back empty is a step the translator forgot to project.
     """
     for state in RunState:
         if state is RunState.OPEN:
@@ -387,68 +381,7 @@ def test_the_validate_mode_reports_every_deviation_with_its_rule_and_where_it_li
     )
 
 
-_CI_STATES_PAIRED = {
-    CiStatus.GREEN: controles.EstadoCI.VERDE,
-    CiStatus.RED: controles.EstadoCI.ROJO,
-    CiStatus.PENDING: controles.EstadoCI.PENDIENTE,
-    CiStatus.NO_CHECKS: controles.EstadoCI.SIN_CHECKS,
-    CiStatus.UNKNOWN: controles.EstadoCI.DESCONOCIDO,
-}
-"""The one thing about this duplicate that cannot be derived: which member means which.
-
-The program spells the states in English and the script in Spanish, so comparing the two sets of
-strings would put `green` against `verde` and fail on a contract in perfect health. What is written
-down here is the meaning, once, and both vocabularies are then held to it: a state added or dropped on
-one side alone breaks, and adding one to both costs declaring its pair, which is what a translated
-duplicate is worth.
-"""
-
-
-def test_the_ci_states_the_program_knows_are_the_ones_the_script_classifies() -> None:
-    """`CiStatus` is the third declared copy of a vocabulary of `skills/`, and nothing measured it.
-
-    `docs/conventions/domain.md` declares it beside `RunState` and `StagedHygiene.FORBIDDEN_PREFIXES`:
-    the program imports nothing from `skills/`, so the classifier of `gh pr checks` exists twice. The
-    other two copies are measured and this one was not. Each of the five is a branch the run takes with
-    its pull request already open -- `pendiente` waits, `rojo` closes blocked, and `desconocido` and
-    `sin-checks` are the two ways of not being able to affirm a green -- so a state present on one side
-    only is either a branch nothing produces or a result nobody has a rule for.
-    """
-    assert set(_CI_STATES_PAIRED) == set(CiStatus), (
-        f"CiStatus and the pairing it is held to disagree: "
-        f"only in the program {sorted(set(CiStatus) - set(_CI_STATES_PAIRED))}, "
-        f"only in the pairing {sorted(set(_CI_STATES_PAIRED) - set(CiStatus))}"
-    )
-    assert set(_CI_STATES_PAIRED.values()) == set(controles.EstadoCI), (
-        f"controles.EstadoCI and the pairing it is held to disagree: "
-        f"only in the script {sorted(set(controles.EstadoCI) - set(_CI_STATES_PAIRED.values()))}, "
-        f"only in the pairing {sorted(set(_CI_STATES_PAIRED.values()) - set(controles.EstadoCI))}"
-    )
-
-
-def test_the_ci_buckets_the_program_classifies_are_the_ones_the_script_classifies() -> None:
-    """The same duplicate one layer down, on strings neither side gets to choose.
-
-    Unlike the states, the buckets are `gh pr checks`'s own vocabulary, so both copies spell them
-    identically and the sets compare directly. They are what the fail-closed order is built on: a
-    bucket outside the known set is `desconocido` and never green, so one taught to a single copy would
-    make the same pull request green or not depending on which flow asked.
-    """
-    duplicated = {
-        "_CI_BUCKETS_ROJO": (GhCi.RED_BUCKETS, controles._CI_BUCKETS_ROJO),
-        "_CI_BUCKETS_OK": (GhCi.OK_BUCKETS, controles._CI_BUCKETS_OK),
-        "_CI_BUCKETS": (GhCi.KNOWN_BUCKETS, controles._CI_BUCKETS),
-    }
-
-    for named, (program, script) in duplicated.items():
-        assert program == script, (
-            f"GhCi and controles.{named} disagree on the buckets of `gh pr checks`: "
-            f"only in the program {sorted(program - script)}, only in the script {sorted(script - program)}"
-        )
-
-
 _GRACE_WINDOW_IS_WRITTEN_IN = (
-    _CONTROLES,
     _ROOT / "docs" / "design-notes.md",
     _ROOT / "README.md",
 )
@@ -482,25 +415,6 @@ def test_the_grace_window_is_the_same_number_wherever_it_is_written() -> None:
     assert set(written.values()) == {(budgets.indeterminate_ticks, budgets.seconds_between_ticks)}, (
         f"the grace window of {type(budgets).__name__} is "
         f"{(budgets.indeterminate_ticks, budgets.seconds_between_ticks)} and the prose writes {written}"
-    )
-
-
-def test_the_forbidden_artifacts_are_the_same_ones_in_the_script_and_in_the_program() -> None:
-    """The hygiene backstop is written twice on purpose, and until now nothing measured it.
-
-    `controles.FORBIDDEN_PREFIXES` is what the old flow's `pr-hygiene` control enforces, and
-    `StagedHygiene.FORBIDDEN_PREFIXES` is what the program enforces when it stages. The program
-    imports nothing from `skills/` -- the argument is in `docs/conventions/infrastructure.md` --
-    so the duplication is the decision. What is not allowed is one copy gaining a prefix the
-    other does not: the same artifact would then enter the pull request or not depending on who
-    opened it.
-    """
-    script = set(controles.FORBIDDEN_PREFIXES)
-    program = set(StagedHygiene.FORBIDDEN_PREFIXES)
-
-    assert script == program, (
-        "controles.FORBIDDEN_PREFIXES y StagedHygiene.FORBIDDEN_PREFIXES no prohiben lo mismo: "
-        f"solo en el script {sorted(script - program)}, solo en el programa {sorted(program - script)}"
     )
 
 
@@ -581,9 +495,9 @@ def test_the_program_does_not_grant_the_judge_what_its_own_rubric_says_he_does_n
 
     It is what stops it from trying to run lint or tests, and what justifies handing it the diff
     already computed. Granting `Bash` would make the rubric a lie the judge reads first, and the judge
-    would have no way to know which half is true. The old flow enforces the same thing structurally,
-    through the `tools:` header of `agents/slice-verifier.md`; the program has no header, so this is
-    where it gets enforced.
+    would have no way to know which half is true. The old flow enforced the same thing structurally,
+    through the `tools:` header of a now-retired `agents/slice-verifier.md`; the program has no header,
+    so this is where it gets enforced.
     """
     rubric = _program_rubric()
     assert "No tienes `Bash`" in rubric, (
@@ -738,46 +652,6 @@ def test_the_verdicts_and_severities_in_the_rubric_are_the_ones_the_program_acce
     assert {s.strip() for s in str(_documented_finding()["severidad"]).split("|")} == set(Severity)
 
 
-def test_every_subcommand_of_both_scripts_accepts_json() -> None:
-    """One rule across both scripts: human-readable by default, `--json` for structured.
-
-    This is not tidiness. `issue_body.py show` used to emit JSON unconditionally and take
-    `--pretty`, while the five `controles.py` subcommands are human-readable unless given
-    `--json` -- and during the 2026-07-30 probe that difference tripped the person who had
-    written both scripts the day before. Two scripts in one repo with opposite conventions
-    for the same thing is a trap, so the rule is now enforced instead of remembered.
-    """
-    for script in ("controles", "issue_body"):
-        module = importlib.import_module(script)
-        subcommands = _subcommand_parsers(module.build_parser())
-        assert subcommands, f"{script}.py exposes no subcommands"
-        for name, subparser in sorted(subcommands.items()):
-            usage = subparser.format_usage()
-            assert "--json" in usage, (
-                f"{script}.py {name} does not accept --json; every subcommand of both "
-                f"scripts must, so the flag never depends on remembering which script it is"
-            )
-            assert "--pretty" not in usage, (
-                f"{script}.py {name} still has --pretty, the flag the inconsistency came from"
-            )
-
-
-def _subcommand_parsers(parser: argparse.ArgumentParser) -> dict[str, argparse.ArgumentParser]:
-    """Subparsers by name, coupling to as little of `argparse` as the task allows.
-
-    `argparse` publishes no API for walking back into its subparsers, so `_actions` is
-    unavoidable. What it does avoid is naming `argparse._SubParsersAction`: the action is
-    identified by its documented `choices` attribute instead of by a private class, and the flags
-    of each subcommand are then read from the public `format_usage()`. One private instead of
-    three, in a test whose subject is our own convention and not CPython's internals.
-    """
-    for action in parser._actions:
-        choices = action.choices
-        if isinstance(choices, dict) and all(isinstance(sub, argparse.ArgumentParser) for sub in choices.values()):
-            return dict(choices)
-    return {}
-
-
 _UNSCANNED = {
     "docs/superpowers/specs": "registro fechado, no se actualiza",
     "skills/slice-spec/references/observabilidad.md": "documenta rutas de otros repos",
@@ -795,7 +669,7 @@ _EXEMPT = {
 }
 """One token is exempt rather than its whole file.
 
-`smoke/README.md` is worth scanning (it cites agents/ and tests/ paths of ours) but it also
+`smoke/README.md` is worth scanning (it cites `tests/` paths of ours, among others) but it also
 speaks in the smoke fixture's own coordinates, and the fixture happens to have a `tests/`
 directory just like the repo root.
 """
@@ -807,7 +681,7 @@ _PATHLIKE = re.compile(r"^[\w.][\w./-]*$")
 The docs here do not use markdown links for local files; they cite paths in backticks. So the
 thing to validate is not `[x](y)` -- there are none -- but every backticked token that claims
 something about this tree. A token qualifies only when its first component is a tracked top-level
-entry: that keeps bare filenames (`controles.py`), paths in other repos (`monitoring/metrics.py`),
+entry: that keeps bare filenames (`metrics.py`), paths in other repos (`monitoring/metrics.py`),
 and branch patterns (`slice/NN-name`) out by construction, instead of by an allowlist that would
 have to grow forever.
 """

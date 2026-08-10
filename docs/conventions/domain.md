@@ -59,12 +59,13 @@ dato, igual que el `Judge` (ver `docs/conventions/application.md`).
 - **Se cubre desde fuera**, como todo el dominio: la tabla de `(paso, resultado)` entra por el
   subcomando que la expone. No hay tests unitarios de dominio (`docs/conventions/testing.md`).
 
-**El vocabulario de cierres duplica uno durable, y esta declarado.** `RunState` es una tercera copia -en
-ingles- de lo que ya dicen `Estado`/`MotivoBloqueada` en `skills/slice-runner/scripts/issue_body.py` y
-`Veredicto` en `skills/slice-runner/scripts/metrics.py`. Es la misma decision que el resto del programa
--**no importa nada de `skills/`**, ver `docs/conventions/infrastructure.md`- y el mismo motivo: el flujo
-viejo esta condenado, sus scripts son stdlib puro con otra vara, y acoplarse a ellos para ahorrar la
-duplicacion sale mas caro que la duplicacion. El traductor es `IssueLabel.of(state, step)`
+**El vocabulario de cierres duplica uno durable, y esta declarado.** `RunState` es una copia declarada
+-en ingles- de `Veredicto` en `skills/slice-runner/scripts/metrics.py`. (Duplicaba tambien
+`Estado`/`MotivoBloqueada` de `issue_body.py`, retirado ya con el flujo
+viejo por no tener consumidor.) Es la misma decision que el resto del programa -**no importa nada de
+`skills/`**, ver `docs/conventions/infrastructure.md`- y el mismo motivo: sus scripts son stdlib puro
+con otra vara, y acoplarse a ellos para ahorrar la duplicacion sale mas caro que la duplicacion. El
+traductor es `IssueLabel.of(state, step)`
 (`domain/issue_label.py`): un `match` exhaustivo sobre el par que proyecta cada cierre de `RunState` a la
 etiqueta de GitHub que escribe la frontera (`infrastructure/gh_run_repository.py`), total o explicito -un
 par sin regla no cae en una rama generica, rompe en `mypy` en cuanto se anade un cierre o un paso sin
@@ -76,18 +77,14 @@ manual es la que se escribe fuera de cualquier `(state, step)` que `IssueLabel.o
 es lo que pasa antes de que exista ningun `Run`. Una etiqueta nueva sin proyeccion ni fuente manual
 declarada pone `make check` en rojo.
 
-**`CiStatus` es la tercera copia declarada del mismo tipo.** `domain/ci_status.py` repite en ingles el
-vocabulario `EstadoCI` de `skills/slice-runner/scripts/controles.py` (`verde`, `rojo`, `pendiente`,
-`sin-checks`, `desconocido`), igual que `RunState` repite a `Estado` y que `StagedHygiene.FORBIDDEN_PREFIXES` repite
-sus prefijos, y por el mismo motivo: el programa **no importa nada de `skills/`**. Los dos traductores al
-vocabulario con el que se interroga a `StateMachine` viven del lado del destino, como `IssueLabel.of`:
-`Outcome.of_the_ci(status)` y `Outcome.of_the_verdict(verdict)`, los dos con `match` exhaustivo y sin rama
-generica, para que la regla no acabe siendo un `if` de quien conduce el run. Como las otras copias, esta
-**esta medida**: `tests/test_skill_contracts.py` empareja los miembros de `CiStatus` con los de
-`EstadoCI` **por significado y no por cadena** -uno esta en ingles y el otro en castellano, asi que comparar
-los valores pondria `green` frente a `verde` y fallaria con el contrato sano-, de modo que anadir o quitar un
-estado en un solo lado pone `make check` en rojo. El emparejamiento se escribe una vez en el propio test,
-porque es lo unico de esta duplicacion que no se puede derivar de ninguno de los dos lados.
+**`CiStatus` repite en ingles el vocabulario `verde`/`rojo`/`pendiente`/`sin-checks`/`desconocido`.**
+Hasta que se retiro con el flujo viejo, `domain/ci_status.py` era la copia declarada de `EstadoCI` en
+`controles.py`, igual que `RunState` repite a `Veredicto` y que
+`StagedHygiene.FORBIDDEN_PREFIXES` repetia los suyos: el motivo era que el programa **no importa nada
+de `skills/`**. Retirado el script, `CiStatus` es el unico sitio donde vive ese vocabulario. Los dos
+traductores al vocabulario con el que se interroga a `StateMachine` viven del lado del destino, como
+`IssueLabel.of`: `Outcome.of_the_ci(status)` y `Outcome.of_the_verdict(verdict)`, los dos con `match`
+exhaustivo y sin rama generica, para que la regla no acabe siendo un `if` de quien conduce el run.
 
 **La higiene del indice es politica, y sus prefijos prohibidos son una duplicacion declarada mas.**
 `StagedHygiene.of(staged=..., declared=...)` (`domain/staged_hygiene.py`) devuelve las ofensas
@@ -107,12 +104,10 @@ implementador declaro, y la tupla vacia es el indice limpio. Las decisiones que 
   que cae solo de la regla general. Y **"nada staged" no es asunto de esta politica**: eso ya lo dice
   `EmptyIndexError` cuando se va a leer el diff, y reimplementarlo aqui seria un segundo sitio donde
   decidir lo mismo.
-- **Los prefijos duplican a proposito los de `skills/slice-runner/scripts/controles.py`**, por el mismo
-  motivo que `RunState` duplica a `Estado`: el programa no importa nada de `skills/` (ver
-  `docs/conventions/infrastructure.md`), el flujo viejo esta condenado, y acoplarse a el para ahorrar la
-  duplicacion sale mas caro que la duplicacion. La copia esta **medida**, no pendiente:
-  `tests/test_skill_contracts.py` compara los dos conjuntos, asi que anadir un prefijo en un solo lado
-  pone `make check` en rojo.
+- **Los prefijos duplicaban a proposito los de `controles.py`**, por el
+  mismo motivo que `RunState` duplica a `Veredicto`: el programa no importa nada de `skills/` (ver
+  `docs/conventions/infrastructure.md`). El script se retiro con el flujo viejo por no tener consumidor,
+  asi que `StagedHygiene.FORBIDDEN_PREFIXES` es hoy el unico sitio donde viven estos prefijos.
 
 Las decisiones de `StateMachine` y de los `Budgets` que le entran tampoco son deriva, y estan aqui para
 que no se "arreglen" hacia el lado facil. **Los valores concretos viven en `Budgets`, y de donde sale cada

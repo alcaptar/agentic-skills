@@ -34,18 +34,18 @@ sabe por que existe; sin el segundo, la auditoria seria una opinion.
 
 | Factor | Estado | Evidencia |
 |---|---|---|
-| 1. Lenguaje natural a llamadas de herramienta | **Cumple** | `skills/slice-runner/scripts/controles.py`, `issue_body.py` y `skills/deploy-watch/scripts/deploy_core.py` son "el codigo determinista tiene la soberania". El modelo propone, el exit code decide |
-| 2. Duena de tus prompts | **Cumple, con hueco** | Skills y agentes versionados aqui, con `~/.claude/` por symlink; `tests/test_skill_contracts.py` valida contratos escritos en `.md`. Falta lo que el factor pide ademas: *"testing y evaluaciones como codigo regular"* |
+| 1. Lenguaje natural a llamadas de herramienta | **Cumple** | `skills/deploy-watch/scripts/deploy_core.py` es "el codigo determinista tiene la soberania"; `controles.py` e `issue_body.py`, retirados con el flujo viejo, tambien lo eran. El modelo propone, el exit code decide |
+| 2. Duena de tus prompts | **Cumple, con hueco** | Skills versionadas aqui, con `~/.claude/` por symlink; `tests/test_skill_contracts.py` valida contratos escritos en `.md`. Falta lo que el factor pide ademas: *"testing y evaluaciones como codigo regular"* |
 | 3. Duena de tu ventana de contexto | **Parcial, conocido** | Muy trabajado (salida de build a disco, relato largo fuera del `SKILL.md`, subagentes desechables). Residual: el orquestador vive en la sesion del harness, que no es del repo. Declarado como fase 2 en `docs/design-notes.md` |
-| 4. Las herramientas son salida estructurada | **Cumple** | El veredicto del verificador es un objeto validado por `controles.py verify-verdict`. Frontera mas debil: la lista de rutas del implementador vuelve en prosa, con `pr-hygiene` como red |
+| 4. Las herramientas son salida estructurada | **Cumple** | El veredicto del verificador era un objeto validado por `controles.py verify-verdict` (retirado con el flujo viejo). Frontera mas debil: la lista de rutas del implementador volvia en prosa, con `pr-hygiene` como red |
 | 5. Unificar estado de ejecucion y de negocio | **Incumple** | Cluster A, abajo |
 | 6. Lanzar / pausar / reanudar | **Parcial** | Pausa y reanuda bien **entre** slices (el issue es el estado). **Dentro** de una slice no hay reanudacion: cluster A |
 | 7. Contactar humanos con llamadas de herramienta | **Incumple** | Cluster B, abajo |
 | 8. Duena de tu control de flujo | **Incumple** | Los diez pasos y los presupuestos son prosa interpretada. Contradice el principio propio del repo, "lo que es regla exacta pasa a script, sin excepciones" |
-| 9. Compactar errores en la ventana de contexto | **Cumple, y va mas alla** | `controles.py controles --out` manda el log a disco y devuelve ruta; el error entero llega al implementador y **nada** llega al que juzga. El factor pide compactar; el repo ademas aisla |
-| 10. Agentes pequenos y enfocados | **Parcial, conocido** | Tres skills y dos agentes bien acotados, pero el orquestador tiene diez pasos con reintentos, por encima del rango de 3-10 que el factor recomienda |
+| 9. Compactar errores en la ventana de contexto | **Cumple, y va mas alla** | `controles.py controles --out` mandaba el log a disco y devolvia ruta (retirado con el flujo viejo); el error entero llegaba al implementador y **nada** llegaba al que juzga. El factor pedia compactar; el repo ademas aislaba |
+| 10. Agentes pequenos y enfocados | **Parcial, conocido** | Tres skills y dos agentes definidos (estos ultimos, retirados) bien acotados, pero el orquestador tiene diez pasos con reintentos, por encima del rango de 3-10 que el factor recomienda |
 | 11. Disparar desde cualquier sitio | **Incumple** | El estado ya vive en un issue de GitHub, pero el disparador solo existe en la linea de comandos. Compone con el cluster B |
-| 12. El agente como reductor sin estado | **Parcial** | Los nucleos puros existen (`deploy_core.py`, el nucleo de `issue_body.py`). El orquestador no es un reductor: su estado es implicito en su contexto. El propio autor marca este factor como didactico |
+| 12. El agente como reductor sin estado | **Parcial** | Los nucleos puros existen (`deploy_core.py`; el de `issue_body.py`, retirado con el flujo viejo, tambien lo era). El orquestador no es un reductor: su estado es implicito en su contexto. El propio autor marca este factor como didactico |
 
 ## Los tres clusters
 
@@ -55,12 +55,11 @@ El issue tiene el estado de **negocio** (que slice, en que fase macro) pero no e
 que paso va, cuanto presupuesto queda, que hallazgos no bloqueantes estan abiertos. Cuatro defectos que
 salen de leer el codigo, no de suponer:
 
-- **Una slice `en-curso` al reanudar no tiene guion.** `_elige_slice` en
-  `skills/slice-runner/scripts/issue_body.py` devuelve la primera slice con estado distinto de
-  `mergeada`, lo que incluye `en-curso`, `bloqueada: *` y `abortada: *`. El paso 1 del `SKILL.md` solo
-  da procedimiento para `pendiente` y `esperando-merge`. Con una slice `en-curso` se re-elige, el
-  `git switch -c` del paso 4 choca con la rama existente, y el paso 5 reimplementa desde cero sin saber
-  que se hizo.
+- **Una slice `en-curso` al reanudar no tenia guion.** `_elige_slice` en `issue_body.py` (retirado con
+  el flujo viejo) devolvia la primera slice con estado distinto de `mergeada`, lo que incluye
+  `en-curso`, `bloqueada: *` y `abortada: *`. El paso 1 del `SKILL.md` solo daba procedimiento para
+  `pendiente` y `esperando-merge`. Con una slice `en-curso` se re-elegia, el `git switch -c` del paso 4
+  chocaba con la rama existente, y el paso 5 reimplementaba desde cero sin saber que se hizo.
 - **Los presupuestos se resetean en silencio.** Los 2 reintentos de controles, los 2 del verificador y
   los 3 ticks de la ventana de gracia de la integracion continua viven **solo** en el contexto del
   orquestador. Al reanudar o compactar vuelven a cero sin que nada avise.
@@ -122,11 +121,12 @@ El criterio de corte por skill es **si el valor esta en la conversacion o en el 
 | `SKILL.md` del runner (retirado) | El loop | Programa (`src/slice_runner/`) |
 | `skills/deploy-watch/SKILL.md` | El loop de ticks, con nucleo puro ya escrito | Programa, o skill fina sobre uno |
 
-Y el coste de la transicion es menor de lo que parece: `controles.py`, `issue_body.py`,
-`deploy_core.py`, `metrics.py`, `discover_controles.py` y `discover_conventions.py` **ya son** el nucleo
-determinista y los puertos, con sus tests. Lo que se escribe nuevo es el aggregate del run, el puerto
-del agente de codigo y el entrypoint. Lo que se **borra** es la mayor parte del `SKILL.md` del runner:
-la prosa de control de flujo pasa a codigo con tests.
+Y el coste de la transicion es menor de lo que parece: `deploy_core.py`, `metrics.py`,
+`discover_controles.py` y `discover_conventions.py` **ya son** el nucleo determinista y los puertos,
+con sus tests -y entonces tambien lo eran `controles.py` e `issue_body.py`, hoy retirados-. Lo que se
+escribe nuevo es el aggregate del run, el puerto del agente de codigo y el entrypoint. Lo que se
+**borra** es la mayor parte del `SKILL.md` del runner: la prosa de control de flujo pasa a codigo con
+tests.
 
 ## Spike: `claude -p` como llamada sin estado (2026-07-31)
 
@@ -138,8 +138,8 @@ a proposito: lo que cumpla ahi lo cumple un modelo mejor-.
 ### Lo que se confirmo
 
 **`--json-schema` hace cumplir el contrato del veredicto.** Cuatro ejecuciones con el system prompt
-real de `agents/slice-verifier.md` (2.223 palabras, transferido tal cual con `--append-system-prompt`)
-sobre un diff con una violacion de convencion plantada:
+real del entonces agente definido `slice-verifier` (hoy retirado; 2.223 palabras, transferido tal cual
+con `--append-system-prompt`) sobre un diff con una violacion de convencion plantada:
 
 | Ejecucion | Contrato (`verify-verdict`) | Veredicto del juez | alta/media/baja | Coste | Duracion |
 |---|---|---|---|---|---|
@@ -148,11 +148,12 @@ sobre un diff con una violacion de convencion plantada:
 | 3 | exit 0, PASA | FALLA | 2/0/0 | 0,109 $ | 86 s |
 | 4 | exit 0, PASA | FALLA | 3/0/0 | 0,070 $ | 56 s |
 
-Cuatro de cuatro pasan **el validador que ya existe en el repo**, sin desenvolver prosa ni reinvocar.
-`result` es una cadena con el objeto, consumible tal cual por `controles.py verify-verdict`. Esto ataca
-directamente lo que entonces declaraba el `SKILL.md` del runner: *"el cumplimiento del formato es
-estocastico"*. Con el esquema desaparece, y con el probablemente el contador `--descartes-verify`
-entero. Varia el **numero** de hallazgos, no el veredicto, que es la varianza que se espera de un juez.
+Cuatro de cuatro pasan **el validador que entonces ya existia en el repo**, sin desenvolver prosa ni
+reinvocar. `result` es una cadena con el objeto, consumible tal cual por `controles.py verify-verdict`
+(retirado con el flujo viejo). Esto ataca directamente lo que entonces declaraba el `SKILL.md` del
+runner: *"el cumplimiento del formato es estocastico"*. Con el esquema desaparece, y con el
+probablemente el contador `--descartes-verify` entero. Varia el **numero** de hallazgos, no el
+veredicto, que es la varianza que se espera de un juez.
 
 **Hay tres flags de herramientas y solo uno restringe de verdad.** No son variaciones del mismo
 mecanismo: hacen tres cosas distintas, y la intuicion lleva a los dos equivocados.
