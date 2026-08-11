@@ -46,6 +46,13 @@ class TestACallThatDoesNotComeBack:
 
 
 @pytest.mark.integration
+class TestABackgroundCallThatLeavesNoOutcome:
+    def test_a_launch_that_dies_of_neither_a_timeout_nor_an_os_error_is_reported_as_a_process_failure(self) -> None:
+        with pytest.raises(ProcessNotRunnableError, match="left neither a result nor a known error"):
+            LocalProcess(budgets=Budgets()).run([], stdin="", on_line=lambda _: None)
+
+
+@pytest.mark.integration
 class TestACallThatWantsEachLineAsItArrives:
     _SPACED_LINES = "echo one; sleep 0.3; echo two; sleep 0.3; echo three"
 
