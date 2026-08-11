@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import re
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 from slice_runner.domain.alignment_response import AlignmentResponse
 from slice_runner.domain.exceptions import LaggingSearchIndexError, UnreadableIssueError
@@ -28,7 +28,6 @@ if TYPE_CHECKING:
     from slice_runner.infrastructure.gh_sub_issue_payload import GhLabelPayload
     from slice_runner.infrastructure.process import Process, ProcessOutput
 
-_SLICE_HEADING = re.compile(r"^(slice-\d+)\s*\(([^)]+)\)\s*:\s*(.+?)\s*$")
 _LABEL_MISSING = re.compile(r"'(.+?)' not found")
 _LABEL_COLOR = "5319e7"
 _LABEL_DESCRIPTION = "estado de una slice, escrito por slice-runner"
@@ -39,6 +38,8 @@ class GhCommandFailedError(OSError):
 
 
 class GhRunRepository(RunRepository):
+    SLICE_HEADING: ClassVar[re.Pattern[str]] = re.compile(r"^(slice-\d+)\s*\(([^)]+)\)\s*:\s*(.+?)\s*$")
+
     def __init__(self, *, process: Process) -> None:
         self._process = process
 
@@ -294,9 +295,9 @@ class GhRunRepository(RunRepository):
             label=cls._label_of(payload.labels),
         )
 
-    @staticmethod
-    def _heading_of(title: str) -> re.Match[str]:
-        matched = _SLICE_HEADING.match(title)
+    @classmethod
+    def _heading_of(cls, title: str) -> re.Match[str]:
+        matched = cls.SLICE_HEADING.match(title)
         if not matched:
             raise UnreadableIssueError(f"the subissue title does not open with `slice-NN (name):`: {title!r}")
 
