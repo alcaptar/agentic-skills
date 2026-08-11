@@ -10,6 +10,8 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True, kw_only=True, slots=True)
 class CorpusEntry:
+    repo: str
+    issue: int
     slice_id: str
     diff: SliceDiff
     verdict: Verdict

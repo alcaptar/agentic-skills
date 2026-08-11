@@ -17,6 +17,7 @@ if TYPE_CHECKING:
     from slice_runner.domain.closed_slice import ClosedSlice
 
 _REPO = "alcaptar/agentic-skills"
+_ISSUE = 38
 _SLICE = "slice-07"
 _NAME = "una-llamada-una-fila"
 
@@ -32,6 +33,7 @@ class _Closer:
     def close(self, **overrides: object) -> ClosedSlice:
         params = {
             "repo": _REPO,
+            "issue": _ISSUE,
             "slice_id": _SLICE,
             "name": _NAME,
             "state": RunState.MERGED,

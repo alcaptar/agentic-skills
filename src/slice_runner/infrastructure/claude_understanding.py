@@ -49,9 +49,19 @@ class ClaudeUnderstanding(UnderstandingWriter):
         watch = HarnessTurnWatch(turns=self._turns, slice_id=subissue.slice_id, step=Step.UNDERSTAND)
         output = self._process.run(invocation.argv, stdin=invocation.text, cwd=invocation.cwd, on_line=watch)
         envelope = HarnessOutput.from_process(output)
-        self._trace.record(HarnessCall(slice_id=subissue.slice_id, step=Step.UNDERSTAND, session=envelope.session_id))
+        self._trace.record(
+            HarnessCall(
+                repo=repo,
+                issue=subissue.number,
+                slice_id=subissue.slice_id,
+                step=Step.UNDERSTAND,
+                session=envelope.session_id,
+            )
+        )
         spend = envelope.to_domain()
-        self._spend_log.record(HarnessCallSpend(session=envelope.session_id, spend=spend))
+        self._spend_log.record(
+            HarnessCallSpend(repo=repo, issue=subissue.number, session=envelope.session_id, spend=spend)
+        )
         self._tool_uses.record_after(
             slice_id=subissue.slice_id, step=Step.UNDERSTAND, session=envelope.session_id, repo=repo
         )

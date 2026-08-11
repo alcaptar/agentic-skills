@@ -219,8 +219,12 @@ class RecordedTrace(CallTrace):
     def record(self, call: HarnessCall) -> None:
         self.calls.append(call)
 
-    def sessions_of(self, *, slice_id: str, step: Step) -> tuple[str, ...]:
-        return tuple(call.session for call in self.calls if call.slice_id == slice_id and call.step == step)
+    def sessions_of(self, *, repo: str, issue: int, slice_id: str, step: Step) -> tuple[str, ...]:
+        return tuple(
+            call.session
+            for call in self.calls
+            if call.repo == repo and call.issue == issue and call.slice_id == slice_id and call.step == step
+        )
 
 
 class RecordedTurnLog(TurnLog):

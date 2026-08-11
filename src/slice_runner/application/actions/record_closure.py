@@ -17,6 +17,7 @@ if TYPE_CHECKING:
 @dataclass(frozen=True, kw_only=True, slots=True)
 class RecordClosureParams:
     repo: str
+    issue: int
     slice_id: str
     name: str
     state: RunState
@@ -35,6 +36,7 @@ class RecordClosure:
         self._metrics.record(
             ClosedSlice(
                 repo=params.repo,
+                issue=params.issue,
                 slice_id=params.slice_id,
                 name=params.name,
                 state=params.state,

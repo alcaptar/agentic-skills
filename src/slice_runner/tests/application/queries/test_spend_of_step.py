@@ -11,8 +11,10 @@ from slice_runner.domain.harness_spend import HarnessSpend
 from slice_runner.domain.step import Step
 from slice_runner.tests.mothers.harness_spend_mother import HarnessSpendMother
 
+_REPO = "alcaptar/agentic-skills"
+_ISSUE = 38
 _SLICE = "slice-05"
-_PARAMS = SpendOfStepParams(slice_id=_SLICE, step=Step.IMPLEMENT)
+_PARAMS = SpendOfStepParams(repo=_REPO, issue=_ISSUE, slice_id=_SLICE, step=Step.IMPLEMENT)
 _SESSION = "779e530f-c285-495c-bbdc-f2896f81fe25"
 _RETRIED_SESSION = "cd8b5450-595b-403e-b6a6-a1f2c9af512c"
 
@@ -37,7 +39,7 @@ class TestAddingUpWhatARoleSpentOnASlice:
     def test_the_trace_is_asked_for_the_sessions_of_that_slice_and_step(self, query: SpendOfStep, trace: Mock) -> None:
         query.execute(_PARAMS)
 
-        trace.sessions_of.assert_called_once_with(slice_id=_SLICE, step=Step.IMPLEMENT)
+        trace.sessions_of.assert_called_once_with(repo=_REPO, issue=_ISSUE, slice_id=_SLICE, step=Step.IMPLEMENT)
 
     def test_the_spend_log_is_asked_to_sum_the_sessions_found_in_the_trace(
         self, query: SpendOfStep, trace: Mock, spend_log: Mock

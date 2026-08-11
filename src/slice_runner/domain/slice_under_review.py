@@ -13,6 +13,8 @@ if TYPE_CHECKING:
 class SliceUnderReview:
     slice_id: str
     repo: str
+    issue: int
+    worktree: str
     diff: SliceDiff
     signal: str
     criteria: tuple[str, ...]

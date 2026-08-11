@@ -10,6 +10,8 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True, kw_only=True, slots=True)
 class HarnessCallSpend:
+    repo: str
+    issue: int
     session: str
     spend: HarnessSpend
 

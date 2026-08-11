@@ -12,6 +12,8 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True, kw_only=True, slots=True)
 class SpendOfStepParams:
+    repo: str
+    issue: int
     slice_id: str
     step: Step
 
@@ -22,6 +24,8 @@ class SpendOfStep:
         self._spend_log = spend_log
 
     def execute(self, params: SpendOfStepParams) -> HarnessSpend:
-        sessions = self._trace.sessions_of(slice_id=params.slice_id, step=params.step)
+        sessions = self._trace.sessions_of(
+            repo=params.repo, issue=params.issue, slice_id=params.slice_id, step=params.step
+        )
 
         return self._spend_log.spend_of(sessions)

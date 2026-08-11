@@ -97,6 +97,11 @@ class TestHowEachClosureIsRecorded(WithTheLedgerOutOfTheRealHome):
             ClosedSliceMother.NAME,
         )
 
+    def test_the_row_also_carries_the_issue_of_the_subissue_it_closed(self, tmp_path: Path) -> None:
+        LocalMetricsLog(clock=self.frozen_at()).record(ClosedSliceMother.merged())
+
+        assert WrittenMetricsLog.row_under(tmp_path)["issue"] == ClosedSliceMother.ISSUE
+
     def test_the_row_is_stamped_with_the_moment_the_clock_reads_when_it_closes(self, tmp_path: Path) -> None:
         LocalMetricsLog(clock=self.frozen_at(_STAMP)).record(ClosedSliceMother.merged())
 

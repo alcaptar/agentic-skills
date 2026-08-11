@@ -43,11 +43,21 @@ class ClaudeVerifier(Verifier):
         watch = HarnessTurnWatch(turns=self._turns, slice_id=review.slice_id, step=Step.VERIFY)
         output = self._process.run(invocation.argv, stdin=invocation.text, on_line=watch)
         envelope = HarnessOutput.from_process(output)
-        self._trace.record(HarnessCall(slice_id=review.slice_id, step=Step.VERIFY, session=envelope.session_id))
+        self._trace.record(
+            HarnessCall(
+                repo=review.repo,
+                issue=review.issue,
+                slice_id=review.slice_id,
+                step=Step.VERIFY,
+                session=envelope.session_id,
+            )
+        )
         spend = envelope.to_domain()
-        self._spend_log.record(HarnessCallSpend(session=envelope.session_id, spend=spend))
+        self._spend_log.record(
+            HarnessCallSpend(repo=review.repo, issue=review.issue, session=envelope.session_id, spend=spend)
+        )
         self._tool_uses.record_after(
-            slice_id=review.slice_id, step=Step.VERIFY, session=envelope.session_id, repo=review.repo
+            slice_id=review.slice_id, step=Step.VERIFY, session=envelope.session_id, repo=review.worktree
         )
         with envelope.measuring():
             verdict = VerdictPayload.from_dict(envelope.structured_output).to_domain()

@@ -100,6 +100,7 @@ class MetricsEntryPayload(ContractModel):
 
     ts: str
     repo: str
+    issue: int
     slice_id: str
     name: str
     verdict: DurableVerdict = Field(alias="veredicto")
@@ -125,6 +126,7 @@ class MetricsEntryPayload(ContractModel):
             {
                 "ts": ts,
                 "repo": closed.repo,
+                "issue": closed.issue,
                 "slice_id": closed.slice_id,
                 "name": closed.name,
                 "veredicto": closure.verdict,

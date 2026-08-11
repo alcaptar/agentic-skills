@@ -43,6 +43,8 @@ class VerifySliceParamsMother:
     def against_the_base(cls) -> VerifySliceParams:
         return VerifySliceParams(
             repo=SliceUnderReviewMother.REPO,
+            issue=SliceUnderReviewMother.ISSUE,
+            worktree=SliceUnderReviewMother.WORKTREE,
             base=cls.BASE,
             slice_id=SliceUnderReviewMother.SLICE_ID,
             signal=SliceUnderReviewMother.signal(),
@@ -53,16 +55,20 @@ class VerifySliceParamsMother:
 
 
 class SliceUnderReviewMother:
-    REPO: ClassVar[str] = "/repos/project"
+    REPO: ClassVar[str] = "alcaptar/agentic-skills"
+    ISSUE: ClassVar[int] = 45
+    WORKTREE: ClassVar[str] = "/repos/project"
     SLICE_ID: ClassVar[str] = "slice-05"
 
     @classmethod
     def of_the_slice(
-        cls, *, repo: str | None = None, files: tuple[str, ...] | None = None, text: str | None = None
+        cls, *, worktree: str | None = None, files: tuple[str, ...] | None = None, text: str | None = None
     ) -> SliceUnderReview:
         return SliceUnderReview(
             slice_id=cls.SLICE_ID,
-            repo=repo or cls.REPO,
+            repo=cls.REPO,
+            issue=cls.ISSUE,
+            worktree=worktree or cls.WORKTREE,
             diff=SliceDiffMother.of_the_slice(files=files, text=text),
             signal=cls.signal(),
             criteria=cls.criteria(),
@@ -98,7 +104,7 @@ class JudgeMother:
 
     @classmethod
     def reading_the_repo_and_its_yardstick(cls) -> Judge:
-        return cls.adversarial().also_reading(Path(SliceUnderReviewMother.REPO), cls.YARDSTICK)
+        return cls.adversarial().also_reading(Path(SliceUnderReviewMother.WORKTREE), cls.YARDSTICK)
 
 
 class VerificationMother:

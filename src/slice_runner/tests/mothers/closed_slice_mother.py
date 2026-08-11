@@ -16,6 +16,7 @@ if TYPE_CHECKING:
 
 class ClosedSliceMother:
     REPO: ClassVar[str] = "alcaptar/agentic-skills"
+    ISSUE: ClassVar[int] = 38
     SLICE_ID: ClassVar[str] = "slice-07"
     NAME: ClassVar[str] = "controles-como-puerto"
 
@@ -68,6 +69,7 @@ class ClosedSliceMother:
     ) -> ClosedSlice:
         return ClosedSlice(
             repo=cls.REPO,
+            issue=cls.ISSUE,
             slice_id=cls.SLICE_ID,
             name=cls.NAME,
             state=state,

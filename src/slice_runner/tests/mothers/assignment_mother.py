@@ -11,7 +11,8 @@ from slice_runner.tests.mothers.verdict_mother import FindingMother
 
 
 class AssignmentMother:
-    REPO: ClassVar[str] = "/repos/agentic-skills"
+    REPO: ClassVar[str] = "alcaptar/agentic-skills"
+    WORKTREE: ClassVar[str] = "/repos/agentic-skills"
     UNDERSTANDING: ClassVar[str] = (
         "El precheck de subissue cerrada se llama `SUBISSUE_ALREADY_CLOSED` y corta antes de tocar la rama."
     )
@@ -25,6 +26,7 @@ class AssignmentMother:
             issue=subissue.number,
             slice_id=subissue.slice_id,
             repo=cls.REPO,
+            worktree=cls.WORKTREE,
             intention=subissue.intention,
             criteria=subissue.criteria,
             signal=subissue.signal,

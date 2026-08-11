@@ -11,11 +11,22 @@ if TYPE_CHECKING:
 
 
 class CorpusEntryMother:
+    REPO: ClassVar[str] = "alcaptar/agentic-skills"
+    ISSUE: ClassVar[int] = 11
     SLICE_ID: ClassVar[str] = "slice-11"
 
     @classmethod
-    def of_the_slice(cls, *, slice_id: str | None = None, verdict: Verdict | None = None) -> CorpusEntry:
+    def of_the_slice(
+        cls,
+        *,
+        repo: str | None = None,
+        issue: int | None = None,
+        slice_id: str | None = None,
+        verdict: Verdict | None = None,
+    ) -> CorpusEntry:
         return CorpusEntry(
+            repo=repo or cls.REPO,
+            issue=cls.ISSUE if issue is None else issue,
             slice_id=slice_id or cls.SLICE_ID,
             diff=SliceDiffMother.of_the_slice(),
             verdict=verdict or VerdictMother.passing(),

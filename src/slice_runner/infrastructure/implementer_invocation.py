@@ -22,7 +22,7 @@ class ImplementerInvocation:
 
     @property
     def cwd(self) -> str:
-        return self.assignment.repo
+        return self.assignment.worktree
 
     @property
     def argv(self) -> list[str]:
@@ -57,7 +57,8 @@ class ImplementerInvocation:
                 "",
                 f"- issue: #{assignment.issue}",
                 f"- slice: {assignment.slice_id}",
-                f"- ruta del repo: {assignment.repo}",
+                f"- repo: {assignment.repo}",
+                f"- ruta del repo: {assignment.worktree}",
                 f"- intencion: {assignment.intention}",
                 f"- senal: {assignment.signal}",
                 *CountedLines.of("criterios de aceptacion", assignment.criteria),

@@ -23,6 +23,7 @@ from slice_runner.infrastructure.implementer_invocation import ImplementerInvoca
 from slice_runner.infrastructure.judge_invocation import JudgeInvocation
 from slice_runner.infrastructure.local_call_spend_log import LocalCallSpendLog
 from slice_runner.infrastructure.local_call_trace import LocalCallTrace
+from slice_runner.infrastructure.system_clock import SystemClock
 from slice_runner.infrastructure.understanding_invocation import UnderstandingInvocation
 from slice_runner.tests.argv import Argv
 from slice_runner.tests.doubles import Answer, RealExceptTheJudge, TimingOutProcess, UnrunnableJudge
@@ -339,25 +340,35 @@ class TestTheEntrypoint(BlindToTheToolboxOfThisMachine):
 
 
 class TestTheCommandThatPrintsAConversation:
+    _REPO = "alcaptar/agentic-skills"
+    _ISSUE = 45
     _SLICE = "slice-05"
-    _REPO = "/Users/someone/repos/the-slice"
+    _WORKTREE = "/Users/someone/repos/the-slice"
 
     @pytest.fixture(autouse=True)
     def toolbox(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
 
     def _traced(self) -> None:
-        LocalCallTrace().record(
-            HarnessCall(slice_id=self._SLICE, step=Step.IMPLEMENT, session=ConversationTranscriptMother.SESSION)
+        LocalCallTrace(clock=SystemClock()).record(
+            HarnessCall(
+                repo=self._REPO,
+                issue=self._ISSUE,
+                slice_id=self._SLICE,
+                step=Step.IMPLEMENT,
+                session=ConversationTranscriptMother.SESSION,
+            )
         )
-        ConversationTranscriptMother.written_under(ClaudeConfig.root(), repo=self._REPO)
+        ConversationTranscriptMother.written_under(ClaudeConfig.root(), repo=self._WORKTREE)
 
     def test_the_conversation_of_a_traced_call_is_printed_as_readable_text(
         self, capsys: pytest.CaptureFixture[str]
     ) -> None:
         self._traced()
 
-        code = Cli.read(repo=self._REPO, slice_id=self._SLICE, step=Step.IMPLEMENT)
+        code = Cli.read(
+            repo=self._REPO, issue=self._ISSUE, worktree=self._WORKTREE, slice_id=self._SLICE, step=Step.IMPLEMENT
+        )
 
         assert code == ExitCode.OK
         output = capsys.readouterr()
@@ -367,7 +378,9 @@ class TestTheCommandThatPrintsAConversation:
     def test_a_slice_and_step_never_traced_exits_with_a_usage_error_instead_of_guessing(
         self, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        code = Cli.read(repo=self._REPO, slice_id=self._SLICE, step=Step.IMPLEMENT)
+        code = Cli.read(
+            repo=self._REPO, issue=self._ISSUE, worktree=self._WORKTREE, slice_id=self._SLICE, step=Step.IMPLEMENT
+        )
 
         assert code == ExitCode.USAGE_ERROR
         output = capsys.readouterr()
@@ -377,11 +390,19 @@ class TestTheCommandThatPrintsAConversation:
     def test_a_traced_session_whose_conversation_was_never_kept_exits_with_a_usage_error(
         self, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        LocalCallTrace().record(
-            HarnessCall(slice_id=self._SLICE, step=Step.IMPLEMENT, session=ConversationTranscriptMother.SESSION)
+        LocalCallTrace(clock=SystemClock()).record(
+            HarnessCall(
+                repo=self._REPO,
+                issue=self._ISSUE,
+                slice_id=self._SLICE,
+                step=Step.IMPLEMENT,
+                session=ConversationTranscriptMother.SESSION,
+            )
         )
 
-        code = Cli.read(repo=self._REPO, slice_id=self._SLICE, step=Step.IMPLEMENT)
+        code = Cli.read(
+            repo=self._REPO, issue=self._ISSUE, worktree=self._WORKTREE, slice_id=self._SLICE, step=Step.IMPLEMENT
+        )
 
         assert code == ExitCode.USAGE_ERROR
         assert ConversationTranscriptMother.SESSION in capsys.readouterr().err
@@ -389,7 +410,21 @@ class TestTheCommandThatPrintsAConversation:
     def test_main_wires_the_parsed_arguments_into_the_read(self, capsys: pytest.CaptureFixture[str]) -> None:
         self._traced()
 
-        code = Cli.main(["read", "--repo", self._REPO, "--slice", self._SLICE, "--step", str(Step.IMPLEMENT)])
+        code = Cli.main(
+            [
+                "read",
+                "--repo",
+                self._REPO,
+                "--issue",
+                str(self._ISSUE),
+                "--worktree",
+                self._WORKTREE,
+                "--slice",
+                self._SLICE,
+                "--step",
+                str(Step.IMPLEMENT),
+            ]
+        )
 
         assert code == ExitCode.OK
         assert "Now let's confirm RED before implementing:" in capsys.readouterr().out
@@ -398,7 +433,19 @@ class TestTheCommandThatPrintsAConversation:
         self, capsys: pytest.CaptureFixture[str]
     ) -> None:
         with pytest.raises(SystemExit):
-            Cli.parser().parse_args(["read", "--repo", self._REPO, "--slice", self._SLICE])
+            Cli.parser().parse_args(
+                [
+                    "read",
+                    "--repo",
+                    self._REPO,
+                    "--issue",
+                    str(self._ISSUE),
+                    "--worktree",
+                    self._WORKTREE,
+                    "--slice",
+                    self._SLICE,
+                ]
+            )
 
         assert "the following arguments are required: --step" in capsys.readouterr().err
 
@@ -406,12 +453,28 @@ class TestTheCommandThatPrintsAConversation:
         self, capsys: pytest.CaptureFixture[str]
     ) -> None:
         with pytest.raises(SystemExit):
-            Cli.parser().parse_args(["read", "--repo", self._REPO, "--slice", self._SLICE, "--step", "deploy"])
+            Cli.parser().parse_args(
+                [
+                    "read",
+                    "--repo",
+                    self._REPO,
+                    "--issue",
+                    str(self._ISSUE),
+                    "--worktree",
+                    self._WORKTREE,
+                    "--slice",
+                    self._SLICE,
+                    "--step",
+                    "deploy",
+                ]
+            )
 
         assert "invalid choice" in capsys.readouterr().err
 
 
 class TestTheCommandThatSumsSpendByRole:
+    _REPO = "alcaptar/agentic-skills"
+    _ISSUE = 45
     _SLICE = "slice-05"
 
     @pytest.fixture(autouse=True)
@@ -419,13 +482,15 @@ class TestTheCommandThatSumsSpendByRole:
         monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
 
     def _traced_and_spent(self, *, step: Step, call: HarnessCallSpend) -> None:
-        LocalCallTrace().record(HarnessCall(slice_id=self._SLICE, step=step, session=call.session))
-        LocalCallSpendLog().record(call)
+        LocalCallTrace(clock=SystemClock()).record(
+            HarnessCall(repo=self._REPO, issue=self._ISSUE, slice_id=self._SLICE, step=step, session=call.session)
+        )
+        LocalCallSpendLog(clock=SystemClock()).record(call)
 
     def test_the_spend_of_a_traced_call_is_printed_as_json(self, capsys: pytest.CaptureFixture[str]) -> None:
         self._traced_and_spent(step=Step.IMPLEMENT, call=HarnessCallSpendMother.of_the_implementer())
 
-        code = Cli.spend(slice_id=self._SLICE, step=Step.IMPLEMENT)
+        code = Cli.spend(repo=self._REPO, issue=self._ISSUE, slice_id=self._SLICE, step=Step.IMPLEMENT)
 
         assert code == ExitCode.OK
         printed = json.loads(capsys.readouterr().out)
@@ -435,7 +500,7 @@ class TestTheCommandThatSumsSpendByRole:
     def test_a_slice_and_step_never_traced_prints_nothing_measured_instead_of_failing(
         self, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        code = Cli.spend(slice_id=self._SLICE, step=Step.IMPLEMENT)
+        code = Cli.spend(repo=self._REPO, issue=self._ISSUE, slice_id=self._SLICE, step=Step.IMPLEMENT)
 
         assert code == ExitCode.OK
         assert json.loads(capsys.readouterr().out)["calls"] == 0
@@ -443,7 +508,19 @@ class TestTheCommandThatSumsSpendByRole:
     def test_main_wires_the_parsed_arguments_into_spend(self, capsys: pytest.CaptureFixture[str]) -> None:
         self._traced_and_spent(step=Step.IMPLEMENT, call=HarnessCallSpendMother.of_the_implementer())
 
-        code = Cli.main(["spend", "--slice", self._SLICE, "--step", str(Step.IMPLEMENT)])
+        code = Cli.main(
+            [
+                "spend",
+                "--repo",
+                self._REPO,
+                "--issue",
+                str(self._ISSUE),
+                "--slice",
+                self._SLICE,
+                "--step",
+                str(Step.IMPLEMENT),
+            ]
+        )
 
         assert code == ExitCode.OK
         printed = json.loads(capsys.readouterr().out)
@@ -455,9 +532,9 @@ class TestTheCommandThatSumsSpendByRole:
         self._traced_and_spent(step=Step.IMPLEMENT, call=HarnessCallSpendMother.of_the_implementer())
         self._traced_and_spent(step=Step.VERIFY, call=HarnessCallSpendMother.of_the_judge())
 
-        implementer_code = Cli.spend(slice_id=self._SLICE, step=Step.IMPLEMENT)
+        implementer_code = Cli.spend(repo=self._REPO, issue=self._ISSUE, slice_id=self._SLICE, step=Step.IMPLEMENT)
         implementer_cost = json.loads(capsys.readouterr().out)["cost_usd"]
-        judge_code = Cli.spend(slice_id=self._SLICE, step=Step.VERIFY)
+        judge_code = Cli.spend(repo=self._REPO, issue=self._ISSUE, slice_id=self._SLICE, step=Step.VERIFY)
         judge_cost = json.loads(capsys.readouterr().out)["cost_usd"]
 
         assert implementer_code == ExitCode.OK
@@ -469,7 +546,9 @@ class TestTheCommandThatSumsSpendByRole:
         self, capsys: pytest.CaptureFixture[str]
     ) -> None:
         with pytest.raises(SystemExit):
-            Cli.parser().parse_args(["spend", "--step", str(Step.IMPLEMENT)])
+            Cli.parser().parse_args(
+                ["spend", "--repo", "alcaptar/agentic-skills", "--issue", "45", "--step", str(Step.IMPLEMENT)]
+            )
 
         assert "the following arguments are required: --slice" in capsys.readouterr().err
 

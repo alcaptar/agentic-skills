@@ -35,7 +35,7 @@ class TestWhatTheJudgeIsGranted:
     def test_the_only_directory_granted_is_the_repo_because_the_diff_is_no_longer_a_file_somewhere(
         self, argv: Argv
     ) -> None:
-        assert argv.values_of("--add-dir") == [SliceUnderReviewMother.REPO, str(JudgeMother.YARDSTICK)]
+        assert argv.values_of("--add-dir") == [SliceUnderReviewMother.WORKTREE, str(JudgeMother.YARDSTICK)]
 
     def test_the_mcp_servers_are_bounded(self, argv: Argv) -> None:
         assert argv.contains("--strict-mcp-config")
@@ -63,10 +63,10 @@ class TestWhatTravelsOnStandardInput:
         assert text.startswith(_JUDGE.rubric)
         assert text.index("## Datos del run") > text.index(_JUDGE.rubric)
 
-    def test_it_carries_the_repo_the_judge_still_has_to_read_around_the_diff(self) -> None:
+    def test_it_carries_the_worktree_the_judge_still_has_to_read_around_the_diff(self) -> None:
         review = SliceUnderReviewMother.of_the_slice()
 
-        assert review.repo in JudgeInvocation(judge=_JUDGE, review=review).text
+        assert review.worktree in JudgeInvocation(judge=_JUDGE, review=review).text
 
     def test_the_diff_itself_travels_so_a_verdict_cannot_be_reached_without_having_been_shown_it(self) -> None:
         review = SliceUnderReviewMother.of_the_slice(text="-    return 1\n+    return 2\n")
@@ -96,6 +96,7 @@ class TestWhatTravelsOnStandardInput:
             "## Datos del run\n"
             "\n"
             "- slice: slice-05\n"
+            "- repo: alcaptar/agentic-skills\n"
             "- ruta del repo: /repos/project\n"
             "- senal: exenta - este repo no despliega\n"
             "- criterios de aceptacion (2):\n"

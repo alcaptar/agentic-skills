@@ -15,6 +15,8 @@ if TYPE_CHECKING:
 @dataclass(frozen=True, kw_only=True, slots=True)
 class ReadConversationParams:
     repo: str
+    issue: int
+    worktree: str
     slice_id: str
     step: Step
 
@@ -31,7 +33,9 @@ class ReadConversation:
         self._log = log
 
     def execute(self, params: ReadConversationParams) -> ReadConversationResult:
-        sessions = self._trace.sessions_of(slice_id=params.slice_id, step=params.step)
+        sessions = self._trace.sessions_of(
+            repo=params.repo, issue=params.issue, slice_id=params.slice_id, step=params.step
+        )
         if not sessions:
             raise NoConversationRecordedError(
                 f"no call of {params.slice_id} ever served {params.step}: the trace has nothing to open"
@@ -39,4 +43,6 @@ class ReadConversation:
 
         session = sessions[-1]
 
-        return ReadConversationResult(session=session, conversation=self._log.read(session=session, repo=params.repo))
+        return ReadConversationResult(
+            session=session, conversation=self._log.read(session=session, repo=params.worktree)
+        )
