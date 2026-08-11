@@ -74,6 +74,7 @@ from slice_runner.infrastructure.local_control_runner import LocalControlRunner
 from slice_runner.infrastructure.local_conversation_log import LocalConversationLog
 from slice_runner.infrastructure.local_corpus import LocalCorpus
 from slice_runner.infrastructure.local_metrics_log import LocalMetricsLog
+from slice_runner.infrastructure.local_plugin_registry import LocalPluginRegistry
 from slice_runner.infrastructure.local_process import LocalProcess
 from slice_runner.infrastructure.local_skill_library import LocalSkillLibrary
 from slice_runner.infrastructure.local_tool_use_log import LocalToolUseLog
@@ -340,6 +341,7 @@ class Cli:
             forum=GhForum(process=self._process),
             branches=GitBranches(process=self._process),
             skills=LocalSkillLibrary(),
+            plugins=LocalPluginRegistry(),
         ).execute(CheckReadinessParams(repo=repo, worktree=worktree, base=base))
 
         print(ReadinessReport(readiness=readiness).rendered())

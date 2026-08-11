@@ -111,3 +111,29 @@ class TestWhetherASkillIsInstalled:
         monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
 
         assert LocalSkillLibrary().installed("deploy-watch") is None
+
+
+class TestWhetherAnAbsolutePathHelperIsReachable:
+    def test_a_helper_present_at_its_relative_path_is_found(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        helper = tmp_path / "skills" / "slice-runner" / "scripts" / "discover_conventions.py"
+        helper.parent.mkdir(parents=True)
+        helper.write_text("x", encoding="utf-8")
+        monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
+
+        assert LocalSkillLibrary().file("skills/slice-runner/scripts/discover_conventions.py") == helper
+
+    def test_a_helper_not_present_reads_as_none(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        (tmp_path / "skills" / "slice-runner" / "scripts").mkdir(parents=True)
+        monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
+
+        assert LocalSkillLibrary().file("skills/slice-runner/scripts/discover_conventions.py") is None
+
+    def test_a_directory_in_place_of_the_helper_is_not_reachable_either(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        (tmp_path / "skills" / "slice-runner" / "scripts" / "discover_conventions.py").mkdir(parents=True)
+        monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
+
+        assert LocalSkillLibrary().file("skills/slice-runner/scripts/discover_conventions.py") is None

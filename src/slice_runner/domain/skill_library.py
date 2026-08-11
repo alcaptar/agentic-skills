@@ -13,3 +13,6 @@ class SkillLibrary(ABC):
 
     @abstractmethod
     def installed(self, name: str) -> Path | None: ...
+
+    @abstractmethod
+    def file(self, relative: str) -> Path | None: ...
