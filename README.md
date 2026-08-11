@@ -407,26 +407,44 @@ mientras fue el flujo que conducia una slice, nunca dejo de vivir en tu sesion.
 ## Instalacion
 
 **Este repo es la fuente de verdad de lo que sigue vivo aqui**, y el entregable son **dos mitades que
-se instalan distinto**: el programa es una rueda de Python y las skills son ficheros que Claude Code
-lee de su directorio de configuracion. Un solo comando monta las dos:
+se instalan distinto**: el programa es una rueda de Python y lo demas son directorios que Claude Code
+lee de su configuracion. Un solo comando monta las dos:
 
 ```bash
 make install
 ```
 
-Instalar solo una deja un entorno que parece listo y no lo esta: sin `slice-spec` no hay issue que
-conducir, y sin `deploy-watch` la llamada que el programa encadena al mergear se gasta sin hacer nada.
+Antes hacen falta tres cosas que este repo **no** instala, y una cuarta que conviene saber:
+
+| Prerequisito | Como se comprueba |
+|---|---|
+| `uv` | `make install` falla sin el |
+| `gh` autenticado | `slice-runner doctor` |
+| `claude` (Claude Code) | `slice-runner doctor` |
+| El plugin `superpowers` | **hoy no lo comprueba nadie**: `slice-spec` lo invoca en su paso 1 |
+
+Instalar solo una mitad deja un entorno que parece listo y no lo esta: sin `slice-spec` no hay issue
+que conducir, y sin `deploy-watch` la llamada que el programa encadena al mergear se gasta sin hacer
+nada.
 
 Lo que hace, y por que asi:
 
-- **`make install-program`** — `uv tool install .`, que deja `slice-runner` en el PATH. Con el ahi no
-  hace falta saber donde vive el checkout para conducir una slice de otro repo.
-- **`make install-skills`** — los symlinks de `slice-spec` y `deploy-watch` bajo el directorio de
-  configuracion de Claude Code (`CLAUDE_CONFIG_DIR` si esta puesto, `~/.claude` si no). Symlinks y no
-  copias: se editan versionadas y siguen activas al instante, sin nada que resincronizar. Es un
-  directorio **de usuario**, no de proyecto, asi que valen en cualquier repo donde invoques
-  `slice-spec`. Y **si un symlink ya existe apuntando a otro sitio, el target lo dice y para** en vez
-  de pisarlo: el caso real es el de `slice-runner`, que apunta a `agentic-skills-legacy` a proposito.
+- **`make install-program`** — `uv tool install --force --reinstall .`, que deja `slice-runner` en el
+  PATH. Con el ahi no hace falta saber donde vive el checkout para conducir una slice de otro repo.
+  El `--reinstall` no sobra: la version es `0.0.0` fija, asi que sin el la rueda se reutiliza de cache
+  y un `git pull` te deja corriendo el codigo anterior sin decirlo.
+- **`make install-skills`** — enlaza **tres** directorios bajo la configuracion de Claude Code
+  (`CLAUDE_CONFIG_DIR` si esta puesto, `~/.claude` si no), y solo dos de ellos son skills:
+  - `slice-spec` y `deploy-watch`, las skills.
+  - `slice-runner`, que **ya no es una skill** -perdio su `SKILL.md` cuando se retiro el flujo viejo y
+    conserva solo `scripts/`-. Se enlaza porque `slice-spec` invoca desde ahi sus dos helpers de
+    descubrimiento por ruta absoluta; sin el, su paso 3 se queda sin con que descubrir las
+    convenciones ni los controles, y eso no da error: hace que se improvisen.
+
+  Symlinks y no copias: se editan versionados y siguen activos al instante, sin nada que
+  resincronizar. Es un directorio **de usuario**, no de proyecto, asi que valen en cualquier repo
+  donde invoques `slice-spec`. Y **si un enlace ya existe apuntando a otro sitio, el target lo dice y
+  para** en vez de pisarlo.
 
 El symlink tiene una consecuencia que conviene saber: **la rama en la que estas decide que codigo
 corre**. Si sondeas un cambio de una skill desde una rama creada en `origin/master`, corres el de
@@ -436,12 +454,12 @@ usas-.
 
 El flujo anterior -la skill `/slice-runner` orquestando a mano dos subagentes definidos
 (slice-implementer y slice-verifier)- ya no vive en este repo: esta congelado en
-`alcaptar/agentic-skills-legacy`, con su propia copia de los dos agentes. Si lo sigues necesitando, el
-symlink de esa skill apunta ahi en vez de a `$PWD/skills/slice-runner`:
+`alcaptar/agentic-skills-legacy`, con su propia copia de los dos agentes.
 
-```bash
-ln -s /ruta/a/agentic-skills-legacy/skills/slice-runner ~/.claude/skills/slice-runner
-```
+**El nombre `slice-runner` bajo la configuracion de Claude Code ya no esta libre para el.** Lo ocupa
+el directorio de helpers que `slice-spec` necesita (ver arriba), asi que si sigues necesitando la
+skill vieja no puede compartir ese nombre: instalala bajo otro, o en otra configuracion. El
+instalador no elige por ti -si encuentra el enlace ocupado, dice a donde apunta y para-.
 
 Los dos agentes se retiraron de **este** repo: el programa no los usaba, y quien los citaba era la
 skill anterior, que ya no vive aqui. Su metodologia y su rubrica viven hoy en el programa
