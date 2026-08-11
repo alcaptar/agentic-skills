@@ -17,7 +17,14 @@
 # (`src/slice_runner/infrastructure/claude_config.py`): si este target asumiera `~/.claude`,
 # mentiria en cuanto alguien mueva la configuracion.
 CLAUDE_HOME ?= $(if $(CLAUDE_CONFIG_DIR),$(CLAUDE_CONFIG_DIR),$(HOME)/.claude)
-SKILLS := slice-spec deploy-watch
+
+# Tres directorios, y el tercero **no es una skill**: `skills/slice-runner/` ya no tiene `SKILL.md`
+# -la skill que vivia ahi se retiro a `agentic-skills-legacy`- y solo conserva `scripts/`. Se enlaza
+# igualmente porque `slice-spec` invoca desde ahi sus dos helpers de descubrimiento por ruta absoluta
+# (`~/.claude/skills/slice-runner/scripts/discover_conventions.py` y `discover_controles.py`), asi que
+# sin este enlace el paso 3 de `slice-spec` no encuentra con que descubrir las convenciones ni los
+# controles. Un directorio sin `SKILL.md` no carga ninguna skill, asi que enlazarlo no activa nada.
+LINKED := slice-spec deploy-watch slice-runner
 
 # Las dos mitades son targets propios porque solo una se puede medir: `install-skills` corre
 # en un `CLAUDE_HOME` de usar y tirar (`make install-skills CLAUDE_HOME=<ruta>`) y lo cubre
@@ -31,22 +38,23 @@ install: install-program install-skills
 install-program:
 	uv tool install --force --reinstall .
 
-# Un symlink ocupado apuntando a otro sitio **no se pisa**: el caso real es el de
-# `slice-runner`, que apunta a `agentic-skills-legacy` a proposito. Se dice y se para.
+# Un symlink ocupado apuntando a otro sitio **no se pisa**: se dice donde apunta y se para. El caso
+# real es quien tenga `slice-runner` apuntando a `agentic-skills-legacy` de cuando ese nombre era la
+# skill del flujo viejo; ahi hay que elegir, porque `slice-spec` necesita el de aqui.
 install-skills:
 	@mkdir -p "$(CLAUDE_HOME)/skills"
-	@for skill in $(SKILLS); do \
-		link="$(CLAUDE_HOME)/skills/$$skill"; \
-		target="$(CURDIR)/skills/$$skill"; \
+	@for name in $(LINKED); do \
+		link="$(CLAUDE_HOME)/skills/$$name"; \
+		target="$(CURDIR)/skills/$$name"; \
 		if [ -L "$$link" ] && [ "$$(readlink "$$link")" = "$$target" ]; then \
-			echo "ya estaba: $$skill"; \
+			echo "ya estaba: $$name"; \
 		elif [ -e "$$link" ] || [ -L "$$link" ]; then \
 			echo "ocupado: $$link"; \
 			echo "  apunta a: $$(readlink "$$link" 2>/dev/null || echo 'un directorio real')"; \
 			echo "  quitalo tu si quieres que apunte a $$target"; \
 			exit 1; \
 		else \
-			ln -s "$$target" "$$link" && echo "instalada: $$skill"; \
+			ln -s "$$target" "$$link" && echo "enlazado: $$name"; \
 		fi; \
 	done
 
