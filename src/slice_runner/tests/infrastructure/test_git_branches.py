@@ -44,14 +44,18 @@ class TestGitBranchesCreatingTheBranchOfTheSlice:
     _SLICE_BRANCH = "slice/16-el-loop-completo"
 
     @staticmethod
-    def _repo_with_a_base_commit(tmp_path: Path) -> Path:
+    def _repo_with_a_base_commit(tmp_path: Path) -> tuple[Path, Path]:
+        remote = tmp_path / "remote.git"
+        Git.run(tmp_path, "init", "--bare", str(remote))
         repo = Git.init_repo(tmp_path / "repo")
         Git.run(repo, "commit", "--allow-empty", "-m", "base")
+        Git.run(repo, "remote", "add", "origin", str(remote))
+        Git.run(repo, "push", "-u", "origin", Git.BASE_BRANCH)
 
-        return repo
+        return repo, remote
 
     def test_the_branch_of_the_slice_exists_after_creating_it(self, tmp_path: Path) -> None:
-        repo = self._repo_with_a_base_commit(tmp_path)
+        repo, _ = self._repo_with_a_base_commit(tmp_path)
         branches = GitBranches(process=Real.process())
 
         branches.create(worktree=str(repo), name=self._SLICE_BRANCH, base=Git.BASE_BRANCH)
@@ -59,7 +63,7 @@ class TestGitBranchesCreatingTheBranchOfTheSlice:
         assert branches.exists(worktree=str(repo), name=self._SLICE_BRANCH) is True
 
     def test_the_worktree_ends_standing_on_the_branch_it_created(self, tmp_path: Path) -> None:
-        repo = self._repo_with_a_base_commit(tmp_path)
+        repo, _ = self._repo_with_a_base_commit(tmp_path)
 
         GitBranches(process=Real.process()).create(worktree=str(repo), name=self._SLICE_BRANCH, base=Git.BASE_BRANCH)
 
@@ -68,7 +72,7 @@ class TestGitBranchesCreatingTheBranchOfTheSlice:
     def test_the_branch_starts_at_the_base_it_was_given_and_not_at_wherever_the_worktree_stood(
         self, tmp_path: Path
     ) -> None:
-        repo = self._repo_with_a_base_commit(tmp_path)
+        repo, _ = self._repo_with_a_base_commit(tmp_path)
         Git.run(repo, "switch", "-c", "someone-elses-work")
         Git.run(repo, "commit", "--allow-empty", "-m", "work of another branch")
 
@@ -79,13 +83,36 @@ class TestGitBranchesCreatingTheBranchOfTheSlice:
     def test_a_branch_that_already_exists_raises_instead_of_silently_standing_on_the_old_one(
         self, tmp_path: Path
     ) -> None:
-        repo = self._repo_with_a_base_commit(tmp_path)
+        repo, _ = self._repo_with_a_base_commit(tmp_path)
         branches = GitBranches(process=Real.process())
         branches.create(worktree=str(repo), name=self._SLICE_BRANCH, base=Git.BASE_BRANCH)
         Git.run(repo, "switch", Git.BASE_BRANCH)
 
         with pytest.raises(GitCommandFailedError, match=self._SLICE_BRANCH):
             branches.create(worktree=str(repo), name=self._SLICE_BRANCH, base=Git.BASE_BRANCH)
+
+    def test_with_the_local_base_left_behind_by_a_push_from_elsewhere_the_worktree_ends_up_at_the_remote_tip(
+        self, tmp_path: Path
+    ) -> None:
+        repo, remote = self._repo_with_a_base_commit(tmp_path)
+        elsewhere = Git.clone(remote=remote, into=tmp_path / "elsewhere")
+        Git.run(elsewhere, "commit", "--allow-empty", "-m", "pushed from elsewhere")
+        Git.run(elsewhere, "push")
+
+        GitBranches(process=Real.process()).create(worktree=str(repo), name=self._SLICE_BRANCH, base=Git.BASE_BRANCH)
+
+        assert Git.run(repo, "rev-parse", "HEAD").strip() == Git.run(elsewhere, "rev-parse", Git.BASE_BRANCH).strip()
+
+    def test_creating_the_branch_leaves_the_local_base_branch_exactly_where_it_stood(self, tmp_path: Path) -> None:
+        repo, remote = self._repo_with_a_base_commit(tmp_path)
+        elsewhere = Git.clone(remote=remote, into=tmp_path / "elsewhere")
+        Git.run(elsewhere, "commit", "--allow-empty", "-m", "pushed from elsewhere")
+        Git.run(elsewhere, "push")
+        before = Git.run(repo, "rev-parse", Git.BASE_BRANCH).strip()
+
+        GitBranches(process=Real.process()).create(worktree=str(repo), name=self._SLICE_BRANCH, base=Git.BASE_BRANCH)
+
+        assert Git.run(repo, "rev-parse", Git.BASE_BRANCH).strip() == before
 
 
 @pytest.mark.integration

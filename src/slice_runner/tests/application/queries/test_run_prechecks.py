@@ -7,6 +7,7 @@ import pytest
 
 from slice_runner.application.queries.run_prechecks import RunPrechecks, RunPrechecksParams
 from slice_runner.domain.branches import Branches
+from slice_runner.domain.exceptions import UnresolvableBaseError
 from slice_runner.domain.forum import Forum
 from slice_runner.domain.precheck_outcome import PrecheckOutcome
 from slice_runner.tests.mothers.parent_issue_mother import ParentIssueMother
@@ -19,6 +20,7 @@ if TYPE_CHECKING:
 _REPO = "alcaptar/agentic-skills"
 _WORKTREE = "/repos/agentic-skills"
 _BRANCH = "slice/05-prechecks-deterministas"
+_BASE = "master"
 
 
 class TestRunPrechecks:
@@ -26,6 +28,7 @@ class TestRunPrechecks:
     def branches(self) -> Mock:
         branches: Mock = create_autospec(Branches, spec_set=True, instance=True)
         branches.exists.return_value = False
+        branches.commits_behind_remote.return_value = 0
         return branches
 
     @pytest.fixture
@@ -40,7 +43,9 @@ class TestRunPrechecks:
 
     @staticmethod
     def _params(*, subissue: SubIssue, parent: ParentIssue) -> RunPrechecksParams:
-        return RunPrechecksParams(repo=_REPO, worktree=_WORKTREE, branch=_BRANCH, subissue=subissue, parent=parent)
+        return RunPrechecksParams(
+            repo=_REPO, worktree=_WORKTREE, branch=_BRANCH, base=_BASE, subissue=subissue, parent=parent
+        )
 
     def test_a_closed_subissue_wins_even_with_everything_else_clear(self, query: RunPrechecks) -> None:
         params = self._params(subissue=SubIssueMother.closed(), parent=ParentIssueMother.with_sources_and_controls())
@@ -74,6 +79,30 @@ class TestRunPrechecks:
         params = self._params(subissue=SubIssueMother.pending(), parent=ParentIssueMother.with_sources_and_controls())
 
         assert query.execute(params) is PrecheckOutcome.BRANCH_ALREADY_EXISTS
+
+    def test_a_base_that_does_not_resolve_against_its_remote_is_its_own_reason(
+        self, query: RunPrechecks, branches: Mock
+    ) -> None:
+        branches.commits_behind_remote.side_effect = UnresolvableBaseError(f"{_BASE} does not resolve")
+        params = self._params(subissue=SubIssueMother.pending(), parent=ParentIssueMother.with_sources_and_controls())
+
+        assert query.execute(params) is PrecheckOutcome.BASE_NOT_ON_REMOTE
+
+    def test_a_base_that_does_not_resolve_wins_over_an_existing_branch_because_nothing_can_be_trusted_without_it(
+        self, query: RunPrechecks, branches: Mock
+    ) -> None:
+        branches.exists.return_value = True
+        branches.commits_behind_remote.side_effect = UnresolvableBaseError(f"{_BASE} does not resolve")
+        params = self._params(subissue=SubIssueMother.pending(), parent=ParentIssueMother.with_sources_and_controls())
+
+        assert query.execute(params) is PrecheckOutcome.BASE_NOT_ON_REMOTE
+
+    def test_the_base_the_params_carried_is_what_gets_asked_about(self, query: RunPrechecks, branches: Mock) -> None:
+        params = self._params(subissue=SubIssueMother.pending(), parent=ParentIssueMother.with_sources_and_controls())
+
+        query.execute(params)
+
+        branches.commits_behind_remote.assert_called_once_with(worktree=_WORKTREE, base=_BASE)
 
     def test_a_parent_with_no_sources_is_missing_sources(self, query: RunPrechecks) -> None:
         params = self._params(subissue=SubIssueMother.pending(), parent=ParentIssueMother.without_sources())

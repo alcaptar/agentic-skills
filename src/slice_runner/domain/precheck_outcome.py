@@ -11,3 +11,4 @@ class PrecheckOutcome(StrEnum):
     BRANCH_ALREADY_EXISTS = "branch-already-exists"
     MISSING_SOURCES = "missing-sources"
     MISSING_CONTROLS = "missing-controls"
+    BASE_NOT_ON_REMOTE = "base-not-on-remote"

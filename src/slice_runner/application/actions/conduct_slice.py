@@ -274,6 +274,7 @@ class ConductSlice:
                 repo=progress.params.repo,
                 worktree=progress.params.worktree,
                 branch=progress.subissue.branch,
+                base=progress.params.base,
                 subissue=progress.subissue,
                 parent=progress.parent,
             )
@@ -462,7 +463,7 @@ class ConductSlice:
                     repo=progress.params.repo,
                     issue=progress.subissue.number,
                     worktree=progress.params.worktree,
-                    base=progress.params.base,
+                    base=f"origin/{progress.params.base}",
                     slice_id=progress.subissue.slice_id,
                     signal=progress.subissue.signal,
                     criteria=progress.subissue.criteria,
