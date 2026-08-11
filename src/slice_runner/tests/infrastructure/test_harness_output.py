@@ -31,6 +31,25 @@ class TestTheEnvelopeWeKnow:
         with pytest.raises(InvalidHarnessOutputError, match="structured_output"):
             HarnessOutput.from_dict(HarnessEnvelopeMother.without("structured_output"))
 
+    def test_one_without_structured_output_that_ran_out_of_turns_says_so_in_the_rejection(self) -> None:
+        envelope = HarnessEnvelopeMother.without("structured_output") | {"subtype": "error_max_turns"}
+
+        with pytest.raises(InvalidHarnessOutputError, match="error_max_turns"):
+            HarnessOutput.from_dict(envelope)
+
+    def test_one_without_structured_output_and_without_any_cause_field_does_not_invent_one(self) -> None:
+        cause_fields = ("is_error", "subtype", "stop_reason", "terminal_reason")
+        envelope = {
+            key: value
+            for key, value in HarnessEnvelopeMother.without("structured_output").items()
+            if key not in cause_fields
+        }
+
+        with pytest.raises(InvalidHarnessOutputError) as rejection:
+            HarnessOutput.from_dict(envelope)
+
+        assert "session ended" not in str(rejection.value)
+
 
 class TestWhatTheHarnessMeasured:
     @pytest.mark.parametrize("recorded", HarnessEnvelopeMother.ALL_RECORDED)
