@@ -404,20 +404,33 @@ mientras fue el flujo que conducia una slice, nunca dejo de vivir en tu sesion.
 
 ## Instalacion
 
-**Este repo es la fuente de verdad de lo que sigue vivo aqui.** La skill de autoria vive en este
-repo; `~/.claude/skills/` apunta por symlink, asi que se edita versionada y sigue activa en Claude
-Code. Es un directorio **de usuario**, no de proyecto: vale en cualquier repo donde invoques
-`slice-spec`.
+**Este repo es la fuente de verdad de lo que sigue vivo aqui**, y el entregable son **dos mitades que
+se instalan distinto**: el programa es una rueda de Python y las skills son ficheros que Claude Code
+lee de su directorio de configuracion. Un solo comando monta las dos:
 
 ```bash
-ln -s "$PWD/skills/slice-spec" ~/.claude/skills/slice-spec
-ln -s "$PWD/skills/deploy-watch" ~/.claude/skills/deploy-watch
+make install
 ```
 
-Conducir una slice con el programa (`uv run slice-runner run`, ver "El paso que ya es un programa") no
-instala nada por symlink: basta con estar en este repo. **Y la rama en la que estas decide que codigo
-corre**: `uv run slice-runner run` es el entrypoint de `src/slice_runner/`, asi que ejecutas el programa
-tal como esta en la rama donde estes parado, no en `origin/master` ni en ninguna otra.
+Instalar solo una deja un entorno que parece listo y no lo esta: sin `slice-spec` no hay issue que
+conducir, y sin `deploy-watch` la llamada que el programa encadena al mergear se gasta sin hacer nada.
+
+Lo que hace, y por que asi:
+
+- **`make install-program`** — `uv tool install .`, que deja `slice-runner` en el PATH. Con el ahi no
+  hace falta saber donde vive el checkout para conducir una slice de otro repo.
+- **`make install-skills`** — los symlinks de `slice-spec` y `deploy-watch` bajo el directorio de
+  configuracion de Claude Code (`CLAUDE_CONFIG_DIR` si esta puesto, `~/.claude` si no). Symlinks y no
+  copias: se editan versionadas y siguen activas al instante, sin nada que resincronizar. Es un
+  directorio **de usuario**, no de proyecto, asi que valen en cualquier repo donde invoques
+  `slice-spec`. Y **si un symlink ya existe apuntando a otro sitio, el target lo dice y para** en vez
+  de pisarlo: el caso real es el de `slice-runner`, que apunta a `agentic-skills-legacy` a proposito.
+
+El symlink tiene una consecuencia que conviene saber: **la rama en la que estas decide que codigo
+corre**. Si sondeas un cambio de una skill desde una rama creada en `origin/master`, corres el de
+`origin` y nada avisa. Lo mismo pasa con el programa si lo lanzas con `uv run slice-runner` desde este
+repo en vez de con el ejecutable instalado -es util mientras lo desarrollas, y una trampa si solo lo
+usas-.
 
 El flujo anterior -la skill `/slice-runner` orquestando a mano dos subagentes definidos
 (slice-implementer y slice-verifier)- ya no vive en este repo: esta congelado en
@@ -432,10 +445,6 @@ Los dos agentes se retiraron de **este** repo: el programa no los usaba, y quien
 skill anterior, que ya no vive aqui. Su metodologia y su rubrica viven hoy en el programa
 (`src/slice_runner/infrastructure/slice_implementer_brief.py` y `slice_verifier_judge.py`, ver
 `docs/conventions/infrastructure.md`).
-
-Otra consecuencia del symlink: **la rama en la que estas decide que codigo corre**, tambien para las
-skills. Si sondeas un cambio de los scripts desde una rama creada en `origin/master`, corres los de
-`origin` y nada avisa.
 
 ## Principios comunes
 

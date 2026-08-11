@@ -1,0 +1,81 @@
+"""What `make install-skills` leaves behind, run against a throwaway configuration directory.
+
+The deliverable is two halves that install differently: the program is a Python wheel and the skills
+are files Claude Code reads from its configuration directory. Only this half can be measured -- the
+other one (`install-program`) writes into the machine's environment and does not fit in a suite -- so
+`install` is split into two targets and this file covers the one that can be.
+
+The target is driven with `CLAUDE_HOME=<path>` on the command line rather than the environment
+variable it defaults from, because the port that launches processes here carries a cap and takes no
+environment.
+"""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+import pytest
+from conftest import _ROOT
+
+from slice_runner.tests.real_process import Real
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+    from slice_runner.infrastructure.process import ProcessOutput
+
+_SKILLS = ("slice-spec", "deploy-watch")
+
+
+def _install_skills(home: Path) -> ProcessOutput:
+    """Run the target that only touches the configuration directory, pointed at `home`."""
+    return Real.process().run(["make", "install-skills", f"CLAUDE_HOME={home}"], stdin="", cwd=str(_ROOT))
+
+
+@pytest.mark.integration
+def test_installing_the_skills_points_both_of_them_at_this_checkout(tmp_path: Path) -> None:
+    """Both skills land, and they land as links to the checkout rather than as copies.
+
+    Copies would drift the moment the repo changes, which is the property the symlink exists for:
+    editing the repo changes what Claude Code runs, with nothing to re-sync.
+    """
+    done = _install_skills(tmp_path)
+
+    assert done.code == 0, done.stdout + done.stderr
+    for skill in _SKILLS:
+        link = tmp_path / "skills" / skill
+        assert link.is_symlink(), f"{skill} landed as a copy, so editing the repo stops changing what runs"
+        assert link.readlink() == _ROOT / "skills" / skill
+
+
+@pytest.mark.integration
+def test_installing_the_skills_twice_leaves_the_same_links_and_still_succeeds(tmp_path: Path) -> None:
+    """A second run is not an error: an install target that only works once is not an install target."""
+    _install_skills(tmp_path)
+
+    done = _install_skills(tmp_path)
+
+    assert done.code == 0, done.stdout + done.stderr
+    for skill in _SKILLS:
+        assert (tmp_path / "skills" / skill).readlink() == _ROOT / "skills" / skill
+
+
+@pytest.mark.integration
+def test_installing_the_skills_refuses_to_replace_a_link_that_points_somewhere_else(tmp_path: Path) -> None:
+    """An occupied link is left untouched and the target fails, naming where it points.
+
+    The real case is the `slice-runner` skill, whose link points at `agentic-skills-legacy` on
+    purpose: silently repointing it would retire a flow someone still uses, and the person would find
+    out from the behaviour rather than from the installer.
+    """
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    occupied = tmp_path / "skills" / "deploy-watch"
+    occupied.parent.mkdir(parents=True)
+    occupied.symlink_to(elsewhere)
+
+    done = _install_skills(tmp_path)
+
+    assert done.code != 0, "an occupied link has to stop the install instead of being replaced"
+    assert occupied.readlink() == elsewhere
+    assert str(occupied) in done.stdout

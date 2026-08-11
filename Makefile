@@ -5,7 +5,47 @@
 # El toolchain lo gestiona uv (`[dependency-groups] dev` en pyproject.toml); `uv run` lo
 # instala solo la primera vez.
 
-.PHONY: test check-types check-style check-format linting fix-linting check
+.PHONY: install install-program install-skills test check-types check-style check-format linting fix-linting check
+
+# El entregable son dos mitades que se instalan distinto: el programa es una rueda de
+# Python y las skills son ficheros que Claude Code lee de su directorio de configuracion.
+# `install` monta las dos, porque instalar solo una deja un entorno que parece listo y no
+# lo esta: sin `slice-spec` no hay issue que conducir, y sin `deploy-watch` la llamada que
+# el programa encadena al mergear se gasta sin hacer nada.
+#
+# El destino sale de `CLAUDE_CONFIG_DIR` si esta puesto, igual que lo resuelve el programa
+# (`src/slice_runner/infrastructure/claude_config.py`): si este target asumiera `~/.claude`,
+# mentiria en cuanto alguien mueva la configuracion.
+CLAUDE_HOME ?= $(if $(CLAUDE_CONFIG_DIR),$(CLAUDE_CONFIG_DIR),$(HOME)/.claude)
+SKILLS := slice-spec deploy-watch
+
+# Las dos mitades son targets propios porque solo una se puede medir: `install-skills` corre
+# en un `CLAUDE_HOME` de usar y tirar (`make install-skills CLAUDE_HOME=<ruta>`) y lo cubre
+# `tests/test_install.py`; `install-program` escribe en el entorno de la maquina y eso no cabe
+# en la suite, asi que queda declarado sin test en vez de fingido con uno.
+install: install-program install-skills
+
+install-program:
+	uv tool install --force .
+
+# Un symlink ocupado apuntando a otro sitio **no se pisa**: el caso real es el de
+# `slice-runner`, que apunta a `agentic-skills-legacy` a proposito. Se dice y se para.
+install-skills:
+	@mkdir -p "$(CLAUDE_HOME)/skills"
+	@for skill in $(SKILLS); do \
+		link="$(CLAUDE_HOME)/skills/$$skill"; \
+		target="$(CURDIR)/skills/$$skill"; \
+		if [ -L "$$link" ] && [ "$$(readlink "$$link")" = "$$target" ]; then \
+			echo "ya estaba: $$skill"; \
+		elif [ -e "$$link" ] || [ -L "$$link" ]; then \
+			echo "ocupado: $$link"; \
+			echo "  apunta a: $$(readlink "$$link" 2>/dev/null || echo 'un directorio real')"; \
+			echo "  quitalo tu si quieres que apunte a $$target"; \
+			exit 1; \
+		else \
+			ln -s "$$target" "$$link" && echo "instalada: $$skill"; \
+		fi; \
+	done
 
 # `PYTEST_ARGS` deja pasar parametros sin tocar el target, que es lo que pide
 # `backend-best-practices` para las sesiones con agente:
