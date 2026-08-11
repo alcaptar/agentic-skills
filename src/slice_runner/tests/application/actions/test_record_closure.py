@@ -4,9 +4,12 @@ from typing import TYPE_CHECKING
 from unittest.mock import Mock, create_autospec
 
 from slice_runner.application.actions.record_closure import RecordClosure, RecordClosureParams
+from slice_runner.domain.budgets import Budgets
+from slice_runner.domain.diff_stats import DiffStats
 from slice_runner.domain.discard_cause import DiscardCause
 from slice_runner.domain.harness_spend import HarnessSpend
 from slice_runner.domain.metrics_log import MetricsLog
+from slice_runner.domain.role_models import RoleModels
 from slice_runner.domain.run_state import RunState
 from slice_runner.domain.severity import Severity
 from slice_runner.tests.mothers.harness_spend_mother import HarnessSpendMother
@@ -38,6 +41,8 @@ class _Closer:
             "name": _NAME,
             "state": RunState.MERGED,
             "run": RunMother.awaiting_merge(),
+            "budgets": Budgets(),
+            "models": RoleModels(understand="sonnet", implement="sonnet"),
             "spends": (HarnessSpendMother.of_the_implementer_call(),),
             **overrides,
         }
@@ -74,6 +79,53 @@ class TestTheRowItWrites:
         written = closer.close(discard_cause=DiscardCause.INCOHERENT_VERDICT)
 
         assert written.discard_cause is DiscardCause.INCOHERENT_VERDICT
+
+    def test_what_the_implementer_declared_left_out_reaches_the_row(self) -> None:
+        closer = _Closer()
+
+        written = closer.close(debt=("no cubri el caso de un binario",))
+
+        assert written.debt == ("no cubri el caso de un binario",)
+
+    def test_a_run_with_nothing_left_out_writes_an_empty_debt_instead_of_omitting_it(self) -> None:
+        closer = _Closer()
+
+        written = closer.close()
+
+        assert written.debt == ()
+
+    def test_the_size_of_the_diff_measured_at_the_last_verify_reaches_the_row(self) -> None:
+        closer = _Closer()
+        stats = DiffStats(files_changed=3, lines_added=40, lines_deleted=12)
+
+        written = closer.close(diff_stats=stats)
+
+        assert written.diff_stats == stats
+
+    def test_a_closure_with_no_verify_measured_this_invocation_carries_no_diff_stats_instead_of_a_zero_one(
+        self,
+    ) -> None:
+        closer = _Closer()
+
+        written = closer.close()
+
+        assert written.diff_stats is None
+
+    def test_the_budgets_the_run_was_conducted_with_reach_the_row(self) -> None:
+        closer = _Closer()
+        budgets = Budgets(slice_cost_usd=12.5)
+
+        written = closer.close(budgets=budgets)
+
+        assert written.budgets == budgets
+
+    def test_the_model_assigned_to_each_role_reaches_the_row(self) -> None:
+        closer = _Closer()
+        models = RoleModels(understand="haiku", implement="opus")
+
+        written = closer.close(models=models)
+
+        assert written.models == models
 
 
 class TestWhichSpendsCount:

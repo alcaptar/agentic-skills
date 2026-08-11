@@ -28,6 +28,7 @@ from slice_runner.domain.precheck_outcome import PrecheckOutcome
 from slice_runner.domain.pull_request_state import PullRequestState
 from slice_runner.domain.retry_response import RetryResponse
 from slice_runner.domain.retry_response_kind import RetryResponseKind
+from slice_runner.domain.role_models import RoleModels
 from slice_runner.domain.run import Run
 from slice_runner.domain.run_state import RunState
 from slice_runner.domain.step import Step
@@ -41,7 +42,7 @@ from slice_runner.tests.mothers.run_mother import RunMother
 from slice_runner.tests.mothers.select_slice_result_mother import SelectSliceResultMother
 from slice_runner.tests.mothers.sub_issue_mother import SubIssueMother
 from slice_runner.tests.mothers.verdict_mother import FindingMother, VerdictMother
-from slice_runner.tests.mothers.verification_mother import VerificationMother
+from slice_runner.tests.mothers.verification_mother import SliceDiffMother, VerificationMother
 
 _RETRY_INSTRUCTION = "el control ya esta arreglado a mano"
 
@@ -460,8 +461,8 @@ class TestConductSliceRespondingToAlignmentWithAMismatchedLabel:
 
 class TestConductSliceClosingAMergeMissedBetweenInvocations:
     @staticmethod
-    def _conductor(*, dangling: tuple[SubIssue, ...]) -> Conductor:
-        return Conductor(chosen=SelectSliceResultMother.about_to_start(dangling=dangling))
+    def _conductor(*, dangling: tuple[SubIssue, ...], models: RoleModels | None = None) -> Conductor:
+        return Conductor(chosen=SelectSliceResultMother.about_to_start(dangling=dangling), models=models)
 
     def test_a_dangling_subissue_whose_pull_request_merged_writes_its_durable_row_as_merged(self) -> None:
         dangling = SubIssueMother.dangling()
@@ -477,6 +478,18 @@ class TestConductSliceClosingAMergeMissedBetweenInvocations:
             RunState.MERGED,
             dangling.run,
         )
+
+    def test_a_dangling_subissue_whose_pull_request_merged_writes_the_budgets_and_models_this_invocation_ran_with(
+        self,
+    ) -> None:
+        dangling = SubIssueMother.dangling()
+        models = RoleModels(understand="opus", implement="opus")
+        conductor = self._conductor(dangling=(dangling,), models=models)
+
+        conductor.conduct()
+
+        recorded = conductor.metrics.record.call_args_list[0].args[0]
+        assert (recorded.budgets, recorded.models) == (conductor.budgets, models)
 
     def test_a_dangling_subissue_whose_pull_request_merged_drops_the_label_it_still_carried(self) -> None:
         dangling = SubIssueMother.dangling()
@@ -835,6 +848,36 @@ class TestConductSliceOnTheHappyPath:
             HarnessSpendMother.of_the_implementer_call(),
             HarnessSpendMother.of_the_judge_call(),
         )
+
+    def test_the_durable_row_carries_the_budgets_and_the_models_this_invocation_ran_with(self) -> None:
+        models = RoleModels(understand="opus", implement="opus")
+        conductor = Conductor(
+            chosen=SelectSliceResultMother.resumed_at(RunMother.implementing()),
+            budgets=Budgets(slice_cost_usd=99.0),
+            models=models,
+        )
+
+        conductor.conduct()
+
+        recorded = self._recorded(conductor.metrics)
+        assert (recorded.budgets, recorded.models) == (conductor.budgets, models)
+
+    def test_the_durable_row_carries_how_much_the_verified_diff_changed(self) -> None:
+        conductor = self._conductor()
+
+        conductor.conduct()
+
+        recorded = self._recorded(conductor.metrics)
+        assert recorded.diff_stats == SliceDiffMother.STATS
+
+    def test_the_durable_row_carries_what_the_implementer_declared_left_out_as_debt(self) -> None:
+        conductor = self._conductor()
+        conductor.implement.execute.return_value = ImplementationMother.with_debt()
+
+        conductor.conduct()
+
+        recorded = self._recorded(conductor.metrics)
+        assert recorded.debt == ImplementationMother.with_debt().left_out
 
     def test_the_verification_asked_for_carries_the_subissue_number_and_not_the_parent_issue(self) -> None:
         conductor = self._conductor()

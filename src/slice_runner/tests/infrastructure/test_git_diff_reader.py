@@ -40,6 +40,33 @@ class TestWhatItReads:
 
         assert read.files == ("mod.py",)
 
+    def test_the_stats_count_the_one_file_touched_and_its_added_and_deleted_lines(self, tmp_path: Path) -> None:
+        repo = RepoMother.with_the_slice_staged(tmp_path)
+
+        read = self._reader().read(repo=str(repo), base=Git.BASE_BRANCH)
+
+        assert (read.stats.files_changed, read.stats.lines_added, read.stats.lines_deleted) == (1, 1, 1)
+
+    def test_a_second_file_staged_is_counted_into_the_same_stats(self, tmp_path: Path) -> None:
+        repo = RepoMother.with_the_slice_staged(tmp_path)
+        (repo / "other.py").write_text("def g() -> int:\n    return 3\n", encoding="utf-8")
+        Git.run(repo, "add", "other.py")
+
+        read = self._reader().read(repo=str(repo), base=Git.BASE_BRANCH)
+
+        assert (read.stats.files_changed, read.stats.lines_added, read.stats.lines_deleted) == (2, 3, 1)
+
+    def test_a_binary_file_staged_is_counted_as_a_file_changed_with_no_lines_because_git_reports_none(
+        self, tmp_path: Path
+    ) -> None:
+        repo = RepoMother.with_the_slice_staged(tmp_path)
+        (repo / "asset.png").write_bytes(b"\x89PNG\r\n\x1a\n\x00")
+        Git.run(repo, "add", "asset.png")
+
+        read = self._reader().read(repo=str(repo), base=Git.BASE_BRANCH)
+
+        assert (read.stats.files_changed, read.stats.lines_added, read.stats.lines_deleted) == (2, 1, 1)
+
     @staticmethod
     def _reader() -> GitDiffReader:
         return GitDiffReader(process=Real.process())
