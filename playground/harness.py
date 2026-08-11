@@ -56,15 +56,24 @@ class Task:
     def tools(self) -> list[str]:
         return getattr(self.module, "TOOLS", ["Read", "Write", "Edit", "Glob", "Grep"])
 
+    @property
+    def correction(self) -> Callable[[Path], str] | None:
+        return getattr(self.module, "CORRECTION", None)
+
+    @property
+    def resumes(self) -> frozenset[str]:
+        return frozenset(getattr(self.module, "RESUMES", ()))
+
     def measure(self, tree: Path) -> dict[str, bool | None]:
         return self.module.measure(tree)
 
 
 class Runner:
-    def __init__(self, *, task: Task, label: str) -> None:
+    def __init__(self, *, task: Task, label: str, model: str | None = None) -> None:
         self.task = task
         self.workspace = RUNS / label
         self.results = self.workspace / "results.jsonl"
+        self.model = model or task.model
 
     def prepare(self, cell: Cell) -> Path:
         tree = self.workspace / cell.name
@@ -74,12 +83,12 @@ class Runner:
 
         return tree
 
-    def invoke(self, *, tree: Path, prompt: str) -> dict[str, Any]:
+    def invoke(self, *, tree: Path, prompt: str, resume: str | None = None) -> dict[str, Any]:
         argv = [
             "claude",
             "-p",
             "--model",
-            self.task.model,
+            self.model,
             "--output-format",
             "json",
             "--permission-mode",
@@ -87,6 +96,7 @@ class Runner:
             "--tools",
             ",".join(self.task.tools),
             "--strict-mcp-config",
+            *(["--resume", resume] if resume else []),
         ]
         started = time.monotonic()
         try:
@@ -115,6 +125,7 @@ class Runner:
             "cost_usd": envelope.get("total_cost_usd"),
             "turns": envelope.get("num_turns"),
             "usage": envelope.get("usage"),
+            "session_id": envelope.get("session_id"),
             "seconds": elapsed,
         }
 
@@ -131,10 +142,29 @@ class Runner:
             "prompt_chars": len(prompt),
             **call,
         }
-        if "failed" not in call:
+        if "failed" in call:
+            return row
+
+        correction = self.task.correction
+        if correction is None:
             row["rules"] = self.task.measure(tree)
 
+            return row
+
+        row["rules_before_the_correction"] = self.task.measure(tree)
+        row["second"] = self._corrected(cell, tree=tree, correction=correction(tree), after=call)
+        row["rules"] = self.task.measure(tree)
+
         return row
+
+    def _corrected(self, cell: Cell, *, tree: Path, correction: str, after: dict[str, Any]) -> dict[str, Any]:
+        resume = after.get("session_id") if cell.variant in self.task.resumes else None
+        if cell.variant in self.task.resumes and not resume:
+            return {"failed": "sin sesion que reanudar"}
+
+        (tree / ".prompt-2.txt").write_text(correction, encoding="utf-8")
+
+        return {"resumed": bool(resume), **self.invoke(tree=tree, prompt=correction, resume=resume)}
 
 
 class Report:
@@ -188,10 +218,11 @@ class Main:
         parser.add_argument("--repetitions", type=int, default=5)
         parser.add_argument("--workers", type=int, default=6)
         parser.add_argument("--report-only", action="store_true")
+        parser.add_argument("--model", help="sustituye el modelo que declara la tarea, para compararlos")
         args = parser.parse_args()
 
         task = Task(args.task)
-        runner = Runner(task=task, label=args.label)
+        runner = Runner(task=task, label=args.label, model=args.model)
 
         if args.report_only:
             rows = [json.loads(line) for line in runner.results.read_text(encoding="utf-8").splitlines() if line]

@@ -287,6 +287,39 @@ razones: quien indulta es una persona y necesita ver lo que indulta, y el corpus
 ambiguedad cuando sus filas digan de que run vienen, que es trabajo que va por detras. El corpus se queda
 en lo que es hoy, material de medicion agregada.
 
+### Donde se va el dinero de un run, medido (2026-08-11)
+
+Sobre 122 sesiones y 342 $ de gasto acumulado, uniendo el rastro de llamadas con el de gasto por sesion:
+
+| paso | % del gasto | $/llamada | turnos/llamada |
+|---|---|---|---|
+| implementar | 68 | 4,49 | 66 |
+| verificar | 21 | 1,91 | 26 |
+| entender | 11 | 1,17 | 30 |
+
+Lo que descoloca es la descomposicion de esa llamada de implementacion: **el 65% es lectura de cache**
+-9,7 millones de tokens releidos a lo largo de sus 66 turnos- y **la salida es el 6%**. No se paga por
+lo que el modelo escribe, se paga por el contexto que arrastra.
+
+Y el dato que decide donde mirar: comparando la primera llamada de implementacion de cada slice con las
+siguientes, **cuestan casi lo mismo** (4,70 $ y 10,2 M de lectura frente a 4,38 $ y 9,5 M). Una vuelta de
+correccion **redescubre el repo entero**: repite los mismos listados y las mismas lecturas que una
+llamada anterior de la misma slice hizo minutos antes. Como dos de cada tres llamadas de implementacion
+son segundas o posteriores, ahi se va **el grueso de lo que cuesta implementar**.
+
+De ahi salen tres candidatos, y el orden por premio no coincide con el orden por esfuerzo: reanudar la
+sesion del arnes entre vueltas -el identificador ya se guarda en el rastro desde siempre y nunca se ha
+usado-, bajar de modelo al que produce -coherente con que su trabajo lo revise otro-, e inyectar las
+convenciones en vez de apuntarlas. El tercero **no se aplica por ahora**: lo que se midio inyectaba un
+documento, y la vara real son decenas de miles de tokens repartidos en varios ficheros, o sea fuera del
+rango medido. Los otros dos se miden en el playground antes de tocar nada.
+
+**El riesgo de reanudar no es el que parecia.** La objecion inicial -que la sesion vieja contamine con
+decisiones previas- se cambia por una mas concreta y medible: un implementador reanudado **defiende su
+propio diseno** cuando el hallazgo contradice lo que eligio, porque lleva decenas de turnos invertidos en
+que estaba bien. La tarea `implementer-resume` lo mide con dos hallazgos a la vez, uno que anade trabajo
+-donde reanudar deberia ganar- y otro que revierte una decision suya -donde deberia perder-.
+
 ## deploy-watch
 
 ### Decisiones clave
