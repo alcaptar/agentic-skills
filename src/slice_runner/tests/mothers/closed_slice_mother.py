@@ -10,6 +10,7 @@ from slice_runner.tests.mothers.harness_spend_mother import HarnessSpendMother
 from slice_runner.tests.mothers.run_mother import RunMother
 
 if TYPE_CHECKING:
+    from slice_runner.domain.ci_indeterminate_cause import CiIndeterminateCause
     from slice_runner.domain.diff_stats import DiffStats
     from slice_runner.domain.discard_cause import DiscardCause
     from slice_runner.domain.finding import Finding
@@ -62,6 +63,10 @@ class ClosedSliceMother:
         return cls._closed(RunState.MERGED, run=RunMother.that_went_back_for_every_reason(), discard_cause=cause)
 
     @classmethod
+    def blocked_indeterminate_because_of(cls, cause: CiIndeterminateCause | None) -> ClosedSlice:
+        return cls._closed(RunState.BLOCKED_CI_INDETERMINATE, ci_indeterminate_cause=cause)
+
+    @classmethod
     def merged_leaving_out(cls, *debt: str) -> ClosedSlice:
         return cls._closed(RunState.MERGED, debt=debt)
 
@@ -85,6 +90,7 @@ class ClosedSliceMother:
         findings: tuple[Finding, ...] = (),
         findings_of_the_last_round: tuple[Finding, ...] | None = None,
         discard_cause: DiscardCause | None = None,
+        ci_indeterminate_cause: CiIndeterminateCause | None = None,
         debt: tuple[str, ...] = (),
         diff_stats: DiffStats | None = None,
     ) -> ClosedSlice:
@@ -101,6 +107,7 @@ class ClosedSliceMother:
             findings=findings,
             findings_of_the_last_round=findings if findings_of_the_last_round is None else findings_of_the_last_round,
             discard_cause=discard_cause,
+            ci_indeterminate_cause=ci_indeterminate_cause,
             debt=debt,
             diff_stats=diff_stats,
         )

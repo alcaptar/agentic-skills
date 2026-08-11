@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from slice_runner.domain.step import Step
+    from slice_runner.domain.unrecorded_conversation_cause import UnrecordedConversationCause
 
 
 @dataclass(frozen=True, kw_only=True, slots=True)
@@ -23,6 +24,17 @@ class HarnessCallToolUse:
     uses: tuple[ToolUse, ...]
 
 
+@dataclass(frozen=True, kw_only=True, slots=True)
+class UnrecordedCallToolUse:
+    slice_id: str
+    step: Step
+    session: str
+    cause: UnrecordedConversationCause
+
+
 class ToolUseLog(ABC):
     @abstractmethod
     def record(self, call: HarnessCallToolUse) -> None: ...
+
+    @abstractmethod
+    def record_unrecorded(self, call: UnrecordedCallToolUse) -> None: ...

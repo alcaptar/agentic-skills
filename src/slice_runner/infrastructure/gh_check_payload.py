@@ -2,11 +2,8 @@ from __future__ import annotations
 
 from typing import Self
 
+from slice_runner.domain.exceptions import UnreadableCiError
 from slice_runner.infrastructure.contract_model import ContractModel
-
-
-class UnreadableCiError(ValueError):
-    pass
 
 
 class GhCheckPayload(ContractModel):

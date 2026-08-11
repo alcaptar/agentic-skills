@@ -37,6 +37,7 @@ def _fila(**kw: Any) -> Fila:
         "duracion_ms": None,
         "tokens_cache": None,
         "descartes_verify_causa": None,
+        "ci_indeterminada_causa": None,
         "modelos": (),
         "variante": None,
     }

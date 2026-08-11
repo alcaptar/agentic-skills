@@ -5,7 +5,8 @@ from typing import TYPE_CHECKING, ClassVar
 
 from slice_runner.domain.ci import Ci
 from slice_runner.domain.ci_status import CiStatus
-from slice_runner.infrastructure.gh_check_payload import GhCheckPayload, UnreadableCiError
+from slice_runner.domain.exceptions import CiCommandFailedError, UnreadableCiError
+from slice_runner.infrastructure.gh_check_payload import GhCheckPayload
 
 if TYPE_CHECKING:
     from slice_runner.infrastructure.process import Process
@@ -24,13 +25,10 @@ class GhCi(Ci):
     def status(self, *, repo: str, pull_request: int) -> CiStatus:
         argv = ["gh", "pr", "checks", str(pull_request), "--repo", repo, "--json", "name,bucket"]
         output = self._process.run(argv, stdin="")
+        if output.code != 0 and output.stderr:
+            raise CiCommandFailedError(f"gh pr checks failed for {repo}#{pull_request}: {output.stderr.strip()}")
 
-        try:
-            checks = self._checks(output.stdout)
-        except UnreadableCiError:
-            return CiStatus.UNKNOWN
-
-        return self._classified(checks)
+        return self._classified(self._checks(output.stdout))
 
     @classmethod
     def _checks(cls, stdout: str) -> list[GhCheckPayload]:

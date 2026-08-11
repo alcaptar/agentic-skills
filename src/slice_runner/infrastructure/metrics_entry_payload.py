@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, ClassVar, Self
 
 from pydantic import Field
 
+from slice_runner.domain.ci_indeterminate_cause import CiIndeterminateCause
 from slice_runner.domain.discard_cause import DiscardCause
 from slice_runner.domain.exceptions import RunNotClosedError
 from slice_runner.domain.run_state import RunState
@@ -44,6 +45,19 @@ class DurableDiscardCause(StrEnum):
                 return cls.INCOHERENT_VERDICT
             case DiscardCause.FAILED_CALL:
                 return cls.FAILED_CALL
+
+
+class DurableCiIndeterminateCause(StrEnum):
+    COMMAND_FAILED = "comando-fallido"
+    UNREADABLE_RESPONSE = "respuesta-no-legible"
+
+    @classmethod
+    def of(cls, cause: CiIndeterminateCause) -> DurableCiIndeterminateCause:
+        match cause:
+            case CiIndeterminateCause.COMMAND_FAILED:
+                return cls.COMMAND_FAILED
+            case CiIndeterminateCause.UNREADABLE_RESPONSE:
+                return cls.UNREADABLE_RESPONSE
 
 
 @dataclass(frozen=True, kw_only=True, slots=True)
@@ -132,6 +146,7 @@ class MetricsEntryPayload(ContractModel):
     verify_discards: int = Field(alias="descartes_verify")
     harness: HarnessMeasurementPayload | None = None
     discard_cause: DurableDiscardCause | None = Field(alias="descartes_verify_causa", default=None)
+    ci_indeterminate_cause: DurableCiIndeterminateCause | None = Field(alias="ci_indeterminada_causa", default=None)
     models: list[str] | None = Field(alias="modelos", default=None)
     variant: str = Field(alias="variante")
     debt: int = Field(alias="deuda")
@@ -167,6 +182,9 @@ class MetricsEntryPayload(ContractModel):
                 "harness": HarnessMeasurementPayload.from_domain(spend) if spend.measured else None,
                 "descartes_verify_causa": DurableDiscardCause.of(closed.discard_cause)
                 if closed.discard_cause
+                else None,
+                "ci_indeterminada_causa": DurableCiIndeterminateCause.of(closed.ci_indeterminate_cause)
+                if closed.ci_indeterminate_cause
                 else None,
                 "modelos": list(spend.models) or None,
                 "variante": cls.VARIANT,

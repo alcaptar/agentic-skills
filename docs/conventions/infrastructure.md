@@ -267,19 +267,34 @@ importar**: un smoke que solo importe el modulo lo da por bueno. Lo evita
   quedaba dos veces para divergir-. Dos decisiones sobre `GhCi` que no son deriva, y estan escritas aqui
   para que no se "arreglen" hacia el lado facil mas adelante:
 
-  1. **El codigo de salida de `gh pr checks` no se usa: se clasifica el `stdout`.** `gh` sale distinto de cero
-     con checks en rojo, con checks pendientes y con una pull request que no existe, asi que el codigo no
-     distingue "rojo" de "todavia no" de "no consta". El bullet de arriba dice que un codigo distinto de cero
-     es un dato; aqui es un dato que **no dice nada**, y el unico que decide es la salida.
-  2. **Un `ValidationError` cae en `CiStatus.UNKNOWN` en vez de en una excepcion**, al contrario que la regla
-     general de la capa. Vale **porque el vocabulario del puerto ya tiene el miembro que significa "no se pudo
-     medir"**: lanzar seria inventar un segundo camino para lo que `UNKNOWN` ya dice, y quien conduce el run
-     tendria que traducirlo de vuelta a ese mismo miembro. Justo por eso **no es permiso general para tragarse
-     validaciones**: donde el vocabulario no cubra "no consta", un `ValidationError` se sigue traduciendo a la
-     excepcion del dominio. Y no relaja nada, porque `UNKNOWN` es fail-closed: una respuesta que no se lee -no
-     es JSON, no es un array, o trae una clave que no pedimos- es `UNKNOWN` y **jamas** "todavia no hay
-     checks", que es el fallo que colgo un smoke real durante cuatro minutos con la integracion continua ya
-     verde.
+  1. **El codigo de salida de `gh pr checks` no se usa para clasificar: se clasifica el `stdout`.** `gh` sale
+     distinto de cero con checks en rojo, con checks pendientes y con una pull request que no existe, asi que
+     el codigo no distingue "rojo" de "todavia no" de "no consta" **por si solo**. El bullet de arriba dice
+     que un codigo distinto de cero es un dato; aqui, sin mas, es un dato que no dice nada, y el unico que
+     decide la clasificacion es la salida. La unica lectura que si usa el codigo es la siguiente, y solo
+     cuando viene acompanado de `stderr`.
+  2. **Un codigo distinto de cero con `stderr` no vacio es el propio comando fallando, y se distingue de una
+     respuesta que si llego pero no se pudo interpretar.** Antes de tocar `stdout`, `GhCi.status` comprueba
+     `code != 0 and stderr`: eso es lo unico que un `gh pr checks` que muere de verdad -credenciales, red, una
+     pull request que no resuelve- deja distinto de un rojo o un pendiente legitimos, que tambien salen con
+     codigo distinto de cero pero **sin** nada en `stderr` porque no son un fallo. Detectado, `GhCi` lanza
+     `CiCommandFailedError` con ese `stderr` como motivo, en vez de intentar interpretar un `stdout` que en
+     ese camino esta vacio. Si el `stdout` no se puede leer -no es JSON, no es un array, un item no es un
+     objeto, o trae una clave que no pedimos-, `GhCheckPayload`/`GhCi` lanzan `UnreadableCiError` con el
+     motivo en el mensaje.
+
+     Las dos son excepciones del **dominio** (no de esta capa: `ConductSlice._asking_the_ci` las captura, asi
+     que tienen que vivir donde aplicacion pueda importarlas), y las dos las traduce
+     `CiIndeterminateCause.of_the_failure` al miembro que dice cual de las dos fue -`COMMAND_FAILED` o
+     `UNREADABLE_RESPONSE`-, que viaja hasta `ClosedSlice` exactamente como `DiscardCause` viaja desde un
+     `MeasuredCallError` (ver `docs/conventions/domain.md`). **Este no es permiso general para propagar
+     cualquier fallo de lectura**: el vocabulario de `CiStatus` sigue teniendo `NO_CHECKS` y `UNKNOWN` para lo
+     que se clasifica sin ambiguedad y sin excepcion -un bucket que el programa no conoce, o ningun check
+     reportado todavia-, y esos dos siguen sin motivo porque no son un fallo, son una lectura valida. Solo las
+     dos causas de arriba -el comando no corrio, la respuesta no se entendio- se convirtieron de un `UNKNOWN`
+     mudo a una excepcion con motivo, y `ConductSlice` las captura para seguir produciendo
+     `Outcome.INDETERMINATE`: la clasificacion que ve `StateMachine` **no cambia**, solo gana un porque que
+     antes se perdia en el `except UnreadableCiError: return CiStatus.UNKNOWN` que las fundia a las dos.
 - **`GhForum` reutiliza `GhCommandFailedError` de `gh_run_repository.py`** para un exit distinto de cero de
   `gh pr list`, en vez de declarar su propia excepcion: es el mismo fallo -un comando de `gh` que sale
   mal- y vive donde lo necesito el primer adaptador que lo tuvo. Su casa natural es un modulo de

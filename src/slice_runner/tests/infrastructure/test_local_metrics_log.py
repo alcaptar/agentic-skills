@@ -9,6 +9,7 @@ from unittest.mock import Mock, create_autospec
 import pytest
 
 from slice_runner.domain.budgets import Budgets
+from slice_runner.domain.ci_indeterminate_cause import CiIndeterminateCause
 from slice_runner.domain.clock import Clock
 from slice_runner.domain.diff_stats import DiffStats
 from slice_runner.domain.discard_cause import DiscardCause
@@ -339,6 +340,31 @@ class TestWhyTheJudgeWasReinvoked(WithTheLedgerOutOfTheRealHome):
         row = WrittenMetricsLog.row_under(tmp_path)
         assert "descartes_verify" in row
         assert "descartes_verify_causa" not in row
+
+
+class TestWhyTheCiCouldNotBeRead(WithTheLedgerOutOfTheRealHome):
+    def test_the_command_itself_failing_is_recorded_with_its_own_cause(self, tmp_path: Path) -> None:
+        LocalMetricsLog(clock=self.frozen_at()).record(
+            ClosedSliceMother.blocked_indeterminate_because_of(CiIndeterminateCause.COMMAND_FAILED)
+        )
+
+        assert WrittenMetricsLog.row_under(tmp_path)["ci_indeterminada_causa"] == "comando-fallido"
+
+    def test_an_unreadable_response_is_recorded_as_a_different_cause_than_a_failed_command(
+        self, tmp_path: Path
+    ) -> None:
+        LocalMetricsLog(clock=self.frozen_at()).record(
+            ClosedSliceMother.blocked_indeterminate_because_of(CiIndeterminateCause.UNREADABLE_RESPONSE)
+        )
+
+        assert WrittenMetricsLog.row_under(tmp_path)["ci_indeterminada_causa"] == "respuesta-no-legible"
+
+    def test_without_a_cause_only_the_ci_field_travels_because_none_is_invented(self, tmp_path: Path) -> None:
+        LocalMetricsLog(clock=self.frozen_at()).record(ClosedSliceMother.blocked_indeterminate_because_of(None))
+
+        row = WrittenMetricsLog.row_under(tmp_path)
+        assert row["ci"] == "none"
+        assert "ci_indeterminada_causa" not in row
 
 
 class TestTheLedgerOnlyGrows(WithTheLedgerOutOfTheRealHome):

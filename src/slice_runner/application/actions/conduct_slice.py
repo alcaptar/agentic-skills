@@ -15,14 +15,17 @@ from slice_runner.application.queries.run_prechecks import RunPrechecksParams
 from slice_runner.application.queries.select_slice import SelectSliceParams
 from slice_runner.domain.alignment import Alignment
 from slice_runner.domain.alignment_response_kind import AlignmentResponseKind
+from slice_runner.domain.ci_indeterminate_cause import CiIndeterminateCause
 from slice_runner.domain.control_status import ControlStatus
 from slice_runner.domain.discard_cause import DiscardCause
 from slice_runner.domain.exceptions import (
+    CiCommandFailedError,
     DirtyIndexError,
     MeasuredCallError,
     MissingBranchError,
     NoPullRequestError,
     NoSliceLeftError,
+    UnreadableCiError,
 )
 from slice_runner.domain.halt import Halt
 from slice_runner.domain.harness_spend import HarnessSpend
@@ -109,6 +112,7 @@ class ConductSliceProgress:
     pull_request: int | None = None
     waited_seconds: int = 0
     discard_cause: DiscardCause | None = None
+    ci_indeterminate_cause: CiIndeterminateCause | None = None
     diff_stats: DiffStats | None = None
 
     @property
@@ -515,9 +519,15 @@ class ConductSlice:
 
     def _asking_the_ci(self, progress: ConductSliceProgress) -> SteppedSlice:
         opened = self._pull_request_of(progress)
-        status = self._ci.status(repo=progress.params.repo, pull_request=opened)
+        asked = replace(progress, pull_request=opened)
+        try:
+            status = self._ci.status(repo=progress.params.repo, pull_request=opened)
+        except (CiCommandFailedError, UnreadableCiError) as unreadable:
+            cause = CiIndeterminateCause.of_the_failure(unreadable)
 
-        return SteppedSlice(progress=replace(progress, pull_request=opened), outcome=Outcome.of_the_ci(status))
+            return SteppedSlice(progress=replace(asked, ci_indeterminate_cause=cause), outcome=Outcome.INDETERMINATE)
+
+        return SteppedSlice(progress=asked, outcome=Outcome.of_the_ci(status))
 
     def _asking_for_the_merge(self, progress: ConductSliceProgress) -> SteppedSlice | HaltedSlice:
         opened = self._pull_request_of(progress)
@@ -612,6 +622,7 @@ class ConductSlice:
                 findings=progress.findings_of_every_round,
                 findings_of_the_last_round=progress.findings_of_the_last_round,
                 discard_cause=progress.discard_cause,
+                ci_indeterminate_cause=progress.ci_indeterminate_cause,
                 debt=progress.debt,
                 diff_stats=progress.diff_stats,
             )

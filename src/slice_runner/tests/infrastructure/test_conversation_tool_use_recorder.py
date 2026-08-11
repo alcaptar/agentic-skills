@@ -61,6 +61,18 @@ class TestARecordedConversation(WithTheToolUseLogOutOfTheRealHome):
         ]
 
 
+class WrittenUnrecordedToolUses:
+    LEDGER: tuple[str, ...] = ("slice-runner", "trace", "unrecorded-tool-uses.jsonl")
+
+    @classmethod
+    def records_under(cls, root: Path) -> list[dict[str, object]]:
+        ledger = root.joinpath(*cls.LEDGER)
+        if not ledger.exists():
+            return []
+
+        return [json.loads(line) for line in ledger.read_text(encoding="utf-8").splitlines()]
+
+
 class TestATranscriptThatCannotBeRead(WithTheToolUseLogOutOfTheRealHome):
     def test_a_session_never_recorded_leaves_the_run_going_instead_of_raising(self, tmp_path: Path) -> None:
         recorder = ConversationToolUseRecorder(conversations=LocalConversationLog(), tool_use_log=LocalToolUseLog())
@@ -68,6 +80,20 @@ class TestATranscriptThatCannotBeRead(WithTheToolUseLogOutOfTheRealHome):
         recorder.record_after(slice_id=_SLICE_ID, step=Step.IMPLEMENT, session="never-recorded", repo=_REPO)
 
         assert WrittenToolUses.records_under(tmp_path) == []
+
+    def test_a_session_never_recorded_is_not_abandoned_in_silence_but_says_so(self, tmp_path: Path) -> None:
+        recorder = ConversationToolUseRecorder(conversations=LocalConversationLog(), tool_use_log=LocalToolUseLog())
+
+        recorder.record_after(slice_id=_SLICE_ID, step=Step.IMPLEMENT, session="never-recorded", repo=_REPO)
+
+        assert WrittenUnrecordedToolUses.records_under(tmp_path) == [
+            {
+                "slice_id": _SLICE_ID,
+                "step": "implement",
+                "session": "never-recorded",
+                "cause": "not-found",
+            }
+        ]
 
     def test_a_corrupted_transcript_leaves_the_run_going_instead_of_raising(self, tmp_path: Path) -> None:
         session = "broken-session"
@@ -80,3 +106,24 @@ class TestATranscriptThatCannotBeRead(WithTheToolUseLogOutOfTheRealHome):
         recorder.record_after(slice_id=_SLICE_ID, step=Step.IMPLEMENT, session=session, repo=_REPO)
 
         assert WrittenToolUses.records_under(tmp_path) == []
+
+    def test_a_corrupted_transcript_is_not_abandoned_in_silence_but_says_a_different_cause(
+        self, tmp_path: Path
+    ) -> None:
+        session = "broken-session"
+        encoded = _REPO.rstrip("/").replace("/", "-")
+        destination = tmp_path / "projects" / encoded / f"{session}.jsonl"
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_text("not json at all\n", encoding="utf-8")
+        recorder = ConversationToolUseRecorder(conversations=LocalConversationLog(), tool_use_log=LocalToolUseLog())
+
+        recorder.record_after(slice_id=_SLICE_ID, step=Step.IMPLEMENT, session=session, repo=_REPO)
+
+        assert WrittenUnrecordedToolUses.records_under(tmp_path) == [
+            {
+                "slice_id": _SLICE_ID,
+                "step": "implement",
+                "session": session,
+                "cause": "unreadable",
+            }
+        ]

@@ -12,15 +12,18 @@ from slice_runner.domain.alignment import Alignment
 from slice_runner.domain.alignment_response import AlignmentResponse
 from slice_runner.domain.alignment_response_kind import AlignmentResponseKind
 from slice_runner.domain.budgets import Budgets
+from slice_runner.domain.ci_indeterminate_cause import CiIndeterminateCause
 from slice_runner.domain.ci_status import CiStatus
 from slice_runner.domain.discard_cause import DiscardCause
 from slice_runner.domain.event_status import EventStatus
 from slice_runner.domain.exceptions import (
+    CiCommandFailedError,
     DirtyIndexError,
     InvalidUnderstandingReportError,
     MissingBranchError,
     NoPullRequestError,
     NoSliceLeftError,
+    UnreadableCiError,
 )
 from slice_runner.domain.halt import Halt
 from slice_runner.domain.harness_spend import HarnessSpend
@@ -1636,3 +1639,49 @@ class TestConductSliceWaitingForTheCi:
         assert conductor.implement.execute.call_count == 1
         assert result.state is RunState.BLOCKED_CI_RED
         assert conductor.metrics.record.call_args.args[0].state is RunState.BLOCKED_CI_RED
+
+
+class TestConductSliceWhenTheCiCannotBeRead:
+    @staticmethod
+    def _conductor() -> Conductor:
+        return Conductor(
+            chosen=SelectSliceResultMother.resumed_at(RunMother.about_to_ask_the_ci()),
+            budgets=Budgets(indeterminate_ticks=0),
+        )
+
+    def test_the_command_itself_failing_still_closes_as_indeterminate_and_not_as_a_crash(self) -> None:
+        conductor = self._conductor()
+        conductor.ci.status.side_effect = CiCommandFailedError("gh pr checks failed for owner/repo#61: rate limited")
+
+        result = conductor.conduct()
+
+        assert result.state is RunState.BLOCKED_CI_INDETERMINATE
+
+    def test_the_command_itself_failing_records_that_concrete_cause_on_the_durable_row(self) -> None:
+        conductor = self._conductor()
+        conductor.ci.status.side_effect = CiCommandFailedError("gh pr checks failed for owner/repo#61: rate limited")
+
+        conductor.conduct()
+
+        recorded = conductor.metrics.record.call_args.args[0]
+        assert recorded.ci_indeterminate_cause is CiIndeterminateCause.COMMAND_FAILED
+
+    def test_a_response_that_arrived_but_could_not_be_read_records_a_different_cause_than_a_failed_command(
+        self,
+    ) -> None:
+        conductor = self._conductor()
+        conductor.ci.status.side_effect = UnreadableCiError("gh did not return JSON: not valid")
+
+        conductor.conduct()
+
+        recorded = conductor.metrics.record.call_args.args[0]
+        assert recorded.ci_indeterminate_cause is CiIndeterminateCause.UNREADABLE_RESPONSE
+
+    def test_a_legitimate_no_checks_reading_leaves_the_cause_out_because_nothing_failed(self) -> None:
+        conductor = self._conductor()
+        conductor.ci.status.return_value = CiStatus.NO_CHECKS
+
+        conductor.conduct()
+
+        recorded = conductor.metrics.record.call_args.args[0]
+        assert recorded.ci_indeterminate_cause is None

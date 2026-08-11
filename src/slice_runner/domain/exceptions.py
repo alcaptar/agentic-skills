@@ -119,3 +119,11 @@ class ConversationNotFoundError(OSError):
 
 class UnreadableConversationError(ValueError):
     pass
+
+
+class CiCommandFailedError(OSError):
+    pass
+
+
+class UnreadableCiError(ValueError):
+    pass
