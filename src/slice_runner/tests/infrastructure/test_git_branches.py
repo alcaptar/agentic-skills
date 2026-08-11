@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
+from slice_runner.domain.exceptions import UnresolvableBaseError
 from slice_runner.infrastructure.git_branches import GitBranches, GitCommandFailedError
 from slice_runner.tests.git_repo import Git
 from slice_runner.tests.real_process import Real
@@ -150,3 +151,20 @@ class TestGitBranchesComparingABaseAgainstItsRemote:
 
         with pytest.raises(GitCommandFailedError):
             GitBranches(process=Real.process()).commits_behind_remote(worktree=str(repo), base=Git.BASE_BRANCH)
+
+    def test_a_base_that_exists_locally_but_was_never_pushed_raises_naming_the_base_instead_of_a_git_command_failure(
+        self, tmp_path: Path
+    ) -> None:
+        repo, _ = self._repo_pushed_to_a_bare_remote(tmp_path)
+        Git.run(repo, "switch", "-c", "slice/05-never-pushed")
+
+        with pytest.raises(UnresolvableBaseError, match="slice/05-never-pushed"):
+            GitBranches(process=Real.process()).commits_behind_remote(worktree=str(repo), base="slice/05-never-pushed")
+
+    def test_a_base_that_does_not_exist_anywhere_raises_naming_the_base_instead_of_a_git_command_failure(
+        self, tmp_path: Path
+    ) -> None:
+        repo, _ = self._repo_pushed_to_a_bare_remote(tmp_path)
+
+        with pytest.raises(UnresolvableBaseError, match="never-existed"):
+            GitBranches(process=Real.process()).commits_behind_remote(worktree=str(repo), base="never-existed")

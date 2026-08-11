@@ -56,6 +56,10 @@ class UnresolvableRepoOrBaseError(DiffNotReadableError):
     pass
 
 
+class UnresolvableBaseError(ValueError):
+    pass
+
+
 class DirtyIndexError(ValueError):
     pass
 

@@ -9,6 +9,7 @@ import pytest
 from slice_runner.application.queries.check_readiness import CheckReadiness, CheckReadinessParams
 from slice_runner.domain.branches import Branches
 from slice_runner.domain.check_verdict import CheckVerdict
+from slice_runner.domain.exceptions import UnresolvableBaseError
 from slice_runner.domain.forum import Forum
 from slice_runner.domain.skill_library import SkillLibrary
 from slice_runner.domain.toolbox import Toolbox
@@ -184,6 +185,18 @@ class TestCheckReadiness:
         readiness = query.execute(CheckReadinessParams(worktree="/repos/agentic-skills", base="master"))
 
         assert readiness.ready
+
+    def test_a_base_that_does_not_resolve_against_its_remote_is_reported_as_missing_naming_the_base(
+        self, query: CheckReadiness, branches: Mock
+    ) -> None:
+        branches.commits_behind_remote.side_effect = UnresolvableBaseError("slice/05-never-pushed does not resolve")
+
+        readiness = query.execute(CheckReadinessParams(worktree="/repos/agentic-skills", base="slice/05-never-pushed"))
+
+        base = self._check(readiness, "base")
+        assert base.verdict is CheckVerdict.MISSING
+        assert "slice/05-never-pushed" in base.detail
+        assert not readiness.ready
 
     def test_worktree_without_base_does_not_run_the_base_check(self, query: CheckReadiness, branches: Mock) -> None:
         readiness = query.execute(CheckReadinessParams(worktree="/repos/agentic-skills"))

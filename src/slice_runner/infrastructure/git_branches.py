@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from slice_runner.domain.branches import Branches
+from slice_runner.domain.exceptions import UnresolvableBaseError
 
 if TYPE_CHECKING:
     from slice_runner.infrastructure.process import Process, ProcessOutput
@@ -37,7 +38,9 @@ class GitBranches(Branches):
         argv = ["git", "-C", worktree, "rev-list", "--count", f"{base}..origin/{base}"]
         output = self._process.run(argv, stdin="")
         if output.code != 0:
-            raise self._failure(argv, output)
+            raise UnresolvableBaseError(
+                f"{base} does not resolve against its remote: {output.stderr.strip() or f'git exited {output.code}'}"
+            )
 
         return int(output.stdout.strip())
 
