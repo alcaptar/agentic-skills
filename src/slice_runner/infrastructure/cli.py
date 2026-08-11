@@ -34,6 +34,7 @@ from slice_runner.domain.exceptions import (
     InvalidHarnessOutputError,
     LaggingSearchIndexError,
     MeasuredCallError,
+    MissingBranchError,
     NoConversationRecordedError,
     NoPullRequestError,
     NoSliceLeftError,
@@ -105,6 +106,7 @@ class Cli:
         ImpossibleTransitionError,
         ProtectedBranchError,
         BranchMismatchError,
+        MissingBranchError,
         DiffNotReadableError,
         MeasuredCallError,
         ProcessTimedOutError,
@@ -327,6 +329,7 @@ class Cli:
                 | ImpossibleTransitionError()
                 | ProtectedBranchError()
                 | BranchMismatchError()
+                | MissingBranchError()
             ):
                 return self._reported(f"the run cannot be conducted as asked: {error}", ExitCode.USAGE_ERROR)
             case DiffNotReadableError():

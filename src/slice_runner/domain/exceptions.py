@@ -67,6 +67,10 @@ class BranchMismatchError(ValueError):
     pass
 
 
+class MissingBranchError(ValueError):
+    pass
+
+
 class UnreadableIssueError(ValueError):
     pass
 

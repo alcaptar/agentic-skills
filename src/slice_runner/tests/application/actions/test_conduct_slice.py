@@ -18,6 +18,7 @@ from slice_runner.domain.event_status import EventStatus
 from slice_runner.domain.exceptions import (
     DirtyIndexError,
     InvalidUnderstandingReportError,
+    MissingBranchError,
     NoPullRequestError,
     NoSliceLeftError,
 )
@@ -689,6 +690,16 @@ class TestConductSliceResumingAnInterruptedRun:
         result = conductor.conduct()
 
         assert (result.halt, result.precheck) == (Halt.PRECHECKS_BLOCKED, PrecheckOutcome.SLICE_IN_ANOTHER_REPO)
+        assert conductor.verify.execute.call_count == 0
+
+    def test_a_run_that_resumes_stops_before_implementing_when_its_declared_branch_no_longer_exists(self) -> None:
+        conductor = self._conductor()
+        conductor.branches.exists.return_value = False
+
+        with pytest.raises(MissingBranchError, match=f"resumes expecting the branch `{_BRANCH}`.*no such branch"):
+            conductor.conduct()
+
+        assert conductor.implement.execute.call_count == 0
         assert conductor.verify.execute.call_count == 0
         assert conductor.repository.write_run.call_count == 0
 
