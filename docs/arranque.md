@@ -38,12 +38,14 @@ En el repo donde vas a trabajar:
 | | |
 |---|---|
 | 1 | `/slice-spec` en una sesion de Claude Code. Ensena la spec por terminal antes de crear nada |
-| 2 | `slice-runner run <issue-padre> --repo <org>/<repo> --base master` |
+| 2 | `slice-runner run <issue-padre> --repo <org>/<repo> --base master [--slice slice-NN]` |
 | 3 | Publica lo que ha entendido en la subissue. Contesta en otro comentario: `-GO`, o `-REVIEW <correccion>` |
 | 4 | Implementa, controles, juez, pull request, integracion continua |
 | 5 | `gh pr ready <n>` y `gh pr merge <n> --merge --delete-branch` |
 
-- El numero del paso 2 es el del issue **padre**, no el de la subissue.
+- El numero del paso 2 es el del issue **padre**, no el de la subissue. Pasar el de una subissue no
+  falla con un mensaje util: sale con "no queda ninguna rebanada" (codigo 9).
+- `--slice slice-NN` elige cual conducir. Sin el, coge la siguiente ejecutable en orden.
 - `-GO` se lee por coincidencia exacta: con texto detras **no arranca**. Con varias respuestas, gana
   la ultima escrita.
 - Las pull requests nacen en borrador. Reinvocar no las saca de ahi.
