@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from slice_runner.domain.exceptions import UnresolvableBaseError
 from slice_runner.domain.prechecks import Prechecks
 
 if TYPE_CHECKING:
@@ -18,6 +19,7 @@ class RunPrechecksParams:
     repo: str
     worktree: str
     branch: str
+    base: str
     subissue: SubIssue
     parent: ParentIssue
 
@@ -31,6 +33,15 @@ class RunPrechecks:
         return Prechecks.of(
             subissue=params.subissue,
             parent=params.parent,
+            base_resolves_on_remote=self._base_resolves_on_remote(worktree=params.worktree, base=params.base),
             branch_exists=self._branches.exists(worktree=params.worktree, name=params.branch),
             open_pull_request=self._forum.open_pull_request(repo=params.repo, branch=params.branch),
         )
+
+    def _base_resolves_on_remote(self, *, worktree: str, base: str) -> bool:
+        try:
+            self._branches.commits_behind_remote(worktree=worktree, base=base)
+        except UnresolvableBaseError:
+            return False
+
+        return True

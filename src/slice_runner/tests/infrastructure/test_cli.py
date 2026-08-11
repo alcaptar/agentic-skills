@@ -1186,6 +1186,8 @@ class TestWhenTheRunStaysOpen:
             children=GhConversationMother.the_slice_never_run(),
             answers=(
                 Answer(to=("git", "rev-parse"), code=1),
+                Answer(to=("git", "fetch", "origin")),
+                Answer(to=("git", "rev-list", "--count"), stdout="0\n"),
                 Answer(to=("git", "switch")),
                 Answer(to=("gh", "pr", "list"), stdout=GhConversationMother.no_open_pull_request()),
                 Answer(
@@ -1215,7 +1217,7 @@ class TestWhenTheRunStaysOpen:
             "switch",
             "-c",
             GhConversationMother.BRANCH,
-            GhConversationMother.BASE,
+            f"origin/{GhConversationMother.BASE}",
         )
 
     def test_a_slice_that_was_never_run_ticks_through_the_alignment_pause_until_the_wait_runs_out(
@@ -1242,6 +1244,8 @@ class TestWhenTheRunStaysOpen:
             children=GhConversationMother.the_slice_never_run(),
             answers=(
                 Answer(to=("git", "rev-parse"), code=1),
+                Answer(to=("git", "fetch", "origin")),
+                Answer(to=("git", "rev-list", "--count"), stdout="0\n"),
                 Answer(to=("gh", "pr", "list"), stdout=GhConversationMother.the_open_pull_request()),
             ),
         )
@@ -1250,6 +1254,31 @@ class TestWhenTheRunStaysOpen:
 
         assert code == ExitCode.PRECHECKS_BLOCKED
         assert json.loads(capsys.readouterr().out)["precheck"] == "pull-request-already-open"
+
+    def test_a_base_that_does_not_resolve_against_its_remote_exits_with_its_own_precheck_and_writes_nothing(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        invocation = RunInvocation(
+            children=GhConversationMother.the_slice_never_run(),
+            answers=(
+                Answer(to=("git", "rev-parse"), code=1),
+                Answer(to=("git", "fetch", "origin")),
+                Answer(
+                    to=("git", "rev-list", "--count"),
+                    code=128,
+                    stderr=f"fatal: ambiguous argument '{GhConversationMother.BASE}..origin/"
+                    f"{GhConversationMother.BASE}'",
+                ),
+                Answer(to=("gh", "pr", "list"), stdout=GhConversationMother.no_open_pull_request()),
+            ),
+        )
+
+        code = invocation.conduct(logs=tmp_path / "logs")
+
+        assert code == ExitCode.PRECHECKS_BLOCKED
+        assert json.loads(capsys.readouterr().out)["precheck"] == "base-not-on-remote"
+        assert not invocation.process.invoked("gh", "issue", "edit")
+        assert not invocation.process.invoked("git", "switch")
 
     def test_a_merge_that_never_arrives_spends_the_whole_wait_and_says_the_pull_request_is_still_draft(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]

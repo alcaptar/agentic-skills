@@ -28,7 +28,8 @@ class GitBranches(Branches):
         raise self._failure(argv, output)
 
     def create(self, *, worktree: str, name: str, base: str) -> None:
-        argv = ["git", "-C", worktree, "switch", "-c", name, base]
+        self._fetch(worktree)
+        argv = ["git", "-C", worktree, "switch", "-c", name, f"origin/{base}"]
         output = self._process.run(argv, stdin="")
         if output.code != 0:
             raise self._failure(argv, output)
