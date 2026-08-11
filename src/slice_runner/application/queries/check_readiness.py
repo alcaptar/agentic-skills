@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar
 
 from slice_runner.domain.check_verdict import CheckVerdict
+from slice_runner.domain.exceptions import UnresolvableBaseError
 from slice_runner.domain.readiness import Readiness
 from slice_runner.domain.readiness_check import ReadinessCheck
 
@@ -110,7 +111,15 @@ class CheckReadiness:
         )
 
     def _of_base(self, *, worktree: str, base: str) -> ReadinessCheck:
-        behind = self._branches.commits_behind_remote(worktree=worktree, base=base)
+        try:
+            behind = self._branches.commits_behind_remote(worktree=worktree, base=base)
+        except UnresolvableBaseError:
+            return ReadinessCheck(
+                name="base",
+                verdict=CheckVerdict.MISSING,
+                detail=f"{base} does not resolve against its remote",
+            )
+
         if behind == 0:
             return ReadinessCheck(
                 name="base", verdict=CheckVerdict.READY, detail=f"{base} is up to date with its remote"

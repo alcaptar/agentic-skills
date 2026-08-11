@@ -1407,7 +1407,13 @@ class TestTheCommandThatChecksReadiness:
         (tmp_path / "skills" / "deploy-watch").mkdir(parents=True)
 
     @staticmethod
-    def _process(*, authenticated: bool = True, repo_readable: bool = True, commits_behind: int = 0) -> AnsweringByArgv:
+    def _process(
+        *,
+        authenticated: bool = True,
+        repo_readable: bool = True,
+        commits_behind: int = 0,
+        base_resolves: bool = True,
+    ) -> AnsweringByArgv:
         return AnsweringByArgv(
             Answer(to=("git", "--version"), stdout="git version 2.51.0\n"),
             Answer(to=("gh", "--version"), stdout="gh version 2.55.0\n"),
@@ -1419,7 +1425,14 @@ class TestTheCommandThatChecksReadiness:
             if repo_readable
             else Answer(to=("gh", "repo", "view"), code=1, stderr="GraphQL: Could not resolve to a Repository"),
             Answer(to=("git", "fetch", "origin"), stdout=""),
-            Answer(to=("git", "rev-list", "--count"), stdout=f"{commits_behind}\n"),
+            Answer(to=("git", "rev-list", "--count"), stdout=f"{commits_behind}\n")
+            if base_resolves
+            else Answer(
+                to=("git", "rev-list", "--count"),
+                code=128,
+                stderr="fatal: ambiguous argument 'master..origin/master': unknown revision or path not in the "
+                "working tree.",
+            ),
         )
 
     def test_with_everything_ready_it_exits_with_zero(self) -> None:
@@ -1529,6 +1542,17 @@ class TestTheCommandThatChecksReadiness:
         code = Cli(process=self._process(), budgets=Budgets()).doctor()
 
         assert code == ExitCode.OK
+
+    def test_a_base_that_does_not_resolve_against_its_remote_exits_with_the_not_ready_code_naming_the_base(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        code = Cli(process=self._process(base_resolves=False), budgets=Budgets()).doctor(
+            worktree="/repos/agentic-skills", base="master"
+        )
+
+        assert code == ExitCode.ENVIRONMENT_NOT_READY
+        assert code != ExitCode.RUN_INTERRUPTED
+        assert "master" in capsys.readouterr().out
 
     @pytest.mark.integration
     def test_main_wires_the_doctor_subcommand_over_a_real_process(
