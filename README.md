@@ -240,12 +240,12 @@ El codigo de salida es el contrato con quien lo invoca:
 | `1` | FALLA: el juez veta la slice |
 | `2` | No hay veredicto de fiar: un proceso del run no se pudo lanzar, o el juez devolvio un veredicto incoherente |
 | `3` | No hay nada que juzgar: el indice esta vacio (¿falto el `git add`?) |
-| `4` | Error de uso: el repo o la base no resuelven, falta un argumento, el issue o el estado que se quiere leer no se pueden leer, o `read` no encuentra la conversacion pedida |
+| `4` | Error de uso: el repo o la base no resuelven, falta un argumento, el issue o el estado que se quiere leer no se pueden leer, `read` no encuentra la conversacion pedida, o el rastro/registro durable que `read` o `spend` leen trae una linea corrupta |
 | `5` | `run`: la slice cerro **sin** mergear (controles, juez, integracion continua o presupuesto). Hay que mirar el issue; reinvocar sin tocar nada repite el cierre |
 | `7` | `run`: se agoto la espera con el run todavia abierto -pausa de alineacion, integracion continua o merge-. Reinvocar es exactamente lo que toca, salvo esperando el merge: ahi la pull request nace en borrador (`--draft`) y reinvocar no la saca de ahi -hay que sacarla a mano-, y tanto la salida como un comentario en la subissue lo dicen |
 | `8` | `run`: los prechecks pararon la invocacion antes de tocar codigo |
 | `9` | `run`: el issue no tiene ninguna slice ejecutable (todas cerradas, bloqueadas o abortadas) |
-| `10` | `run`: el run se interrumpio antes de llegar a una parada -`gh` o `git` fallaron, el foro contesto algo ilegible, el registro durable no se pudo escribir-. El estado persistido sigue siendo bueno |
+| `10` | `run`: el run se interrumpio antes de llegar a una parada -`gh` o `git` fallaron, el foro contesto algo ilegible, el registro durable no se pudo escribir-. El estado persistido sigue siendo bueno. Cualquier subcomando sale con este mismo codigo ante una excepcion que el programa no sabe nombrar, con su tipo y su mensaje por `stderr` en vez de un volcado de la pila |
 | `11` | `run`: la pull request de la slice se cerro **sin** mergear, asi que el merge que la invocacion esperaba ya no puede llegar. El run se queda abierto en su paso; lo decide una persona (reabrir la pull request, o cerrar la slice) |
 | `12` | Una llamada a un proceso externo agoto su tope por llamada y se mato, asi que no hay respuesta que interpretar. Reinvocar a ciegas vuelve a pagar el tope entero: primero hay que mirar **que** se colgo |
 

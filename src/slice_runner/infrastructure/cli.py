@@ -39,6 +39,9 @@ from slice_runner.domain.exceptions import (
     NoSliceLeftError,
     ProtectedBranchError,
     RunNotClosedError,
+    UnreadableCallSpendLogError,
+    UnreadableCallTraceError,
+    UnreadableConversationError,
     UnreadableForumError,
     UnreadableIssueError,
     UnreadableRunError,
@@ -122,6 +125,13 @@ class Cli:
         except SystemExit as refusal:
             return ExitCode.USAGE_ERROR if refusal.code else ExitCode.OK
 
+        try:
+            return cls._dispatched(arguments)
+        except Exception as error:
+            return cls._reported(f"{type(error).__name__}: {error}", ExitCode.RUN_INTERRUPTED)
+
+    @classmethod
+    def _dispatched(cls, arguments: argparse.Namespace) -> int:
         budgets = Budgets()
 
         match Subcommand(arguments.command):
@@ -229,6 +239,8 @@ class Cli:
             )
         except (NoConversationRecordedError, ConversationNotFoundError) as error:
             return cls._reported(f"there is no conversation to read: {error}", ExitCode.USAGE_ERROR)
+        except (UnreadableCallTraceError, UnreadableConversationError) as error:
+            return cls._reported(f"the durable record cannot be read: {error}", ExitCode.USAGE_ERROR)
 
         print(
             ConversationReport(
@@ -241,9 +253,13 @@ class Cli:
     @classmethod
     def spend(cls, *, repo: str, issue: int, slice_id: str, step: Step) -> int:
         clock = SystemClock()
-        spend = SpendOfStep(trace=LocalCallTrace(clock=clock), spend_log=LocalCallSpendLog(clock=clock)).execute(
-            SpendOfStepParams(repo=repo, issue=issue, slice_id=slice_id, step=step)
-        )
+        try:
+            spend = SpendOfStep(trace=LocalCallTrace(clock=clock), spend_log=LocalCallSpendLog(clock=clock)).execute(
+                SpendOfStepParams(repo=repo, issue=issue, slice_id=slice_id, step=step)
+            )
+        except (UnreadableCallTraceError, UnreadableCallSpendLogError) as error:
+            return cls._reported(f"the durable record cannot be read: {error}", ExitCode.USAGE_ERROR)
+
         print(json.dumps(SpendPayload.from_domain(spend).to_contract(), ensure_ascii=False))
 
         return ExitCode.OK
