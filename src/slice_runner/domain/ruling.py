@@ -4,5 +4,5 @@ from enum import StrEnum
 
 
 class Ruling(StrEnum):
-    PASS = "PASA"
-    FAIL = "FALLA"
+    PASS = "PASS"
+    FAIL = "FAIL"

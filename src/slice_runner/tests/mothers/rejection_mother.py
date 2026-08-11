@@ -7,7 +7,7 @@ from slice_runner.tests.mothers.harness_spend_mother import HarnessSpendMother
 class RejectionMother:
     @staticmethod
     def incoherent_verdict() -> InvalidVerdictError:
-        rejection = InvalidVerdictError("a PASA with a finding of severity alta contradicts the rubric")
+        rejection = InvalidVerdictError("a PASS with a finding of severity high contradicts the rubric")
         rejection.spend = HarnessSpendMother.of_the_judge_call()
 
         return rejection

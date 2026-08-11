@@ -58,7 +58,7 @@ class TestTheRecordThatIsWritten(WithTheCorpusOutOfTheRealHome):
                 "issue": CorpusEntryMother.ISSUE,
                 "slice_id": CorpusEntryMother.SLICE_ID,
                 "diff": SliceDiffMother.TEXT,
-                "verdict": {"veredicto": "PASA", "hallazgos": []},
+                "verdict": {"ruling": "PASS", "findings": []},
                 "severity_counts": {"alta": 0, "media": 0, "baja": 0},
                 "ts": _STAMP.isoformat(),
             }
