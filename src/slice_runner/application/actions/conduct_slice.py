@@ -20,6 +20,7 @@ from slice_runner.domain.discard_cause import DiscardCause
 from slice_runner.domain.exceptions import (
     DirtyIndexError,
     MeasuredCallError,
+    MissingBranchError,
     NoPullRequestError,
     NoSliceLeftError,
 )
@@ -226,6 +227,8 @@ class ConductSlice:
         if of_the_subissue is not PrecheckOutcome.CLEAR:
             return self._ending(progress, Halt.PRECHECKS_BLOCKED, precheck=of_the_subissue)
         if chosen.subissue.run is not None:
+            self._branch_still_standing(progress)
+
             return self._conducting(progress)
         if chosen.subissue.label is IssueLabel.AWAITING_ALIGNMENT:
             return self._conducting(replace(progress, run=replace(progress.run, step=Step.UNDERSTAND)))
@@ -240,6 +243,16 @@ class ConductSlice:
         )
 
         return replace(chosen, subissue=reopened.subissue)
+
+    def _branch_still_standing(self, progress: ConductSliceProgress) -> None:
+        branch = progress.subissue.branch
+        if self._branches.exists(worktree=progress.params.worktree, name=branch):
+            return
+
+        raise MissingBranchError(
+            f"the run of {progress.subissue.slice_id} stands on `{progress.run.step}` and resumes expecting "
+            f"the branch `{branch}` to exist: the worktree has no such branch"
+        )
 
     def _aligning(self, progress: ConductSliceProgress) -> ConductSliceResult:
         precheck = self._prechecks.execute(

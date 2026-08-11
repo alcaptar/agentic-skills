@@ -856,6 +856,7 @@ class TestConductingASliceAnEarlierInvocationLeftHalfDone:
         return RunInvocation(
             children=GhConversationMother.the_slice_resumed_at(RunMother.awaiting_merge()),
             answers=(
+                Answer(to=("git", "rev-parse"), code=0),
                 Answer(
                     to=("gh", "pr", "list", "--state", "all"),
                     stdout=GhConversationMother.the_pull_request_of_the_branch(),
@@ -924,6 +925,7 @@ class TestConductingTheSliceNamedByTheCaller:
             children=GhConversationMother.two_slices_resumed_at(RunMother.awaiting_merge()),
             parent=GhConversationMother.parent_of_two_slices(),
             answers=(
+                Answer(to=("git", "rev-parse"), code=0),
                 Answer(
                     to=("gh", "pr", "list", "--state", "all"),
                     stdout=GhConversationMother.the_pull_request_of_the_branch(),
@@ -992,6 +994,7 @@ class TestWhenTheRunClosesWithoutBeingMerged:
         invocation = RunInvocation(
             children=GhConversationMother.the_slice_resumed_at(RunMother.with_the_only_ci_retry_already_spent()),
             answers=(
+                Answer(to=("git", "rev-parse"), code=0),
                 Answer(
                     to=("gh", "pr", "list", "--state", "all"),
                     stdout=GhConversationMother.the_pull_request_of_the_branch(),
@@ -1017,6 +1020,7 @@ class TestTheRoundTripAfterARedCiThatStillHasARetryLeft(BlindToTheToolboxOfThisM
         return RunInvocation(
             children=GhConversationMother.the_slice_resumed_at(RunMother.about_to_ask_the_ci()),
             answers=(
+                Answer(to=("git", "rev-parse"), code=0),
                 Answer(
                     to=("gh", "pr", "list", "--state", "all"),
                     stdout=GhConversationMother.the_pull_request_of_the_branch(),
@@ -1164,6 +1168,7 @@ class TestWhenTheRunStaysOpen:
         invocation = RunInvocation(
             children=GhConversationMother.the_slice_resumed_at(RunMother.awaiting_merge()),
             answers=(
+                Answer(to=("git", "rev-parse"), code=0),
                 Answer(
                     to=("gh", "pr", "list", "--state", "all"),
                     stdout=GhConversationMother.the_pull_request_of_the_branch(),
@@ -1191,6 +1196,7 @@ class TestWhenTheRunStaysOpen:
         invocation = RunInvocation(
             children=GhConversationMother.the_slice_resumed_at(RunMother.awaiting_merge()),
             answers=(
+                Answer(to=("git", "rev-parse"), code=0),
                 Answer(
                     to=("gh", "pr", "list", "--state", "all"),
                     stdout=GhConversationMother.the_pull_request_of_the_branch(),
@@ -1237,7 +1243,10 @@ class TestWhenTheInvocationCannotBeConducted(ReadingWhatWasReported):
     ) -> None:
         invocation = RunInvocation(
             children=GhConversationMother.the_slice_resumed_at(RunMother.awaiting_merge()),
-            answers=(Answer(to=("gh", "pr", "list", "--state", "all"), code=1, stderr="gh: authentication required"),),
+            answers=(
+                Answer(to=("git", "rev-parse"), code=0),
+                Answer(to=("gh", "pr", "list", "--state", "all"), code=1, stderr="gh: authentication required"),
+            ),
         )
 
         code = invocation.conduct(logs=tmp_path / "logs")
@@ -1275,6 +1284,7 @@ class TestTheBudgetsTheEntrypointInjects:
         invocation = RunInvocation(
             children=GhConversationMother.the_slice_resumed_at(RunMother.awaiting_merge()),
             answers=(
+                Answer(to=("git", "rev-parse"), code=0),
                 Answer(
                     to=("gh", "pr", "list", "--state", "all"),
                     stdout=GhConversationMother.the_pull_request_of_the_branch(),
