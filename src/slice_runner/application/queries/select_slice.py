@@ -59,15 +59,20 @@ class SelectSlice:
             if next_in_line is not None:
                 return next_in_line, None
 
+            malformed: list[tuple[SubIssue, RetryResponse]] = []
             for child in children:
                 retry = self._awaiting_retry(child, repo=params.repo)
-                if retry is not None:
+                if retry is None:
+                    continue
+                if retry.kind is RetryResponseKind.RETRY:
                     return child, retry
+                malformed.append((child, retry))
 
             raise self._none_left(
                 f"none of the {len(children)} slice(s) of issue {params.issue} can be run: "
                 f"every one is closed, blocked or aborted, and none carries a retry instruction yet",
                 dangling=dangling,
+                malformed=tuple(malformed),
             )
 
         named = SliceQueue.find(children, params.slice_id)
@@ -80,18 +85,21 @@ class SelectSlice:
             return named, None
 
         retry = self._awaiting_retry(named, repo=params.repo)
-        if retry is not None:
+        if retry is not None and retry.kind is RetryResponseKind.RETRY:
             return named, retry
+        malformed_named = ((named, retry),) if retry is not None and retry.kind is RetryResponseKind.MALFORMED else ()
         if SliceQueue.blocked(named):
             raise self._none_left(
                 f"slice {params.slice_id} of issue {params.issue} is blocked and waits for a retry instruction "
                 f"in a subissue comment (`-RETRY <instruction>`)",
                 dangling=dangling,
+                malformed=malformed_named,
             )
 
         raise self._none_left(
             f"slice {params.slice_id} of issue {params.issue} cannot be run: it is closed, blocked or aborted",
             dangling=dangling,
+            malformed=malformed_named,
         )
 
     def _awaiting_retry(self, child: SubIssue, *, repo: str) -> RetryResponse | None:
@@ -99,15 +107,21 @@ class SelectSlice:
             return None
 
         response = self._repository.read_retry_instruction(repo=repo, issue=child.number)
-        if response.kind is not RetryResponseKind.RETRY:
+        if response.kind is RetryResponseKind.NOT_YET:
             return None
 
         return response
 
     @staticmethod
-    def _none_left(message: str, *, dangling: tuple[SubIssue, ...]) -> NoSliceLeftError:
+    def _none_left(
+        message: str,
+        *,
+        dangling: tuple[SubIssue, ...],
+        malformed: tuple[tuple[SubIssue, RetryResponse], ...] = (),
+    ) -> NoSliceLeftError:
         error = NoSliceLeftError(message)
         error.dangling = dangling
+        error.malformed_retries = malformed
 
         return error
 

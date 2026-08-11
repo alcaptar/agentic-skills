@@ -9,6 +9,7 @@ from slice_runner.domain.checklist_entry import ChecklistEntry
 from slice_runner.domain.exceptions import NoSliceLeftError
 from slice_runner.domain.issue_label import IssueLabel
 from slice_runner.domain.issue_state import IssueState
+from slice_runner.domain.malformed_reason import MalformedReason
 from slice_runner.domain.retry_response import RetryResponse
 from slice_runner.domain.retry_response_kind import RetryResponseKind
 from slice_runner.domain.run_repository import RunRepository
@@ -17,6 +18,7 @@ from slice_runner.tests.mothers.run_mother import RunMother
 from slice_runner.tests.mothers.sub_issue_mother import SubIssueMother
 
 _INSTRUCTION = "el control ya esta arreglado a mano"
+_REASON = MalformedReason.MISSING_INSTRUCTION
 
 _REPO = "alcaptar/agentic-skills"
 _ISSUE = 38
@@ -279,6 +281,19 @@ class TestSelectSliceReopeningABlockedSliceOnAutoPick:
 
         assert query.execute(_PARAMS).retry is None
 
+    def test_a_malformed_retry_comment_raises_instead_of_being_treated_as_no_instruction_yet(
+        self, query: SelectSlice, repository: Mock
+    ) -> None:
+        blocked = SubIssueMother.blocked(IssueLabel.BLOCKED_CI_RED, RunMother.blocked_on_red_ci())
+        repository.read_children.return_value = (blocked,)
+        malformed = RetryResponse(kind=RetryResponseKind.MALFORMED, reason=_REASON)
+        repository.read_retry_instruction.return_value = malformed
+
+        with pytest.raises(NoSliceLeftError) as raised:
+            query.execute(_PARAMS)
+
+        assert raised.value.malformed_retries == ((blocked, malformed),)
+
 
 class TestSelectSliceReopeningTheSliceNamedByTheCaller:
     @pytest.fixture
@@ -319,3 +334,17 @@ class TestSelectSliceReopeningTheSliceNamedByTheCaller:
 
         with pytest.raises(NoSliceLeftError, match="retry instruction"):
             query.execute(params)
+
+    def test_naming_a_blocked_slice_with_a_malformed_retry_comment_raises_carrying_it_as_malformed(
+        self, query: SelectSlice, repository: Mock
+    ) -> None:
+        blocked = SubIssueMother.blocked(IssueLabel.BLOCKED_VERIFY, RunMother.blocked_on_verify())
+        repository.read_children.return_value = (blocked,)
+        malformed = RetryResponse(kind=RetryResponseKind.MALFORMED, reason=_REASON)
+        repository.read_retry_instruction.return_value = malformed
+        params = SelectSliceParams(repo=_REPO, issue=_ISSUE, slice_id=blocked.slice_id)
+
+        with pytest.raises(NoSliceLeftError) as raised:
+            query.execute(params)
+
+        assert raised.value.malformed_retries == ((blocked, malformed),)

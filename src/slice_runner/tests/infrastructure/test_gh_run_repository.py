@@ -17,10 +17,12 @@ from slice_runner.domain.exceptions import (
 )
 from slice_runner.domain.issue_label import IssueLabel
 from slice_runner.domain.issue_state import IssueState
+from slice_runner.domain.malformed_reason import MalformedReason
 from slice_runner.domain.retry_response_kind import RetryResponseKind
 from slice_runner.domain.source import Source, SourceKind
 from slice_runner.infrastructure.automation_mark import AutomationMark
 from slice_runner.infrastructure.gh_run_repository import GhCommandFailedError, GhRunRepository
+from slice_runner.infrastructure.malformed_response_comment import MalformedResponseComment
 from slice_runner.infrastructure.process import ProcessOutput
 from slice_runner.infrastructure.reopened_comment import ReopenedComment
 from slice_runner.infrastructure.understanding_comment import UnderstandingComment
@@ -727,6 +729,35 @@ class TestReadingTheAlignmentResponse:
 
         assert response.kind is AlignmentResponseKind.NOT_YET
 
+    def test_a_go_carrying_extra_text_is_read_as_malformed_instead_of_not_yet_answered(self) -> None:
+        process = self._process([UnderstandingComment.rendered("asi entiendo la slice"), "-GO por favor"])
+
+        response = GhRunRepository(process=process).read_alignment_response(repo=_REPO, issue=45)
+
+        assert response.kind is AlignmentResponseKind.MALFORMED
+        assert response.reason is MalformedReason.GO_CARRIES_TEXT
+
+    def test_a_review_with_no_correction_behind_it_is_read_as_malformed_instead_of_not_yet_answered(self) -> None:
+        process = self._process([UnderstandingComment.rendered("asi entiendo la slice"), "-REVIEW"])
+
+        response = GhRunRepository(process=process).read_alignment_response(repo=_REPO, issue=45)
+
+        assert response.kind is AlignmentResponseKind.MALFORMED
+        assert response.reason is MalformedReason.MISSING_CORRECTION
+
+    def test_a_malformed_comment_already_acknowledged_is_never_read_again_as_the_answer(self) -> None:
+        process = self._process(
+            [
+                UnderstandingComment.rendered("asi entiendo la slice"),
+                "-GO por favor",
+                MalformedResponseComment.rendered(MalformedReason.GO_CARRIES_TEXT),
+            ]
+        )
+
+        response = GhRunRepository(process=process).read_alignment_response(repo=_REPO, issue=45)
+
+        assert response.kind is AlignmentResponseKind.NOT_YET
+
     def test_a_non_zero_exit_raises_with_the_stderr_it_carried(self) -> None:
         process = ScriptedProcess(ProcessOutput(code=1, stdout="", stderr="HTTP 404: Not Found"))
 
@@ -804,6 +835,23 @@ class TestReadingTheRetryInstruction:
 
         assert response.kind is RetryResponseKind.NOT_YET
 
+    def test_a_retry_comment_with_no_instruction_behind_it_is_read_as_malformed_instead_of_not_yet_answered(
+        self,
+    ) -> None:
+        process = self._process(["-RETRY"])
+
+        response = GhRunRepository(process=process).read_retry_instruction(repo=_REPO, issue=45)
+
+        assert response.kind is RetryResponseKind.MALFORMED
+        assert response.reason is MalformedReason.MISSING_INSTRUCTION
+
+    def test_a_malformed_retry_comment_already_acknowledged_is_never_read_again_as_the_answer(self) -> None:
+        process = self._process(["-RETRY", MalformedResponseComment.rendered(MalformedReason.MISSING_INSTRUCTION)])
+
+        response = GhRunRepository(process=process).read_retry_instruction(repo=_REPO, issue=45)
+
+        assert response.kind is RetryResponseKind.NOT_YET
+
     def test_a_non_zero_exit_raises_with_the_stderr_it_carried(self) -> None:
         process = ScriptedProcess(ProcessOutput(code=1, stdout="", stderr="HTTP 404: Not Found"))
 
@@ -841,6 +889,44 @@ class TestMarkingASliceReopened:
 
         with pytest.raises(GhCommandFailedError, match="HTTP 422"):
             GhRunRepository(process=process).mark_reopened(repo=_REPO, issue=45, instruction="x")
+
+
+class TestWritingAMalformedResponse:
+    def test_the_call_is_a_comment_carrying_the_explanation_and_the_marker(self) -> None:
+        process = ScriptedProcess(ProcessOutput(code=0, stdout="", stderr=""))
+
+        GhRunRepository(process=process).write_malformed_response(
+            repo=_REPO, issue=45, reason=MalformedReason.GO_CARRIES_TEXT
+        )
+
+        assert process.calls[0].argv == ["gh", "issue", "comment", "45", "--repo", _REPO, "--body-file", "-"]
+        assert process.calls[0].stdin == MalformedResponseComment.rendered(MalformedReason.GO_CARRIES_TEXT)
+
+    def test_the_comment_carries_the_marker_that_lets_a_later_read_find_it_back(self) -> None:
+        process = ScriptedProcess(ProcessOutput(code=0, stdout="", stderr=""))
+
+        GhRunRepository(process=process).write_malformed_response(
+            repo=_REPO, issue=45, reason=MalformedReason.GO_CARRIES_TEXT
+        )
+
+        assert MalformedResponseComment.MARKER in process.calls[0].stdin
+
+    def test_the_comment_carries_the_visible_automation_mark(self) -> None:
+        process = ScriptedProcess(ProcessOutput(code=0, stdout="", stderr=""))
+
+        GhRunRepository(process=process).write_malformed_response(
+            repo=_REPO, issue=45, reason=MalformedReason.GO_CARRIES_TEXT
+        )
+
+        assert AutomationMark.TEXT in process.calls[0].stdin
+
+    def test_a_non_zero_exit_raises_with_the_stderr_it_carried(self) -> None:
+        process = ScriptedProcess(ProcessOutput(code=1, stdout="", stderr="HTTP 422: Unprocessable Entity"))
+
+        with pytest.raises(GhCommandFailedError, match="HTTP 422"):
+            GhRunRepository(process=process).write_malformed_response(
+                repo=_REPO, issue=45, reason=MalformedReason.GO_CARRIES_TEXT
+            )
 
 
 class TestPausingForAlignment:

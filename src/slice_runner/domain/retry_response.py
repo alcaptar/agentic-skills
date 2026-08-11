@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import ClassVar
 
+from slice_runner.domain.malformed_reason import MalformedReason
 from slice_runner.domain.retry_response_kind import RetryResponseKind
 
 
@@ -12,6 +13,7 @@ class RetryResponse:
 
     kind: RetryResponseKind
     instruction: str = ""
+    reason: MalformedReason | None = None
 
     @classmethod
     def of_the_comments(cls, comments: tuple[str, ...]) -> RetryResponse:
@@ -30,6 +32,6 @@ class RetryResponse:
 
         instruction = stripped.removeprefix(cls.RETRY_TOKEN).strip()
         if not instruction:
-            return None
+            return cls(kind=RetryResponseKind.MALFORMED, reason=MalformedReason.MISSING_INSTRUCTION)
 
         return cls(kind=RetryResponseKind.RETRY, instruction=instruction)
