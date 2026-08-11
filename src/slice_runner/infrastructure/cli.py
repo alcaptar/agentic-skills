@@ -173,7 +173,9 @@ class Cli:
                     repo=arguments.repo, issue=arguments.issue, slice_id=arguments.slice_id, step=Step(arguments.step)
                 )
             case Subcommand.DOCTOR:
-                return cls(process=LocalProcess(budgets=budgets), budgets=budgets).doctor()
+                return cls(process=LocalProcess(budgets=budgets), budgets=budgets).doctor(
+                    repo=arguments.repo, worktree=arguments.worktree, base=arguments.base
+                )
 
     @classmethod
     def parser(cls) -> argparse.ArgumentParser:
@@ -226,9 +228,14 @@ class Cli:
         spend.add_argument("--slice", dest="slice_id", required=True, help="identifier of the slice to add up")
         spend.add_argument("--step", required=True, choices=[str(x) for x in Step], help="step whose calls are summed")
 
-        subcommands.add_parser(
+        doctor = subcommands.add_parser(
             Subcommand.DOCTOR, help="check whether git, gh, claude and the skills the run needs are in place"
         )
+        doctor.add_argument("--repo", default=None, help="repo to check read access to, as `<org>/<repo>`")
+        doctor.add_argument(
+            "--worktree", default=None, help="local path whose base branch is compared against its remote"
+        )
+        doctor.add_argument("--base", default=None, help="base branch compared against its remote")
 
         return parser
 
@@ -327,12 +334,13 @@ class Cli:
             file=sys.stderr,
         )
 
-    def doctor(self) -> int:
+    def doctor(self, *, repo: str | None = None, worktree: str | None = None, base: str | None = None) -> int:
         readiness = CheckReadiness(
             toolbox=LocalToolbox(process=self._process),
             forum=GhForum(process=self._process),
+            branches=GitBranches(process=self._process),
             skills=LocalSkillLibrary(),
-        ).execute(CheckReadinessParams())
+        ).execute(CheckReadinessParams(repo=repo, worktree=worktree, base=base))
 
         print(ReadinessReport(readiness=readiness).rendered())
 

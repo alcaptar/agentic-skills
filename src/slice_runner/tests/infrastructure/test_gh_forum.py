@@ -211,3 +211,25 @@ class TestGhForumAskingWhoIsAuthenticated:
         process = ScriptedProcess(ProcessOutput(code=1, stdout="", stderr="gh: To authenticate, run `gh auth login`"))
 
         assert GhForum(process=process).authenticated_as() is None
+
+
+class TestGhForumCheckingWhetherARepoCanBeRead:
+    def test_it_asks_gh_to_view_exactly_this_repo(self) -> None:
+        process = ScriptedProcess(ProcessOutput(code=0, stdout=json.dumps({"name": "agentic-skills"}), stderr=""))
+
+        GhForum(process=process).can_read(repo=_REPO)
+
+        argv = Argv(process.calls[0].argv)
+        assert process.calls[0].argv[:3] == ["gh", "repo", "view"]
+        assert _REPO in process.calls[0].argv
+        assert argv.value_of("--json") == "name"
+
+    def test_a_repo_gh_can_view_reads_as_true(self) -> None:
+        process = ScriptedProcess(ProcessOutput(code=0, stdout=json.dumps({"name": "agentic-skills"}), stderr=""))
+
+        assert GhForum(process=process).can_read(repo=_REPO) is True
+
+    def test_a_repo_gh_cannot_view_reads_as_false_instead_of_raising(self) -> None:
+        process = ScriptedProcess(ProcessOutput(code=1, stdout="", stderr="GraphQL: Could not resolve to a Repository"))
+
+        assert GhForum(process=process).can_read(repo=_REPO) is False

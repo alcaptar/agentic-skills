@@ -85,3 +85,71 @@ class TestGitBranchesCreatingTheBranchOfTheSlice:
 
         with pytest.raises(GitCommandFailedError, match=self._SLICE_BRANCH):
             branches.create(worktree=str(repo), name=self._SLICE_BRANCH, base=Git.BASE_BRANCH)
+
+
+@pytest.mark.integration
+class TestGitBranchesComparingABaseAgainstItsRemote:
+    @staticmethod
+    def _repo_pushed_to_a_bare_remote(tmp_path: Path) -> tuple[Path, Path]:
+        remote = tmp_path / "remote.git"
+        Git.run(tmp_path, "init", "--bare", str(remote))
+        repo = Git.init_repo(tmp_path / "repo")
+        Git.run(repo, "commit", "--allow-empty", "-m", "base")
+        Git.run(repo, "remote", "add", "origin", str(remote))
+        Git.run(repo, "push", "-u", "origin", Git.BASE_BRANCH)
+
+        return repo, remote
+
+    def test_a_base_that_matches_its_remote_reports_zero_commits_behind(self, tmp_path: Path) -> None:
+        repo, _ = self._repo_pushed_to_a_bare_remote(tmp_path)
+
+        behind = GitBranches(process=Real.process()).commits_behind_remote(worktree=str(repo), base=Git.BASE_BRANCH)
+
+        assert behind == 0
+
+    def test_a_base_left_behind_by_a_push_from_elsewhere_reports_how_many_commits_it_is_missing(
+        self, tmp_path: Path
+    ) -> None:
+        repo, remote = self._repo_pushed_to_a_bare_remote(tmp_path)
+        Git.run(tmp_path, "clone", str(remote), str(tmp_path / "elsewhere"))
+        elsewhere = tmp_path / "elsewhere"
+        Git.run(elsewhere, "commit", "--allow-empty", "-m", "pushed from elsewhere")
+        Git.run(elsewhere, "push")
+
+        behind = GitBranches(process=Real.process()).commits_behind_remote(worktree=str(repo), base=Git.BASE_BRANCH)
+
+        assert behind == 1
+
+    def test_comparing_the_base_fetches_first_so_a_push_nobody_fetched_by_hand_is_still_seen(
+        self, tmp_path: Path
+    ) -> None:
+        repo, remote = self._repo_pushed_to_a_bare_remote(tmp_path)
+        Git.run(tmp_path, "clone", str(remote), str(tmp_path / "elsewhere"))
+        elsewhere = tmp_path / "elsewhere"
+        Git.run(elsewhere, "commit", "--allow-empty", "-m", "pushed from elsewhere")
+        Git.run(elsewhere, "push")
+
+        behind = GitBranches(process=Real.process()).commits_behind_remote(worktree=str(repo), base=Git.BASE_BRANCH)
+
+        assert behind > 0
+
+    def test_comparing_the_base_only_updates_the_remote_tracking_refs_and_leaves_the_local_branch_untouched(
+        self, tmp_path: Path
+    ) -> None:
+        repo, remote = self._repo_pushed_to_a_bare_remote(tmp_path)
+        Git.run(tmp_path, "clone", str(remote), str(tmp_path / "elsewhere"))
+        elsewhere = tmp_path / "elsewhere"
+        Git.run(elsewhere, "commit", "--allow-empty", "-m", "pushed from elsewhere")
+        Git.run(elsewhere, "push")
+        before = Git.run(repo, "rev-parse", Git.BASE_BRANCH).strip()
+
+        GitBranches(process=Real.process()).commits_behind_remote(worktree=str(repo), base=Git.BASE_BRANCH)
+
+        assert Git.run(repo, "rev-parse", Git.BASE_BRANCH).strip() == before
+
+    def test_a_worktree_with_no_remote_to_fetch_from_raises_with_the_reason_git_gave(self, tmp_path: Path) -> None:
+        repo = Git.init_repo(tmp_path / "repo")
+        Git.run(repo, "commit", "--allow-empty", "-m", "base")
+
+        with pytest.raises(GitCommandFailedError):
+            GitBranches(process=Real.process()).commits_behind_remote(worktree=str(repo), base=Git.BASE_BRANCH)

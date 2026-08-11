@@ -73,6 +73,11 @@ class GhForum(Forum):
 
         return output.stdout.strip() or None
 
+    def can_read(self, *, repo: str) -> bool:
+        output = self._process.run(["gh", "repo", "view", repo, "--json", "name"], stdin="")
+
+        return output.code == 0
+
     @staticmethod
     def _number_of(stdout: str) -> int:
         url = stdout.strip()
