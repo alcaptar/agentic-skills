@@ -305,11 +305,11 @@ importar**: un smoke que solo importe el modulo lo da por bueno. Lo evita
      que*, que es todo el trabajo de este cuerpo. Y **donde vive cada test** el programa no lo sabe: el
      informe del implementador trae rutas con su tipo, no un mapa de criterio a test, asi que escribirlo
      seria inventarlo.
-  4. **Bajo `## Deuda aceptada` va lo que el implementador declaro haber dejado fuera**, que le llega como
-     lista y se transporta sin adivinar donde corta una frase. Una lista vacia significa "nada quedo
-     fuera", y la seccion solo se emite cuando trae bullets. Los hallazgos no bloqueantes del veredicto
-     **no** entran: darlos por deuda aceptada seria mentir, porque un hallazgo puede haberse corregido en
-     la vuelta siguiente, y saber cual sobrevivio es dato que nadie guarda.
+  4. **Bajo `## Deuda aceptada` va lo que el implementador declaro haber dejado fuera, junto a los
+     hallazgos que sobrevivieron a la vuelta con la que el juez dejo pasar la slice**, que llegan como
+     lista y se transportan sin adivinar donde corta una frase. Una lista vacia significa "nada quedo
+     fuera", y la seccion solo se emite cuando trae bullets. Los de vueltas anteriores **no** entran:
+     pueden haberse corregido despues, y darlos por aceptados seria mentir.
 
      **Y la deuda llega solo dentro de una invocacion, exactamente como el gasto y por el mismo motivo**:
      no viaja en el `Run` persistido, asi que una invocacion que muera despues de implementar deja a la

@@ -234,6 +234,59 @@ extrae", el entendimiento fue ese tercero, y la condicion se cumplio -aunque no 
 slice con severidad `alta` citando esa misma linea-. Que una condicion escrita se ejecute importa mas que
 la regla concreta; la que nadie ejecuta ensena que el fichero donde vive es opinion.
 
+### El commit unico por slice era un residuo, y se retira (2026-08-11)
+
+Nadie decidio nunca que una slice fuese un solo commit. Salio de la decision del 2026-07-30 de mover el
+commit **detras** del veredicto -para que un veredicto negativo no dejara rastro que deshacer-, y "un
+solo commit **sin `--amend`**" quedo escrito ahi como la consecuencia barata de ese movimiento, no como
+un objetivo. El precio si se registro: la rubrica del juez tenia un item que pedia que el test precediera
+a la implementacion, y hubo que retirarlo porque el historial de un commit unico nunca puede acreditarlo;
+en el smoke del 2026-07-27 los tres agentes contestaron "no puedo constatarlo", o sea ruido garantizado
+en todas las slices.
+
+Se retira porque una ronda de correccion fundida con lo que corrige obliga a quien revisa a reconstruir
+del diff final que se pidio cambiar. Lo que devuelve la vuelta atras no es solo permiso: es la capacidad
+de acreditar en el historial el orden en que se hizo el trabajo, que se habia dado por perdida. Lo que
+**no** cambia es lo que era decision propia y no consecuencia: `git add` con rutas explicitas, la higiene
+del indice antes de cada commit, y `--merge` al fusionar.
+
+### Que se rompe hoy al reanudar un run, y en que orden vale la pena arreglarlo (2026-08-11)
+
+El `Run` que se persiste en la subissue lleva nueve campos; el progreso que el conductor tiene en memoria,
+catorce. Lo que se pierde no es adorno: sin los veredictos, una reanudacion en el paso de implementar
+manda al implementador sin los hallazgos que tiene que corregir; sin la lista de ficheros que el
+implementador declaro, una reanudacion en los controles stagea una lista vacia y **acusa de infraccion de
+higiene a todos los ficheros que si estaban bien**, gastandole un reintento.
+
+Lo que se descubrio al medirlo es que **el mundo ya guarda casi todo**: los veredictos con sus hallazgos
+en el corpus, los logs de los controles en disco con nombre determinista, el gasto por llamada en su log,
+y la pull request la sabe el foro. Solo tres datos no viven en ningun sitio. Asi que el patron a extender
+no es persistir mas, sino releer -que es lo que ya hace el entendimiento, la unica pieza que sobrevive
+limpia a una muerte-. Su precio es que releer necesita poder buscar sin ambiguedad, y eso depende de que
+cada fila diga de que run viene.
+
+El orden se decidio poniendo cada arreglo contra un fallo real (un run que gasto quince dolares y murio
+al entregar porque su rama no existia):
+
+| | coste | que habria hecho en ese fallo |
+|---|---|---|
+| Comprobar el suelo al reanudar | quitar una condicion, mas tests | parar en el segundo cero, sin gastar |
+| Caer escribiendo estado | pequeno | dejar dicho que paso en vez de quedarse en curso |
+| Releer el mundo | varias lecturas nuevas, y depende de la identidad de las filas | nada: el estado no era el problema |
+| Commit por paso | contenido | conservar el codigo, y fallar igual al entregar |
+
+Lo barato es lo que mas valia, asi que va primero, y es lo contrario del orden en que se habia listado.
+
+### Los hallazgos indultables se publican, y el comentario manda (2026-08-11)
+
+Para indultar un hallazgo en una invocacion distinta a la que lo produjo hace falta que el hallazgo
+sobreviva con identidad. El veredicto entero ya esta escrito en el corpus, asi que la opcion coherente con
+"un segundo sitio donde escribir puede desmentir al primero" era que el corpus mandase y el comentario
+fuese solo una vista. Se eligio lo contrario -el comentario de la subissue es la fuente de verdad- por dos
+razones: quien indulta es una persona y necesita ver lo que indulta, y el corpus solo se puede buscar sin
+ambiguedad cuando sus filas digan de que run vienen, que es trabajo que va por detras. El corpus se queda
+en lo que es hoy, material de medicion agregada.
+
 ## deploy-watch
 
 ### Decisiones clave
