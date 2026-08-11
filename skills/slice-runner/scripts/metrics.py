@@ -49,10 +49,12 @@ import sys
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypeVar
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+
+_Causa = TypeVar("_Causa", bound=StrEnum)
 
 DEFAULT_PATH = Path.home() / ".claude" / "slice-runner" / "metrics.jsonl"
 DESCONOCIDO = "desconocido"
@@ -105,6 +107,21 @@ class CausaDescarte(StrEnum):
 
     VEREDICTO_INCOHERENTE = "veredicto-incoherente"
     LLAMADA_FALLIDA = "llamada-fallida"
+
+
+class CausaCiIndeterminada(StrEnum):
+    """Por que no se pudo determinar el estado de la integracion continua.
+
+    `COMANDO_FALLIDO` es `gh pr checks` fallando de verdad -credenciales, red, una pull request
+    que no resuelve-; `RESPUESTA_NO_LEGIBLE` es una respuesta que si llego pero no se pudo
+    interpretar. Se separan por el mismo motivo que `CausaDescarte`: cada una se arregla mirando
+    un sitio distinto, y sumadas no dicen cual.
+
+    El campo es opcional: el historico anterior a esta slice no lo trae.
+    """
+
+    COMANDO_FALLIDO = "comando-fallido"
+    RESPUESTA_NO_LEGIBLE = "respuesta-no-legible"
 
 
 _VEREDICTO_VIEJO = "bloqueada-puertas"
@@ -173,15 +190,15 @@ def _grupo(row: dict[str, object], clave: str) -> dict[str, object]:
     return {str(k): v for k, v in valor.items()} if isinstance(valor, dict) else {}
 
 
-def _causa(row: dict[str, object], clave: str) -> CausaDescarte | None:
-    """La causa del descarte si la fila trae una del vocabulario, y si no, ninguna.
+def _causa(row: dict[str, object], clave: str, vocabulario: type[_Causa]) -> _Causa | None:
+    """La causa si la fila trae una del `vocabulario`, y si no, ninguna.
 
     Una causa que no reconocemos se lee como ausente por lo mismo que `_load` se salta una linea
     corrupta: el log es durable y una fila rara no puede tumbar el agregado de todo el historico
     que si es legible.
     """
     valor = row.get(clave)
-    return CausaDescarte(valor) if isinstance(valor, str) and valor in set(CausaDescarte) else None
+    return vocabulario(valor) if isinstance(valor, str) and valor in set(vocabulario) else None
 
 
 @dataclass(frozen=True, kw_only=True, slots=True)
@@ -210,6 +227,7 @@ class Fila:
     duracion_ms: float | None
     tokens_cache: float | None
     descartes_verify_causa: CausaDescarte | None
+    ci_indeterminada_causa: CausaCiIndeterminada | None
     modelos: tuple[str, ...]
     variante: str | None
 
@@ -233,7 +251,8 @@ class Fila:
             turnos=_opcional(harness, "turnos"),
             duracion_ms=_opcional(harness, "duracion_ms"),
             tokens_cache=_opcional(harness, "tokens_cache"),
-            descartes_verify_causa=_causa(row, "descartes_verify_causa"),
+            descartes_verify_causa=_causa(row, "descartes_verify_causa", CausaDescarte),
+            ci_indeterminada_causa=_causa(row, "ci_indeterminada_causa", CausaCiIndeterminada),
             modelos=_lista_str(row, "modelos"),
             variante=_texto_opcional(row, "variante"),
         )

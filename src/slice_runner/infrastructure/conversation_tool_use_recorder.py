@@ -3,7 +3,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from slice_runner.domain.exceptions import ConversationNotFoundError, UnreadableConversationError
-from slice_runner.infrastructure.tool_use_log import HarnessCallToolUse, ToolUse
+from slice_runner.domain.unrecorded_conversation_cause import UnrecordedConversationCause
+from slice_runner.infrastructure.tool_use_log import HarnessCallToolUse, ToolUse, UnrecordedCallToolUse
 from slice_runner.infrastructure.tool_use_recorder import ToolUseRecorder
 
 if TYPE_CHECKING:
@@ -20,7 +21,15 @@ class ConversationToolUseRecorder(ToolUseRecorder):
     def record_after(self, *, slice_id: str, step: Step, session: str, repo: str) -> None:
         try:
             conversation = self._conversations.read(session=session, repo=repo)
-        except (ConversationNotFoundError, UnreadableConversationError):
+        except (ConversationNotFoundError, UnreadableConversationError) as unreadable:
+            self._tool_use_log.record_unrecorded(
+                UnrecordedCallToolUse(
+                    slice_id=slice_id,
+                    step=step,
+                    session=session,
+                    cause=UnrecordedConversationCause.of_the_failure(unreadable),
+                )
+            )
             return
 
         self._tool_use_log.record(

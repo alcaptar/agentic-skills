@@ -13,9 +13,11 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 import metrics
+from slice_runner.domain.ci_indeterminate_cause import CiIndeterminateCause
 from slice_runner.domain.discard_cause import DiscardCause
 from slice_runner.infrastructure.metrics_entry_payload import (
     DurableCi,
+    DurableCiIndeterminateCause,
     DurableDiscardCause,
     DurableVerdict,
     MetricsEntryPayload,
@@ -38,6 +40,10 @@ def test_the_durable_vocabulary_the_program_writes_is_the_one_metrics_py_reads()
         "descartes_verify_causa": (
             {str(c) for c in DurableDiscardCause},
             {str(c) for c in metrics.CausaDescarte},
+        ),
+        "ci_indeterminada_causa": (
+            {str(c) for c in DurableCiIndeterminateCause},
+            {str(c) for c in metrics.CausaCiIndeterminada},
         ),
     }
 
@@ -77,3 +83,12 @@ def test_a_row_that_discards_the_judge_is_read_with_the_cause_metrics_py_knows()
     fila = metrics.Fila.from_row(row)
 
     assert fila.descartes_verify_causa == metrics.CausaDescarte.LLAMADA_FALLIDA
+
+
+def test_a_row_that_closes_ci_indeterminate_is_read_with_the_cause_metrics_py_knows() -> None:
+    closed = ClosedSliceMother.blocked_indeterminate_because_of(CiIndeterminateCause.COMMAND_FAILED)
+    row = MetricsEntryPayload.from_domain(closed, ts=datetime(2026, 8, 10, tzinfo=UTC).isoformat()).to_contract()
+
+    fila = metrics.Fila.from_row(row)
+
+    assert fila.ci_indeterminada_causa == metrics.CausaCiIndeterminada.COMANDO_FALLIDO

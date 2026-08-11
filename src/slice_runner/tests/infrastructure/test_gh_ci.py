@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
 from slice_runner.domain.ci_status import CiStatus
+from slice_runner.domain.exceptions import CiCommandFailedError, UnreadableCiError
 from slice_runner.infrastructure.gh_ci import GhCi
 from slice_runner.infrastructure.process import ProcessOutput
 from slice_runner.tests.argv import Argv
@@ -59,19 +62,32 @@ class TestGhCi:
     def test_a_skipped_check_next_to_one_that_passed_does_not_take_the_green_away(self) -> None:
         assert self._status(self._answering(self._checks("pass", "skipping"))) is CiStatus.GREEN
 
-    def test_an_answer_that_is_not_json_reads_as_unknown_and_never_as_no_checks(self) -> None:
-        assert self._status(self._answering("no checks reported")) is CiStatus.UNKNOWN
+    def test_an_answer_that_is_not_json_raises_the_readable_cause_instead_of_reading_as_unknown_in_silence(
+        self,
+    ) -> None:
+        with pytest.raises(UnreadableCiError):
+            self._status(self._answering("no checks reported"))
 
-    def test_an_answer_that_is_json_but_not_an_array_reads_as_unknown(self) -> None:
-        assert self._status(self._answering(json.dumps({"name": "check", "bucket": "pass"}))) is CiStatus.UNKNOWN
+    def test_an_answer_that_is_json_but_not_an_array_raises_the_readable_cause(self) -> None:
+        with pytest.raises(UnreadableCiError):
+            self._status(self._answering(json.dumps({"name": "check", "bucket": "pass"})))
 
-    def test_an_array_whose_items_are_not_objects_reads_as_unknown(self) -> None:
-        assert self._status(self._answering(json.dumps(["pass", "pass"]))) is CiStatus.UNKNOWN
+    def test_an_array_whose_items_are_not_objects_raises_the_readable_cause(self) -> None:
+        with pytest.raises(UnreadableCiError):
+            self._status(self._answering(json.dumps(["pass", "pass"])))
 
-    def test_a_check_with_a_key_we_did_not_ask_for_reads_as_unknown_instead_of_being_read_around(self) -> None:
+    def test_a_check_with_a_key_we_did_not_ask_for_raises_the_readable_cause_instead_of_being_read_around(
+        self,
+    ) -> None:
         recorded = json.dumps([{"name": "check", "bucket": "pass", "state": "SUCCESS"}])
 
-        assert self._status(self._answering(recorded)) is CiStatus.UNKNOWN
+        with pytest.raises(UnreadableCiError):
+            self._status(self._answering(recorded))
 
-    def test_a_non_zero_exit_reads_as_unknown_because_the_exit_code_is_not_the_signal(self) -> None:
-        assert self._status(self._answering("", code=1, stderr=_UNRESOLVED)) is CiStatus.UNKNOWN
+    def test_a_non_zero_exit_with_a_real_stderr_raises_the_command_failure_and_never_parses_the_empty_stdout(
+        self,
+    ) -> None:
+        with pytest.raises(CiCommandFailedError) as failure:
+            self._status(self._answering("", code=1, stderr=_UNRESOLVED))
+
+        assert _UNRESOLVED in str(failure.value)

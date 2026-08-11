@@ -51,24 +51,22 @@ class TestAControlThatNeverGetsToRun:
 
         assert outcome.status is ControlStatus.UNKNOWN
 
-    def test_a_process_that_cannot_be_launched_leaves_no_log_because_nothing_was_captured(self, tmp_path: Path) -> None:
+    def test_a_process_that_cannot_be_launched_still_names_which_control_it_was(self, tmp_path: Path) -> None:
         process = ProcessDoubles.exiting()
         process.run.side_effect = ProcessNotRunnableError("sh: resource temporarily unavailable")
 
         outcome = LocalControlRunner(process=process).run(ControlCommandMother.lint(), repo=_REPO, out=tmp_path)
 
-        assert outcome.log is None
+        assert outcome.log == tmp_path / f"{ControlCommandMother.LINT_NAME}.log"
 
-    def test_a_process_that_cannot_be_launched_writes_nothing_under_the_requested_directory(
-        self, tmp_path: Path
-    ) -> None:
+    def test_a_process_that_cannot_be_launched_writes_why_it_never_started_to_the_log(self, tmp_path: Path) -> None:
         process = ProcessDoubles.exiting()
         process.run.side_effect = ProcessNotRunnableError("sh: resource temporarily unavailable")
-        out = tmp_path / "round-1"
 
-        LocalControlRunner(process=process).run(ControlCommandMother.lint(), repo=_REPO, out=out)
+        LocalControlRunner(process=process).run(ControlCommandMother.lint(), repo=_REPO, out=tmp_path)
 
-        assert not out.exists()
+        written = (tmp_path / f"{ControlCommandMother.LINT_NAME}.log").read_text(encoding="utf-8")
+        assert written == "sh: resource temporarily unavailable"
 
 
 class TestTheOutDirectoryIsCreatedOnDemand:

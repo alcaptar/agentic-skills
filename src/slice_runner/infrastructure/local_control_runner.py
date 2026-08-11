@@ -21,11 +21,20 @@ class LocalControlRunner(ControlRunner):
     def run(self, command: ControlCommand, *, repo: str, out: Path) -> ControlOutcome:
         try:
             output = self._process.run(["sh", "-c", command.command], stdin="", cwd=repo)
-        except ProcessNotRunnableError:
-            return ControlOutcome(status=ControlStatus.UNKNOWN)
+        except ProcessNotRunnableError as unrunnable:
+            log = self._logged(command, out=out, text=str(unrunnable))
 
+            return ControlOutcome(status=ControlStatus.UNKNOWN, log=log)
+
+        return ControlOutcome(
+            status=ControlStatus.GREEN if output.code == 0 else ControlStatus.RED,
+            log=self._logged(command, out=out, text=output.stdout + output.stderr),
+        )
+
+    @staticmethod
+    def _logged(command: ControlCommand, *, out: Path, text: str) -> Path:
         out.mkdir(parents=True, exist_ok=True)
         log = out / f"{command.name}.log"
-        log.write_text(output.stdout + output.stderr, encoding="utf-8")
+        log.write_text(text, encoding="utf-8")
 
-        return ControlOutcome(status=ControlStatus.GREEN if output.code == 0 else ControlStatus.RED, log=log)
+        return log
