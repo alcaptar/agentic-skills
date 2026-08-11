@@ -16,12 +16,14 @@ from slice_runner.infrastructure.gh_body_payload import GhBodyPayload
 from slice_runner.infrastructure.gh_comments_payload import GhCommentPayload, GhCommentsPayload
 from slice_runner.infrastructure.gh_parent_view_payload import GhParentViewPayload
 from slice_runner.infrastructure.gh_sub_issue_payload import GhSubIssuePayload
+from slice_runner.infrastructure.malformed_response_comment import MalformedResponseComment
 from slice_runner.infrastructure.parent_body import ParentBody
 from slice_runner.infrastructure.reopened_comment import ReopenedComment
 from slice_runner.infrastructure.subissue_body import SubissueBody
 from slice_runner.infrastructure.understanding_comment import UnderstandingComment
 
 if TYPE_CHECKING:
+    from slice_runner.domain.malformed_reason import MalformedReason
     from slice_runner.domain.run import Run
     from slice_runner.infrastructure.gh_sub_issue_payload import GhLabelPayload
     from slice_runner.infrastructure.process import Process, ProcessOutput
@@ -108,19 +110,25 @@ class GhRunRepository(RunRepository):
         return UnderstandingComment.written_in(published[-1])
 
     def read_alignment_response(self, *, repo: str, issue: int) -> AlignmentResponse:
-        return AlignmentResponse.of_the_comments(
-            self._after_the_understanding(self._comment_bodies(repo=repo, issue=issue))
-        )
+        window = self._after_the_understanding(self._comment_bodies(repo=repo, issue=issue))
+
+        return AlignmentResponse.of_the_comments(self._without_acknowledged_malformed(window))
 
     def read_retry_instruction(self, *, repo: str, issue: int) -> RetryResponse:
-        return RetryResponse.of_the_comments(
-            self._after_the_last_reopening(self._comment_bodies(repo=repo, issue=issue))
-        )
+        window = self._after_the_last_reopening(self._comment_bodies(repo=repo, issue=issue))
+
+        return RetryResponse.of_the_comments(self._without_acknowledged_malformed(window))
 
     def mark_reopened(self, *, repo: str, issue: int, instruction: str) -> None:
         self._run(
             ["gh", "issue", "comment", str(issue), "--repo", repo, "--body-file", "-"],
             stdin=ReopenedComment.rendered(instruction),
+        )
+
+    def write_malformed_response(self, *, repo: str, issue: int, reason: MalformedReason) -> None:
+        self._run(
+            ["gh", "issue", "comment", str(issue), "--repo", repo, "--body-file", "-"],
+            stdin=MalformedResponseComment.rendered(reason),
         )
 
     def _comment_bodies(self, *, repo: str, issue: int) -> tuple[str, ...]:
@@ -142,6 +150,13 @@ class GhRunRepository(RunRepository):
         for index in range(len(bodies) - 1, -1, -1):
             if ReopenedComment.is_the_marker(bodies[index]):
                 return bodies[index + 1 :]
+
+        return bodies
+
+    @staticmethod
+    def _without_acknowledged_malformed(bodies: tuple[str, ...]) -> tuple[str, ...]:
+        while bodies and MalformedResponseComment.is_the_marker(bodies[-1]):
+            bodies = bodies[:-2]
 
         return bodies
 

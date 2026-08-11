@@ -25,6 +25,7 @@ from slice_runner.domain.exceptions import (
 from slice_runner.domain.halt import Halt
 from slice_runner.domain.harness_spend import HarnessSpend
 from slice_runner.domain.issue_label import IssueLabel
+from slice_runner.domain.malformed_reason import MalformedReason
 from slice_runner.domain.precheck_outcome import PrecheckOutcome
 from slice_runner.domain.pull_request_state import PullRequestState
 from slice_runner.domain.retry_response import RetryResponse
@@ -378,6 +379,48 @@ class TestConductSliceRespondingToAlignment:
 
         assert conductor.understanding.write.call_count == 0
 
+    def test_a_malformed_go_is_answered_with_what_it_is_missing_instead_of_being_treated_as_silence(self) -> None:
+        conductor = self._conductor(budgets=Budgets(total_wait_seconds=0))
+        malformed = AlignmentResponse(kind=AlignmentResponseKind.MALFORMED, reason=MalformedReason.GO_CARRIES_TEXT)
+        conductor.repository.read_alignment_response.return_value = malformed
+
+        conductor.conduct()
+
+        conductor.repository.write_malformed_response.assert_called_once_with(
+            repo=Conductor.REPO, issue=_SUBISSUE, reason=MalformedReason.GO_CARRIES_TEXT
+        )
+        assert conductor.understanding.write.call_count == 0
+        assert conductor.implement.execute.call_count == 0
+
+    def test_a_malformed_review_is_answered_with_what_it_is_missing_instead_of_rewriting_the_understanding(
+        self,
+    ) -> None:
+        conductor = self._conductor(budgets=Budgets(total_wait_seconds=0))
+        malformed = AlignmentResponse(kind=AlignmentResponseKind.MALFORMED, reason=MalformedReason.MISSING_CORRECTION)
+        conductor.repository.read_alignment_response.return_value = malformed
+
+        conductor.conduct()
+
+        conductor.repository.write_malformed_response.assert_called_once_with(
+            repo=Conductor.REPO, issue=_SUBISSUE, reason=MalformedReason.MISSING_CORRECTION
+        )
+        assert conductor.understanding.write.call_count == 0
+
+    def test_a_tick_that_finds_the_prior_malformed_comment_already_acknowledged_answers_it_no_further(self) -> None:
+        conductor = self._conductor(budgets=Budgets(total_wait_seconds=60))
+        malformed = AlignmentResponse(kind=AlignmentResponseKind.MALFORMED, reason=MalformedReason.GO_CARRIES_TEXT)
+        conductor.repository.read_alignment_response.side_effect = [
+            malformed,
+            AlignmentResponse(kind=AlignmentResponseKind.NOT_YET),
+        ]
+
+        conductor.conduct()
+
+        assert conductor.repository.read_alignment_response.call_count == 2
+        conductor.repository.write_malformed_response.assert_called_once_with(
+            repo=Conductor.REPO, issue=_SUBISSUE, reason=MalformedReason.GO_CARRIES_TEXT
+        )
+
     def test_a_go_carries_forward_whatever_was_spent_while_asking_for_alignment(self) -> None:
         spend = HarnessSpendMother.of_the_understanding_call()
         conductor = Conductor(
@@ -594,6 +637,23 @@ class TestConductSliceWhenTheNamedSliceCannotBeSelected:
             conductor.conduct()
 
         assert conductor.metrics.record.call_count == 0
+
+    def test_a_sibling_with_a_malformed_retry_comment_is_answered_with_what_it_is_missing_before_raising(
+        self,
+    ) -> None:
+        conductor = Conductor(chosen=SelectSliceResultMother.about_to_start())
+        malformed_sibling = SubIssueMother.blocked(IssueLabel.BLOCKED_CI_RED, RunMother.blocked_on_red_ci())
+        malformed = RetryResponse(kind=RetryResponseKind.MALFORMED, reason=MalformedReason.MISSING_INSTRUCTION)
+        error = self._unselectable(dangling=())
+        error.malformed_retries = ((malformed_sibling, malformed),)
+        conductor.select.execute.side_effect = error
+
+        with pytest.raises(NoSliceLeftError):
+            conductor.conduct()
+
+        conductor.repository.write_malformed_response.assert_called_once_with(
+            repo=Conductor.REPO, issue=malformed_sibling.number, reason=MalformedReason.MISSING_INSTRUCTION
+        )
 
 
 class TestConductSliceReopeningABlockedRun:

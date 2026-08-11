@@ -7,3 +7,4 @@ class AlignmentResponseKind(StrEnum):
     NOT_YET = "not-yet"
     GO = "go"
     REVIEW = "review"
+    MALFORMED = "malformed"

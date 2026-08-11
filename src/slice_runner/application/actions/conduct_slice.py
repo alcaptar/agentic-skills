@@ -212,6 +212,11 @@ class ConductSlice:
         except NoSliceLeftError as unselectable:
             for dangling in unselectable.dangling:
                 self._closing_a_merge_missed_between_invocations(params, dangling)
+            for subissue, response in unselectable.malformed_retries:
+                if response.reason is not None:
+                    self._repository.write_malformed_response(
+                        repo=params.repo, issue=subissue.number, reason=response.reason
+                    )
             raise
 
         for dangling in chosen.dangling:
@@ -297,6 +302,10 @@ class ConductSlice:
         response = self._repository.read_alignment_response(repo=progress.params.repo, issue=progress.subissue.number)
         if response.kind is AlignmentResponseKind.REVIEW and response.correction != progress.run.corrected:
             progress = self._publishing_the_understanding(self._seeded(progress), correction=response.correction)
+        elif response.kind is AlignmentResponseKind.MALFORMED and response.reason is not None:
+            self._repository.write_malformed_response(
+                repo=progress.params.repo, issue=progress.subissue.number, reason=response.reason
+            )
 
         return SteppedSlice(progress=progress, outcome=Outcome.of_the_alignment(response.kind))
 

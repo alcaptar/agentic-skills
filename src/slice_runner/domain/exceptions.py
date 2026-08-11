@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from slice_runner.domain.harness_spend import HarnessSpend
+    from slice_runner.domain.retry_response import RetryResponse
     from slice_runner.domain.sub_issue import SubIssue
 
 
@@ -97,6 +98,7 @@ class LaggingSearchIndexError(ValueError):
 
 class NoSliceLeftError(LookupError):
     dangling: tuple[SubIssue, ...] = ()
+    malformed_retries: tuple[tuple[SubIssue, RetryResponse], ...] = ()
 
 
 class NoConversationRecordedError(LookupError):
