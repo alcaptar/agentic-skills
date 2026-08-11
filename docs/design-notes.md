@@ -315,10 +315,36 @@ documento, y la vara real son decenas de miles de tokens repartidos en varios fi
 rango medido. Los otros dos se miden en el playground antes de tocar nada.
 
 **El riesgo de reanudar no es el que parecia.** La objecion inicial -que la sesion vieja contamine con
-decisiones previas- se cambia por una mas concreta y medible: un implementador reanudado **defiende su
-propio diseno** cuando el hallazgo contradice lo que eligio, porque lleva decenas de turnos invertidos en
-que estaba bien. La tarea `implementer-resume` lo mide con dos hallazgos a la vez, uno que anade trabajo
--donde reanudar deberia ganar- y otro que revierte una decision suya -donde deberia perder-.
+decisiones previas- se cambio por una mas concreta y medible: un implementador reanudado **defiende su
+propio diseno** cuando el hallazgo contradice lo que eligio. La tarea `implementer-resume` lo mide con dos
+hallazgos a la vez, uno que anade trabajo -donde reanudar deberia ganar- y otro que revierte una decision
+suya -donde deberia perder-.
+
+### Reanudar la sesion parte los turnos por la mitad y no ahorra nada (2026-08-11)
+
+Medido con `implementer-resume`, cinco repeticiones por variante, dos vueltas por celda:
+
+| segunda vuelta | llamada nueva | sesion reanudada |
+|---|---|---|
+| turnos | 24,4 (rango 22-26) | 11,0 (rango 9-14) |
+| coste | 0,370 $ (0,348-0,397) | 0,403 $ (0,347-0,473) |
+| lectura de cache | 292 k | 440 k |
+| segundos | 121,9 | 127,1 |
+
+Los rangos de **turnos no se solapan**; los de **coste se solapan enteros**, con la sesion reanudada
+tendiendo a mas cara. El mecanismo esta en la lectura de cache: cada turno reanudado arrastra la
+conversacion anterior entera -unos 40 k por turno frente a 12 k-, asi que se cambian muchos turnos
+pequenos por pocos turnos grandes y **el producto sale igual**. Tampoco gana en reloj.
+
+La consecuencia para donde buscar ahorro es que **el coste es turnos por contexto**, y reanudar mueve los
+dos factores en direcciones opuestas. Lo que si mueve el producto es el precio del token -o sea el
+modelo- o el contexto que se arrastra por turno. Reanudar se queda como herramienta de **latencia en
+numero de pasos**, no de dinero, y en un repo mas grande deberia salir **peor**, no mejor: la sesion de
+la primera vuelta es ahi mucho mas larga, asi que lo que arrastra cada turno reanudado crece con ella.
+
+Y el riesgo que se habia elevado a hipotesis principal **no aparecio**: el hallazgo que revierte la
+decision del propio implementador lo corrigieron **las dos variantes en las cinco repeticiones**. Las seis
+reglas salieron 5/5 en ambas, asi que reanudar tampoco degrada. Simplemente no compra lo que se buscaba.
 
 ## deploy-watch
 
