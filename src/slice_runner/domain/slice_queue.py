@@ -31,6 +31,10 @@ class SliceQueue:
         return child.state is IssueState.OPEN and not cls._disqualifying(child.label)
 
     @classmethod
+    def blocked(cls, child: SubIssue) -> bool:
+        return child.state is IssueState.OPEN and cls._disqualifying(child.label)
+
+    @classmethod
     def dangling(cls, children: tuple[SubIssue, ...]) -> tuple[SubIssue, ...]:
         return tuple(child for child in children if cls._left_dangling(child))
 

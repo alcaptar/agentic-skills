@@ -7,6 +7,7 @@ if TYPE_CHECKING:
     from slice_runner.domain.alignment_response import AlignmentResponse
     from slice_runner.domain.issue_label import IssueLabel
     from slice_runner.domain.parent_issue import ParentIssue
+    from slice_runner.domain.retry_response import RetryResponse
     from slice_runner.domain.run import Run
     from slice_runner.domain.sub_issue import SubIssue
 
@@ -23,6 +24,12 @@ class RunRepository(ABC):
 
     @abstractmethod
     def read_alignment_response(self, *, repo: str, issue: int) -> AlignmentResponse: ...
+
+    @abstractmethod
+    def read_retry_instruction(self, *, repo: str, issue: int) -> RetryResponse: ...
+
+    @abstractmethod
+    def mark_reopened(self, *, repo: str, issue: int, instruction: str) -> None: ...
 
     @abstractmethod
     def write_run(self, *, repo: str, issue: int, run: Run) -> None: ...

@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import TYPE_CHECKING
 from unittest.mock import Mock
 
 import pytest
 
 from slice_runner.application.actions.close_parent import CloseParentParams
+from slice_runner.application.actions.reopen_slice import ReopenSliceParams, ReopenSliceResult
 from slice_runner.domain.alignment import Alignment
 from slice_runner.domain.alignment_response import AlignmentResponse
 from slice_runner.domain.alignment_response_kind import AlignmentResponseKind
@@ -24,6 +26,8 @@ from slice_runner.domain.harness_spend import HarnessSpend
 from slice_runner.domain.issue_label import IssueLabel
 from slice_runner.domain.precheck_outcome import PrecheckOutcome
 from slice_runner.domain.pull_request_state import PullRequestState
+from slice_runner.domain.retry_response import RetryResponse
+from slice_runner.domain.retry_response_kind import RetryResponseKind
 from slice_runner.domain.run import Run
 from slice_runner.domain.run_state import RunState
 from slice_runner.domain.step import Step
@@ -38,6 +42,8 @@ from slice_runner.tests.mothers.select_slice_result_mother import SelectSliceRes
 from slice_runner.tests.mothers.sub_issue_mother import SubIssueMother
 from slice_runner.tests.mothers.verdict_mother import FindingMother, VerdictMother
 from slice_runner.tests.mothers.verification_mother import VerificationMother
+
+_RETRY_INSTRUCTION = "el control ya esta arreglado a mano"
 
 if TYPE_CHECKING:
     from slice_runner.domain.closed_slice import ClosedSlice
@@ -574,6 +580,71 @@ class TestConductSliceWhenTheNamedSliceCannotBeSelected:
             conductor.conduct()
 
         assert conductor.metrics.record.call_count == 0
+
+
+class TestConductSliceReopeningABlockedRun:
+    @staticmethod
+    def _blocked_and_reopened(label: IssueLabel, blocked_run: Run, reopened_run: Run) -> tuple[Conductor, Run]:
+        blocked = SubIssueMother.blocked(label, blocked_run)
+        retry = RetryResponse(kind=RetryResponseKind.RETRY, instruction=_RETRY_INSTRUCTION)
+        chosen = replace(SelectSliceResultMother.about_to_start(subissue=blocked), retry=retry)
+        conductor = Conductor(chosen=chosen)
+        reopened = replace(blocked, run=reopened_run, label=IssueLabel.IN_PROGRESS)
+        conductor.reopen.execute.return_value = ReopenSliceResult(subissue=reopened, instruction=_RETRY_INSTRUCTION)
+
+        return conductor, blocked.run or reopened_run
+
+    def test_a_chosen_slice_carrying_a_retry_response_is_reopened_before_anything_is_conducted(self) -> None:
+        conductor, _ = self._blocked_and_reopened(
+            IssueLabel.BLOCKED_CONTROLS,
+            RunMother.blocked_on_controls(),
+            replace(RunMother.blocked_on_controls(), control_retries=0),
+        )
+        blocked = SubIssueMother.blocked(IssueLabel.BLOCKED_CONTROLS, RunMother.blocked_on_controls())
+
+        conductor.conduct()
+
+        conductor.reopen.execute.assert_called_once_with(
+            ReopenSliceParams(repo=Conductor.REPO, subissue=blocked, instruction=_RETRY_INSTRUCTION)
+        )
+
+    def test_a_slice_chosen_without_a_retry_response_is_never_sent_to_be_reopened(self) -> None:
+        conductor = Conductor(chosen=SelectSliceResultMother.resumed_at(RunMother.implementing()))
+
+        conductor.conduct()
+
+        assert conductor.reopen.execute.call_count == 0
+
+    def test_the_run_that_resumes_is_the_one_reopen_slice_handed_back_not_the_stale_blocked_one(self) -> None:
+        conductor, _ = self._blocked_and_reopened(
+            IssueLabel.BLOCKED_VERIFY,
+            RunMother.blocked_on_verify(),
+            replace(RunMother.blocked_on_verify(), verify_retries=0),
+        )
+        conductor.verify.execute.side_effect = [
+            VerificationMother.vetoing(VerdictMother.failing()),
+            VerificationMother.passing(),
+        ]
+
+        conductor.conduct()
+
+        assert conductor.verify.execute.call_count == 2
+        assert conductor.implement.execute.call_count == 1
+
+    def test_the_retry_instruction_that_reopened_the_slice_travels_to_the_implementer(self) -> None:
+        conductor, _ = self._blocked_and_reopened(
+            IssueLabel.BLOCKED_VERIFY,
+            RunMother.blocked_on_verify(),
+            replace(RunMother.blocked_on_verify(), verify_retries=0),
+        )
+        conductor.verify.execute.side_effect = [
+            VerificationMother.vetoing(VerdictMother.failing()),
+            VerificationMother.passing(),
+        ]
+
+        conductor.conduct()
+
+        assert conductor.implement.execute.call_args.args[0].retry_instruction == _RETRY_INSTRUCTION
 
 
 class TestConductSliceResumingAnInterruptedRun:

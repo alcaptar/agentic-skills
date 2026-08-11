@@ -25,3 +25,4 @@ class Assignment:
     control_logs: tuple[Path, ...] = ()
     hygiene_refusal: str = ""
     understanding: str = ""
+    retry_instruction: str = ""

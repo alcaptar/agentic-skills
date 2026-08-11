@@ -55,6 +55,10 @@ class SubIssueMother:
         return replace(SubIssueMother.pending(), label=label)
 
     @staticmethod
+    def blocked(label: IssueLabel, run: Run) -> SubIssue:
+        return replace(SubIssueMother.pending(), label=label, run=run)
+
+    @staticmethod
     def paused_after_spending(spend: HarnessSpend) -> SubIssue:
         return replace(
             SubIssueMother.pending(),
