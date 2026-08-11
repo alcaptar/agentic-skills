@@ -38,6 +38,11 @@ git switch master && git pull --ff-only
   commit por hecho, `git diff --name-only` tiene que salir vacio.
 - **La integracion continua se comprueba contra el SHA que vas a mergear**, no contra "la rama": un
   `success` heredado del commit anterior se lee igual en la interfaz.
+- **Una pull request lleva los commits que hagan falta, y cada ronda de correccion va en el suyo.**
+  Fundir la correccion con lo corregido obliga a quien revisa a reconstruir del diff final que se pidio
+  cambiar, y deja el historial sin el orden en que se hizo el trabajo, que es lo unico que puede
+  acreditarlo. Lo que no cambia por llevar varios: cada commit stagea solo lo declarado, y su mensaje
+  sigue siendo convencional con el `name` de la slice como scope.
 
 ## Dos slices en paralelo
 
@@ -66,5 +71,6 @@ implementarla.
 - Dar dos slices por disjuntas sin haber mirado que ficheros toca cada una.
 - `--squash` o `--rebase` al mergear.
 - Un cuerpo de pull request que resume el diff.
+- Fundir una ronda de correccion con el commit que corrige.
 - `git add -A`, o dar por bueno un commit sin comprobar que el indice iguala el arbol.
 - Leer la integracion continua sin comprobar a que SHA corresponde.

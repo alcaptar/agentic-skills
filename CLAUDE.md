@@ -110,9 +110,11 @@ Estos no son convenciones de codigo: son las invariantes del pipeline, y valen e
   **por que** en lugar de resumir el codigo -eso ya lo cuenta el diff-. Vara: si borras la slice, ¿que
   queda roto o imposible? Si no puedes nombrarlo, la linea es relleno. No hay exencion, a diferencia de
   `SENAL:`. Si un issue viejo no la trae, la PR la reconstruye y **declara que la infirio**.
-- **La PR solo lleva el codigo de la slice**: el commit stagea unicamente los ficheros de codigo/test
+- **La PR solo lleva el codigo de la slice**: cada commit stagea unicamente los ficheros de codigo/test
   de la slice (`git add` explicito, nunca `-A`/`.`); planes y design-docs jamas entran en la PR (la spec
-  vive en el issue). Conventional commits con el `name` de la slice como scope (`feat(name): ...`). Como
+  vive en el issue). Conventional commits con el `name` de la slice como scope (`feat(name): ...`). Una
+  PR lleva **los commits que hagan falta y cada ronda de correccion va en el suyo**, para que la revision
+  lea que se pidio cambiar sin reconstruirlo del diff final (ver `docs/conventions/git-workflow.md`). Como
   referencia la PR a su issue depende del flujo: **`Part of #N`** en el viejo, donde el issue es la feature
   entera y una PR es una slice de ella, y **`Closes #<subissue>`** en el formato nuevo, donde cada slice
   tiene su propia subissue y al mergear la cierra GitHub sola (por eso `RunState.MERGED` no lleva etiqueta:
