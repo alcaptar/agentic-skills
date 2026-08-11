@@ -16,6 +16,7 @@ from slice_runner.application.actions.deliver_slice import DeliverSlice
 from slice_runner.application.actions.implement_slice import ImplementSlice
 from slice_runner.application.actions.record_closure import RecordClosure
 from slice_runner.application.actions.record_step import RecordStep
+from slice_runner.application.actions.reopen_slice import ReopenSlice
 from slice_runner.application.actions.stage_slice import StageSlice
 from slice_runner.application.actions.verify_slice import VerifySlice
 from slice_runner.application.queries.run_prechecks import RunPrechecks
@@ -64,6 +65,7 @@ class Conductor:
     def __init__(self, *, chosen: SelectSliceResult, budgets: Budgets | None = None) -> None:
         self.budgets = budgets or Budgets()
         self.select = self._doubling(SelectSlice, execute=chosen)
+        self.reopen = self._doubling(ReopenSlice, execute=None)
         self.prechecks = self._doubling(RunPrechecks, execute=PrecheckOutcome.CLEAR)
         self.implement = self._doubling(ImplementSlice, execute=ImplementationMother.of_two_paths())
         self.stage = self._doubling(StageSlice, execute=None)
@@ -106,6 +108,7 @@ class Conductor:
         return ConductSlice(
             use_cases=ConductSliceUseCases(
                 select=self.select,
+                reopen=self.reopen,
                 prechecks=self.prechecks,
                 implement=self.implement,
                 stage=self.stage,

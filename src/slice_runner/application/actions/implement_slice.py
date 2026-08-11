@@ -24,6 +24,7 @@ class ImplementSliceParams:
     control_logs: tuple[Path, ...] = ()
     hygiene_refusal: str = ""
     understanding: str = ""
+    retry_instruction: str = ""
 
 
 class ImplementSlice:
@@ -48,4 +49,5 @@ class ImplementSlice:
             control_logs=params.control_logs,
             hygiene_refusal=params.hygiene_refusal,
             understanding=params.understanding,
+            retry_instruction=params.retry_instruction,
         )

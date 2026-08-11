@@ -895,6 +895,7 @@ class TestAskingForASliceThatCannotBeRun:
                 RunMother.awaiting_merge(), second_label=IssueLabel.BLOCKED_VERIFY
             ),
             parent=GhConversationMother.parent_of_two_slices(),
+            answers=(Answer(to=("gh", "issue", "view", "--json", "comments"), stdout=json.dumps({"comments": []})),),
         )
 
         code = invocation.conduct(logs=tmp_path / "logs", slice_id=GhConversationMother.OTHER_SLICE)

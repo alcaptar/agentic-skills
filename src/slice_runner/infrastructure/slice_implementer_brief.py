@@ -27,6 +27,10 @@ que transcribir ni te releva de pensar, pero **lo que decidio una persona ahi no
 cuenta**: si crees que se equivoca, hazlo como pide y dilo en `left_out`. Donde contradiga a las
 convenciones del repo o a los criterios de aceptacion, ganan ellos.
 
+Si la slice se reabrio tras un bloqueo o un aborto por presupuesto, el prompt cierra con **"## Instruccion
+de reintento"**: lo que una persona escribio para autorizar el reintento, y gana a lo que hicieras antes
+del bloqueo.
+
 Si alguno de esos datos llega vacio, **dilo en lo que devuelves** en vez de suplirlo por tu cuenta.
 
 ## La vara de medir

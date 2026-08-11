@@ -69,8 +69,25 @@ class ImplementerInvocation:
                 *self._control_logs,
                 *self._hygiene_refusal,
                 *self._understanding,
+                *self._retry_instruction,
             ]
         )
+
+    @property
+    def _retry_instruction(self) -> list[str]:
+        instruction = self.assignment.retry_instruction.strip()
+        if not instruction:
+            return []
+
+        return [
+            "",
+            "## Instruccion de reintento",
+            "",
+            "Esta slice estaba bloqueada o abortada; una persona la reabrio con esta instruccion, que gana a lo",
+            "que hicieras antes del bloqueo:",
+            "",
+            instruction,
+        ]
 
     @property
     def _understanding(self) -> list[str]:

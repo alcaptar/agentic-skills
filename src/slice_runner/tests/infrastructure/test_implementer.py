@@ -235,6 +235,28 @@ class TestTheAgreedUnderstandingThatTravelsWithTheBrief:
         assert "\n## Entendimiento acordado\n" not in self._sent(AssignmentMother.of_the_first_round())
 
 
+class TestTheRetryInstructionThatTravelsWithTheBrief:
+    @staticmethod
+    def _sent(assignment: Assignment) -> str:
+        process = RecordedProcess(HarnessEnvelopeMother.recorded(_RECORDED))
+
+        ClaudeImplementer(
+            process=process,
+            trace=RecordedTrace(),
+            turns=RecordedTurnLog(),
+            spend_log=RecordedSpendLog(),
+            tool_uses=RecordedToolUseRecorder(),
+        ).implement(assignment)
+
+        return process.stdin
+
+    def test_the_instruction_that_reopened_the_slice_travels_and_closes_the_prompt(self) -> None:
+        assert self._sent(AssignmentMother.of_a_round_after_reopening()).endswith(AssignmentMother.RETRY_INSTRUCTION)
+
+    def test_a_round_with_no_reopening_carries_no_section_instead_of_an_empty_one(self) -> None:
+        assert "\n## Instruccion de reintento\n" not in self._sent(AssignmentMother.of_the_first_round())
+
+
 class TestTheReportOfARecordedCall:
     def test_both_paths_of_the_recorded_call_arrive_labelled(self) -> None:
         process = RecordedProcess(HarnessEnvelopeMother.recorded(_RECORDED))

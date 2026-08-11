@@ -47,6 +47,30 @@ class RunMother:
         return Run(step=Step.UNDERSTAND, corrected=correction)
 
     @staticmethod
+    def blocked_on_controls() -> Run:
+        return Run(step=Step.RUN_CONTROLS, control_retries=2)
+
+    @staticmethod
+    def blocked_on_hygiene() -> Run:
+        return Run(step=Step.RUN_CONTROLS, hygiene_retries=2)
+
+    @staticmethod
+    def blocked_on_verify() -> Run:
+        return Run(step=Step.VERIFY, verify_retries=2)
+
+    @staticmethod
+    def blocked_on_red_ci() -> Run:
+        return Run(step=Step.AWAIT_CI, ci_retries=1)
+
+    @staticmethod
+    def blocked_on_indeterminate_ci() -> Run:
+        return Run(step=Step.AWAIT_CI, indeterminate_ticks=3)
+
+    @staticmethod
+    def aborted_for_budget(spend: HarnessSpend) -> Run:
+        return Run(step=Step.VERIFY, spend=spend)
+
+    @staticmethod
     def that_went_back_for_every_reason() -> Run:
         return Run(
             step=Step.AWAIT_MERGE,

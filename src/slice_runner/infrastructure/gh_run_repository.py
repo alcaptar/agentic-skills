@@ -8,6 +8,7 @@ from slice_runner.domain.alignment_response import AlignmentResponse
 from slice_runner.domain.exceptions import LaggingSearchIndexError, UnreadableIssueError
 from slice_runner.domain.issue_label import IssueLabel
 from slice_runner.domain.parent_issue import ParentIssue
+from slice_runner.domain.retry_response import RetryResponse
 from slice_runner.domain.run_repository import RunRepository
 from slice_runner.domain.sub_issue import SubIssue
 from slice_runner.infrastructure.gh_body_payload import GhBodyPayload
@@ -15,6 +16,7 @@ from slice_runner.infrastructure.gh_comments_payload import GhCommentPayload, Gh
 from slice_runner.infrastructure.gh_parent_view_payload import GhParentViewPayload
 from slice_runner.infrastructure.gh_sub_issue_payload import GhSubIssuePayload
 from slice_runner.infrastructure.parent_body import ParentBody
+from slice_runner.infrastructure.reopened_comment import ReopenedComment
 from slice_runner.infrastructure.subissue_body import SubissueBody
 from slice_runner.infrastructure.understanding_comment import UnderstandingComment
 
@@ -109,6 +111,17 @@ class GhRunRepository(RunRepository):
             self._after_the_understanding(self._comment_bodies(repo=repo, issue=issue))
         )
 
+    def read_retry_instruction(self, *, repo: str, issue: int) -> RetryResponse:
+        return RetryResponse.of_the_comments(
+            self._after_the_last_reopening(self._comment_bodies(repo=repo, issue=issue))
+        )
+
+    def mark_reopened(self, *, repo: str, issue: int, instruction: str) -> None:
+        self._run(
+            ["gh", "issue", "comment", str(issue), "--repo", repo, "--body-file", "-"],
+            stdin=ReopenedComment.rendered(instruction),
+        )
+
     def _comment_bodies(self, *, repo: str, issue: int) -> tuple[str, ...]:
         output = self._run(["gh", "issue", "view", str(issue), "--repo", repo, "--json", "comments"])
         payload = GhCommentsPayload.from_dict(self._decoded_object(output))
@@ -122,6 +135,14 @@ class GhRunRepository(RunRepository):
                 return bodies[index + 1 :]
 
         return ()
+
+    @staticmethod
+    def _after_the_last_reopening(bodies: tuple[str, ...]) -> tuple[str, ...]:
+        for index in range(len(bodies) - 1, -1, -1):
+            if ReopenedComment.is_the_marker(bodies[index]):
+                return bodies[index + 1 :]
+
+        return bodies
 
     def write_label(self, *, repo: str, issue: int, remove: IssueLabel | None, add: IssueLabel) -> None:
         argv = self._edit_of(repo=repo, issue=issue, add=add, remove=remove)

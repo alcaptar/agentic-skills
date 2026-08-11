@@ -15,6 +15,7 @@ class AssignmentMother:
     UNDERSTANDING: ClassVar[str] = (
         "El precheck de subissue cerrada se llama `SUBISSUE_ALREADY_CLOSED` y corta antes de tocar la rama."
     )
+    RETRY_INSTRUCTION: ClassVar[str] = "el control ya esta arreglado a mano"
 
     @classmethod
     def of_the_first_round(cls) -> Assignment:
@@ -54,3 +55,7 @@ class AssignmentMother:
     @classmethod
     def of_the_first_round_with_an_agreed_understanding(cls) -> Assignment:
         return replace(cls.of_the_first_round(), understanding=cls.UNDERSTANDING)
+
+    @classmethod
+    def of_a_round_after_reopening(cls) -> Assignment:
+        return replace(cls.of_the_first_round(), retry_instruction=cls.RETRY_INSTRUCTION)

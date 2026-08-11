@@ -17,9 +17,11 @@ from slice_runner.domain.exceptions import (
 )
 from slice_runner.domain.issue_label import IssueLabel
 from slice_runner.domain.issue_state import IssueState
+from slice_runner.domain.retry_response_kind import RetryResponseKind
 from slice_runner.domain.source import Source, SourceKind
 from slice_runner.infrastructure.gh_run_repository import GhCommandFailedError, GhRunRepository
 from slice_runner.infrastructure.process import ProcessOutput
+from slice_runner.infrastructure.reopened_comment import ReopenedComment
 from slice_runner.infrastructure.understanding_comment import UnderstandingComment
 from slice_runner.tests.argv import Argv
 from slice_runner.tests.doubles import ScriptedProcess
@@ -697,6 +699,93 @@ class TestReadingTheAlignmentResponse:
 
         with pytest.raises(GhCommandFailedError, match="HTTP 404"):
             GhRunRepository(process=process).read_alignment_response(repo=_REPO, issue=45)
+
+
+class TestReadingTheRetryInstruction:
+    @staticmethod
+    def _process(bodies: list[str]) -> ScriptedProcess:
+        template = GhResponseMother.subissue_comments()[0]
+        payload = {"comments": [{**template, "body": body} for body in bodies]}
+
+        return ScriptedProcess(ProcessOutput(code=0, stdout=json.dumps(payload), stderr=""))
+
+    def test_it_asks_gh_for_exactly_the_comments_of_the_subissue(self) -> None:
+        process = self._process([])
+
+        GhRunRepository(process=process).read_retry_instruction(repo=_REPO, issue=45)
+
+        argv = Argv(process.calls[0].argv)
+        assert process.calls[0].argv[:4] == ["gh", "issue", "view", "45"]
+        assert argv.value_of("--repo") == _REPO
+        assert argv.value_of("--json") == "comments"
+
+    def test_no_comment_at_all_reads_as_not_answered_yet(self) -> None:
+        process = self._process([])
+
+        response = GhRunRepository(process=process).read_retry_instruction(repo=_REPO, issue=45)
+
+        assert response.kind is RetryResponseKind.NOT_YET
+
+    def test_a_retry_comment_carries_its_instruction_through(self) -> None:
+        process = self._process(["-RETRY el control ya esta arreglado a mano"])
+
+        response = GhRunRepository(process=process).read_retry_instruction(repo=_REPO, issue=45)
+
+        assert (response.kind, response.instruction) == (RetryResponseKind.RETRY, "el control ya esta arreglado a mano")
+
+    def test_the_most_recent_retry_comment_wins_over_an_earlier_one(self) -> None:
+        process = self._process(["-RETRY el primero", "-RETRY el ultimo"])
+
+        response = GhRunRepository(process=process).read_retry_instruction(repo=_REPO, issue=45)
+
+        assert response.instruction == "el ultimo"
+
+    def test_a_retry_comment_before_the_last_reopening_is_never_read_as_a_new_instruction(self) -> None:
+        process = self._process(["-RETRY ya consumida", ReopenedComment.rendered("ya consumida")])
+
+        response = GhRunRepository(process=process).read_retry_instruction(repo=_REPO, issue=45)
+
+        assert response.kind is RetryResponseKind.NOT_YET
+
+    def test_a_retry_comment_after_the_last_reopening_is_read_as_a_new_instruction(self) -> None:
+        process = self._process(
+            ["-RETRY ya consumida", ReopenedComment.rendered("ya consumida"), "-RETRY la de verdad"]
+        )
+
+        response = GhRunRepository(process=process).read_retry_instruction(repo=_REPO, issue=45)
+
+        assert (response.kind, response.instruction) == (RetryResponseKind.RETRY, "la de verdad")
+
+    def test_a_non_zero_exit_raises_with_the_stderr_it_carried(self) -> None:
+        process = ScriptedProcess(ProcessOutput(code=1, stdout="", stderr="HTTP 404: Not Found"))
+
+        with pytest.raises(GhCommandFailedError, match="HTTP 404"):
+            GhRunRepository(process=process).read_retry_instruction(repo=_REPO, issue=45)
+
+
+class TestMarkingASliceReopened:
+    def test_the_call_is_a_comment_carrying_the_instruction_and_the_marker(self) -> None:
+        process = ScriptedProcess(ProcessOutput(code=0, stdout="", stderr=""))
+
+        GhRunRepository(process=process).mark_reopened(
+            repo=_REPO, issue=45, instruction="el control ya esta arreglado a mano"
+        )
+
+        assert process.calls[0].argv == ["gh", "issue", "comment", "45", "--repo", _REPO, "--body-file", "-"]
+        assert process.calls[0].stdin == ReopenedComment.rendered("el control ya esta arreglado a mano")
+
+    def test_the_comment_carries_the_marker_that_lets_a_later_read_find_it_back(self) -> None:
+        process = ScriptedProcess(ProcessOutput(code=0, stdout="", stderr=""))
+
+        GhRunRepository(process=process).mark_reopened(repo=_REPO, issue=45, instruction="x")
+
+        assert ReopenedComment.MARKER in process.calls[0].stdin
+
+    def test_a_non_zero_exit_raises_with_the_stderr_it_carried(self) -> None:
+        process = ScriptedProcess(ProcessOutput(code=1, stdout="", stderr="HTTP 422: Unprocessable Entity"))
+
+        with pytest.raises(GhCommandFailedError, match="HTTP 422"):
+            GhRunRepository(process=process).mark_reopened(repo=_REPO, issue=45, instruction="x")
 
 
 class TestPausingForAlignment:

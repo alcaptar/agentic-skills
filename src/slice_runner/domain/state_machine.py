@@ -4,6 +4,8 @@ from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Literal, NoReturn
 
 from slice_runner.domain.exceptions import ImpossibleTransitionError
+from slice_runner.domain.harness_spend import HarnessSpend
+from slice_runner.domain.issue_label import IssueLabel
 from slice_runner.domain.outcome import Outcome
 from slice_runner.domain.run_state import RunState
 from slice_runner.domain.step import Step
@@ -23,6 +25,23 @@ class StateMachine:
             return self._closed(run, RunState.ABORTED_BUDGET)
 
         return self._after_the_step_of(run, outcome)
+
+    def reopened(self, run: Run, *, blocked: IssueLabel) -> Run:
+        match blocked:
+            case IssueLabel.BLOCKED_CONTROLS:
+                return replace(run, control_retries=0)
+            case IssueLabel.BLOCKED_HYGIENE:
+                return replace(run, hygiene_retries=0)
+            case IssueLabel.BLOCKED_VERIFY:
+                return replace(run, verify_retries=0)
+            case IssueLabel.BLOCKED_CI_RED:
+                return replace(run, ci_retries=0)
+            case IssueLabel.BLOCKED_CI_INDETERMINATE:
+                return replace(run, indeterminate_ticks=0)
+            case IssueLabel.ABORTED_BUDGET:
+                return replace(run, spend=HarnessSpend.nothing())
+            case _:
+                raise ImpossibleTransitionError(f"the label `{blocked}` names no closed run that can be reopened")
 
     def _after_the_step_of(self, run: Run, outcome: Outcome) -> Transition:
         match run.step:
