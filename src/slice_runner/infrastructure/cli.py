@@ -84,6 +84,7 @@ from slice_runner.infrastructure.verdict_payload import VerdictPayload
 
 if TYPE_CHECKING:
     from slice_runner.application.actions.conduct_slice import ConductSliceResult
+    from slice_runner.domain.clock import Clock
     from slice_runner.infrastructure.process import Process
 
 
@@ -142,9 +143,17 @@ class Cli:
                     )
                 )
             case Subcommand.READ:
-                return cls.read(repo=arguments.repo, slice_id=arguments.slice_id, step=Step(arguments.step))
+                return cls.read(
+                    repo=arguments.repo,
+                    issue=arguments.issue,
+                    worktree=arguments.worktree,
+                    slice_id=arguments.slice_id,
+                    step=Step(arguments.step),
+                )
             case Subcommand.SPEND:
-                return cls.spend(slice_id=arguments.slice_id, step=Step(arguments.step))
+                return cls.spend(
+                    repo=arguments.repo, issue=arguments.issue, slice_id=arguments.slice_id, step=Step(arguments.step)
+                )
 
     @classmethod
     def parser(cls) -> argparse.ArgumentParser:
@@ -183,13 +192,17 @@ class Cli:
         read = subcommands.add_parser(
             Subcommand.READ, help="print the conversation of the last call that served a slice's step, as text"
         )
-        read.add_argument("--repo", required=True, help="path of the slice's repo, as it was when the call ran")
+        read.add_argument("--repo", required=True, help="repo of the issue the slice belongs to, as `<org>/<repo>`")
+        read.add_argument("--issue", type=int, required=True, help="number of the subissue the slice belongs to")
+        read.add_argument("--worktree", required=True, help="path of the slice's repo, as it was when the call ran")
         read.add_argument("--slice", dest="slice_id", required=True, help="identifier of the slice to read")
         read.add_argument("--step", required=True, choices=[str(x) for x in Step], help="step whose call is read")
 
         spend = subcommands.add_parser(
             Subcommand.SPEND, help="add up what the harness spent on the calls that served a slice's step"
         )
+        spend.add_argument("--repo", required=True, help="repo of the issue the slice belongs to, as `<org>/<repo>`")
+        spend.add_argument("--issue", type=int, required=True, help="number of the subissue the slice belongs to")
         spend.add_argument("--slice", dest="slice_id", required=True, help="identifier of the slice to add up")
         spend.add_argument("--step", required=True, choices=[str(x) for x in Step], help="step whose calls are summed")
 
@@ -208,10 +221,11 @@ class Cli:
         return ExitCode.OK
 
     @classmethod
-    def read(cls, *, repo: str, slice_id: str, step: Step) -> int:
+    def read(cls, *, repo: str, issue: int, worktree: str, slice_id: str, step: Step) -> int:
+        clock = SystemClock()
         try:
-            result = ReadConversation(trace=LocalCallTrace(), log=LocalConversationLog()).execute(
-                ReadConversationParams(repo=repo, slice_id=slice_id, step=step)
+            result = ReadConversation(trace=LocalCallTrace(clock=clock), log=LocalConversationLog()).execute(
+                ReadConversationParams(repo=repo, issue=issue, worktree=worktree, slice_id=slice_id, step=step)
             )
         except (NoConversationRecordedError, ConversationNotFoundError) as error:
             return cls._reported(f"there is no conversation to read: {error}", ExitCode.USAGE_ERROR)
@@ -225,9 +239,10 @@ class Cli:
         return ExitCode.OK
 
     @classmethod
-    def spend(cls, *, slice_id: str, step: Step) -> int:
-        spend = SpendOfStep(trace=LocalCallTrace(), spend_log=LocalCallSpendLog()).execute(
-            SpendOfStepParams(slice_id=slice_id, step=step)
+    def spend(cls, *, repo: str, issue: int, slice_id: str, step: Step) -> int:
+        clock = SystemClock()
+        spend = SpendOfStep(trace=LocalCallTrace(clock=clock), spend_log=LocalCallSpendLog(clock=clock)).execute(
+            SpendOfStepParams(repo=repo, issue=issue, slice_id=slice_id, step=step)
         )
         print(json.dumps(SpendPayload.from_domain(spend).to_contract(), ensure_ascii=False))
 
@@ -235,7 +250,7 @@ class Cli:
 
     def verify(self, *, repo: str, base: str, slice_id: str) -> int:
         try:
-            verification = self._action().execute(self._params(repo=repo, base=base, slice_id=slice_id))
+            verification = self._action().execute(self._params(worktree=repo, base=base, slice_id=slice_id))
         except UnresolvableRepoOrBaseError as error:
             return self._reported(f"the repo or the base requested do not resolve: {error}", ExitCode.USAGE_ERROR)
         except DiffNotReadableError as error:
@@ -323,14 +338,14 @@ class Cli:
                 implement=ImplementSlice(
                     implementer=ClaudeImplementer(
                         process=self._process,
-                        trace=LocalCallTrace(),
+                        trace=LocalCallTrace(clock=clock),
                         turns=StderrTurnLog(),
-                        spend_log=LocalCallSpendLog(),
+                        spend_log=LocalCallSpendLog(clock=clock),
                         tool_uses=self._tool_uses(),
                     )
                 ),
                 stage=StageSlice(workspace=workspace),
-                verify=self._action(),
+                verify=self._action(clock=clock),
                 deliver=DeliverSlice(workspace=workspace, forum=forum),
                 close=CloseParent(repository=repository),
                 record_step=RecordStep(repository=repository, events=StderrEventLog(), clock=clock),
@@ -345,9 +360,9 @@ class Cli:
                 clock=clock,
                 understanding=ClaudeUnderstanding(
                     process=self._process,
-                    trace=LocalCallTrace(),
+                    trace=LocalCallTrace(clock=clock),
                     turns=StderrTurnLog(),
-                    spend_log=LocalCallSpendLog(),
+                    spend_log=LocalCallSpendLog(clock=clock),
                     tool_uses=self._tool_uses(),
                 ),
                 pull_request=SlicePullRequest(),
@@ -357,19 +372,21 @@ class Cli:
             budgets=self._budgets,
         )
 
-    def _action(self) -> VerifySlice:
+    def _action(self, *, clock: Clock | None = None) -> VerifySlice:
+        used = clock or SystemClock()
+
         return VerifySlice(
             reader=GitDiffReader(process=self._process),
             verifier=ClaudeVerifier(
                 process=self._process,
-                trace=LocalCallTrace(),
+                trace=LocalCallTrace(clock=used),
                 turns=StderrTurnLog(),
-                spend_log=LocalCallSpendLog(),
+                spend_log=LocalCallSpendLog(clock=used),
                 tool_uses=self._tool_uses(),
             ),
             judge=SliceVerifierJudge.adversarial(),
             skills=LocalSkillLibrary(),
-            corpus=LocalCorpus(),
+            corpus=LocalCorpus(clock=used),
         )
 
     @staticmethod
@@ -388,9 +405,17 @@ class Cli:
         )
 
     @staticmethod
-    def _params(*, repo: str, base: str, slice_id: str) -> VerifySliceParams:
+    def _params(*, worktree: str, base: str, slice_id: str) -> VerifySliceParams:
         return VerifySliceParams(
-            repo=repo, base=base, slice_id=slice_id, signal="", criteria=(), sources=(), checklist=()
+            repo="",
+            issue=0,
+            worktree=worktree,
+            base=base,
+            slice_id=slice_id,
+            signal="",
+            criteria=(),
+            sources=(),
+            checklist=(),
         )
 
     @staticmethod

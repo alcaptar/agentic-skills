@@ -52,7 +52,8 @@ class JudgeInvocation:
                 "## Datos del run",
                 "",
                 f"- slice: {review.slice_id}",
-                f"- ruta del repo: {review.repo}",
+                f"- repo: {review.repo}",
+                f"- ruta del repo: {review.worktree}",
                 f"- senal: {review.signal}",
                 *CountedLines.of("criterios de aceptacion", review.criteria),
                 *CountedLines.of(

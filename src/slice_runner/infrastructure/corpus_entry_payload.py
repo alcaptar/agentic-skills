@@ -28,14 +28,20 @@ class CorpusEntryPayload(ContractModel):
     diff: str
     verdict: VerdictPayload
     severity_counts: SeverityCountPayload
+    repo: str | None = None
+    issue: int | None = None
+    ts: str | None = None
 
     @classmethod
-    def from_domain(cls, entry: CorpusEntry) -> Self:
+    def from_domain(cls, entry: CorpusEntry, *, ts: str) -> Self:
         return cls.model_validate(
             {
                 "slice_id": entry.slice_id,
                 "diff": entry.diff.text,
                 "verdict": VerdictPayload.from_domain(entry.verdict),
                 "severity_counts": SeverityCountPayload.from_domain(entry.verdict),
+                "repo": entry.repo,
+                "issue": entry.issue,
+                "ts": ts,
             }
         )

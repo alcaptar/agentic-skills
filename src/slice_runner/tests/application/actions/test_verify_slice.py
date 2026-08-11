@@ -79,12 +79,12 @@ class TestVerifySlice:
         review: SliceUnderReview = verifier.verify.call_args.args[1]
         return review
 
-    def test_the_diff_is_read_for_the_repo_and_base_that_were_asked_for(
+    def test_the_diff_is_read_for_the_worktree_and_base_that_were_asked_for(
         self, action: VerifySlice, reader: Mock
     ) -> None:
         action.execute(_PARAMS)
 
-        reader.read.assert_called_once_with(repo=_PARAMS.repo, base=_PARAMS.base)
+        reader.read.assert_called_once_with(repo=_PARAMS.worktree, base=_PARAMS.base)
 
     def test_the_judge_gets_the_diff_that_was_just_read_and_not_the_repo_and_base(
         self, action: VerifySlice, verifier: Mock
@@ -93,12 +93,12 @@ class TestVerifySlice:
 
         assert self._reviewed(verifier).diff is _DIFF
 
-    def test_what_the_judge_may_read_is_decided_here_and_is_the_repo_plus_the_yardstick(
+    def test_what_the_judge_may_read_is_decided_here_and_is_the_worktree_plus_the_yardstick(
         self, action: VerifySlice, verifier: Mock
     ) -> None:
         action.execute(_PARAMS)
 
-        assert self._judged_by(verifier).readable == (Path(_PARAMS.repo), *_YARDSTICK)
+        assert self._judged_by(verifier).readable == (Path(_PARAMS.worktree), *_YARDSTICK)
 
     def test_the_injected_judge_is_left_untouched_so_one_run_cannot_widen_the_next(
         self, action: VerifySlice, judge: Judge
@@ -116,12 +116,13 @@ class TestVerifySlice:
         judged_by = self._judged_by(verifier)
         assert (judged_by.rubric, judged_by.tools) == (JudgeMother.RUBRIC, JudgeMother.TOOLS)
 
-    def test_the_repo_travels_as_data_and_not_only_as_something_the_judge_may_read(
+    def test_the_repo_and_the_issue_travel_as_data_and_not_only_as_something_the_judge_may_read(
         self, action: VerifySlice, verifier: Mock
     ) -> None:
         action.execute(_PARAMS)
 
-        assert self._reviewed(verifier).repo == _PARAMS.repo
+        reviewed = self._reviewed(verifier)
+        assert (reviewed.repo, reviewed.issue) == (_PARAMS.repo, _PARAMS.issue)
 
     def test_the_slice_and_the_yardstick_its_items_are_measured_against_travel_to_the_judge_too(
         self, action: VerifySlice, verifier: Mock
@@ -149,7 +150,9 @@ class TestVerifySlice:
         action.execute(_PARAMS)
 
         recorded = self._recorded(corpus)
-        assert (recorded.slice_id, recorded.diff, recorded.verdict) == (
+        assert (recorded.repo, recorded.issue, recorded.slice_id, recorded.diff, recorded.verdict) == (
+            _PARAMS.repo,
+            _PARAMS.issue,
             _PARAMS.slice_id,
             _DIFF,
             VerdictMother.passing(),

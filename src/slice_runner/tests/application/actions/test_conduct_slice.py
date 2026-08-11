@@ -836,6 +836,24 @@ class TestConductSliceOnTheHappyPath:
             HarnessSpendMother.of_the_judge_call(),
         )
 
+    def test_the_verification_asked_for_carries_the_subissue_number_and_not_the_parent_issue(self) -> None:
+        conductor = self._conductor()
+
+        conductor.conduct()
+
+        asked = conductor.verify.execute.call_args.args[0]
+        assert (asked.repo, asked.issue, asked.worktree) == (Conductor.REPO, _SUBISSUE, Conductor.WORKTREE)
+        assert asked.issue != Conductor.ISSUE
+
+    def test_the_durable_row_carries_the_subissue_number_and_not_the_parent_issue(self) -> None:
+        conductor = self._conductor()
+
+        conductor.conduct()
+
+        recorded = self._recorded(conductor.metrics)
+        assert recorded.issue == _SUBISSUE
+        assert recorded.issue != Conductor.ISSUE
+
     @staticmethod
     def _recorded(metrics: Mock) -> ClosedSlice:
         closed: ClosedSlice = metrics.record.call_args.args[0]

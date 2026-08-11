@@ -138,6 +138,28 @@ class TestWhereTheJudgeConversationCanBeFound:
         assert [call.session for call in trace.calls] == [HarnessEnvelopeMother.SESSION_OF_THE_JUDGE]
 
 
+class TestTheRunTheCallIsTracedUnder:
+    def test_the_trace_and_the_spend_log_both_carry_the_repo_and_the_issue_of_the_run_under_review(self) -> None:
+        process = RecordedProcess(HarnessEnvelopeMother.recorded())
+        trace = RecordedTrace()
+        spend_log = RecordedSpendLog()
+
+        ClaudeVerifier(
+            process=process,
+            trace=trace,
+            turns=RecordedTurnLog(),
+            spend_log=spend_log,
+            tool_uses=RecordedToolUseRecorder(),
+        ).verify(_JUDGE, SliceUnderReviewMother.of_the_slice())
+
+        assert [(call.repo, call.issue) for call in trace.calls] == [
+            (SliceUnderReviewMother.REPO, SliceUnderReviewMother.ISSUE)
+        ]
+        assert [(call.repo, call.issue) for call in spend_log.calls] == [
+            (SliceUnderReviewMother.REPO, SliceUnderReviewMother.ISSUE)
+        ]
+
+
 class TestTheSpendLogOfTheCall:
     def test_the_session_and_what_it_spent_are_written_down(self) -> None:
         process = RecordedProcess(HarnessEnvelopeMother.recorded())
@@ -188,7 +210,7 @@ class TestTheToolUseRecordingOfTheCall:
                 SliceUnderReviewMother.SLICE_ID,
                 Step.VERIFY,
                 HarnessEnvelopeMother.SESSION_OF_THE_JUDGE,
-                SliceUnderReviewMother.REPO,
+                SliceUnderReviewMother.WORKTREE,
             )
         ]
 

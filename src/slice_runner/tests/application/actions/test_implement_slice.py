@@ -18,6 +18,7 @@ if TYPE_CHECKING:
     from slice_runner.domain.assignment import Assignment
     from slice_runner.domain.finding import Finding
 
+_REPO = "alcaptar/agentic-skills"
 _WORKTREE = "/repos/agentic-skills"
 
 
@@ -35,6 +36,7 @@ class TestImplementSlice:
     @staticmethod
     def _params(*findings: Finding) -> ImplementSliceParams:
         return ImplementSliceParams(
+            repo=_REPO,
             worktree=_WORKTREE,
             subissue=SubIssueMother.pending(),
             parent=ParentIssueMother.with_sources_and_controls(),
@@ -76,12 +78,19 @@ class TestImplementSlice:
         assigned = self._assigned(implementer)
         assert (assigned.sources, assigned.controls) == (parent.sources, parent.controls)
 
-    def test_the_repo_that_is_assigned_is_the_worktree_where_the_work_happens(
+    def test_the_worktree_that_is_assigned_is_where_the_work_happens(
         self, action: ImplementSlice, implementer: Mock
     ) -> None:
         action.execute(self._params())
 
-        assert self._assigned(implementer).repo == _WORKTREE
+        assert self._assigned(implementer).worktree == _WORKTREE
+
+    def test_the_repo_that_is_assigned_is_the_real_repo_of_the_issue_and_not_the_worktree(
+        self, action: ImplementSlice, implementer: Mock
+    ) -> None:
+        action.execute(self._params())
+
+        assert self._assigned(implementer).repo == _REPO
 
     def test_a_first_round_assigns_no_findings_at_all(self, action: ImplementSlice, implementer: Mock) -> None:
         action.execute(self._params())

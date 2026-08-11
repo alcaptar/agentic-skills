@@ -192,8 +192,8 @@ es ejecutable falla en cerrado, sin tocar nada.
 | `run` | Conduce la siguiente slice ejecutable del issue de punta a punta -alinear, implementar, controlar, verificar, abrir la pull request, esperar la integracion continua- y para donde diga el estado. `--slice` nombra una slice concreta en vez de dejar que el programa elija. | `uv run slice-runner run 38 --repo alcaptar/agentic-skills --base master` |
 | `verify` | Juzga lo que hay staged contra el branch-point de la base y emite el veredicto por salida estandar (o el motivo de no tenerlo, por salida de error). | `uv run slice-runner verify --repo . --base master --slice slice-01` |
 | `explain` | Contesta que paso viene despues de un resultado, y cuando se agota un presupuesto, sin montar un run: es una funcion pura sobre el estado que le llega por entrada estandar. | `echo '{"run": {"step": "run-controls", "control_retries": 2}, "outcome": "failed"}' \| uv run slice-runner explain` |
-| `read` | Abre la conversacion grabada de una llamada concreta del rastro y la emite legible por salida estandar, para que la lea una persona. | `uv run slice-runner read --repo . --slice slice-04 --step implement` |
-| `spend` | Suma lo que gasto el harness en las llamadas que sirvieron un paso de una slice (coste, turnos, duracion, numero de llamadas) y lo emite como JSON. | `uv run slice-runner spend --slice slice-04 --step implement` |
+| `read` | Abre la conversacion grabada de una llamada concreta del rastro y la emite legible por salida estandar, para que la lea una persona. `--repo` e `--issue` identifican el run -son los mismos que fija `run`-, y `--worktree` es la ruta donde corrio la llamada. | `uv run slice-runner read --repo alcaptar/agentic-skills --issue 38 --worktree . --slice slice-04 --step implement` |
+| `spend` | Suma lo que gasto el harness en las llamadas que sirvieron un paso de una slice (coste, turnos, duracion, numero de llamadas) y lo emite como JSON. `--repo` e `--issue` identifican el run, igual que en `read`. | `uv run slice-runner spend --repo alcaptar/agentic-skills --issue 38 --slice slice-04 --step implement` |
 
 ```bash
 uv run slice-runner run 38 --repo alcaptar/agentic-skills --base master
@@ -204,20 +204,25 @@ uv run slice-runner verify --repo . --base master --slice slice-01
 Juzga **lo que hay staged** contra el branch-point de la base -que es lo que sera el commit-, emite el
 veredicto como JSON por salida estandar y **cualquier motivo por el que no haya veredicto** por salida de
 error, nunca mezclados. Ademas escribe: cada verificacion anexa una linea a
-`~/.claude/slice-runner/corpus/verdicts.jsonl` -o al equivalente bajo `CLAUDE_CONFIG_DIR`- con el
-identificador de la slice, el diff juzgado, el veredicto entero y su conteo por severidad. Es un registro
-append-only, y vive **fuera del repo** para que ningun `git add` de la slice se lo lleve a la pull request.
+`~/.claude/slice-runner/corpus/verdicts.jsonl` -o al equivalente bajo `CLAUDE_CONFIG_DIR`- con el repo y el
+issue del run, el identificador de la slice, el diff juzgado, el veredicto entero, su conteo por severidad
+y cuando se escribio. Es un registro append-only, y vive **fuera del repo** para que ningun `git add` de la
+slice se lo lleve a la pull request. Un `verify` suelto -invocado sin que `run` este conduciendo ningun
+issue- escribe esa fila con el repo vacio y el issue a `0`: no hay identidad real que registrar fuera de
+un run conducido.
 
 Y **cada llamada al harness** -la que entiende, la que implementa y la que juzga- anexa su linea a
-`~/.claude/slice-runner/trace/calls.jsonl`, con la slice, el paso que servia y el identificador de sesion de
-su conversacion. Es lo que permite abrir la conversacion de una llamada concreta -viven en
-`~/.claude/projects/`, una por sesion- sin adivinar por marcas de tiempo entre decenas de ficheros. Tambien
-append-only y tambien fuera del repo, y por el mismo motivo.
+`~/.claude/slice-runner/trace/calls.jsonl`, con el repo y el issue del run, la slice, el paso que servia, el
+identificador de sesion de su conversacion y cuando se escribio. El repo y el issue son los que distinguen
+dos features que comparten el mismo identificador de slice -`slice-01` no es unico entre issues-, asi que
+una fila nunca se puede confundir con la de otro run. Es lo que permite abrir la conversacion de una llamada
+concreta -viven en `~/.claude/projects/`, una por sesion- sin adivinar por marcas de tiempo entre decenas de
+ficheros. Tambien append-only y tambien fuera del repo, y por el mismo motivo.
 
 `read` es quien la abre:
 
 ```bash
-uv run slice-runner read --repo . --slice slice-04 --step implement
+uv run slice-runner read --repo alcaptar/agentic-skills --issue 38 --worktree . --slice slice-04 --step implement
 ```
 
 Parte de ese rastro -nunca de una busqueda por marca de tiempo- para encontrar la sesion, y de ahi lee

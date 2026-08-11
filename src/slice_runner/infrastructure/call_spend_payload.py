@@ -13,10 +13,15 @@ if TYPE_CHECKING:
 class CallSpendPayload(ContractModel):
     session: str
     spend: SpendPayload
+    repo: str | None = None
+    issue: int | None = None
+    ts: str | None = None
 
     @classmethod
-    def from_call(cls, call: HarnessCallSpend) -> Self:
-        return cls(session=call.session, spend=SpendPayload.from_domain(call.spend))
+    def from_call(cls, call: HarnessCallSpend, *, ts: str) -> Self:
+        return cls(
+            session=call.session, spend=SpendPayload.from_domain(call.spend), repo=call.repo, issue=call.issue, ts=ts
+        )
 
     @classmethod
     def from_dict(cls, data: dict[str, object]) -> Self:

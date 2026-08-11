@@ -17,6 +17,7 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True, kw_only=True, slots=True)
 class ImplementSliceParams:
+    repo: str
     worktree: str
     subissue: SubIssue
     parent: ParentIssue
@@ -39,7 +40,8 @@ class ImplementSlice:
         return Assignment(
             issue=params.subissue.number,
             slice_id=params.subissue.slice_id,
-            repo=params.worktree,
+            repo=params.repo,
+            worktree=params.worktree,
             intention=params.subissue.intention,
             criteria=params.subissue.criteria,
             signal=params.subissue.signal,

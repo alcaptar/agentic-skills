@@ -14,10 +14,15 @@ class HarnessCallPayload(ContractModel):
     slice_id: str
     step: Step
     session: str
+    repo: str | None = None
+    issue: int | None = None
+    ts: str | None = None
 
     @classmethod
-    def from_call(cls, call: HarnessCall) -> Self:
-        return cls(slice_id=call.slice_id, step=call.step, session=call.session)
+    def from_call(cls, call: HarnessCall, *, ts: str) -> Self:
+        return cls(
+            slice_id=call.slice_id, step=call.step, session=call.session, repo=call.repo, issue=call.issue, ts=ts
+        )
 
     @classmethod
     def from_dict(cls, data: dict[str, object]) -> Self:

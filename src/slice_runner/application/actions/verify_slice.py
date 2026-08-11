@@ -21,6 +21,8 @@ if TYPE_CHECKING:
 @dataclass(frozen=True, kw_only=True, slots=True)
 class VerifySliceParams:
     repo: str
+    issue: int
+    worktree: str
     base: str
     slice_id: str
     signal: str
@@ -40,12 +42,14 @@ class VerifySlice:
         self._corpus = corpus
 
     def execute(self, params: VerifySliceParams) -> Verification:
-        diff = self._reader.read(repo=params.repo, base=params.base)
+        diff = self._reader.read(repo=params.worktree, base=params.base)
         verification = self._verifier.verify(
-            self._judge_reading(params.repo),
+            self._judge_reading(params.worktree),
             SliceUnderReview(
                 slice_id=params.slice_id,
                 repo=params.repo,
+                issue=params.issue,
+                worktree=params.worktree,
                 diff=diff,
                 signal=params.signal,
                 criteria=params.criteria,
@@ -53,9 +57,17 @@ class VerifySlice:
                 checklist=params.checklist,
             ),
         )
-        self._corpus.record(CorpusEntry(slice_id=params.slice_id, diff=diff, verdict=verification.verdict))
+        self._corpus.record(
+            CorpusEntry(
+                repo=params.repo,
+                issue=params.issue,
+                slice_id=params.slice_id,
+                diff=diff,
+                verdict=verification.verdict,
+            )
+        )
 
         return verification
 
-    def _judge_reading(self, repo: str) -> Judge:
-        return self._judge.also_reading(Path(repo), *self._skills.directories())
+    def _judge_reading(self, worktree: str) -> Judge:
+        return self._judge.also_reading(Path(worktree), *self._skills.directories())

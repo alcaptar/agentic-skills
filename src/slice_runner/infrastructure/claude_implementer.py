@@ -43,11 +43,21 @@ class ClaudeImplementer(Implementer):
         watch = HarnessTurnWatch(turns=self._turns, slice_id=assignment.slice_id, step=Step.IMPLEMENT)
         output = self._process.run(invocation.argv, stdin=invocation.text, cwd=invocation.cwd, on_line=watch)
         envelope = HarnessOutput.from_process(output)
-        self._trace.record(HarnessCall(slice_id=assignment.slice_id, step=Step.IMPLEMENT, session=envelope.session_id))
+        self._trace.record(
+            HarnessCall(
+                repo=assignment.repo,
+                issue=assignment.issue,
+                slice_id=assignment.slice_id,
+                step=Step.IMPLEMENT,
+                session=envelope.session_id,
+            )
+        )
         spend = envelope.to_domain()
-        self._spend_log.record(HarnessCallSpend(session=envelope.session_id, spend=spend))
+        self._spend_log.record(
+            HarnessCallSpend(repo=assignment.repo, issue=assignment.issue, session=envelope.session_id, spend=spend)
+        )
         self._tool_uses.record_after(
-            slice_id=assignment.slice_id, step=Step.IMPLEMENT, session=envelope.session_id, repo=assignment.repo
+            slice_id=assignment.slice_id, step=Step.IMPLEMENT, session=envelope.session_id, repo=assignment.worktree
         )
         with envelope.measuring():
             self._reject_denials(envelope)

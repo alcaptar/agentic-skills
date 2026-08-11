@@ -370,6 +370,7 @@ class ConductSlice:
 
         implementation = self._implement.execute(
             ImplementSliceParams(
+                repo=progress.params.repo,
                 worktree=progress.params.worktree,
                 subissue=progress.subissue,
                 parent=progress.parent,
@@ -427,7 +428,9 @@ class ConductSlice:
         try:
             verification = self._verify.execute(
                 VerifySliceParams(
-                    repo=progress.params.worktree,
+                    repo=progress.params.repo,
+                    issue=progress.subissue.number,
+                    worktree=progress.params.worktree,
                     base=progress.params.base,
                     slice_id=progress.subissue.slice_id,
                     signal=progress.subissue.signal,
@@ -541,6 +544,7 @@ class ConductSlice:
         self._record_closure.execute(
             RecordClosureParams(
                 repo=params.repo,
+                issue=subissue.number,
                 slice_id=subissue.slice_id,
                 name=subissue.name,
                 state=RunState.MERGED,
@@ -565,6 +569,7 @@ class ConductSlice:
         self._record_closure.execute(
             RecordClosureParams(
                 repo=progress.params.repo,
+                issue=progress.subissue.number,
                 slice_id=progress.subissue.slice_id,
                 name=progress.subissue.name,
                 state=state,

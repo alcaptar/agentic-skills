@@ -16,6 +16,7 @@ class Assignment:
     issue: int
     slice_id: str
     repo: str
+    worktree: str
     intention: str
     criteria: tuple[str, ...]
     signal: str

@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
+from unittest.mock import Mock, create_autospec
 
 import pytest
 
 from slice_runner.domain.budgets import Budgets
+from slice_runner.domain.clock import Clock
 from slice_runner.infrastructure.cli import Cli
 from slice_runner.infrastructure.exit_code import ExitCode
 from slice_runner.infrastructure.local_corpus import LocalCorpus
@@ -19,6 +22,8 @@ from slice_runner.tests.mothers.verification_mother import SliceDiffMother
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+_STAMP = datetime(2026, 8, 10, 12, 0, 0, tzinfo=UTC)
 
 
 class WrittenCorpus:
@@ -34,19 +39,28 @@ class WithTheCorpusOutOfTheRealHome:
     def corpus_root(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv(LocalCorpus.CONFIG_VARIABLE, str(tmp_path))
 
+    @staticmethod
+    def frozen_at(stamp: datetime = _STAMP) -> Mock:
+        clock: Mock = create_autospec(Clock, spec_set=True, instance=True)
+        clock.now.return_value = stamp
+        return clock
+
 
 class TestTheRecordThatIsWritten(WithTheCorpusOutOfTheRealHome):
-    def test_a_verification_is_written_as_the_slice_the_diff_and_the_verdict_the_judge_gave(
+    def test_a_verification_is_written_as_the_run_it_came_from_the_diff_and_the_verdict_the_judge_gave(
         self, tmp_path: Path
     ) -> None:
-        LocalCorpus().record(CorpusEntryMother.of_the_slice())
+        LocalCorpus(clock=self.frozen_at()).record(CorpusEntryMother.of_the_slice())
 
         assert WrittenCorpus.records_under(tmp_path) == [
             {
+                "repo": CorpusEntryMother.REPO,
+                "issue": CorpusEntryMother.ISSUE,
                 "slice_id": CorpusEntryMother.SLICE_ID,
                 "diff": SliceDiffMother.TEXT,
                 "verdict": {"veredicto": "PASA", "hallazgos": []},
                 "severity_counts": {"alta": 0, "media": 0, "baja": 0},
+                "ts": _STAMP.isoformat(),
             }
         ]
 
@@ -59,19 +73,32 @@ class TestTheRecordThatIsWritten(WithTheCorpusOutOfTheRealHome):
             FindingMother.with_line(),
         )
 
-        LocalCorpus().record(CorpusEntryMother.of_the_slice(verdict=vetoed))
+        LocalCorpus(clock=self.frozen_at()).record(CorpusEntryMother.of_the_slice(verdict=vetoed))
 
         assert WrittenCorpus.records_under(tmp_path)[0]["severity_counts"] == {"alta": 2, "media": 1, "baja": 0}
 
 
 class TestTheCorpusOnlyGrows(WithTheCorpusOutOfTheRealHome):
     def test_a_second_verification_is_appended_instead_of_overwriting_the_first(self, tmp_path: Path) -> None:
-        corpus = LocalCorpus()
+        corpus = LocalCorpus(clock=self.frozen_at())
 
         corpus.record(CorpusEntryMother.of_the_slice(slice_id="slice-01"))
         corpus.record(CorpusEntryMother.of_the_slice(slice_id="slice-02"))
 
         assert [record["slice_id"] for record in WrittenCorpus.records_under(tmp_path)] == ["slice-01", "slice-02"]
+
+    def test_two_features_that_happen_to_share_a_slice_id_still_keep_their_own_repo_and_issue_apart(
+        self, tmp_path: Path
+    ) -> None:
+        corpus = LocalCorpus(clock=self.frozen_at())
+
+        corpus.record(CorpusEntryMother.of_the_slice(repo="alcaptar/agentic-skills", issue=45))
+        corpus.record(CorpusEntryMother.of_the_slice(repo="alcaptar/another-feature", issue=99))
+
+        assert [(record["repo"], record["issue"]) for record in WrittenCorpus.records_under(tmp_path)] == [
+            ("alcaptar/agentic-skills", 45),
+            ("alcaptar/another-feature", 99),
+        ]
 
 
 class TestWhereTheCorpusLives:
@@ -80,7 +107,7 @@ class TestWhereTheCorpusLives:
     ) -> None:
         monkeypatch.setenv(LocalCorpus.CONFIG_VARIABLE, str(tmp_path / "never-used-before"))
 
-        LocalCorpus().record(CorpusEntryMother.of_the_slice())
+        LocalCorpus(clock=WithTheCorpusOutOfTheRealHome.frozen_at()).record(CorpusEntryMother.of_the_slice())
 
         assert (tmp_path / "never-used-before" / "slice-runner" / "corpus" / "verdicts.jsonl").exists()
 
@@ -90,7 +117,7 @@ class TestWhereTheCorpusLives:
         monkeypatch.delenv(LocalCorpus.CONFIG_VARIABLE, raising=False)
         monkeypatch.setenv("HOME", str(tmp_path))
 
-        LocalCorpus().record(CorpusEntryMother.of_the_slice())
+        LocalCorpus(clock=WithTheCorpusOutOfTheRealHome.frozen_at()).record(CorpusEntryMother.of_the_slice())
 
         assert (tmp_path / ".claude" / "slice-runner" / "corpus" / "verdicts.jsonl").exists()
 

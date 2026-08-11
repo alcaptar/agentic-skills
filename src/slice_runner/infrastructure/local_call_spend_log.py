@@ -14,10 +14,14 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from slice_runner.domain.call_spend_log import HarnessCallSpend
+    from slice_runner.domain.clock import Clock
 
 
 class LocalCallSpendLog(CallSpendLog):
     LEDGER: ClassVar[tuple[str, ...]] = ("slice-runner", "trace", "spend.jsonl")
+
+    def __init__(self, *, clock: Clock) -> None:
+        self._clock = clock
 
     def record(self, call: HarnessCallSpend) -> None:
         ledger = self._ledger()
@@ -60,6 +64,7 @@ class LocalCallSpendLog(CallSpendLog):
 
         return CallSpendPayload.from_dict(data)
 
-    @staticmethod
-    def _line(call: HarnessCallSpend) -> str:
-        return json.dumps(CallSpendPayload.from_call(call).to_contract(), ensure_ascii=False)
+    def _line(self, call: HarnessCallSpend) -> str:
+        payload = CallSpendPayload.from_call(call, ts=self._clock.now().isoformat())
+
+        return json.dumps(payload.to_contract(), ensure_ascii=False)

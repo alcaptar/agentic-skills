@@ -16,6 +16,7 @@ if TYPE_CHECKING:
 @dataclass(frozen=True, kw_only=True, slots=True)
 class ClosedSlice:
     repo: str
+    issue: int
     slice_id: str
     name: str
     state: RunState

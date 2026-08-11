@@ -11,9 +11,11 @@ from slice_runner.domain.exceptions import NoConversationRecordedError
 from slice_runner.domain.step import Step
 from slice_runner.tests.mothers.conversation_mother import ConversationMother
 
-_REPO = "/Users/someone/repos/the-slice"
+_REPO = "alcaptar/agentic-skills"
+_ISSUE = 38
+_WORKTREE = "/Users/someone/repos/the-slice"
 _SLICE = "slice-05"
-_PARAMS = ReadConversationParams(repo=_REPO, slice_id=_SLICE, step=Step.IMPLEMENT)
+_PARAMS = ReadConversationParams(repo=_REPO, issue=_ISSUE, worktree=_WORKTREE, slice_id=_SLICE, step=Step.IMPLEMENT)
 _SESSION = "779e530f-c285-495c-bbdc-f2896f81fe25"
 _RETRIED_SESSION = "cd8b5450-595b-403e-b6a6-a1f2c9af512c"
 
@@ -40,14 +42,14 @@ class TestReadingTheConversationOfASlice:
     ) -> None:
         query.execute(_PARAMS)
 
-        trace.sessions_of.assert_called_once_with(slice_id=_SLICE, step=Step.IMPLEMENT)
+        trace.sessions_of.assert_called_once_with(repo=_REPO, issue=_ISSUE, slice_id=_SLICE, step=Step.IMPLEMENT)
 
     def test_the_conversation_read_is_the_one_of_the_session_found_in_the_trace(
         self, query: ReadConversation, log: Mock
     ) -> None:
         query.execute(_PARAMS)
 
-        log.read.assert_called_once_with(session=_SESSION, repo=_REPO)
+        log.read.assert_called_once_with(session=_SESSION, repo=_WORKTREE)
 
     def test_the_result_carries_the_session_and_the_conversation_read(self, query: ReadConversation) -> None:
         result = query.execute(_PARAMS)
@@ -62,7 +64,7 @@ class TestReadingTheConversationOfASlice:
 
         query.execute(_PARAMS)
 
-        log.read.assert_called_once_with(session=_RETRIED_SESSION, repo=_REPO)
+        log.read.assert_called_once_with(session=_RETRIED_SESSION, repo=_WORKTREE)
 
     def test_a_slice_and_step_with_no_call_ever_traced_raises_instead_of_guessing_a_session(
         self, query: ReadConversation, trace: Mock, log: Mock

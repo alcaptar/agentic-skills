@@ -105,11 +105,11 @@ class TestHowTheImplementerIsInvoked:
         assert invocation.text not in invocation.argv
 
     def test_the_cwd_the_process_needs_travels_with_the_invocation_and_not_only_as_a_bare_repo(self) -> None:
-        assert ImplementerInvocation(assignment=AssignmentMother.of_the_first_round()).cwd == AssignmentMother.REPO
+        assert ImplementerInvocation(assignment=AssignmentMother.of_the_first_round()).cwd == AssignmentMother.WORKTREE
 
 
 class TestWhereTheProcessRuns:
-    def test_the_repo_becomes_the_working_directory_of_the_process_and_not_only_prompt_text(self) -> None:
+    def test_the_worktree_becomes_the_working_directory_of_the_process_and_not_only_prompt_text(self) -> None:
         process = RecordedProcess(HarnessEnvelopeMother.recorded(_RECORDED))
 
         ClaudeImplementer(
@@ -120,7 +120,7 @@ class TestWhereTheProcessRuns:
             tool_uses=RecordedToolUseRecorder(),
         ).implement(AssignmentMother.of_the_first_round())
 
-        assert process.cwd == AssignmentMother.REPO
+        assert process.cwd == AssignmentMother.WORKTREE
 
     def test_the_harness_is_invoked_exactly_once_because_a_retry_is_a_decision_of_whoever_orchestrates(self) -> None:
         process = RecordedProcess(HarnessEnvelopeMother.recorded(_RECORDED))
@@ -160,6 +160,7 @@ class TestTheSliceDataThatTravelsWithTheBrief:
             "\n"
             "- issue: #45\n"
             "- slice: slice-05\n"
+            "- repo: alcaptar/agentic-skills\n"
             "- ruta del repo: /repos/agentic-skills\n"
             "- intencion: hoy nada evita reimplementar una slice ya entregada\n"
             "- senal: exenta - este repo no despliega\n"
@@ -333,6 +334,24 @@ class TestTheTraceOfTheCall:
         assert [call.session for call in trace.calls] == [HarnessEnvelopeMother.SESSION_OF_THE_IMPLEMENTER]
 
 
+class TestTheRunTheCallIsTracedUnder:
+    def test_the_trace_and_the_spend_log_both_carry_the_repo_and_the_issue_of_the_assignment(self) -> None:
+        process = RecordedProcess(HarnessEnvelopeMother.recorded(_RECORDED))
+        trace = RecordedTrace()
+        spend_log = RecordedSpendLog()
+
+        ClaudeImplementer(
+            process=process,
+            trace=trace,
+            turns=RecordedTurnLog(),
+            spend_log=spend_log,
+            tool_uses=RecordedToolUseRecorder(),
+        ).implement(AssignmentMother.of_the_first_round())
+
+        assert [(call.repo, call.issue) for call in trace.calls] == [(AssignmentMother.REPO, 45)]
+        assert [(call.repo, call.issue) for call in spend_log.calls] == [(AssignmentMother.REPO, 45)]
+
+
 class TestTheSpendLogOfTheCall:
     def test_the_session_and_what_it_spent_are_written_down_regardless_of_the_slice_or_the_step(self) -> None:
         process = RecordedProcess(HarnessEnvelopeMother.recorded(_RECORDED))
@@ -382,7 +401,7 @@ class TestTheToolUseRecordingOfTheCall:
                 "slice-05",
                 Step.IMPLEMENT,
                 HarnessEnvelopeMother.SESSION_OF_THE_IMPLEMENTER,
-                AssignmentMother.REPO,
+                AssignmentMother.WORKTREE,
             )
         ]
 
