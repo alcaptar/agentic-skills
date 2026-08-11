@@ -25,8 +25,11 @@ SKILLS := slice-spec deploy-watch
 # en la suite, asi que queda declarado sin test en vez de fingido con uno.
 install: install-program install-skills
 
+# `--reinstall` no es redundante con `--force`: `--force` pisa el ejecutable que ya hubiera, pero
+# la rueda se reutiliza de cache mientras la version no cambie, y `version` es `0.0.0` fija. Sin el,
+# un `git pull` seguido de `make install` deja instalado el codigo viejo sin decirlo.
 install-program:
-	uv tool install --force .
+	uv tool install --force --reinstall .
 
 # Un symlink ocupado apuntando a otro sitio **no se pisa**: el caso real es el de
 # `slice-runner`, que apunta a `agentic-skills-legacy` a proposito. Se dice y se para.
