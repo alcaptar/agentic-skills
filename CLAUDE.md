@@ -45,6 +45,7 @@ historia del proyecto.
 | **Como se trabaja aqui** | `git-workflow.md`, este `CLAUDE.md` | Tu y yo en sesion. **No** el implementador: tiene prohibido tocar `git` |
 | **Por que es asi** | `docs/design-notes.md` y las pull requests mergeadas | Quien necesita no re-derivar una decision. Nunca es vara de nada |
 | **Lo que se leyo un dia** | `docs/12-factor.md`, `docs/maturity-map.md`, `docs/research-agent-loops.md`, `docs/superpowers/specs/` | Quien quiera saber de donde salio una decision. **Fechado: no se actualiza**, y lo que cite puede estar ya retirado |
+| **Como se arranca** | `docs/arranque.md` | Quien va a usar esto por primera vez, persona o agente. Que teclear, que cuesta y que hace en tu repo sin preguntar. **No es vara de nada**: no juzga codigo ni declara convenciones |
 
 ### Jerarquia de autoridad
 
