@@ -1034,6 +1034,7 @@ class TestTheRoundTripAfterARedCiThatStillHasARetryLeft(BlindToTheToolboxOfThisM
                 Answer(to=("git", "add")),
                 Answer(to=("git", "diff", "--cached", "--name-only"), stdout=cls._what_the_implementer_left_staged()),
                 Answer(to=("sh", "-c", GhConversationMother.CONTROL)),
+                Answer(to=("git", "diff", "--cached", "--numstat"), stdout="1\t0\thello.py\n1\t0\ttest_hello.py\n"),
                 Answer(to=("git", "diff", "--cached"), stdout="diff --git a/hello.py b/hello.py\n"),
                 Answer(
                     to=(JudgeInvocation.EXECUTABLE, "--add-dir"),

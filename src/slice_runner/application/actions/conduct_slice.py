@@ -55,12 +55,14 @@ if TYPE_CHECKING:
     from slice_runner.domain.control_outcome import ControlOutcome
     from slice_runner.domain.control_runner import ControlRunner
     from slice_runner.domain.deploy_watch import DeployWatch
+    from slice_runner.domain.diff_stats import DiffStats
     from slice_runner.domain.finding import Finding
     from slice_runner.domain.forum import Forum
     from slice_runner.domain.parent_issue import ParentIssue
     from slice_runner.domain.pull_request_writer import PullRequestWriter
     from slice_runner.domain.reported_path import ReportedPath
     from slice_runner.domain.retry_response import RetryResponse
+    from slice_runner.domain.role_models import RoleModels
     from slice_runner.domain.run_repository import RunRepository
     from slice_runner.domain.state_machine import StateMachine
     from slice_runner.domain.sub_issue import SubIssue
@@ -106,6 +108,7 @@ class ConductSliceProgress:
     pull_request: int | None = None
     waited_seconds: int = 0
     discard_cause: DiscardCause | None = None
+    diff_stats: DiffStats | None = None
 
     @property
     def spend(self) -> HarnessSpend:
@@ -175,6 +178,7 @@ class ConductSlice:
         ports: ConductSlicePorts,
         machine: StateMachine,
         budgets: Budgets,
+        models: RoleModels,
     ) -> None:
         self._select = use_cases.select
         self._reopen = use_cases.reopen
@@ -197,6 +201,7 @@ class ConductSlice:
         self._deploy_watch = ports.deploy_watch
         self._machine = machine
         self._budgets = budgets
+        self._models = models
 
     def execute(self, params: ConductSliceParams) -> ConductSliceResult:
         try:
@@ -447,7 +452,10 @@ class ConductSlice:
             )
 
         judged = replace(
-            progress, spends=(*progress.spends, verification.spend), verdicts=(*progress.verdicts, verification.verdict)
+            progress,
+            spends=(*progress.spends, verification.spend),
+            verdicts=(*progress.verdicts, verification.verdict),
+            diff_stats=verification.diff_stats,
         )
         stepped = SteppedSlice(progress=judged, outcome=Outcome.of_the_verdict(verification.verdict))
         if verification.verdict.ruling is Ruling.PASS:
@@ -549,6 +557,8 @@ class ConductSlice:
                 name=subissue.name,
                 state=RunState.MERGED,
                 run=run,
+                budgets=self._budgets,
+                models=self._models,
                 spends=(run.spend,),
             )
         )
@@ -574,10 +584,14 @@ class ConductSlice:
                 name=progress.subissue.name,
                 state=state,
                 run=progress.run,
+                budgets=self._budgets,
+                models=self._models,
                 spends=progress.spends,
                 findings=progress.findings_of_every_round,
                 findings_of_the_last_round=progress.findings_of_the_last_round,
                 discard_cause=progress.discard_cause,
+                debt=progress.debt,
+                diff_stats=progress.diff_stats,
             )
         )
         if state is RunState.MERGED:

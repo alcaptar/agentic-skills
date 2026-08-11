@@ -45,6 +45,7 @@ from slice_runner.domain.exceptions import (
     UnresolvableRepoOrBaseError,
 )
 from slice_runner.domain.halt import Halt
+from slice_runner.domain.role_models import RoleModels
 from slice_runner.domain.state_machine import StateMachine
 from slice_runner.domain.step import Step
 from slice_runner.infrastructure.claude_deploy_watch import ClaudeDeployWatch
@@ -61,6 +62,7 @@ from slice_runner.infrastructure.gh_run_repository import GhCommandFailedError, 
 from slice_runner.infrastructure.git_branches import GitBranches, GitCommandFailedError
 from slice_runner.infrastructure.git_diff_reader import GitDiffReader
 from slice_runner.infrastructure.git_workspace import GitWorkspace
+from slice_runner.infrastructure.implementer_invocation import ImplementerInvocation
 from slice_runner.infrastructure.local_call_spend_log import LocalCallSpendLog
 from slice_runner.infrastructure.local_call_trace import LocalCallTrace
 from slice_runner.infrastructure.local_control_runner import LocalControlRunner
@@ -80,6 +82,7 @@ from slice_runner.infrastructure.subcommand import Subcommand
 from slice_runner.infrastructure.system_clock import SystemClock
 from slice_runner.infrastructure.transition_payload import TransitionPayload
 from slice_runner.infrastructure.transition_request_payload import TransitionRequestPayload
+from slice_runner.infrastructure.understanding_invocation import UnderstandingInvocation
 from slice_runner.infrastructure.verdict_payload import VerdictPayload
 
 if TYPE_CHECKING:
@@ -370,6 +373,7 @@ class Cli:
             ),
             machine=machine,
             budgets=self._budgets,
+            models=RoleModels(understand=UnderstandingInvocation.MODEL, implement=ImplementerInvocation.MODEL),
         )
 
     def _action(self, *, clock: Clock | None = None) -> VerifySlice:

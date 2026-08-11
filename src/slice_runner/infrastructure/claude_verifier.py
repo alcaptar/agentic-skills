@@ -65,5 +65,6 @@ class ClaudeVerifier(Verifier):
         return Verification(
             verdict=verdict,
             spend=spend,
+            diff_stats=review.diff.stats,
             denied_reads=tuple(denial.denied_action for denial in envelope.permission_denials),
         )

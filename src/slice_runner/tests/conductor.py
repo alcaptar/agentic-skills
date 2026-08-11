@@ -36,6 +36,7 @@ from slice_runner.domain.metrics_log import MetricsLog
 from slice_runner.domain.precheck_outcome import PrecheckOutcome
 from slice_runner.domain.pull_request_state import PullRequestState
 from slice_runner.domain.pull_request_writer import PullRequestWriter
+from slice_runner.domain.role_models import RoleModels
 from slice_runner.domain.run_repository import RunRepository
 from slice_runner.domain.state_machine import StateMachine
 from slice_runner.domain.understanding_writer import UnderstandingWriter
@@ -62,8 +63,13 @@ class Conductor:
     UNDERSTANDING: ClassVar[str] = UnderstandingMother.TEXT
     NOW: ClassVar[datetime] = datetime(2024, 1, 1, tzinfo=UTC)
 
-    def __init__(self, *, chosen: SelectSliceResult, budgets: Budgets | None = None) -> None:
+    MODELS: ClassVar[RoleModels] = RoleModels(understand="sonnet", implement="sonnet")
+
+    def __init__(
+        self, *, chosen: SelectSliceResult, budgets: Budgets | None = None, models: RoleModels | None = None
+    ) -> None:
         self.budgets = budgets or Budgets()
+        self.models = models or self.MODELS
         self.select = self._doubling(SelectSlice, execute=chosen)
         self.reopen = self._doubling(ReopenSlice, execute=None)
         self.prechecks = self._doubling(RunPrechecks, execute=PrecheckOutcome.CLEAR)
@@ -131,6 +137,7 @@ class Conductor:
             ),
             machine=StateMachine(budgets=self.budgets),
             budgets=self.budgets,
+            models=self.models,
         )
 
     @staticmethod

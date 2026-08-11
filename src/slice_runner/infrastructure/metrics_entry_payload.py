@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from enum import StrEnum
 from typing import TYPE_CHECKING, ClassVar, Self
 
@@ -15,6 +15,7 @@ from slice_runner.infrastructure.corpus_entry_payload import SeverityCountPayloa
 
 if TYPE_CHECKING:
     from slice_runner.domain.closed_slice import ClosedSlice
+    from slice_runner.domain.diff_stats import DiffStats
     from slice_runner.domain.harness_spend import HarnessSpend
 
 
@@ -95,6 +96,22 @@ class HarnessMeasurementPayload(ContractModel):
         )
 
 
+class DiffStatsPayload(ContractModel):
+    files_changed: int = Field(alias="ficheros")
+    lines_added: int = Field(alias="lineas_anadidas")
+    lines_deleted: int = Field(alias="lineas_borradas")
+
+    @classmethod
+    def from_domain(cls, stats: DiffStats) -> Self:
+        return cls.model_validate(
+            {
+                "ficheros": stats.files_changed,
+                "lineas_anadidas": stats.lines_added,
+                "lineas_borradas": stats.lines_deleted,
+            }
+        )
+
+
 class MetricsEntryPayload(ContractModel):
     VARIANT: ClassVar[str] = "programa"
 
@@ -117,6 +134,10 @@ class MetricsEntryPayload(ContractModel):
     discard_cause: DurableDiscardCause | None = Field(alias="descartes_verify_causa", default=None)
     models: list[str] | None = Field(alias="modelos", default=None)
     variant: str = Field(alias="variante")
+    debt: int = Field(alias="deuda")
+    diff: DiffStatsPayload | None = None
+    budgets: dict[str, object] = Field(alias="presupuestos")
+    models_by_role: dict[str, object] = Field(alias="modelos_por_papel")
 
     @classmethod
     def from_domain(cls, closed: ClosedSlice, *, ts: str) -> Self:
@@ -149,6 +170,10 @@ class MetricsEntryPayload(ContractModel):
                 else None,
                 "modelos": list(spend.models) or None,
                 "variante": cls.VARIANT,
+                "deuda": len(closed.debt),
+                "diff": DiffStatsPayload.from_domain(closed.diff_stats) if closed.diff_stats is not None else None,
+                "presupuestos": asdict(closed.budgets),
+                "modelos_por_papel": asdict(closed.models),
             }
         )
 
