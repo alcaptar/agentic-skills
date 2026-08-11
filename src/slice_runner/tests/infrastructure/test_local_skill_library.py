@@ -73,3 +73,41 @@ class TestWhereTheYardstickLives:
         (tmp_path / ".claude" / "plugins").mkdir(parents=True)
 
         assert LocalSkillLibrary().directories() == (tmp_path / ".claude" / "plugins",)
+
+
+class TestWhetherASkillIsInstalled:
+    def test_a_skill_present_as_a_plain_directory_is_found(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        skill = tmp_path / "skills" / "deploy-watch"
+        skill.mkdir(parents=True)
+        monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
+
+        assert LocalSkillLibrary().installed("deploy-watch") == skill
+
+    def test_a_skill_installed_as_a_symlink_is_found_too_because_that_is_how_make_install_lays_it_down(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        checkout = tmp_path / "checkout" / "skills" / "deploy-watch"
+        checkout.mkdir(parents=True)
+        (tmp_path / "skills").mkdir()
+        symlink = tmp_path / "skills" / "deploy-watch"
+        symlink.symlink_to(checkout)
+        monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
+
+        assert LocalSkillLibrary().installed("deploy-watch") == symlink
+
+    def test_a_skill_not_installed_reads_as_none(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        (tmp_path / "skills").mkdir()
+        monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
+
+        assert LocalSkillLibrary().installed("deploy-watch") is None
+
+    def test_a_file_in_place_of_the_skill_directory_is_not_installed_either(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        (tmp_path / "skills").mkdir()
+        (tmp_path / "skills" / "deploy-watch").write_text("not a directory", encoding="utf-8")
+        monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
+
+        assert LocalSkillLibrary().installed("deploy-watch") is None

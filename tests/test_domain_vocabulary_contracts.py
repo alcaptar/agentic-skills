@@ -8,6 +8,7 @@ file for.
 
 from __future__ import annotations
 
+from slice_runner.domain.check_verdict import CheckVerdict
 from slice_runner.domain.issue_label import IssueLabel
 from slice_runner.domain.run_state import RunState
 from slice_runner.domain.step import Step
@@ -47,3 +48,15 @@ def test_no_label_in_the_vocabulary_lacks_a_source_in_the_translator_or_a_manual
     produced = {IssueLabel.of(state=state, step=step) for state in RunState for step in Step} - {None}
 
     assert set(IssueLabel) - produced == manual_source
+
+
+def test_the_verdict_vocabulary_of_the_doctor_holds_only_the_verdicts_a_check_produces_today() -> None:
+    """`CheckVerdict` closes over exactly `ready` and `missing` because no check emits a third one yet.
+
+    `slice-runner doctor` only runs the checks that need no `--repo` -- git, gh, claude, the two
+    skills -- and none of those can come back as an `aviso` the way a lagging base branch will once
+    that check exists. Adding a member here without a check that produces it would be dead
+    vocabulary nobody ever emits, exactly the failure `IssueLabel`'s own contract above guards
+    against for a different vocabulary.
+    """
+    assert set(CheckVerdict) == {CheckVerdict.READY, CheckVerdict.MISSING}

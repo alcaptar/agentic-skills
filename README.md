@@ -194,6 +194,7 @@ es ejecutable falla en cerrado, sin tocar nada.
 | `explain` | Contesta que paso viene despues de un resultado, y cuando se agota un presupuesto, sin montar un run: es una funcion pura sobre el estado que le llega por entrada estandar. | `echo '{"run": {"step": "run-controls", "control_retries": 2}, "outcome": "failed"}' \| uv run slice-runner explain` |
 | `read` | Abre la conversacion grabada de una llamada concreta del rastro y la emite legible por salida estandar, para que la lea una persona. `--repo` e `--issue` identifican el run -son los mismos que fija `run`-, y `--worktree` es la ruta donde corrio la llamada. | `uv run slice-runner read --repo alcaptar/agentic-skills --issue 38 --worktree . --slice slice-04 --step implement` |
 | `spend` | Suma lo que gasto el harness en las llamadas que sirvieron un paso de una slice (coste, turnos, duracion, numero de llamadas) y lo emite como JSON. `--repo` e `--issue` identifican el run, igual que en `read`. | `uv run slice-runner spend --repo alcaptar/agentic-skills --issue 38 --slice slice-04 --step implement` |
+| `doctor` | Comprueba si el entorno esta listo para conducir una slice -`git`, `gh` autenticado, `claude` y las skills `slice-spec`/`deploy-watch` instaladas- y lo emite legible por salida estandar, un chequeo por linea con el comando que lo arregla cuando falta. No arregla nada el mismo. | `uv run slice-runner doctor` |
 
 ```bash
 uv run slice-runner run 38 --repo alcaptar/agentic-skills --base master
@@ -248,6 +249,7 @@ El codigo de salida es el contrato con quien lo invoca:
 | `10` | `run`: el run se interrumpio antes de llegar a una parada -`gh` o `git` fallaron, el foro contesto algo ilegible, el registro durable no se pudo escribir-. El estado persistido sigue siendo bueno. Cualquier subcomando sale con este mismo codigo ante una excepcion que el programa no sabe nombrar, con su tipo y su mensaje por `stderr` en vez de un volcado de la pila |
 | `11` | `run`: la pull request de la slice se cerro **sin** mergear, asi que el merge que la invocacion esperaba ya no puede llegar. El run se queda abierto en su paso; lo decide una persona (reabrir la pull request, o cerrar la slice) |
 | `12` | Una llamada a un proceso externo agoto su tope por llamada y se mato, asi que no hay respuesta que interpretar. Reinvocar a ciegas vuelve a pagar el tope entero: primero hay que mirar **que** se colgo |
+| `13` | `doctor`: el entorno no esta listo para conducir una slice -falta `git`, `gh` no esta autenticado, falta `claude`, o falta alguna de las skills `slice-spec`/`deploy-watch`-. Distinto de `4`: la invocacion estaba bien escrita, lo que falta es el entorno |
 
 `1` es un veredicto y `2` no lo es: esa es la distincion que hace el codigo de salida y que un booleano
 perderia. Del `5` en adelante la pregunta es otra -¿que hace quien invoca ahora?-, y por eso hay un codigo

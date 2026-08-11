@@ -66,6 +66,13 @@ class GhForum(Forum):
 
         return GhPullRequestStatePayload.from_dict(self._decoded_object(output.stdout)).to_domain()
 
+    def authenticated_as(self) -> str | None:
+        output = self._process.run(["gh", "api", "user", "--jq", ".login"], stdin="")
+        if output.code != 0:
+            return None
+
+        return output.stdout.strip() or None
+
     @staticmethod
     def _number_of(stdout: str) -> int:
         url = stdout.strip()
