@@ -74,4 +74,8 @@ class TestSlicePullRequest:
 
         body = SlicePullRequest().body(SubIssueMother.pending(), debt=(), findings=(accepted,))
 
-        assert f"## Deuda aceptada\n- {accepted.severity}: {accepted.detail} ({accepted.path})\n" in body
+        assert (
+            "## Deuda aceptada\n"
+            "Hallazgos que el juez dejo pasar sin corregir:\n"
+            f"- {accepted.severity}: {accepted.rule} - {accepted.detail} ({accepted.path})\n"
+        ) in body
