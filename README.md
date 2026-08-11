@@ -5,6 +5,9 @@ perder el control humano en los dos puntos donde importa: el merge y el rollback
 
 No es de la organizacion: de momento, uso personal.
 
+**¿Vienes a usarlo?** `docs/arranque.md` dice que teclear, que cuesta y que hace en tu repo sin
+preguntar. Esto de aqui abajo es el **por que**.
+
 ## Para que existe
 
 El problema no es que un agente no sepa escribir codigo: es que un agente suelto sobre una tarea
