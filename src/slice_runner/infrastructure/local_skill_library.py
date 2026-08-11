@@ -21,3 +21,8 @@ class LocalSkillLibrary(SkillLibrary):
         candidate = ClaudeConfig.root() / "skills" / name
 
         return candidate if candidate.is_dir() else None
+
+    def file(self, relative: str) -> Path | None:
+        candidate = ClaudeConfig.root() / relative
+
+        return candidate if candidate.is_file() else None

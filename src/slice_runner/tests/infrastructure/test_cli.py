@@ -1434,6 +1434,13 @@ class TestTheCommandThatChecksReadiness:
         monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
         (tmp_path / "skills" / "slice-spec").mkdir(parents=True)
         (tmp_path / "skills" / "deploy-watch").mkdir(parents=True)
+        scripts = tmp_path / "skills" / "slice-runner" / "scripts"
+        scripts.mkdir(parents=True)
+        (scripts / "discover_conventions.py").write_text("x", encoding="utf-8")
+        (scripts / "discover_controles.py").write_text("x", encoding="utf-8")
+        (tmp_path / "settings.json").write_text(
+            json.dumps({"enabledPlugins": {"superpowers@claude-plugins-official": True}}), encoding="utf-8"
+        )
 
     @staticmethod
     def _process(
@@ -1473,7 +1480,16 @@ class TestTheCommandThatChecksReadiness:
         Cli(process=self._process(), budgets=Budgets()).doctor()
 
         printed = capsys.readouterr().out
-        for name in ("git", "gh", "claude", "skill slice-spec", "skill deploy-watch"):
+        for name in (
+            "git",
+            "gh",
+            "claude",
+            "skill slice-spec",
+            "skill deploy-watch",
+            "plugin superpowers",
+            "helper discover_conventions.py",
+            "helper discover_controles.py",
+        ):
             assert name in printed
 
     def test_something_missing_exits_with_its_own_code_distinct_from_a_usage_error(self) -> None:

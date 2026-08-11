@@ -11,6 +11,7 @@ from slice_runner.domain.readiness_check import ReadinessCheck
 if TYPE_CHECKING:
     from slice_runner.domain.branches import Branches
     from slice_runner.domain.forum import Forum
+    from slice_runner.domain.plugin_registry import PluginRegistry
     from slice_runner.domain.skill_library import SkillLibrary
     from slice_runner.domain.toolbox import Toolbox
 
@@ -24,12 +25,26 @@ class CheckReadinessParams:
 
 class CheckReadiness:
     SKILLS: ClassVar[tuple[str, ...]] = ("slice-spec", "deploy-watch")
+    PLUGINS: ClassVar[tuple[str, ...]] = ("superpowers",)
+    HELPERS: ClassVar[tuple[str, ...]] = (
+        "skills/slice-runner/scripts/discover_conventions.py",
+        "skills/slice-runner/scripts/discover_controles.py",
+    )
 
-    def __init__(self, *, toolbox: Toolbox, forum: Forum, branches: Branches, skills: SkillLibrary) -> None:
+    def __init__(
+        self,
+        *,
+        toolbox: Toolbox,
+        forum: Forum,
+        branches: Branches,
+        skills: SkillLibrary,
+        plugins: PluginRegistry,
+    ) -> None:
         self._toolbox = toolbox
         self._forum = forum
         self._branches = branches
         self._skills = skills
+        self._plugins = plugins
 
     def execute(self, params: CheckReadinessParams) -> Readiness:
         checks = [
@@ -37,6 +52,8 @@ class CheckReadiness:
             self._of_gh(),
             self._of_claude(),
             *(self._of_skill(name) for name in self.SKILLS),
+            *(self._of_plugin(name) for name in self.PLUGINS),
+            *(self._of_helper(relative) for relative in self.HELPERS),
         ]
         if params.repo is not None:
             checks.append(self._of_repo(params.repo))
@@ -98,6 +115,31 @@ class CheckReadiness:
             )
 
         return ReadinessCheck(name=f"skill {name}", verdict=CheckVerdict.READY, detail=f"installed at {path}")
+
+    def _of_plugin(self, name: str) -> ReadinessCheck:
+        if self._plugins.enabled(name):
+            return ReadinessCheck(name=f"plugin {name}", verdict=CheckVerdict.READY, detail="enabled")
+
+        return ReadinessCheck(
+            name=f"plugin {name}",
+            verdict=CheckVerdict.MISSING,
+            detail="not enabled",
+            fix=f"/plugin marketplace add anthropics/claude-plugins-official && /plugin install {name}",
+        )
+
+    def _of_helper(self, relative: str) -> ReadinessCheck:
+        path = self._skills.file(relative)
+        name = relative.rsplit("/", 1)[-1]
+        if path is None:
+            directory = relative.split("/")[1]
+            return ReadinessCheck(
+                name=f"helper {name}",
+                verdict=CheckVerdict.MISSING,
+                detail="not installed",
+                fix=f"ln -s <checkout>/skills/{directory} ~/.claude/skills/{directory}",
+            )
+
+        return ReadinessCheck(name=f"helper {name}", verdict=CheckVerdict.READY, detail=f"installed at {path}")
 
     def _of_repo(self, repo: str) -> ReadinessCheck:
         if self._forum.can_read(repo=repo):
