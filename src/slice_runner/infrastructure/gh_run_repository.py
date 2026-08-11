@@ -11,16 +11,19 @@ from slice_runner.domain.parent_issue import ParentIssue
 from slice_runner.domain.retry_response import RetryResponse
 from slice_runner.domain.run_repository import RunRepository
 from slice_runner.domain.sub_issue import SubIssue
+from slice_runner.infrastructure.automation_mark import AutomationMark
 from slice_runner.infrastructure.gh_body_payload import GhBodyPayload
 from slice_runner.infrastructure.gh_comments_payload import GhCommentPayload, GhCommentsPayload
 from slice_runner.infrastructure.gh_parent_view_payload import GhParentViewPayload
 from slice_runner.infrastructure.gh_sub_issue_payload import GhSubIssuePayload
+from slice_runner.infrastructure.malformed_response_comment import MalformedResponseComment
 from slice_runner.infrastructure.parent_body import ParentBody
 from slice_runner.infrastructure.reopened_comment import ReopenedComment
 from slice_runner.infrastructure.subissue_body import SubissueBody
 from slice_runner.infrastructure.understanding_comment import UnderstandingComment
 
 if TYPE_CHECKING:
+    from slice_runner.domain.malformed_reason import MalformedReason
     from slice_runner.domain.run import Run
     from slice_runner.infrastructure.gh_sub_issue_payload import GhLabelPayload
     from slice_runner.infrastructure.process import Process, ProcessOutput
@@ -107,19 +110,25 @@ class GhRunRepository(RunRepository):
         return UnderstandingComment.written_in(published[-1])
 
     def read_alignment_response(self, *, repo: str, issue: int) -> AlignmentResponse:
-        return AlignmentResponse.of_the_comments(
-            self._after_the_understanding(self._comment_bodies(repo=repo, issue=issue))
-        )
+        window = self._after_the_understanding(self._comment_bodies(repo=repo, issue=issue))
+
+        return AlignmentResponse.of_the_comments(self._without_acknowledged_malformed(window))
 
     def read_retry_instruction(self, *, repo: str, issue: int) -> RetryResponse:
-        return RetryResponse.of_the_comments(
-            self._after_the_last_reopening(self._comment_bodies(repo=repo, issue=issue))
-        )
+        window = self._after_the_last_reopening(self._comment_bodies(repo=repo, issue=issue))
+
+        return RetryResponse.of_the_comments(self._without_acknowledged_malformed(window))
 
     def mark_reopened(self, *, repo: str, issue: int, instruction: str) -> None:
         self._run(
             ["gh", "issue", "comment", str(issue), "--repo", repo, "--body-file", "-"],
             stdin=ReopenedComment.rendered(instruction),
+        )
+
+    def write_malformed_response(self, *, repo: str, issue: int, reason: MalformedReason) -> None:
+        self._run(
+            ["gh", "issue", "comment", str(issue), "--repo", repo, "--body-file", "-"],
+            stdin=MalformedResponseComment.rendered(reason),
         )
 
     def _comment_bodies(self, *, repo: str, issue: int) -> tuple[str, ...]:
@@ -144,6 +153,13 @@ class GhRunRepository(RunRepository):
 
         return bodies
 
+    @staticmethod
+    def _without_acknowledged_malformed(bodies: tuple[str, ...]) -> tuple[str, ...]:
+        while bodies and MalformedResponseComment.is_the_marker(bodies[-1]):
+            bodies = bodies[:-2]
+
+        return bodies
+
     def write_label(self, *, repo: str, issue: int, remove: IssueLabel | None, add: IssueLabel) -> None:
         argv = self._edit_of(repo=repo, issue=issue, add=add, remove=remove)
         self._edit_with_label_fallback(argv, repo=repo, issue=issue, add=add)
@@ -162,7 +178,7 @@ class GhRunRepository(RunRepository):
     def flag_draft_pull_request(self, *, repo: str, issue: int, pull_request: int) -> None:
         self._run(
             ["gh", "issue", "comment", str(issue), "--repo", repo, "--body-file", "-"],
-            stdin=(
+            stdin=AutomationMark.appended_to(
                 f"La pull request #{pull_request} nace en borrador (`--draft`); hay que sacarla de "
                 "borrador para que el merge pueda ocurrir."
             ),
@@ -178,8 +194,10 @@ class GhRunRepository(RunRepository):
                 "--repo",
                 repo,
                 "--comment",
-                f"Las {subissue_count} subissue(s) de esta feature estan todas cerradas, asi que esta feature "
-                "se cierra con ellas.",
+                AutomationMark.appended_to(
+                    f"Las {subissue_count} subissue(s) de esta feature estan todas cerradas, asi que esta feature "
+                    "se cierra con ellas."
+                ),
             ]
         )
 

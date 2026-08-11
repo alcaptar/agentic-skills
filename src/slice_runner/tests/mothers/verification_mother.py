@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, ClassVar
 
 from slice_runner.application.actions.verify_slice import VerifySliceParams
 from slice_runner.domain.checklist_entry import ChecklistEntry
+from slice_runner.domain.diff_stats import DiffStats
 from slice_runner.domain.judge import Judge
 from slice_runner.domain.slice_diff import SliceDiff
 from slice_runner.domain.slice_under_review import SliceUnderReview
@@ -30,10 +31,15 @@ class SliceDiffMother:
         "-    return 1\n"
         "+    return 2\n"
     )
+    STATS: ClassVar[DiffStats] = DiffStats(files_changed=2, lines_added=1, lines_deleted=1)
 
     @classmethod
-    def of_the_slice(cls, *, files: tuple[str, ...] | None = None, text: str | None = None) -> SliceDiff:
-        return SliceDiff(text=text if text is not None else cls.TEXT, files=files or cls.TOUCHED)
+    def of_the_slice(
+        cls, *, files: tuple[str, ...] | None = None, text: str | None = None, stats: DiffStats | None = None
+    ) -> SliceDiff:
+        return SliceDiff(
+            text=text if text is not None else cls.TEXT, files=files or cls.TOUCHED, stats=stats or cls.STATS
+        )
 
 
 class VerifySliceParamsMother:
@@ -112,26 +118,41 @@ class VerificationMother:
 
     @staticmethod
     def passing() -> Verification:
-        return Verification(verdict=VerdictMother.passing(), spend=HarnessSpendMother.of_the_judge_call())
+        return Verification(
+            verdict=VerdictMother.passing(),
+            spend=HarnessSpendMother.of_the_judge_call(),
+            diff_stats=SliceDiffMother.STATS,
+        )
 
     @staticmethod
     def vetoing(verdict: Verdict) -> Verification:
-        return Verification(verdict=verdict, spend=HarnessSpendMother.of_the_judge_call())
+        return Verification(
+            verdict=verdict, spend=HarnessSpendMother.of_the_judge_call(), diff_stats=SliceDiffMother.STATS
+        )
 
     @staticmethod
     def ordering_corrections(*findings: Finding) -> Verification:
-        return Verification(verdict=VerdictMother.passing_with(*findings), spend=HarnessSpendMother.of_the_judge_call())
+        return Verification(
+            verdict=VerdictMother.passing_with(*findings),
+            spend=HarnessSpendMother.of_the_judge_call(),
+            diff_stats=SliceDiffMother.STATS,
+        )
 
     @staticmethod
     def approving_with_accepted_debt(*findings: Finding) -> Verification:
         chosen = findings or (FindingMother.low_severity(),)
 
-        return Verification(verdict=VerdictMother.passing_with(*chosen), spend=HarnessSpendMother.of_the_judge_call())
+        return Verification(
+            verdict=VerdictMother.passing_with(*chosen),
+            spend=HarnessSpendMother.of_the_judge_call(),
+            diff_stats=SliceDiffMother.STATS,
+        )
 
     @classmethod
     def failing_after_a_denied_read(cls) -> Verification:
         return Verification(
             verdict=VerdictMother.failing(),
             spend=HarnessSpendMother.of_the_judge_call(),
+            diff_stats=SliceDiffMother.STATS,
             denied_reads=(cls.DENIED_READ,),
         )

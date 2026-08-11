@@ -28,6 +28,15 @@ Un directorio en `tasks/` con:
 | `seed-*/` | El arbol que se copia limpio a cada repeticion |
 | `task.py` | `VARIANTS` (cada una compone el prompt y prepara el arbol) y `measure(tree)` |
 
+Opcionalmente, `task.py` declara **una segunda vuelta**: `CORRECTION(tree)` devuelve lo que se le manda
+despues de la primera, y `RESUMES` nombra las variantes que la piden reanudando la sesion anterior en
+vez de abriendo una nueva. Con las dos, cada celda emite `rules_before_the_correction` ademas de
+`rules`, y el coste de cada vuelta por separado. Es lo que permite medir algo que en una sola llamada
+no se ve: **lo que cuesta redescubrir**.
+
+Y `--model` en la linea de comandos sustituye al que declara la tarea, para comparar dos modelos sobre
+la misma tarea sin duplicarla.
+
 `measure` devuelve **un resultado por regla**, no un booleano: `True`, `False`, o `None` cuando la
 regla no aplica a lo que se escribio. Con una medida binaria unica te quedas sin experimento en cuanto
 la tarea satura; con doce reglas, la que satura se tira y quedan once.

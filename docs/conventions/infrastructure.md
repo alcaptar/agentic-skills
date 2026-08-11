@@ -206,6 +206,18 @@ importar**: un smoke que solo importe el modulo lo da por bueno. Lo evita
   duplicacion la **mide** `test_metrics_bridge_contract.py`, que compara los conjuntos de ambos lados y
   ademas pasa la fila que construye el payload por el lector real del script (`Fila.from_row`): una clave
   renombrada solo se veria al cerrar una slice, que es justo el momento en que un fallo pierde la fila.
+- **`budgets` y `models_by_role` son la excepcion declarada de "un alias por campo", y el motivo es el
+  criterio que los trajo.** `MetricsEntryPayload.budgets`/`models_by_role`
+  (`infrastructure/metrics_entry_payload.py`) vuelcan `dataclasses.asdict(closed.budgets)`/
+  `asdict(closed.models)` en `dict[str, object]`, sin un `BaseModel` propio ni un `alias` por campo
+  interno, al contrario que el resto de esta clase, que nombra cada clave en castellano. La regla general
+  existe para que un contrato que cambia de forma rompa donde se declara; aqui se invierte a proposito,
+  porque el criterio que trajo esta fila pide justo lo contrario: que anadir un campo a `Budgets` o a
+  `RoleModels` (`docs/conventions/domain.md`) no obligue a tocar el registro. Nombrar cada campo aqui
+  volveria a acoplar la fila durable a la forma exacta de esos dos value objects, que es la dependencia
+  que el criterio prohibe. Las claves que llegan son las del dataclass en ingles (`control_retries`,
+  `slice_cost_usd`, `understand`...), sin traducir: es la misma lectura generica que `metrics.py._grupo`
+  ya hace con `harness`, que agrega cualquier `dict` anidado sin conocer sus claves.
 - **El programa no escribe ningun numero que no venga del harness.** Del sobre salen coste en dolares,
   turnos y duracion, sumados por slice; `--duracion-s` (reloj de pared) y `--coste-tokens` **no se pasan**,
   porque no son dato del harness: hay puerto de reloj (`Clock.now`, que sella cada evento del run), pero lo

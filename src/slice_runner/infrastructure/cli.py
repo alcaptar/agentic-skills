@@ -34,17 +34,22 @@ from slice_runner.domain.exceptions import (
     InvalidHarnessOutputError,
     LaggingSearchIndexError,
     MeasuredCallError,
+    MissingBranchError,
     NoConversationRecordedError,
     NoPullRequestError,
     NoSliceLeftError,
     ProtectedBranchError,
     RunNotClosedError,
+    UnreadableCallSpendLogError,
+    UnreadableCallTraceError,
+    UnreadableConversationError,
     UnreadableForumError,
     UnreadableIssueError,
     UnreadableRunError,
     UnresolvableRepoOrBaseError,
 )
 from slice_runner.domain.halt import Halt
+from slice_runner.domain.role_models import RoleModels
 from slice_runner.domain.state_machine import StateMachine
 from slice_runner.domain.step import Step
 from slice_runner.infrastructure.claude_deploy_watch import ClaudeDeployWatch
@@ -61,6 +66,7 @@ from slice_runner.infrastructure.gh_run_repository import GhCommandFailedError, 
 from slice_runner.infrastructure.git_branches import GitBranches, GitCommandFailedError
 from slice_runner.infrastructure.git_diff_reader import GitDiffReader
 from slice_runner.infrastructure.git_workspace import GitWorkspace
+from slice_runner.infrastructure.implementer_invocation import ImplementerInvocation
 from slice_runner.infrastructure.local_call_spend_log import LocalCallSpendLog
 from slice_runner.infrastructure.local_call_trace import LocalCallTrace
 from slice_runner.infrastructure.local_control_runner import LocalControlRunner
@@ -80,6 +86,7 @@ from slice_runner.infrastructure.subcommand import Subcommand
 from slice_runner.infrastructure.system_clock import SystemClock
 from slice_runner.infrastructure.transition_payload import TransitionPayload
 from slice_runner.infrastructure.transition_request_payload import TransitionRequestPayload
+from slice_runner.infrastructure.understanding_invocation import UnderstandingInvocation
 from slice_runner.infrastructure.verdict_payload import VerdictPayload
 
 if TYPE_CHECKING:
@@ -99,6 +106,7 @@ class Cli:
         ImpossibleTransitionError,
         ProtectedBranchError,
         BranchMismatchError,
+        MissingBranchError,
         DiffNotReadableError,
         MeasuredCallError,
         ProcessTimedOutError,
@@ -122,6 +130,13 @@ class Cli:
         except SystemExit as refusal:
             return ExitCode.USAGE_ERROR if refusal.code else ExitCode.OK
 
+        try:
+            return cls._dispatched(arguments)
+        except Exception as error:
+            return cls._reported(f"{type(error).__name__}: {error}", ExitCode.RUN_INTERRUPTED)
+
+    @classmethod
+    def _dispatched(cls, arguments: argparse.Namespace) -> int:
         budgets = Budgets()
 
         match Subcommand(arguments.command):
@@ -229,6 +244,8 @@ class Cli:
             )
         except (NoConversationRecordedError, ConversationNotFoundError) as error:
             return cls._reported(f"there is no conversation to read: {error}", ExitCode.USAGE_ERROR)
+        except (UnreadableCallTraceError, UnreadableConversationError) as error:
+            return cls._reported(f"the durable record cannot be read: {error}", ExitCode.USAGE_ERROR)
 
         print(
             ConversationReport(
@@ -241,9 +258,13 @@ class Cli:
     @classmethod
     def spend(cls, *, repo: str, issue: int, slice_id: str, step: Step) -> int:
         clock = SystemClock()
-        spend = SpendOfStep(trace=LocalCallTrace(clock=clock), spend_log=LocalCallSpendLog(clock=clock)).execute(
-            SpendOfStepParams(repo=repo, issue=issue, slice_id=slice_id, step=step)
-        )
+        try:
+            spend = SpendOfStep(trace=LocalCallTrace(clock=clock), spend_log=LocalCallSpendLog(clock=clock)).execute(
+                SpendOfStepParams(repo=repo, issue=issue, slice_id=slice_id, step=step)
+            )
+        except (UnreadableCallTraceError, UnreadableCallSpendLogError) as error:
+            return cls._reported(f"the durable record cannot be read: {error}", ExitCode.USAGE_ERROR)
+
         print(json.dumps(SpendPayload.from_domain(spend).to_contract(), ensure_ascii=False))
 
         return ExitCode.OK
@@ -308,6 +329,7 @@ class Cli:
                 | ImpossibleTransitionError()
                 | ProtectedBranchError()
                 | BranchMismatchError()
+                | MissingBranchError()
             ):
                 return self._reported(f"the run cannot be conducted as asked: {error}", ExitCode.USAGE_ERROR)
             case DiffNotReadableError():
@@ -370,6 +392,7 @@ class Cli:
             ),
             machine=machine,
             budgets=self._budgets,
+            models=RoleModels(understand=UnderstandingInvocation.MODEL, implement=ImplementerInvocation.MODEL),
         )
 
     def _action(self, *, clock: Clock | None = None) -> VerifySlice:

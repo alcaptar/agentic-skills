@@ -1,16 +1,20 @@
 from __future__ import annotations
 
 import json
+from dataclasses import asdict
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 from unittest.mock import Mock, create_autospec
 
 import pytest
 
+from slice_runner.domain.budgets import Budgets
 from slice_runner.domain.ci_indeterminate_cause import CiIndeterminateCause
 from slice_runner.domain.clock import Clock
+from slice_runner.domain.diff_stats import DiffStats
 from slice_runner.domain.discard_cause import DiscardCause
 from slice_runner.domain.exceptions import RunNotClosedError
+from slice_runner.domain.role_models import RoleModels
 from slice_runner.domain.run_state import RunState
 from slice_runner.domain.severity import Severity
 from slice_runner.infrastructure.claude_config import ClaudeConfig
@@ -179,6 +183,76 @@ class TestWhatVariantIsWritten(WithTheLedgerOutOfTheRealHome):
         LocalMetricsLog(clock=self.frozen_at()).record(ClosedSliceMother.merged())
 
         assert WrittenMetricsLog.row_under(tmp_path)["variante"] == "programa"
+
+
+class TestHowMuchTheSliceChanged(WithTheLedgerOutOfTheRealHome):
+    def test_what_the_implementer_declared_left_out_travels_as_a_count_and_not_as_the_reasons(
+        self, tmp_path: Path
+    ) -> None:
+        LocalMetricsLog(clock=self.frozen_at()).record(
+            ClosedSliceMother.merged_leaving_out("no cubri el binario", "falta el caso de rename")
+        )
+
+        assert WrittenMetricsLog.row_under(tmp_path)["deuda"] == 2
+
+    def test_a_slice_that_left_nothing_out_writes_zero_debt_instead_of_omitting_it(self, tmp_path: Path) -> None:
+        LocalMetricsLog(clock=self.frozen_at()).record(ClosedSliceMother.merged())
+
+        assert WrittenMetricsLog.row_under(tmp_path)["deuda"] == 0
+
+    def test_the_size_of_the_diff_measured_at_the_verify_that_passed_travels_as_its_own_group(
+        self, tmp_path: Path
+    ) -> None:
+        stats = DiffStats(files_changed=4, lines_added=51, lines_deleted=9)
+
+        LocalMetricsLog(clock=self.frozen_at()).record(ClosedSliceMother.merged_measuring_the_diff(stats))
+
+        assert WrittenMetricsLog.row_under(tmp_path)["diff"] == {
+            "ficheros": 4,
+            "lineas_anadidas": 51,
+            "lineas_borradas": 9,
+        }
+
+    def test_a_closure_with_no_diff_measured_this_invocation_writes_no_group_instead_of_a_zero_one(
+        self, tmp_path: Path
+    ) -> None:
+        LocalMetricsLog(clock=self.frozen_at()).record(ClosedSliceMother.merged())
+
+        assert "diff" not in WrittenMetricsLog.row_under(tmp_path)
+
+
+class TestWhatConfigurationTheRunWasConductedWith(WithTheLedgerOutOfTheRealHome):
+    def test_the_budgets_the_run_was_conducted_with_travel_whole_and_not_one_field_at_a_time(
+        self, tmp_path: Path
+    ) -> None:
+        budgets = Budgets(slice_cost_usd=12.5, verify_retries=4)
+
+        LocalMetricsLog(clock=self.frozen_at()).record(ClosedSliceMother.merged_with_config(budgets=budgets))
+
+        assert WrittenMetricsLog.row_under(tmp_path)["presupuestos"] == asdict(budgets)
+
+    def test_the_model_assigned_to_each_role_travels_whole_and_not_one_field_at_a_time(self, tmp_path: Path) -> None:
+        models = RoleModels(understand="haiku", implement="opus")
+
+        LocalMetricsLog(clock=self.frozen_at()).record(ClosedSliceMother.merged_with_config(models=models))
+
+        row = WrittenMetricsLog.row_under(tmp_path)
+        assert row["modelos_por_papel"] == {"understand": "haiku", "implement": "opus"}
+
+    def test_two_runs_with_different_configurations_write_rows_that_differ_on_that_configuration_and_not_only_on_cost(
+        self, tmp_path: Path
+    ) -> None:
+        log = LocalMetricsLog(clock=self.frozen_at())
+        same_budgets = Budgets(slice_cost_usd=10.0)
+        first_models = RoleModels(understand="sonnet", implement="sonnet")
+        second_models = RoleModels(understand="haiku", implement="opus")
+
+        log.record(ClosedSliceMother.merged_with_config(budgets=same_budgets, models=first_models))
+        log.record(ClosedSliceMother.merged_with_config(budgets=same_budgets, models=second_models))
+
+        rows = WrittenMetricsLog.rows_under(tmp_path)
+        assert rows[0]["harness"] == rows[1]["harness"]
+        assert rows[0]["modelos_por_papel"] != rows[1]["modelos_por_papel"]
 
 
 class TestWhatTheRunAlreadyCounted(WithTheLedgerOutOfTheRealHome):

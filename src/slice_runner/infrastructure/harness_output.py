@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from contextlib import contextmanager
-from typing import TYPE_CHECKING, Self
+from typing import TYPE_CHECKING, ClassVar, Self
 
 from pydantic import Field
 
@@ -19,6 +19,8 @@ if TYPE_CHECKING:
 
 
 class HarnessOutput(ContractModel):
+    CAUSE_FIELDS: ClassVar[tuple[str, ...]] = ("is_error", "subtype", "stop_reason", "terminal_reason")
+
     is_error: bool = Field(strict=True)
     structured_output: dict[str, object]
 
@@ -81,7 +83,21 @@ class HarnessOutput(ContractModel):
 
     @classmethod
     def from_dict(cls, data: dict[str, object]) -> Self:
-        return cls._validated(data, "the harness envelope is not the one we know", InvalidHarnessOutputError)
+        try:
+            return cls._validated(data, "the harness envelope is not the one we know", InvalidHarnessOutputError)
+        except InvalidHarnessOutputError as error:
+            cause = cls._why_the_session_ended(data)
+            if not cause:
+                raise
+            raise InvalidHarnessOutputError(f"{error}{cause}") from error
+
+    @classmethod
+    def _why_the_session_ended(cls, data: dict[str, object]) -> str:
+        present = [f"{field}={data[field]!r}" for field in cls.CAUSE_FIELDS if field in data]
+        if not present:
+            return ""
+
+        return f" (session ended with: {', '.join(present)})"
 
     @classmethod
     def _decoded(cls, output: ProcessOutput) -> dict[str, object]:

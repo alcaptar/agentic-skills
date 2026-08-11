@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from slice_runner.domain.alignment_response import AlignmentResponse
     from slice_runner.domain.issue_label import IssueLabel
+    from slice_runner.domain.malformed_reason import MalformedReason
     from slice_runner.domain.parent_issue import ParentIssue
     from slice_runner.domain.retry_response import RetryResponse
     from slice_runner.domain.run import Run
@@ -30,6 +31,9 @@ class RunRepository(ABC):
 
     @abstractmethod
     def mark_reopened(self, *, repo: str, issue: int, instruction: str) -> None: ...
+
+    @abstractmethod
+    def write_malformed_response(self, *, repo: str, issue: int, reason: MalformedReason) -> None: ...
 
     @abstractmethod
     def write_run(self, *, repo: str, issue: int, run: Run) -> None: ...

@@ -116,7 +116,9 @@ class LocalProcess(Process):
             raise ProcessNotRunnableError(f"{argv[0]}: {outcome.error.strerror or outcome.error}") from outcome.error
 
         finished = outcome.finished
-        assert finished is not None
+        if finished is None:
+            label = argv[0] if argv else str(argv)
+            raise ProcessNotRunnableError(f"{label}: the background call left neither a result nor a known error")
 
         return ProcessOutput(
             code=finished.returncode, stdout=stdout_path.read_text(encoding="utf-8"), stderr=finished.stderr

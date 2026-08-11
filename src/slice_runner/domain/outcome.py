@@ -29,7 +29,7 @@ class Outcome(StrEnum):
         match kind:
             case AlignmentResponseKind.GO:
                 return cls.DONE
-            case AlignmentResponseKind.REVIEW | AlignmentResponseKind.NOT_YET:
+            case AlignmentResponseKind.REVIEW | AlignmentResponseKind.NOT_YET | AlignmentResponseKind.MALFORMED:
                 return cls.PENDING
 
     @classmethod

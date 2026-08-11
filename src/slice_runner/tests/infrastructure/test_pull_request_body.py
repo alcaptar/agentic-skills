@@ -66,7 +66,22 @@ class TestPullRequestBody:
         assert self._with_debt().rendered().endswith("\nCloses #46")
         assert self._without_debt().rendered().endswith("\nCloses #46")
 
-    def test_a_finding_the_judge_approved_without_correcting_joins_the_debt_section_the_implementer_declared(
+    def test_a_finding_the_judge_approved_without_correcting_names_the_rule_it_broke_not_only_its_elaboration(
+        self,
+    ) -> None:
+        accepted = FindingMother.low_severity(path="src/y.py")
+        body = PullRequestBody(
+            intention=_INTENTION,
+            criteria=_CRITERIA,
+            debt=(),
+            findings=(accepted,),
+            signal=_SIGNAL,
+            subissue=46,
+        ).rendered()
+
+        assert f"- {accepted.severity}: {accepted.rule} - {accepted.detail} ({accepted.path})" in body
+
+    def test_a_finding_the_judge_approved_without_correcting_is_marked_apart_from_the_debt_the_implementer_declared(
         self,
     ) -> None:
         accepted = FindingMother.low_severity(path="src/y.py")
@@ -82,7 +97,9 @@ class TestPullRequestBody:
         assert (
             "## Deuda aceptada\n"
             "- el cableado del subcomando queda para la slice-09\n"
-            f"- {accepted.severity}: {accepted.detail} ({accepted.path})\n"
+            "\n"
+            "Hallazgos que el juez dejo pasar sin corregir:\n"
+            f"- {accepted.severity}: {accepted.rule} - {accepted.detail} ({accepted.path})\n"
             "\n"
             "## Senal a comprobar tras el despliegue"
         ) in body

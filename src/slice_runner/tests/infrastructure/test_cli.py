@@ -339,6 +339,28 @@ class TestTheEntrypoint(BlindToTheToolboxOfThisMachine):
         assert "a-base-that-is-not-there" in capsys.readouterr().err
 
 
+class TestAnExceptionNoListInTheProgramDescribes:
+    _MESSAGE = "a leak in the plumbing nobody named"
+
+    @staticmethod
+    def _explodes(entrypoint: type[Cli], *, request: str, budgets: Budgets) -> int:
+        raise RuntimeError(TestAnExceptionNoListInTheProgramDescribes._MESSAGE)
+
+    def test_main_reports_its_type_and_message_and_exits_with_the_code_of_a_run_interrupted(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        monkeypatch.setattr(sys, "stdin", io.StringIO(""))
+        monkeypatch.setattr(Cli, "explain", classmethod(self._explodes))
+
+        code = Cli.main(["explain"])
+
+        output = capsys.readouterr()
+        assert code == ExitCode.RUN_INTERRUPTED
+        assert code != ExitCode.VETOED
+        assert output.out == ""
+        assert f"RuntimeError: {self._MESSAGE}" in output.err
+
+
 class TestTheCommandThatPrintsAConversation:
     _REPO = "alcaptar/agentic-skills"
     _ISSUE = 45
@@ -386,6 +408,45 @@ class TestTheCommandThatPrintsAConversation:
         output = capsys.readouterr()
         assert output.out == ""
         assert self._SLICE in output.err
+
+    def test_a_corrupt_line_in_the_call_trace_exits_with_a_usage_error_instead_of_a_stack_dump(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        self._corrupted(ClaudeConfig.root().joinpath(*LocalCallTrace.LEDGER))
+
+        code = Cli.read(
+            repo=self._REPO, issue=self._ISSUE, worktree=self._WORKTREE, slice_id=self._SLICE, step=Step.IMPLEMENT
+        )
+
+        assert code == ExitCode.USAGE_ERROR
+        output = capsys.readouterr()
+        assert output.out == ""
+        assert "not JSON" in output.err
+
+    def test_a_corrupt_line_in_the_conversation_transcript_exits_with_a_usage_error_instead_of_a_stack_dump(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        self._traced()
+        self._corrupted(self._transcript_path())
+
+        code = Cli.read(
+            repo=self._REPO, issue=self._ISSUE, worktree=self._WORKTREE, slice_id=self._SLICE, step=Step.IMPLEMENT
+        )
+
+        assert code == ExitCode.USAGE_ERROR
+        output = capsys.readouterr()
+        assert output.out == ""
+        assert "not JSON" in output.err
+
+    def _transcript_path(self) -> Path:
+        encoded = self._WORKTREE.rstrip("/").replace("/", "-")
+
+        return ClaudeConfig.root() / "projects" / encoded / f"{ConversationTranscriptMother.SESSION}.jsonl"
+
+    @staticmethod
+    def _corrupted(path: Path) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("not json\n", encoding="utf-8")
 
     def test_a_traced_session_whose_conversation_was_never_kept_exits_with_a_usage_error(
         self, capsys: pytest.CaptureFixture[str]
@@ -504,6 +565,35 @@ class TestTheCommandThatSumsSpendByRole:
 
         assert code == ExitCode.OK
         assert json.loads(capsys.readouterr().out)["calls"] == 0
+
+    def test_a_corrupt_line_in_the_call_trace_exits_with_a_usage_error_instead_of_a_stack_dump(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        self._corrupted(ClaudeConfig.root().joinpath(*LocalCallTrace.LEDGER))
+
+        code = Cli.spend(repo=self._REPO, issue=self._ISSUE, slice_id=self._SLICE, step=Step.IMPLEMENT)
+
+        assert code == ExitCode.USAGE_ERROR
+        output = capsys.readouterr()
+        assert output.out == ""
+        assert "not JSON" in output.err
+
+    def test_a_corrupt_line_in_the_spend_log_exits_with_a_usage_error_instead_of_a_stack_dump(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        self._corrupted(ClaudeConfig.root().joinpath(*LocalCallSpendLog.LEDGER))
+
+        code = Cli.spend(repo=self._REPO, issue=self._ISSUE, slice_id=self._SLICE, step=Step.IMPLEMENT)
+
+        assert code == ExitCode.USAGE_ERROR
+        output = capsys.readouterr()
+        assert output.out == ""
+        assert "not JSON" in output.err
+
+    @staticmethod
+    def _corrupted(path: Path) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("not json\n", encoding="utf-8")
 
     def test_main_wires_the_parsed_arguments_into_spend(self, capsys: pytest.CaptureFixture[str]) -> None:
         self._traced_and_spent(step=Step.IMPLEMENT, call=HarnessCallSpendMother.of_the_implementer())
@@ -856,6 +946,7 @@ class TestConductingASliceAnEarlierInvocationLeftHalfDone:
         return RunInvocation(
             children=GhConversationMother.the_slice_resumed_at(RunMother.awaiting_merge()),
             answers=(
+                Answer(to=("git", "rev-parse"), code=0),
                 Answer(
                     to=("gh", "pr", "list", "--state", "all"),
                     stdout=GhConversationMother.the_pull_request_of_the_branch(),
@@ -924,6 +1015,7 @@ class TestConductingTheSliceNamedByTheCaller:
             children=GhConversationMother.two_slices_resumed_at(RunMother.awaiting_merge()),
             parent=GhConversationMother.parent_of_two_slices(),
             answers=(
+                Answer(to=("git", "rev-parse"), code=0),
                 Answer(
                     to=("gh", "pr", "list", "--state", "all"),
                     stdout=GhConversationMother.the_pull_request_of_the_branch(),
@@ -992,6 +1084,7 @@ class TestWhenTheRunClosesWithoutBeingMerged:
         invocation = RunInvocation(
             children=GhConversationMother.the_slice_resumed_at(RunMother.with_the_only_ci_retry_already_spent()),
             answers=(
+                Answer(to=("git", "rev-parse"), code=0),
                 Answer(
                     to=("gh", "pr", "list", "--state", "all"),
                     stdout=GhConversationMother.the_pull_request_of_the_branch(),
@@ -1017,6 +1110,7 @@ class TestTheRoundTripAfterARedCiThatStillHasARetryLeft(BlindToTheToolboxOfThisM
         return RunInvocation(
             children=GhConversationMother.the_slice_resumed_at(RunMother.about_to_ask_the_ci()),
             answers=(
+                Answer(to=("git", "rev-parse"), code=0),
                 Answer(
                     to=("gh", "pr", "list", "--state", "all"),
                     stdout=GhConversationMother.the_pull_request_of_the_branch(),
@@ -1034,6 +1128,7 @@ class TestTheRoundTripAfterARedCiThatStillHasARetryLeft(BlindToTheToolboxOfThisM
                 Answer(to=("git", "add")),
                 Answer(to=("git", "diff", "--cached", "--name-only"), stdout=cls._what_the_implementer_left_staged()),
                 Answer(to=("sh", "-c", GhConversationMother.CONTROL)),
+                Answer(to=("git", "diff", "--cached", "--numstat"), stdout="1\t0\thello.py\n1\t0\ttest_hello.py\n"),
                 Answer(to=("git", "diff", "--cached"), stdout="diff --git a/hello.py b/hello.py\n"),
                 Answer(
                     to=(JudgeInvocation.EXECUTABLE, "--add-dir"),
@@ -1164,6 +1259,7 @@ class TestWhenTheRunStaysOpen:
         invocation = RunInvocation(
             children=GhConversationMother.the_slice_resumed_at(RunMother.awaiting_merge()),
             answers=(
+                Answer(to=("git", "rev-parse"), code=0),
                 Answer(
                     to=("gh", "pr", "list", "--state", "all"),
                     stdout=GhConversationMother.the_pull_request_of_the_branch(),
@@ -1191,6 +1287,7 @@ class TestWhenTheRunStaysOpen:
         invocation = RunInvocation(
             children=GhConversationMother.the_slice_resumed_at(RunMother.awaiting_merge()),
             answers=(
+                Answer(to=("git", "rev-parse"), code=0),
                 Answer(
                     to=("gh", "pr", "list", "--state", "all"),
                     stdout=GhConversationMother.the_pull_request_of_the_branch(),
@@ -1237,7 +1334,10 @@ class TestWhenTheInvocationCannotBeConducted(ReadingWhatWasReported):
     ) -> None:
         invocation = RunInvocation(
             children=GhConversationMother.the_slice_resumed_at(RunMother.awaiting_merge()),
-            answers=(Answer(to=("gh", "pr", "list", "--state", "all"), code=1, stderr="gh: authentication required"),),
+            answers=(
+                Answer(to=("git", "rev-parse"), code=0),
+                Answer(to=("gh", "pr", "list", "--state", "all"), code=1, stderr="gh: authentication required"),
+            ),
         )
 
         code = invocation.conduct(logs=tmp_path / "logs")
@@ -1275,6 +1375,7 @@ class TestTheBudgetsTheEntrypointInjects:
         invocation = RunInvocation(
             children=GhConversationMother.the_slice_resumed_at(RunMother.awaiting_merge()),
             answers=(
+                Answer(to=("git", "rev-parse"), code=0),
                 Answer(
                     to=("gh", "pr", "list", "--state", "all"),
                     stdout=GhConversationMother.the_pull_request_of_the_branch(),

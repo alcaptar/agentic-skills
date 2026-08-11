@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import ClassVar
 
+from slice_runner.infrastructure.automation_mark import AutomationMark
+
 _HOW_TO_RESPOND = (
     "Para continuar, responde a este comentario:\n"
     "\n"
@@ -17,7 +19,7 @@ class UnderstandingComment:
 
     @classmethod
     def rendered(cls, text: str) -> str:
-        return "\n\n".join([text, _HOW_TO_RESPOND, cls.MARKER])
+        return "\n\n".join([text, _HOW_TO_RESPOND, cls.MARKER, AutomationMark.TEXT])
 
     @classmethod
     def is_the_understanding(cls, body: str) -> bool:

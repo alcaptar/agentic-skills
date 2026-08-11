@@ -17,9 +17,12 @@ from slice_runner.domain.exceptions import (
 )
 from slice_runner.domain.issue_label import IssueLabel
 from slice_runner.domain.issue_state import IssueState
+from slice_runner.domain.malformed_reason import MalformedReason
 from slice_runner.domain.retry_response_kind import RetryResponseKind
 from slice_runner.domain.source import Source, SourceKind
+from slice_runner.infrastructure.automation_mark import AutomationMark
 from slice_runner.infrastructure.gh_run_repository import GhCommandFailedError, GhRunRepository
+from slice_runner.infrastructure.malformed_response_comment import MalformedResponseComment
 from slice_runner.infrastructure.process import ProcessOutput
 from slice_runner.infrastructure.reopened_comment import ReopenedComment
 from slice_runner.infrastructure.understanding_comment import UnderstandingComment
@@ -583,6 +586,13 @@ class TestWritingTheUnderstanding:
 
         assert UnderstandingComment.MARKER in process.calls[0].stdin
 
+    def test_the_comment_carries_the_visible_automation_mark(self) -> None:
+        process = ScriptedProcess(ProcessOutput(code=0, stdout="", stderr=""))
+
+        GhRunRepository(process=process).write_understanding(repo=_REPO, issue=45, understanding="x")
+
+        assert AutomationMark.TEXT in process.calls[0].stdin
+
     def test_a_non_zero_exit_raises_with_the_stderr_it_carried(self) -> None:
         process = ScriptedProcess(ProcessOutput(code=1, stdout="", stderr="HTTP 422: Unprocessable Entity"))
 
@@ -616,6 +626,15 @@ class TestReadingBackWhatWasAgreed:
         process = self._process(["un comentario cualquiera", "-GO"])
 
         assert GhRunRepository(process=process).read_understanding(repo=_REPO, issue=45) == ""
+
+    def test_a_comment_in_the_previous_format_with_no_visible_mark_is_still_read_as_the_understanding(self) -> None:
+        previous_format = GhResponseMother.subissue_comments()[0]["body"]
+        assert isinstance(previous_format, str)
+        process = self._process([previous_format])
+
+        understood = GhRunRepository(process=process).read_understanding(repo=_REPO, issue=45)
+
+        assert understood == "asi entiendo la slice-10"
 
 
 class TestReadingTheAlignmentResponse:
@@ -681,12 +700,57 @@ class TestReadingTheAlignmentResponse:
 
         assert response.kind is AlignmentResponseKind.NOT_YET
 
+    def test_a_stray_comment_before_a_previous_format_understanding_is_never_read_as_its_answer(self) -> None:
+        previous_format = GhResponseMother.subissue_comments()[0]["body"]
+        assert isinstance(previous_format, str)
+        process = self._process(["-GO", previous_format])
+
+        response = GhRunRepository(process=process).read_alignment_response(repo=_REPO, issue=45)
+
+        assert response.kind is AlignmentResponseKind.NOT_YET
+
+    def test_the_visible_automation_mark_by_itself_is_never_read_as_the_answer(self) -> None:
+        process = self._process([UnderstandingComment.rendered("asi entiendo la slice"), AutomationMark.TEXT])
+
+        response = GhRunRepository(process=process).read_alignment_response(repo=_REPO, issue=45)
+
+        assert response.kind is AlignmentResponseKind.NOT_YET
+
     def test_only_the_most_recent_understanding_bounds_the_search_after_a_review_round(self) -> None:
         process = self._process(
             [
                 UnderstandingComment.rendered("primer entendimiento"),
                 "-REVIEW la senal no esta exenta",
                 UnderstandingComment.rendered("entendimiento corregido"),
+            ]
+        )
+
+        response = GhRunRepository(process=process).read_alignment_response(repo=_REPO, issue=45)
+
+        assert response.kind is AlignmentResponseKind.NOT_YET
+
+    def test_a_go_carrying_extra_text_is_read_as_malformed_instead_of_not_yet_answered(self) -> None:
+        process = self._process([UnderstandingComment.rendered("asi entiendo la slice"), "-GO por favor"])
+
+        response = GhRunRepository(process=process).read_alignment_response(repo=_REPO, issue=45)
+
+        assert response.kind is AlignmentResponseKind.MALFORMED
+        assert response.reason is MalformedReason.GO_CARRIES_TEXT
+
+    def test_a_review_with_no_correction_behind_it_is_read_as_malformed_instead_of_not_yet_answered(self) -> None:
+        process = self._process([UnderstandingComment.rendered("asi entiendo la slice"), "-REVIEW"])
+
+        response = GhRunRepository(process=process).read_alignment_response(repo=_REPO, issue=45)
+
+        assert response.kind is AlignmentResponseKind.MALFORMED
+        assert response.reason is MalformedReason.MISSING_CORRECTION
+
+    def test_a_malformed_comment_already_acknowledged_is_never_read_again_as_the_answer(self) -> None:
+        process = self._process(
+            [
+                UnderstandingComment.rendered("asi entiendo la slice"),
+                "-GO por favor",
+                MalformedResponseComment.rendered(MalformedReason.GO_CARRIES_TEXT),
             ]
         )
 
@@ -756,6 +820,38 @@ class TestReadingTheRetryInstruction:
 
         assert (response.kind, response.instruction) == (RetryResponseKind.RETRY, "la de verdad")
 
+    def test_a_retry_comment_before_a_previous_format_reopening_is_never_read_as_a_new_instruction(self) -> None:
+        previous_format = f"Slice reabierta por esta instruccion de reintento:\n\nx\n\n{ReopenedComment.MARKER}"
+        process = self._process(["-RETRY ya consumida", previous_format])
+
+        response = GhRunRepository(process=process).read_retry_instruction(repo=_REPO, issue=45)
+
+        assert response.kind is RetryResponseKind.NOT_YET
+
+    def test_the_visible_automation_mark_by_itself_is_never_read_as_a_retry_instruction(self) -> None:
+        process = self._process(["-RETRY ya consumida", ReopenedComment.rendered("ya consumida"), AutomationMark.TEXT])
+
+        response = GhRunRepository(process=process).read_retry_instruction(repo=_REPO, issue=45)
+
+        assert response.kind is RetryResponseKind.NOT_YET
+
+    def test_a_retry_comment_with_no_instruction_behind_it_is_read_as_malformed_instead_of_not_yet_answered(
+        self,
+    ) -> None:
+        process = self._process(["-RETRY"])
+
+        response = GhRunRepository(process=process).read_retry_instruction(repo=_REPO, issue=45)
+
+        assert response.kind is RetryResponseKind.MALFORMED
+        assert response.reason is MalformedReason.MISSING_INSTRUCTION
+
+    def test_a_malformed_retry_comment_already_acknowledged_is_never_read_again_as_the_answer(self) -> None:
+        process = self._process(["-RETRY", MalformedResponseComment.rendered(MalformedReason.MISSING_INSTRUCTION)])
+
+        response = GhRunRepository(process=process).read_retry_instruction(repo=_REPO, issue=45)
+
+        assert response.kind is RetryResponseKind.NOT_YET
+
     def test_a_non_zero_exit_raises_with_the_stderr_it_carried(self) -> None:
         process = ScriptedProcess(ProcessOutput(code=1, stdout="", stderr="HTTP 404: Not Found"))
 
@@ -781,11 +877,56 @@ class TestMarkingASliceReopened:
 
         assert ReopenedComment.MARKER in process.calls[0].stdin
 
+    def test_the_comment_carries_the_visible_automation_mark(self) -> None:
+        process = ScriptedProcess(ProcessOutput(code=0, stdout="", stderr=""))
+
+        GhRunRepository(process=process).mark_reopened(repo=_REPO, issue=45, instruction="x")
+
+        assert AutomationMark.TEXT in process.calls[0].stdin
+
     def test_a_non_zero_exit_raises_with_the_stderr_it_carried(self) -> None:
         process = ScriptedProcess(ProcessOutput(code=1, stdout="", stderr="HTTP 422: Unprocessable Entity"))
 
         with pytest.raises(GhCommandFailedError, match="HTTP 422"):
             GhRunRepository(process=process).mark_reopened(repo=_REPO, issue=45, instruction="x")
+
+
+class TestWritingAMalformedResponse:
+    def test_the_call_is_a_comment_carrying_the_explanation_and_the_marker(self) -> None:
+        process = ScriptedProcess(ProcessOutput(code=0, stdout="", stderr=""))
+
+        GhRunRepository(process=process).write_malformed_response(
+            repo=_REPO, issue=45, reason=MalformedReason.GO_CARRIES_TEXT
+        )
+
+        assert process.calls[0].argv == ["gh", "issue", "comment", "45", "--repo", _REPO, "--body-file", "-"]
+        assert process.calls[0].stdin == MalformedResponseComment.rendered(MalformedReason.GO_CARRIES_TEXT)
+
+    def test_the_comment_carries_the_marker_that_lets_a_later_read_find_it_back(self) -> None:
+        process = ScriptedProcess(ProcessOutput(code=0, stdout="", stderr=""))
+
+        GhRunRepository(process=process).write_malformed_response(
+            repo=_REPO, issue=45, reason=MalformedReason.GO_CARRIES_TEXT
+        )
+
+        assert MalformedResponseComment.MARKER in process.calls[0].stdin
+
+    def test_the_comment_carries_the_visible_automation_mark(self) -> None:
+        process = ScriptedProcess(ProcessOutput(code=0, stdout="", stderr=""))
+
+        GhRunRepository(process=process).write_malformed_response(
+            repo=_REPO, issue=45, reason=MalformedReason.GO_CARRIES_TEXT
+        )
+
+        assert AutomationMark.TEXT in process.calls[0].stdin
+
+    def test_a_non_zero_exit_raises_with_the_stderr_it_carried(self) -> None:
+        process = ScriptedProcess(ProcessOutput(code=1, stdout="", stderr="HTTP 422: Unprocessable Entity"))
+
+        with pytest.raises(GhCommandFailedError, match="HTTP 422"):
+            GhRunRepository(process=process).write_malformed_response(
+                repo=_REPO, issue=45, reason=MalformedReason.GO_CARRIES_TEXT
+            )
 
 
 class TestPausingForAlignment:
@@ -862,6 +1003,13 @@ class TestFlaggingADraftPullRequest:
         assert "#61" in process.calls[0].stdin
         assert "borrador" in process.calls[0].stdin
 
+    def test_the_comment_carries_the_visible_automation_mark(self) -> None:
+        process = ScriptedProcess(ProcessOutput(code=0, stdout="", stderr=""))
+
+        GhRunRepository(process=process).flag_draft_pull_request(repo=_REPO, issue=45, pull_request=61)
+
+        assert AutomationMark.TEXT in process.calls[0].stdin
+
     def test_a_non_zero_exit_raises_with_the_stderr_it_carried(self) -> None:
         process = ScriptedProcess(ProcessOutput(code=1, stdout="", stderr="HTTP 422: Unprocessable Entity"))
 
@@ -879,7 +1027,7 @@ class TestClosingTheParent:
         argv = Argv(process.calls[0].argv)
         assert process.calls[0].argv[:4] == ["gh", "issue", "close", "43"]
         assert argv.value_of("--repo") == _REPO
-        assert argv.value_of("--comment") == (
+        assert argv.value_of("--comment") == AutomationMark.appended_to(
             "Las 4 subissue(s) de esta feature estan todas cerradas, asi que esta feature se cierra con ellas."
         )
 
