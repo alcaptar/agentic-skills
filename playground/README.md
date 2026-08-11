@@ -48,7 +48,7 @@ falta muchas mas repeticiones para el mismo poder.
 ## El metodo, que es lo unico que se ha validado tres veces
 
 Tarea fija, **una sola variable**, cinco repeticiones, medida objetiva sobre el arbol resultante. De
-las hipotesis medidas asi hasta hoy, **dos de tres resultaron falsas**: medir antes de construir es la
+las hipotesis medidas asi hasta hoy, **tres de cuatro resultaron falsas**: medir antes de construir es la
 norma y no el adorno. Los resultados se escriben en `docs/design-notes.md` con sus numeros,
 **incluidos los empates**: un experimento que no distingue tambien es un resultado.
 

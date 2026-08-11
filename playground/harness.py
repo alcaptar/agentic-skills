@@ -197,14 +197,33 @@ class Report:
                 lines.append(rule.ljust(width) + "".join(cells))
 
             lines.append("-" * (width + 14 * len(keys)))
-            for label, extract in (("coste $", "cost_usd"), ("turnos", "turns"), ("segundos", "seconds")):
-                cells = []
-                for key in keys:
-                    values = [row[extract] for row in groups[key] if row.get(extract) is not None]
-                    cells.append((f"{sum(values) / len(values):.3f}" if values else "-").rjust(14))
-                lines.append(label.ljust(width) + "".join(cells))
+            lines.extend(Report._metrics(groups, keys=keys, width=width))
 
         return "\n".join(lines)
+
+    @staticmethod
+    def _metrics(
+        groups: dict[tuple[str, str], list[dict[str, Any]]], *, keys: list[tuple[str, str]], width: int
+    ) -> list[str]:
+        rounds: tuple[tuple[str, str], ...] = (("", ""),)
+        if any(row.get("second") for key in keys for row in groups[key]):
+            rounds = (("1a vuelta ", ""), ("2a vuelta ", "second"))
+
+        lines = []
+        for prefix, source in rounds:
+            for label, extract in (("coste $", "cost_usd"), ("turnos", "turns"), ("segundos", "seconds")):
+                cells = [Report._averaged(groups[key], source=source, extract=extract) for key in keys]
+                lines.append((prefix + label).ljust(width) + "".join(cells))
+
+        return lines
+
+    @staticmethod
+    def _averaged(rows: list[dict[str, Any]], *, source: str, extract: str) -> str:
+        values = [
+            value for row in rows if (value := (row.get(source) or {} if source else row).get(extract)) is not None
+        ]
+
+        return (f"{sum(values) / len(values):.3f}" if values else "-").rjust(14)
 
 
 class Main:
