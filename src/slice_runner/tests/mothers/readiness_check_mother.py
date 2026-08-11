@@ -1,0 +1,16 @@
+from __future__ import annotations
+
+from slice_runner.domain.check_verdict import CheckVerdict
+from slice_runner.domain.readiness_check import ReadinessCheck
+
+
+class ReadinessCheckMother:
+    @staticmethod
+    def ready(*, name: str = "git", detail: str = "2.51.0") -> ReadinessCheck:
+        return ReadinessCheck(name=name, verdict=CheckVerdict.READY, detail=detail)
+
+    @staticmethod
+    def missing(
+        *, name: str = "git", detail: str = "not found on the PATH", fix: str = "install git"
+    ) -> ReadinessCheck:
+        return ReadinessCheck(name=name, verdict=CheckVerdict.MISSING, detail=detail, fix=fix)

@@ -16,3 +16,8 @@ class LocalSkillLibrary(SkillLibrary):
         root = ClaudeConfig.root()
 
         return tuple(tree for tree in (root / name for name in self.TREES) if tree.is_dir())
+
+    def installed(self, name: str) -> Path | None:
+        candidate = ClaudeConfig.root() / "skills" / name
+
+        return candidate if candidate.is_dir() else None

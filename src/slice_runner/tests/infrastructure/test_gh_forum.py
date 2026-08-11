@@ -192,3 +192,22 @@ class TestGhForumAskingWhatStateThePullRequestIsIn:
 
         with pytest.raises(UnreadableForumError):
             GhForum(process=process).pull_request_state(repo=_REPO, number=60)
+
+
+class TestGhForumAskingWhoIsAuthenticated:
+    def test_it_asks_gh_for_the_login_of_the_authenticated_user(self) -> None:
+        process = ScriptedProcess(ProcessOutput(code=0, stdout="acapdev\n", stderr=""))
+
+        GhForum(process=process).authenticated_as()
+
+        assert process.calls[0].argv == ["gh", "api", "user", "--jq", ".login"]
+
+    def test_the_login_printed_is_returned_stripped_of_its_trailing_newline(self) -> None:
+        process = ScriptedProcess(ProcessOutput(code=0, stdout="acapdev\n", stderr=""))
+
+        assert GhForum(process=process).authenticated_as() == "acapdev"
+
+    def test_no_authentication_reads_as_none_instead_of_raising(self) -> None:
+        process = ScriptedProcess(ProcessOutput(code=1, stdout="", stderr="gh: To authenticate, run `gh auth login`"))
+
+        assert GhForum(process=process).authenticated_as() is None

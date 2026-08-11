@@ -26,7 +26,7 @@ from slice_runner.infrastructure.local_call_trace import LocalCallTrace
 from slice_runner.infrastructure.system_clock import SystemClock
 from slice_runner.infrastructure.understanding_invocation import UnderstandingInvocation
 from slice_runner.tests.argv import Argv
-from slice_runner.tests.doubles import Answer, RealExceptTheJudge, TimingOutProcess, UnrunnableJudge
+from slice_runner.tests.doubles import Answer, AnsweringByArgv, RealExceptTheJudge, TimingOutProcess, UnrunnableJudge
 from slice_runner.tests.git_repo import Git
 from slice_runner.tests.mothers.conversation_transcript_mother import ConversationTranscriptMother
 from slice_runner.tests.mothers.gh_conversation_mother import GhConversationMother
@@ -1397,3 +1397,81 @@ class TestTheBudgetsTheEntrypointInjects:
         Cli.explain(request=asked, budgets=Budgets(seconds_between_ticks=7))
 
         assert json.loads(capsys.readouterr().out)["wait_seconds"] == 7
+
+
+class TestTheCommandThatChecksReadiness:
+    @pytest.fixture(autouse=True)
+    def toolbox(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
+        (tmp_path / "skills" / "slice-spec").mkdir(parents=True)
+        (tmp_path / "skills" / "deploy-watch").mkdir(parents=True)
+
+    @staticmethod
+    def _process(*, authenticated: bool = True) -> AnsweringByArgv:
+        return AnsweringByArgv(
+            Answer(to=("git", "--version"), stdout="git version 2.51.0\n"),
+            Answer(to=("gh", "--version"), stdout="gh version 2.55.0\n"),
+            Answer(to=("claude", "--version"), stdout="2.1.4\n"),
+            Answer(to=("gh", "api", "user"), stdout="acapdev\n")
+            if authenticated
+            else Answer(to=("gh", "api", "user"), code=1, stderr="gh: not logged in"),
+        )
+
+    def test_with_everything_ready_it_exits_with_zero(self) -> None:
+        code = Cli(process=self._process(), budgets=Budgets()).doctor()
+
+        assert code == ExitCode.OK
+
+    def test_every_check_is_named_in_what_is_printed(self, capsys: pytest.CaptureFixture[str]) -> None:
+        Cli(process=self._process(), budgets=Budgets()).doctor()
+
+        printed = capsys.readouterr().out
+        for name in ("git", "gh", "claude", "skill slice-spec", "skill deploy-watch"):
+            assert name in printed
+
+    def test_something_missing_exits_with_its_own_code_distinct_from_a_usage_error(self) -> None:
+        code = Cli(process=self._process(authenticated=False), budgets=Budgets()).doctor()
+
+        assert code == ExitCode.ENVIRONMENT_NOT_READY
+        assert code != ExitCode.USAGE_ERROR
+
+    def test_a_missing_check_prints_the_command_that_fixes_it(self, capsys: pytest.CaptureFixture[str]) -> None:
+        Cli(process=self._process(authenticated=False), budgets=Budgets()).doctor()
+
+        assert "gh auth login" in capsys.readouterr().out
+
+    def test_the_doctor_never_runs_the_fix_it_prints(self) -> None:
+        process = self._process(authenticated=False)
+
+        Cli(process=process, budgets=Budgets()).doctor()
+
+        assert not process.invoked("gh", "auth", "login")
+
+    def test_claude_is_only_asked_for_its_version_and_never_invoked_for_real(self) -> None:
+        process = self._process()
+
+        Cli(process=process, budgets=Budgets()).doctor()
+
+        assert process.ran("claude", "--version")
+        assert not process.invoked("claude", "-p")
+
+    def test_it_parses_with_no_argument_at_all(self) -> None:
+        arguments = Cli.parser().parse_args(["doctor"])
+
+        assert arguments.command == "doctor"
+
+    @pytest.mark.integration
+    def test_main_wires_the_doctor_subcommand_over_a_real_process(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        toolbox = tmp_path / "only-git"
+        toolbox.mkdir()
+        (toolbox / "git").symlink_to(shutil.which("git") or "/usr/bin/git")
+        monkeypatch.setenv("PATH", str(toolbox))
+
+        code = Cli.main(["doctor"])
+
+        assert code == ExitCode.ENVIRONMENT_NOT_READY
+        printed = capsys.readouterr().out
+        assert "ready" in printed
+        assert "missing" in printed

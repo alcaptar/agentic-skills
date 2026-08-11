@@ -21,6 +21,7 @@ from slice_runner.application.actions.record_step import RecordStep
 from slice_runner.application.actions.reopen_slice import ReopenSlice
 from slice_runner.application.actions.stage_slice import StageSlice
 from slice_runner.application.actions.verify_slice import VerifySlice, VerifySliceParams
+from slice_runner.application.queries.check_readiness import CheckReadiness, CheckReadinessParams
 from slice_runner.application.queries.read_conversation import ReadConversation, ReadConversationParams
 from slice_runner.application.queries.run_prechecks import RunPrechecks
 from slice_runner.application.queries.select_slice import SelectSlice
@@ -76,7 +77,9 @@ from slice_runner.infrastructure.local_metrics_log import LocalMetricsLog
 from slice_runner.infrastructure.local_process import LocalProcess
 from slice_runner.infrastructure.local_skill_library import LocalSkillLibrary
 from slice_runner.infrastructure.local_tool_use_log import LocalToolUseLog
+from slice_runner.infrastructure.local_toolbox import LocalToolbox
 from slice_runner.infrastructure.process import ProcessNotRunnableError, ProcessTimedOutError
+from slice_runner.infrastructure.readiness_report import ReadinessReport
 from slice_runner.infrastructure.slice_pull_request import SlicePullRequest
 from slice_runner.infrastructure.slice_verifier_judge import SliceVerifierJudge
 from slice_runner.infrastructure.spend_payload import SpendPayload
@@ -169,6 +172,8 @@ class Cli:
                 return cls.spend(
                     repo=arguments.repo, issue=arguments.issue, slice_id=arguments.slice_id, step=Step(arguments.step)
                 )
+            case Subcommand.DOCTOR:
+                return cls(process=LocalProcess(budgets=budgets), budgets=budgets).doctor()
 
     @classmethod
     def parser(cls) -> argparse.ArgumentParser:
@@ -220,6 +225,10 @@ class Cli:
         spend.add_argument("--issue", type=int, required=True, help="number of the subissue the slice belongs to")
         spend.add_argument("--slice", dest="slice_id", required=True, help="identifier of the slice to add up")
         spend.add_argument("--step", required=True, choices=[str(x) for x in Step], help="step whose calls are summed")
+
+        subcommands.add_parser(
+            Subcommand.DOCTOR, help="check whether git, gh, claude and the skills the run needs are in place"
+        )
 
         return parser
 
@@ -317,6 +326,17 @@ class Cli:
             "to happen, reinvoking alone will not move it",
             file=sys.stderr,
         )
+
+    def doctor(self) -> int:
+        readiness = CheckReadiness(
+            toolbox=LocalToolbox(process=self._process),
+            forum=GhForum(process=self._process),
+            skills=LocalSkillLibrary(),
+        ).execute(CheckReadinessParams())
+
+        print(ReadinessReport(readiness=readiness).rendered())
+
+        return ExitCode.OK if readiness.ready else ExitCode.ENVIRONMENT_NOT_READY
 
     def _why_the_run_stopped(self, error: Exception) -> ExitCode:
         match error:

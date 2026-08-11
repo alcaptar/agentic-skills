@@ -19,3 +19,6 @@ class Forum(ABC):
 
     @abstractmethod
     def pull_request_state(self, *, repo: str, number: int) -> PullRequestState: ...
+
+    @abstractmethod
+    def authenticated_as(self) -> str | None: ...

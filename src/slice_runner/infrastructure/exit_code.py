@@ -20,6 +20,7 @@ class ExitCode(IntEnum):
     RUN_INTERRUPTED = 10
     PULL_REQUEST_CLOSED = 11
     PROCESS_TIMED_OUT = 12
+    ENVIRONMENT_NOT_READY = 13
 
     @classmethod
     def of(cls, ruling: Ruling) -> ExitCode:
