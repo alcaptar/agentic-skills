@@ -609,3 +609,26 @@ def test_the_exit_codes_the_readme_documents_are_the_ones_the_program_can_return
         f"README.md and ExitCode disagree: only in the README {sorted(documented - {int(c) for c in ExitCode})}, "
         f"only in the enum {sorted({int(c) for c in ExitCode} - documented)}"
     )
+
+
+def test_every_slice_title_slice_spec_documents_yields_a_name_git_accepts_as_a_branch() -> None:
+    """The titles the skill shows are what a model imitates, so they have to survive `git switch -c`.
+
+    `slice-spec` used to document an optional conventional-commit type inside the parentheses --
+    `slice-03 (refactor: extraer-repo)` -- and the program consumed it nowhere: `GhRunRepository` takes
+    the whole parentheses as the name, so the branch came out as `slice/03-refactor: extraer-repo` and
+    git refused it. The run died on 2026-08-11 having already marked the subissue in progress, published
+    the understanding and paid for the call, which is the worst moment to find out.
+
+    Parsing the documented titles with the program's own expression is what keeps the two sides honest:
+    a title the skill teaches and the program cannot turn into a branch fails here instead of mid-run.
+    """
+    titles = re.findall(r"`(slice-\d+ \([^)]+\)[^`]*)`", _read(_SPEC))
+
+    assert titles, "slice-spec documents no slice title, so this contract has nothing to measure"
+    for title in titles:
+        parsed = GhRunRepository.SLICE_HEADING.match(title)
+        assert parsed, f"the program cannot read the title slice-spec documents: {title}"
+        assert re.fullmatch(r"[a-z0-9]+(-[a-z0-9]+)*", parsed.group(2)), (
+            f"the title `{title}` yields the name `{parsed.group(2)}`, which git will not take as a branch"
+        )

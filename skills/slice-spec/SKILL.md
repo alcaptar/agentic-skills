@@ -186,9 +186,12 @@ SENAL: prometheus min_over_time(application_stock_actual[10m]) < 0 dispara la al
 - **El titulo es `slice-NN (name): titulo`.** `NN` = orden de dos digitos, y es lo que ordena las
   slices; `name` = kebab-case unico dentro de la feature, y es lo que deriva la rama y el scope del
   commit. Un titulo que no empiece por `slice-NN` no se puede leer y para el run.
-- Type opcional para conventional commits: `slice-03 (refactor: extraer-repo): ...`. Sin type ⇒ `feat`.
-  No hace falta declarar la lista de types validos: el commit lo redacta el agente (sabe conventional
-  commits) y su unico control determinista es la higiene del diff que aplica el programa al stagear.
+- **El parentesis lleva el `name` y nada mas.** Nada de un type de conventional commit delante: el
+  programa se lleva el parentesis entero como nombre, asi que un `(refactor: extraer-repo)` le pide a
+  git una rama llamada `slice/03-refactor: extraer-repo`, que no es un nombre de rama valido, y el run
+  muere **despues** de haber publicado el entendimiento y pagado la llamada. El type del commit lo
+  elige el agente al redactarlo -sabe conventional commits-, y su unico control determinista es la
+  higiene del diff que aplica el programa al stagear, asi que declararlo aqui no alimentaba nada.
 - **El estado macro es una etiqueta, nunca una marca en el texto.** Toda subissue nace con
   `estado:pendiente` y `slice-runner` la mueve escribiendo etiquetas (`estado:en-curso`,
   `estado:esperando-merge`, `bloqueada:controles`, `abortada:presupuesto`...); mergeada es GitHub
@@ -226,7 +229,7 @@ SENAL: prometheus min_over_time(application_stock_actual[10m]) < 0 dispara la al
    resto por la **heuristica ordenada**, y **solo abre dialogo con la persona** (opciones graduadas
    por capa, estilo hamburger) cuando el corte no es obvio o una slice supera el budget. Valida cada
    slice contra los criterios de validez y el conjunto contra el **test de despriorizacion** e
-   **igualdad de tamano**. Elige `name` kebab-case por slice y, si aplica, su `type`.
+   **igualdad de tamano**. Elige el `name` kebab-case de cada slice.
 
 2a. **Escribe la intencion, la de la feature y la de cada slice.** El brainstorming del paso 1 ya
    entendio el problema: la seccion `## Intencion` es su destilado, no trabajo nuevo. Redactala con
@@ -312,8 +315,9 @@ trabajo. Ofrece corregirlas. Checklist:
   vieja de estas skills, no se convierte a medias.
 - Cada subissue tiene titulo `slice-NN (name): titulo`, con `NN` de dos digitos sin huecos ni repetidos
   y `name` en kebab-case unico dentro de la feature, y al menos una linea `ACEPTACION:` en su cuerpo.
-- Si aparece un `type` en el parentesis, es un type de conventional commit (no hay lista normativa
-  que validar aqui: el commit lo redacta y valida el flujo de slice-runner).
+- **El parentesis no lleva nada mas que el `name`.** Un type de conventional commit delante, del
+  estilo `(refactor: extraer-repo)`, es desviacion: el programa se lleva el parentesis entero como
+  nombre y deriva una rama que git rechaza.
 - **Cada subissue tiene su etiqueta de estado macro**, y es una del vocabulario (`estado:pendiente` al
   crearla; luego las que escribe slice-runner). Un estado escrito en el texto en vez de como etiqueta es
   desviacion: nada lo lee, y desmiente a la etiqueta en cuanto las dos existen. Un cuerpo que traiga a
