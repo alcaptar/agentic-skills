@@ -346,6 +346,43 @@ Y el riesgo que se habia elevado a hipotesis principal **no aparecio**: el halla
 decision del propio implementador lo corrigieron **las dos variantes en las cinco repeticiones**. Las seis
 reglas salieron 5/5 en ambas, asi que reanudar tampoco degrada. Simplemente no compra lo que se buscaba.
 
+### Haiku implementando: 78% mas barato, y 2 de cada 5 salen defectuosas (2026-08-11, sin cerrar)
+
+Misma tarea `implementer-resume`, misma semilla, solo la variante de llamada nueva, cinco repeticiones
+por modelo. Antes de medir se anadio la regla que faltaba y que es la unica que dice si el codigo
+**funciona**: ejecutar los tests que el propio modelo escribio. Las seis anteriores comprueban forma, y
+un modelo mas flojo puede cumplirlas todas y escribir algo que no arranca.
+
+| | el caro | el barato |
+|---|---|---|
+| coste por celda, dos vueltas | 0,874 $ | 0,191 $ |
+| segundos | 246 | 114 |
+| celdas sin una sola regla en falso | 5/5 | 3/5 |
+
+**Los dos fallos son modos distintos y los dos importan.** Uno no hizo el trabajo -no existe el caso de
+uso pedido, y su coste, la mitad que el de las demas, lo delata: hizo la mitad de los turnos y se dio por
+terminado-. El otro lo hizo entero y **sus propios tests no pasan**, que es exactamente lo que las reglas
+de forma no ven.
+
+En el pipeline real ninguno de los dos llega a una pull request: el de los tests lo caza el control de
+tests y el otro lo caza el juez, asi que **el coste de fallar es una vuelta extra**, no codigo malo
+mergeado. Y el punto de equilibrio calculado sobre el gasto real dice que el modelo barato tendria que
+subir la media de vueltas extra de 1,04 a **2,8** para dejar de ahorrar; un 40% de defectuosas la deja
+alrededor de 1,5-1,9. Compensa, y con margen.
+
+**Por que no se ha decidido.** Dos fallos sobre cinco dejan la tasa real en cualquier sitio entre el 10% y
+el 70%, y es el numero del que depende todo. Afinarlo cuesta unos 3 $ -cada celda del barato son 0,20 $-,
+que es lo que hay que gastar antes de tocar nada:
+
+```bash
+python3 playground/harness.py implementer-resume --label haiku --variants fresh \
+  --seeds seed-populated --repetitions 20 --model haiku
+```
+
+Y aunque salga bien, **el experimento no mide el factor que decide**: cuantas vueltas de correccion pide
+el modelo barato contra el juez de verdad, en un repo grande. Eso solo se ve conduciendo dos o tres slices
+reales y mirando los reintentos, no en el banco.
+
 ## deploy-watch
 
 ### Decisiones clave

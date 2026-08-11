@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import subprocess
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -10,6 +11,8 @@ DOCUMENTS = ("code-style.md", "domain.md", "application.md", "testing.md")
 MODEL = "sonnet"
 TOOLS = ["Read", "Write", "Edit", "Glob", "Grep"]
 USES_A_DEPENDENCY_TWICE = 2
+PYTEST_TIMEOUT_SECONDS = 120
+PYTEST_VERDICTS = frozenset({0, 1, 5})
 
 BRIEF = """Estas trabajando en el paquete `library`, en el directorio actual.
 
@@ -143,8 +146,26 @@ class Rules:
 
         return True
 
+    def its_own_tests_pass(self) -> bool | None:
+        argv = ["uv", "run", "--no-project", "--with", "pytest", "python", "-m", "pytest", "src/library/tests", "-q"]
+        try:
+            done = subprocess.run(
+                argv,
+                cwd=self.tree,
+                env={"PATH": "/usr/bin:/bin:/usr/local/bin:" + str(Path.home() / ".local/bin"), "PYTHONPATH": "src"},
+                capture_output=True,
+                text=True,
+                timeout=PYTEST_TIMEOUT_SECONDS,
+                check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            return None
+
+        return done.returncode == 0 if done.returncode in PYTEST_VERDICTS else None
+
     def all(self) -> dict[str, bool | None]:
         return {
+            "its_own_tests_pass": self.its_own_tests_pass(),
             "renewal_exists": self.renewal_exists(),
             "renewal_reads_and_writes_through_the_port": self.renewal_reads_and_writes_through_the_port(),
             "renewal_has_a_test": self.renewal_has_a_test(),
