@@ -51,13 +51,12 @@ que falla si vuelve a colarse una referencia.
 
 ### El `alias` traduce; cuando no hay nada que traducir, no se escribe
 
-`VerdictPayload` lleva `alias` en cada campo porque el contrato del juez esta en castellano y el codigo
-en ingles. El contrato de `explain` (`RunPayload`, `TransitionPayload`) y el de `run`
-(`ConductedSlicePayload`) **los fijamos nosotros y estan en
-ingles**, asi que la clave del contrato ya es el nombre del campo y un `alias` identico solo seria ruido
-que hay que mantener en dos sitios. `by_alias=True` cae en el nombre del campo cuando no hay alias, con
-lo que el esquema, la validacion y la salida siguen saliendo de un solo sitio, que es lo que la regla
-protege.
+El contrato de `explain` (`RunPayload`, `TransitionPayload`), el de `run` (`ConductedSlicePayload`) y,
+desde que el contrato del juez se tradujo a ingles, tambien `VerdictPayload`/`FindingPayload`, **los
+fijamos nosotros y estan en ingles**, asi que la clave del contrato ya es el nombre del campo y un
+`alias` identico solo seria ruido que hay que mantener en dos sitios. `by_alias=True` cae en el nombre
+del campo cuando no hay alias, con lo que el esquema, la validacion y la salida siguen saliendo de un
+solo sitio, que es lo que la regla protege.
 
 ### Un campo que se llama como un builtin rompe las anotaciones de la clase
 

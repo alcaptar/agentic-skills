@@ -146,7 +146,7 @@ class TestTheExitCodeOfTheVerdict(BlindToTheToolboxOfThisMachine):
         code = Cli(process=process, budgets=Budgets()).verify(repo=str(repo), base=Git.BASE_BRANCH, slice_id=_SLICE)
 
         assert code == ExitCode.OK
-        assert json.loads(capsys.readouterr().out) == {"veredicto": "PASA", "hallazgos": []}
+        assert json.loads(capsys.readouterr().out) == {"ruling": "PASS", "findings": []}
 
     def test_a_fail_exits_with_one_and_emits_every_finding_whoever_retries_the_slice_needs(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
@@ -158,8 +158,8 @@ class TestTheExitCodeOfTheVerdict(BlindToTheToolboxOfThisMachine):
 
         assert code == ExitCode.VETOED
         emitted = json.loads(capsys.readouterr().out)
-        assert emitted["veredicto"] == "FALLA"
-        assert [finding["severidad"] for finding in emitted["hallazgos"]] == ["alta", "alta", "media", "media"]
+        assert emitted["ruling"] == "FAIL"
+        assert [finding["severity"] for finding in emitted["findings"]] == ["high", "high", "medium", "medium"]
 
 
 @pytest.mark.integration
@@ -176,7 +176,7 @@ class TestWhenThereIsNoVerdictToTrust(BlindToTheToolboxOfThisMachine):
         assert code == ExitCode.NO_USABLE_VERDICT
         output = capsys.readouterr()
         assert output.out == ""
-        assert "PASA with 1 finding" in output.err
+        assert "PASS with 1 finding" in output.err
 
     def test_a_judge_that_cannot_be_launched_exits_with_two_instead_of_with_the_code_of_the_veto(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
@@ -267,7 +267,7 @@ class TestWhatTheJudgeWasDeniedReading(BlindToTheToolboxOfThisMachine):
         output = capsys.readouterr()
         assert code == ExitCode.OK
         assert HarnessEnvelopeMother.DENIED_READ in output.err
-        assert json.loads(output.out) == {"veredicto": "PASA", "hallazgos": []}
+        assert json.loads(output.out) == {"ruling": "PASS", "findings": []}
 
     def test_a_run_with_nothing_denied_says_nothing_so_the_warning_keeps_meaning_something(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]

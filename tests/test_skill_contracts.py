@@ -505,12 +505,12 @@ def _documented_finding() -> dict[str, object]:
     """The single example finding in the rubric, which is where the verdict's fields are stated."""
     schema = _sole_json_block_in(_program_rubric())
     assert isinstance(schema, dict)
-    hallazgos = schema["hallazgos"]
-    assert isinstance(hallazgos, list)
-    assert hallazgos
-    primero = hallazgos[0]
-    assert isinstance(primero, dict)
-    return primero
+    findings = schema["findings"]
+    assert isinstance(findings, list)
+    assert findings
+    first = findings[0]
+    assert isinstance(first, dict)
+    return first
 
 
 def test_the_finding_keys_in_the_rubric_are_the_ones_the_program_maps_its_fields_to() -> None:
@@ -539,8 +539,8 @@ def test_the_verdicts_and_severities_in_the_rubric_are_the_ones_the_program_acce
     schema = _sole_json_block_in(_program_rubric())
     assert isinstance(schema, dict)
 
-    assert {v.strip() for v in str(schema["veredicto"]).split("|")} == set(Ruling)
-    assert {s.strip() for s in str(_documented_finding()["severidad"]).split("|")} == set(Severity)
+    assert {v.strip() for v in str(schema["ruling"]).split("|")} == set(Ruling)
+    assert {s.strip() for s in str(_documented_finding()["severity"]).split("|")} == set(Severity)
 
 
 _README = _ROOT / "README.md"

@@ -20,7 +20,13 @@ class SeverityCountPayload(ContractModel):
 
     @classmethod
     def from_domain(cls, verdict: Verdict) -> Self:
-        return cls.model_validate({str(severity): verdict.count_of(severity) for severity in Severity})
+        return cls.model_validate(
+            {
+                "alta": verdict.count_of(Severity.HIGH),
+                "media": verdict.count_of(Severity.MEDIUM),
+                "baja": verdict.count_of(Severity.LOW),
+            }
+        )
 
 
 class CorpusEntryPayload(ContractModel):

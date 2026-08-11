@@ -8,24 +8,24 @@ from typing import ClassVar
 class JudgeVerdictMother:
     @staticmethod
     def passing() -> dict[str, object]:
-        return {"veredicto": "PASA", "hallazgos": []}
+        return {"ruling": "PASS", "findings": []}
 
     @staticmethod
     def failing(*findings: dict[str, object]) -> dict[str, object]:
-        return {"veredicto": "FALLA", "hallazgos": list(findings) or [JudgeVerdictMother.high_severity_finding()]}
+        return {"ruling": "FAIL", "findings": list(findings) or [JudgeVerdictMother.high_severity_finding()]}
 
     @staticmethod
     def passing_with(*findings: dict[str, object]) -> dict[str, object]:
-        return {"veredicto": "PASA", "hallazgos": list(findings)}
+        return {"ruling": "PASS", "findings": list(findings)}
 
     @staticmethod
     def high_severity_finding(*, path: str = "src/x.py") -> dict[str, object]:
         return {
-            "regla": "boundaries",
+            "rule": "boundaries",
             "path": path,
-            "severidad": "alta",
-            "evidencia": "requests in the domain",
-            "detalle": "I/O goes behind a port",
+            "severity": "high",
+            "evidence": "requests in the domain",
+            "detail": "I/O goes behind a port",
         }
 
 
