@@ -27,6 +27,17 @@ class Git:
     def init_repo(cls, root: Path) -> Path:
         root.mkdir(parents=True, exist_ok=True)
         cls.run(root, "init", "-b", cls.BASE_BRANCH)
+
+        return cls._identified(root)
+
+    @classmethod
+    def clone(cls, *, remote: Path, into: Path) -> Path:
+        cls.run(into.parent, "clone", str(remote), str(into))
+
+        return cls._identified(into)
+
+    @classmethod
+    def _identified(cls, root: Path) -> Path:
         cls.run(root, "config", "user.email", "t@example.com")
         cls.run(root, "config", "user.name", "test")
 

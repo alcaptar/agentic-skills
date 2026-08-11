@@ -111,8 +111,7 @@ class TestGitBranchesComparingABaseAgainstItsRemote:
         self, tmp_path: Path
     ) -> None:
         repo, remote = self._repo_pushed_to_a_bare_remote(tmp_path)
-        Git.run(tmp_path, "clone", str(remote), str(tmp_path / "elsewhere"))
-        elsewhere = tmp_path / "elsewhere"
+        elsewhere = Git.clone(remote=remote, into=tmp_path / "elsewhere")
         Git.run(elsewhere, "commit", "--allow-empty", "-m", "pushed from elsewhere")
         Git.run(elsewhere, "push")
 
@@ -124,8 +123,7 @@ class TestGitBranchesComparingABaseAgainstItsRemote:
         self, tmp_path: Path
     ) -> None:
         repo, remote = self._repo_pushed_to_a_bare_remote(tmp_path)
-        Git.run(tmp_path, "clone", str(remote), str(tmp_path / "elsewhere"))
-        elsewhere = tmp_path / "elsewhere"
+        elsewhere = Git.clone(remote=remote, into=tmp_path / "elsewhere")
         Git.run(elsewhere, "commit", "--allow-empty", "-m", "pushed from elsewhere")
         Git.run(elsewhere, "push")
 
@@ -137,8 +135,7 @@ class TestGitBranchesComparingABaseAgainstItsRemote:
         self, tmp_path: Path
     ) -> None:
         repo, remote = self._repo_pushed_to_a_bare_remote(tmp_path)
-        Git.run(tmp_path, "clone", str(remote), str(tmp_path / "elsewhere"))
-        elsewhere = tmp_path / "elsewhere"
+        elsewhere = Git.clone(remote=remote, into=tmp_path / "elsewhere")
         Git.run(elsewhere, "commit", "--allow-empty", "-m", "pushed from elsewhere")
         Git.run(elsewhere, "push")
         before = Git.run(repo, "rev-parse", Git.BASE_BRANCH).strip()
