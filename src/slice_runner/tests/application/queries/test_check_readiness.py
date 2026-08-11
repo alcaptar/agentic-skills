@@ -7,6 +7,7 @@ from unittest.mock import Mock, create_autospec
 import pytest
 
 from slice_runner.application.queries.check_readiness import CheckReadiness, CheckReadinessParams
+from slice_runner.domain.branches import Branches
 from slice_runner.domain.check_verdict import CheckVerdict
 from slice_runner.domain.forum import Forum
 from slice_runner.domain.skill_library import SkillLibrary
@@ -34,14 +35,20 @@ class TestCheckReadiness:
         return forum
 
     @pytest.fixture
+    def branches(self) -> Mock:
+        branches: Mock = create_autospec(Branches, spec_set=True, instance=True)
+        branches.commits_behind_remote.return_value = 0
+        return branches
+
+    @pytest.fixture
     def skills(self) -> Mock:
         skills: Mock = create_autospec(SkillLibrary, spec_set=True, instance=True)
         skills.installed.side_effect = lambda name: {"slice-spec": _SLICE_SPEC, "deploy-watch": _DEPLOY_WATCH}[name]
         return skills
 
     @pytest.fixture
-    def query(self, toolbox: Mock, forum: Mock, skills: Mock) -> CheckReadiness:
-        return CheckReadiness(toolbox=toolbox, forum=forum, skills=skills)
+    def query(self, toolbox: Mock, forum: Mock, branches: Mock, skills: Mock) -> CheckReadiness:
+        return CheckReadiness(toolbox=toolbox, forum=forum, branches=branches, skills=skills)
 
     @staticmethod
     def _check(readiness: Readiness, name: str) -> ReadinessCheck:
@@ -111,3 +118,75 @@ class TestCheckReadiness:
         assert deploy_watch.fix is not None
         assert "deploy-watch" in deploy_watch.fix
         assert "ln -s" in deploy_watch.fix
+
+    def test_without_repo_worktree_or_base_only_the_checks_that_need_none_of_them_run(
+        self, query: CheckReadiness, forum: Mock, branches: Mock
+    ) -> None:
+        readiness = query.execute(CheckReadinessParams())
+
+        assert {check.name for check in readiness.checks} == {
+            "git",
+            "gh",
+            "claude",
+            "skill slice-spec",
+            "skill deploy-watch",
+        }
+        forum.can_read.assert_not_called()
+        branches.commits_behind_remote.assert_not_called()
+
+    def test_with_repo_readable_the_repo_check_is_ready(self, query: CheckReadiness, forum: Mock) -> None:
+        forum.can_read.return_value = True
+
+        readiness = query.execute(CheckReadinessParams(repo="alcaptar/agentic-skills"))
+
+        repo = self._check(readiness, "repo")
+        assert repo.verdict is CheckVerdict.READY
+
+    def test_with_repo_unreadable_the_repo_check_is_missing_with_a_fix_and_breaks_readiness(
+        self, query: CheckReadiness, forum: Mock
+    ) -> None:
+        forum.can_read.return_value = False
+
+        readiness = query.execute(CheckReadinessParams(repo="alcaptar/agentic-skills"))
+
+        repo = self._check(readiness, "repo")
+        assert repo.verdict is CheckVerdict.MISSING
+        assert repo.fix
+        assert not readiness.ready
+
+    def test_with_worktree_and_base_up_to_date_the_base_check_is_ready(
+        self, query: CheckReadiness, branches: Mock
+    ) -> None:
+        branches.commits_behind_remote.return_value = 0
+
+        readiness = query.execute(CheckReadinessParams(worktree="/repos/agentic-skills", base="master"))
+
+        base = self._check(readiness, "base")
+        assert base.verdict is CheckVerdict.READY
+
+    def test_with_worktree_and_base_behind_its_remote_the_base_check_warns_with_the_command_that_updates_it(
+        self, query: CheckReadiness, branches: Mock
+    ) -> None:
+        branches.commits_behind_remote.return_value = 2
+
+        readiness = query.execute(CheckReadinessParams(worktree="/repos/agentic-skills", base="master"))
+
+        base = self._check(readiness, "base")
+        assert base.verdict is CheckVerdict.WARNING
+        assert base.fix
+        assert "master" in base.fix
+
+    def test_a_lagging_base_warning_alone_does_not_flip_readiness_to_not_ready(
+        self, query: CheckReadiness, branches: Mock
+    ) -> None:
+        branches.commits_behind_remote.return_value = 2
+
+        readiness = query.execute(CheckReadinessParams(worktree="/repos/agentic-skills", base="master"))
+
+        assert readiness.ready
+
+    def test_worktree_without_base_does_not_run_the_base_check(self, query: CheckReadiness, branches: Mock) -> None:
+        readiness = query.execute(CheckReadinessParams(worktree="/repos/agentic-skills"))
+
+        assert not any(check.name == "base" for check in readiness.checks)
+        branches.commits_behind_remote.assert_not_called()

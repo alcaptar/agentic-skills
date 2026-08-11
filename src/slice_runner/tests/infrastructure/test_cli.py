@@ -1407,7 +1407,7 @@ class TestTheCommandThatChecksReadiness:
         (tmp_path / "skills" / "deploy-watch").mkdir(parents=True)
 
     @staticmethod
-    def _process(*, authenticated: bool = True) -> AnsweringByArgv:
+    def _process(*, authenticated: bool = True, repo_readable: bool = True, commits_behind: int = 0) -> AnsweringByArgv:
         return AnsweringByArgv(
             Answer(to=("git", "--version"), stdout="git version 2.51.0\n"),
             Answer(to=("gh", "--version"), stdout="gh version 2.55.0\n"),
@@ -1415,6 +1415,11 @@ class TestTheCommandThatChecksReadiness:
             Answer(to=("gh", "api", "user"), stdout="acapdev\n")
             if authenticated
             else Answer(to=("gh", "api", "user"), code=1, stderr="gh: not logged in"),
+            Answer(to=("gh", "repo", "view"), stdout=json.dumps({"name": "agentic-skills"}))
+            if repo_readable
+            else Answer(to=("gh", "repo", "view"), code=1, stderr="GraphQL: Could not resolve to a Repository"),
+            Answer(to=("git", "fetch", "origin"), stdout=""),
+            Answer(to=("git", "rev-list", "--count"), stdout=f"{commits_behind}\n"),
         )
 
     def test_with_everything_ready_it_exits_with_zero(self) -> None:
@@ -1459,6 +1464,71 @@ class TestTheCommandThatChecksReadiness:
         arguments = Cli.parser().parse_args(["doctor"])
 
         assert arguments.command == "doctor"
+        assert arguments.repo is None
+        assert arguments.worktree is None
+        assert arguments.base is None
+
+    def test_it_parses_repo_worktree_and_base_when_given(self) -> None:
+        arguments = Cli.parser().parse_args(
+            ["doctor", "--repo", "alcaptar/agentic-skills", "--worktree", "/repos/agentic-skills", "--base", "master"]
+        )
+
+        assert arguments.repo == "alcaptar/agentic-skills"
+        assert arguments.worktree == "/repos/agentic-skills"
+        assert arguments.base == "master"
+
+    def test_with_a_readable_repo_the_repo_check_is_named_in_what_is_printed_and_it_stays_ready(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        code = Cli(process=self._process(repo_readable=True), budgets=Budgets()).doctor(repo="alcaptar/agentic-skills")
+
+        assert code == ExitCode.OK
+        assert "repo" in capsys.readouterr().out
+
+    def test_with_an_unreadable_repo_it_exits_with_the_not_ready_code(self) -> None:
+        code = Cli(process=self._process(repo_readable=False), budgets=Budgets()).doctor(repo="alcaptar/agentic-skills")
+
+        assert code == ExitCode.ENVIRONMENT_NOT_READY
+
+    def test_with_a_base_up_to_date_with_its_remote_the_base_check_is_named_and_it_stays_ready(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        code = Cli(process=self._process(commits_behind=0), budgets=Budgets()).doctor(
+            worktree="/repos/agentic-skills", base="master"
+        )
+
+        assert code == ExitCode.OK
+        assert "base" in capsys.readouterr().out
+
+    def test_a_base_lagging_behind_its_remote_still_exits_with_zero_because_a_warning_is_not_a_failure(self) -> None:
+        code = Cli(process=self._process(commits_behind=3), budgets=Budgets()).doctor(
+            worktree="/repos/agentic-skills", base="master"
+        )
+
+        assert code == ExitCode.OK
+
+    def test_a_lagging_base_prints_the_command_that_brings_it_up_to_date(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        Cli(process=self._process(commits_behind=3), budgets=Budgets()).doctor(
+            worktree="/repos/agentic-skills", base="master"
+        )
+
+        printed = capsys.readouterr().out
+        assert "master" in printed
+        assert "origin/master" in printed
+
+    def test_the_doctor_never_runs_the_command_that_would_update_the_lagging_base(self) -> None:
+        process = self._process(commits_behind=3)
+
+        Cli(process=process, budgets=Budgets()).doctor(worktree="/repos/agentic-skills", base="master")
+
+        assert not process.invoked("branch", "-f")
+
+    def test_without_worktree_or_base_neither_is_asked_about_and_behaviour_stays_as_before(self) -> None:
+        code = Cli(process=self._process(), budgets=Budgets()).doctor()
+
+        assert code == ExitCode.OK
 
     @pytest.mark.integration
     def test_main_wires_the_doctor_subcommand_over_a_real_process(

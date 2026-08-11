@@ -22,3 +22,6 @@ class Forum(ABC):
 
     @abstractmethod
     def authenticated_as(self) -> str | None: ...
+
+    @abstractmethod
+    def can_read(self, *, repo: str) -> bool: ...

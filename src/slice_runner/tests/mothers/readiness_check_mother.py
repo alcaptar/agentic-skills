@@ -14,3 +14,9 @@ class ReadinessCheckMother:
         *, name: str = "git", detail: str = "not found on the PATH", fix: str = "install git"
     ) -> ReadinessCheck:
         return ReadinessCheck(name=name, verdict=CheckVerdict.MISSING, detail=detail, fix=fix)
+
+    @staticmethod
+    def warning(
+        *, name: str = "base", detail: str = "master is 1 commit(s) behind its remote", fix: str = "git fetch"
+    ) -> ReadinessCheck:
+        return ReadinessCheck(name=name, verdict=CheckVerdict.WARNING, detail=detail, fix=fix)

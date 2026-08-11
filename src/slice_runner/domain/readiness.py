@@ -15,4 +15,4 @@ class Readiness:
 
     @property
     def ready(self) -> bool:
-        return all(check.verdict is CheckVerdict.READY for check in self.checks)
+        return not any(check.verdict is CheckVerdict.MISSING for check in self.checks)

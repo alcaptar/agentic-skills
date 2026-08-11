@@ -46,3 +46,13 @@ class TestReadinessReport:
 
         assert "ready" in rendered
         assert "missing" in rendered
+
+    def test_a_warning_prints_its_own_verdict_word_and_its_fix_on_the_line_right_after_it(self) -> None:
+        readiness = Readiness(
+            checks=(ReadinessCheckMother.warning(detail="master is 1 commit(s) behind its remote", fix="git fetch"),)
+        )
+
+        lines = ReadinessReport(readiness=readiness).rendered().splitlines()
+
+        assert "warning" in lines[0]
+        assert lines[1].strip() == "git fetch"

@@ -9,3 +9,6 @@ class Branches(ABC):
 
     @abstractmethod
     def create(self, *, worktree: str, name: str, base: str) -> None: ...
+
+    @abstractmethod
+    def commits_behind_remote(self, *, worktree: str, base: str) -> int: ...
