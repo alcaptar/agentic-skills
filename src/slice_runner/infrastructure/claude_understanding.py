@@ -73,8 +73,16 @@ class ClaudeUnderstanding(UnderstandingWriter):
     @staticmethod
     def _usable_text(envelope: HarnessOutput) -> str:
         report = UnderstandingReportPayload.from_dict(envelope.structured_output)
-        text = report.understanding.strip()
-        if not text:
+        summary = report.summary.strip()
+        sketch = report.sketch.strip()
+        steps = [(step.description.strip(), step.reason.strip()) for step in report.steps]
+        if not summary or not sketch or any(not description or not reason for description, reason in steps):
             raise InvalidUnderstandingReportError("the harness returned only blank text as its understanding")
 
-        return text
+        return "\n\n".join(
+            [
+                f"## Resumen\n{summary}",
+                "## Pasos\n" + "\n".join(f"- {description} (motivo: {reason})" for description, reason in steps),
+                f"## Esbozo\n{sketch}",
+            ]
+        )
