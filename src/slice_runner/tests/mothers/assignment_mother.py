@@ -39,6 +39,7 @@ class AssignmentMother:
             repo=cls.REPO,
             worktree=cls.WORKTREE,
             intention=subissue.intention,
+            prior_art="",
             criteria=subissue.criteria,
             signal=subissue.signal,
             sources=parent.sources,

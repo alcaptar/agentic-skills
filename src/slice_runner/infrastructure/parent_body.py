@@ -14,6 +14,7 @@ if TYPE_CHECKING:
 
 _CONTROLS_EXEMPTION = "ninguno"
 _INTENTION_HEADING = re.compile(r"^\s*##\s+intenci[oó]n\s*$", re.IGNORECASE)
+_PRIOR_ART_HEADING = re.compile(r"^\s*##\s+lo\s+que\s+ya\s+existe\s*$", re.IGNORECASE)
 _SOURCES_HEADING = re.compile(r"^\s*##\s+fuentes\s+de\s+convenci[oó]n\s*$", re.IGNORECASE)
 _CONTROLS_HEADING = re.compile(r"^\s*##\s+controles\s*$", re.IGNORECASE)
 _H2 = re.compile(r"^\s*##\s+")
@@ -25,6 +26,7 @@ _CONTROL_LINE = re.compile(r"^\s*-\s*([\w-]+)\s*:\s*(.+?)\s*$")
 @dataclass(frozen=True, kw_only=True, slots=True)
 class ParsedParentBody:
     intention: str
+    prior_art: str
     sources: tuple[Source, ...]
     controls: Controls
 
@@ -34,6 +36,7 @@ class ParentBody:
     def parse(cls, body: str, *, repo: str | None) -> ParsedParentBody:
         return ParsedParentBody(
             intention=cls._section_text(body, _INTENTION_HEADING),
+            prior_art=cls._section_text(body, _PRIOR_ART_HEADING),
             sources=cls._sources(body, repo),
             controls=cls._controls(body, repo),
         )

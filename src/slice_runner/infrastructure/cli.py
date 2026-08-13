@@ -522,6 +522,7 @@ class Cli:
             worktree=worktree,
             base=base,
             slice_id=slice_id,
+            prior_art="",
             signal="",
             criteria=(),
             sources=(),

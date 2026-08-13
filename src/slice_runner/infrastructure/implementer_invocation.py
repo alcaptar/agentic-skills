@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar
 
 from slice_runner.infrastructure.counted_lines import CountedLines
+from slice_runner.infrastructure.prior_art_block import PriorArtBlock
 from slice_runner.infrastructure.report_payload import ImplementationReportPayload
 from slice_runner.infrastructure.slice_implementer_brief import SliceImplementerBrief
 
@@ -60,6 +61,7 @@ class ImplementerInvocation:
                 f"- repo: {assignment.repo}",
                 f"- ruta del repo: {assignment.worktree}",
                 f"- intencion: {assignment.intention}",
+                *PriorArtBlock.of(assignment.prior_art),
                 f"- senal: {assignment.signal}",
                 *CountedLines.of("criterios de aceptacion", assignment.criteria),
                 *CountedLines.of(

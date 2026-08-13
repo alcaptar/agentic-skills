@@ -465,6 +465,7 @@ class ConductSlice:
                     worktree=progress.params.worktree,
                     base=f"origin/{progress.params.base}",
                     slice_id=progress.subissue.slice_id,
+                    prior_art=progress.parent.prior_art,
                     signal=progress.subissue.signal,
                     criteria=progress.subissue.criteria,
                     sources=progress.parent.sources,

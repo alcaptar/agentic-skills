@@ -18,6 +18,7 @@ class Assignment:
     repo: str
     worktree: str
     intention: str
+    prior_art: str
     criteria: tuple[str, ...]
     signal: str
     sources: tuple[Source, ...]

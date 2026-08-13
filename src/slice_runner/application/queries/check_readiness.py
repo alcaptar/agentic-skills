@@ -29,6 +29,7 @@ class CheckReadiness:
     HELPERS: ClassVar[tuple[str, ...]] = (
         "skills/slice-runner/scripts/discover_conventions.py",
         "skills/slice-runner/scripts/discover_controles.py",
+        "skills/slice-runner/scripts/discover_prior_art.py",
     )
 
     def __init__(
