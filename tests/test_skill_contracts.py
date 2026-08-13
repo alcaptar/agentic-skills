@@ -38,7 +38,7 @@ from slice_runner.infrastructure.process import ProcessOutput
 from slice_runner.infrastructure.slice_verifier_judge import SliceVerifierJudge
 from slice_runner.infrastructure.subissue_body import SubissueBody
 from slice_runner.infrastructure.verdict_payload import FindingPayload
-from slice_runner.tests.doubles import ScriptedProcess
+from slice_runner.tests.doubles import GhCallDoubles, ScriptedProcess
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -210,7 +210,9 @@ def test_the_subissue_slice_spec_documents_is_read_by_the_program_as_the_slice_i
     ]
     process = ScriptedProcess(ProcessOutput(code=0, stdout=json.dumps(recorded), stderr=""))
 
-    children = GhRunRepository(process=process).read_children(repo="alcaptar/agentic-skills", parent=43, expected=1)
+    children = GhRunRepository(call=GhCallDoubles.wired(process)).read_children(
+        repo="alcaptar/agentic-skills", parent=43, expected=1
+    )
 
     assert _KEBAB_TITLE.match(title), f"the documented title {title!r} does not carry `slice-NN (name-kebab):`"
     assert children[0].slice_id == title.split(" ", 1)[0]

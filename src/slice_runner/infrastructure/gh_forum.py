@@ -10,12 +10,12 @@ from slice_runner.infrastructure.gh_run_repository import GhCommandFailedError
 
 if TYPE_CHECKING:
     from slice_runner.domain.pull_request_state import PullRequestState
-    from slice_runner.infrastructure.process import Process
+    from slice_runner.infrastructure.gh_call import GhCall
 
 
 class GhForum(Forum):
-    def __init__(self, *, process: Process) -> None:
-        self._process = process
+    def __init__(self, *, call: GhCall) -> None:
+        self._call = call
 
     def open_pull_request(self, *, repo: str, branch: str) -> int | None:
         return self._listed(repo=repo, branch=branch, state="open")
@@ -25,11 +25,11 @@ class GhForum(Forum):
 
     def _listed(self, *, repo: str, branch: str, state: str) -> int | None:
         argv = ["gh", "pr", "list", "--repo", repo, "--head", branch, "--state", state, "--json", "number"]
-        output = self._process.run(argv, stdin="")
-        if output.code != 0:
-            raise GhCommandFailedError(f"{' '.join(argv)}: {output.stderr.strip()}")
+        outcome = self._call.run(argv, stdin="", safe_to_repeat=True)
+        if outcome.output.code != 0:
+            raise GhCommandFailedError(f"{' '.join(argv)}: {outcome.reason}")
 
-        items = self._decoded_array(output.stdout)
+        items = self._decoded_array(outcome.output.stdout)
         if not items:
             return None
 
@@ -52,31 +52,31 @@ class GhForum(Forum):
             "--body-file",
             "-",
         ]
-        output = self._process.run(argv, stdin=body)
-        if output.code != 0:
-            raise GhCommandFailedError(f"{' '.join(argv)}: {output.stderr.strip()}")
+        outcome = self._call.run(argv, stdin=body, safe_to_repeat=False)
+        if outcome.output.code != 0:
+            raise GhCommandFailedError(f"{' '.join(argv)}: {outcome.reason}")
 
-        return self._number_of(output.stdout)
+        return self._number_of(outcome.output.stdout)
 
     def pull_request_state(self, *, repo: str, number: int) -> PullRequestState:
         argv = ["gh", "pr", "view", str(number), "--repo", repo, "--json", "state"]
-        output = self._process.run(argv, stdin="")
-        if output.code != 0:
-            raise GhCommandFailedError(f"{' '.join(argv)}: {output.stderr.strip()}")
+        outcome = self._call.run(argv, stdin="", safe_to_repeat=True)
+        if outcome.output.code != 0:
+            raise GhCommandFailedError(f"{' '.join(argv)}: {outcome.reason}")
 
-        return GhPullRequestStatePayload.from_dict(self._decoded_object(output.stdout)).to_domain()
+        return GhPullRequestStatePayload.from_dict(self._decoded_object(outcome.output.stdout)).to_domain()
 
     def authenticated_as(self) -> str | None:
-        output = self._process.run(["gh", "api", "user", "--jq", ".login"], stdin="")
-        if output.code != 0:
+        outcome = self._call.run(["gh", "api", "user", "--jq", ".login"], stdin="", safe_to_repeat=True)
+        if outcome.output.code != 0:
             return None
 
-        return output.stdout.strip() or None
+        return outcome.output.stdout.strip() or None
 
     def can_read(self, *, repo: str) -> bool:
-        output = self._process.run(["gh", "repo", "view", repo, "--json", "name"], stdin="")
+        outcome = self._call.run(["gh", "repo", "view", repo, "--json", "name"], stdin="", safe_to_repeat=True)
 
-        return output.code == 0
+        return outcome.output.code == 0
 
     @staticmethod
     def _number_of(stdout: str) -> int:

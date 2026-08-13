@@ -25,8 +25,9 @@ from slice_runner.infrastructure.understanding_comment import UnderstandingComme
 if TYPE_CHECKING:
     from slice_runner.domain.malformed_reason import MalformedReason
     from slice_runner.domain.run import Run
+    from slice_runner.infrastructure.gh_call import GhCall
     from slice_runner.infrastructure.gh_sub_issue_payload import GhLabelPayload
-    from slice_runner.infrastructure.process import Process, ProcessOutput
+    from slice_runner.infrastructure.process import ProcessOutput
 
 _LABEL_MISSING = re.compile(r"'(.+?)' not found")
 _LABEL_COLOR = "5319e7"
@@ -40,11 +41,14 @@ class GhCommandFailedError(OSError):
 class GhRunRepository(RunRepository):
     SLICE_HEADING: ClassVar[re.Pattern[str]] = re.compile(r"^(slice-\d+)\s*\(([^)]+)\)\s*:\s*(.+?)\s*$")
 
-    def __init__(self, *, process: Process) -> None:
-        self._process = process
+    def __init__(self, *, call: GhCall) -> None:
+        self._call = call
 
     def read_parent(self, *, repo: str, issue: int, slice_repo: str | None) -> ParentIssue:
-        output = self._run(["gh", "issue", "view", str(issue), "--repo", repo, "--json", "body,subIssuesSummary,state"])
+        output = self._run(
+            ["gh", "issue", "view", str(issue), "--repo", repo, "--json", "body,subIssuesSummary,state"],
+            safe_to_repeat=True,
+        )
         payload = GhParentViewPayload.from_dict(self._decoded_object(output))
         parsed = ParentBody.parse(payload.body, repo=slice_repo)
 
@@ -71,7 +75,8 @@ class GhRunRepository(RunRepository):
                 "all",
                 "--json",
                 "number,title,body,labels,state",
-            ]
+            ],
+            safe_to_repeat=True,
         )
         items = self._decoded_array(output)
         children = tuple(self._sub_issue_from(GhSubIssuePayload.from_dict(item)) for item in items)
@@ -85,18 +90,25 @@ class GhRunRepository(RunRepository):
 
     def write_run(self, *, repo: str, issue: int, run: Run) -> None:
         current = GhBodyPayload.from_dict(
-            self._decoded_object(self._run(["gh", "issue", "view", str(issue), "--repo", repo, "--json", "body"]))
+            self._decoded_object(
+                self._run(["gh", "issue", "view", str(issue), "--repo", repo, "--json", "body"], safe_to_repeat=True)
+            )
         ).body
         updated = SubissueBody.with_run(current, run)
         if updated == current:
             return
 
-        self._run(["gh", "issue", "edit", str(issue), "--repo", repo, "--body-file", "-"], stdin=updated)
+        self._run(
+            ["gh", "issue", "edit", str(issue), "--repo", repo, "--body-file", "-"],
+            stdin=updated,
+            safe_to_repeat=True,
+        )
 
     def write_understanding(self, *, repo: str, issue: int, understanding: str) -> None:
         self._run(
             ["gh", "issue", "comment", str(issue), "--repo", repo, "--body-file", "-"],
             stdin=UnderstandingComment.rendered(understanding),
+            safe_to_repeat=False,
         )
 
     def read_understanding(self, *, repo: str, issue: int) -> str:
@@ -124,16 +136,20 @@ class GhRunRepository(RunRepository):
         self._run(
             ["gh", "issue", "comment", str(issue), "--repo", repo, "--body-file", "-"],
             stdin=ReopenedComment.rendered(instruction),
+            safe_to_repeat=False,
         )
 
     def write_malformed_response(self, *, repo: str, issue: int, reason: MalformedReason) -> None:
         self._run(
             ["gh", "issue", "comment", str(issue), "--repo", repo, "--body-file", "-"],
             stdin=MalformedResponseComment.rendered(reason),
+            safe_to_repeat=False,
         )
 
     def _comment_bodies(self, *, repo: str, issue: int) -> tuple[str, ...]:
-        output = self._run(["gh", "issue", "view", str(issue), "--repo", repo, "--json", "comments"])
+        output = self._run(
+            ["gh", "issue", "view", str(issue), "--repo", repo, "--json", "comments"], safe_to_repeat=True
+        )
         payload = GhCommentsPayload.from_dict(self._decoded_object(output))
 
         return tuple(GhCommentPayload.from_dict(comment).body for comment in payload.comments)
@@ -166,7 +182,9 @@ class GhRunRepository(RunRepository):
         self._edit_with_label_fallback(argv, repo=repo, issue=issue, add=add)
 
     def remove_label(self, *, repo: str, issue: int, remove: IssueLabel) -> None:
-        self._run(["gh", "issue", "edit", str(issue), "--repo", repo, "--remove-label", remove.value])
+        self._run(
+            ["gh", "issue", "edit", str(issue), "--repo", repo, "--remove-label", remove.value], safe_to_repeat=True
+        )
 
     def pause_for_alignment(self, *, repo: str, issue: int, remove: IssueLabel | None) -> None:
         argv = [
@@ -183,6 +201,7 @@ class GhRunRepository(RunRepository):
                 f"La pull request #{pull_request} nace en borrador (`--draft`); hay que sacarla de "
                 "borrador para que el merge pueda ocurrir."
             ),
+            safe_to_repeat=False,
         )
 
     def close_parent(self, *, repo: str, issue: int, subissue_count: int) -> None:
@@ -199,7 +218,8 @@ class GhRunRepository(RunRepository):
                     f"Las {subissue_count} subissue(s) de esta feature estan todas cerradas, asi que esta feature "
                     "se cierra con ellas."
                 ),
-            ]
+            ],
+            safe_to_repeat=False,
         )
 
     @staticmethod
@@ -211,23 +231,23 @@ class GhRunRepository(RunRepository):
         return [*argv, "--remove-label", remove.value]
 
     def _edit_with_label_fallback(self, argv: list[str], *, repo: str, issue: int, add: IssueLabel) -> None:
-        output = self._process.run(argv, stdin="")
-        if output.code == 0:
+        outcome = self._call.run(argv, stdin="", safe_to_repeat=True)
+        if outcome.output.code == 0:
             return
 
-        missing = _LABEL_MISSING.search(output.stderr)
+        missing = _LABEL_MISSING.search(outcome.output.stderr)
         if not missing or missing.group(1) != add.value:
-            raise GhCommandFailedError(f"gh issue edit failed for {repo}#{issue}: {output.stderr.strip()}")
+            raise GhCommandFailedError(f"gh issue edit failed for {repo}#{issue}: {outcome.reason}")
 
         self._create_label(repo=repo, name=add.value)
-        retried = self._process.run(argv, stdin="")
-        if retried.code != 0:
+        retried = self._call.run(argv, stdin="", safe_to_repeat=True)
+        if retried.output.code != 0:
             raise GhCommandFailedError(
-                f"gh issue edit failed for {repo}#{issue} even after creating {add.value!r}: {retried.stderr.strip()}"
+                f"gh issue edit failed for {repo}#{issue} even after creating {add.value!r}: {retried.reason}"
             )
 
     def _create_label(self, *, repo: str, name: str) -> None:
-        output = self._process.run(
+        outcome = self._call.run(
             [
                 "gh",
                 "label",
@@ -241,16 +261,17 @@ class GhRunRepository(RunRepository):
                 _LABEL_DESCRIPTION,
             ],
             stdin="",
+            safe_to_repeat=False,
         )
-        if output.code != 0:
-            raise GhCommandFailedError(f"gh label create failed for {repo}/{name}: {output.stderr.strip()}")
+        if outcome.output.code != 0:
+            raise GhCommandFailedError(f"gh label create failed for {repo}/{name}: {outcome.reason}")
 
-    def _run(self, argv: list[str], *, stdin: str = "") -> ProcessOutput:
-        output = self._process.run(argv, stdin=stdin)
-        if output.code != 0:
-            raise GhCommandFailedError(f"{' '.join(argv)}: {output.stderr.strip()}")
+    def _run(self, argv: list[str], *, stdin: str = "", safe_to_repeat: bool) -> ProcessOutput:
+        outcome = self._call.run(argv, stdin=stdin, safe_to_repeat=safe_to_repeat)
+        if outcome.output.code != 0:
+            raise GhCommandFailedError(f"{' '.join(argv)}: {outcome.reason}")
 
-        return output
+        return outcome.output
 
     @staticmethod
     def _decoded(output: ProcessOutput) -> object:

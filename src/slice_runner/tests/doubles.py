@@ -2,12 +2,17 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, ClassVar
 from unittest.mock import Mock, create_autospec
 
+from slice_runner.domain.budgets import Budgets
 from slice_runner.domain.call_spend_log import CallSpendLog
 from slice_runner.domain.call_trace import CallTrace
+from slice_runner.domain.clock import Clock
+from slice_runner.domain.gh_retry_policy import GhRetryPolicy
 from slice_runner.domain.harness_spend import HarnessSpend
+from slice_runner.infrastructure.gh_call import GhCall
 from slice_runner.infrastructure.judge_invocation import JudgeInvocation
 from slice_runner.infrastructure.process import (
     Process,
@@ -260,3 +265,22 @@ class RecordedToolUseRecorder(ToolUseRecorder):
 
     def record_after(self, *, slice_id: str, step: Step, session: str, repo: str) -> None:
         self.calls.append(RecordedToolUseCall(slice_id=slice_id, step=step, session=session, repo=repo))
+
+
+class RecordingClock(Clock):
+    def __init__(self) -> None:
+        self.slept_seconds: list[int] = []
+
+    def sleep(self, *, seconds: int) -> None:
+        self.slept_seconds.append(seconds)
+
+    def now(self) -> datetime:
+        return datetime(2026, 1, 1, tzinfo=UTC)
+
+
+class GhCallDoubles:
+    @staticmethod
+    def wired(process: Process, *, budgets: Budgets | None = None, clock: Clock | None = None) -> GhCall:
+        return GhCall(
+            process=process, policy=GhRetryPolicy(budgets=budgets or Budgets()), clock=clock or RecordingClock()
+        )
