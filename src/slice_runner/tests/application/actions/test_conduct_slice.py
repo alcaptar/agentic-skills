@@ -164,6 +164,14 @@ class TestConductSliceStartingANewRun:
             worktree=Conductor.WORKTREE, name=_BRANCH, base=Conductor.BASE
         )
 
+    def test_the_precheck_is_asked_about_the_declared_base_before_the_branch_is_cut(self) -> None:
+        conductor = self._conductor()
+
+        conductor.conduct()
+
+        asked = conductor.prechecks.execute.call_args.args[0]
+        assert asked.base == Conductor.BASE
+
     def test_publishing_the_understanding_persists_only_the_spend_because_the_response_is_what_decides_to_start(
         self,
     ) -> None:
@@ -961,6 +969,14 @@ class TestConductSliceOnTheHappyPath:
         asked = conductor.verify.execute.call_args.args[0]
         assert (asked.repo, asked.issue, asked.worktree) == (Conductor.REPO, _SUBISSUE, Conductor.WORKTREE)
         assert asked.issue != Conductor.ISSUE
+
+    def test_the_verification_diffs_against_the_remote_of_the_declared_base_and_not_the_local_copy(self) -> None:
+        conductor = self._conductor()
+
+        conductor.conduct()
+
+        asked = conductor.verify.execute.call_args.args[0]
+        assert asked.base == f"origin/{Conductor.BASE}"
 
     def test_the_durable_row_carries_the_subissue_number_and_not_the_parent_issue(self) -> None:
         conductor = self._conductor()

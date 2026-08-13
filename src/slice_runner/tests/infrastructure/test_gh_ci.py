@@ -9,7 +9,7 @@ from slice_runner.domain.exceptions import CiCommandFailedError, UnreadableCiErr
 from slice_runner.infrastructure.gh_ci import GhCi
 from slice_runner.infrastructure.process import ProcessOutput
 from slice_runner.tests.argv import Argv
-from slice_runner.tests.doubles import ScriptedProcess
+from slice_runner.tests.doubles import GhCallDoubles, ScriptedProcess
 
 _REPO = "alcaptar/agentic-skills"
 _PULL_REQUEST = 60
@@ -29,7 +29,7 @@ class TestGhCi:
         return json.dumps([{"name": f"check-{position}", "bucket": bucket} for position, bucket in enumerate(buckets)])
 
     def _status(self, process: ScriptedProcess) -> CiStatus:
-        return GhCi(process=process).status(repo=_REPO, pull_request=_PULL_REQUEST)
+        return GhCi(call=GhCallDoubles.wired(process)).status(repo=_REPO, pull_request=_PULL_REQUEST)
 
     def test_it_asks_gh_for_the_checks_of_exactly_this_pull_request_in_this_repo(self) -> None:
         process = self._answering(self._checks("pass"))
@@ -91,3 +91,20 @@ class TestGhCi:
             self._status(self._answering("", code=1, stderr=_UNRESOLVED))
 
         assert _UNRESOLVED in str(failure.value)
+
+    def test_a_transient_failure_is_retried_until_it_succeeds(self) -> None:
+        process = ScriptedProcess(
+            ProcessOutput(code=1, stdout="", stderr="connection reset by peer"),
+            ProcessOutput(code=0, stdout=self._checks("pass"), stderr=""),
+        )
+
+        assert self._status(process) is CiStatus.GREEN
+        assert len(process.calls) == 2
+
+    def test_a_non_transient_failure_is_never_retried(self) -> None:
+        process = self._answering("", code=1, stderr=_UNRESOLVED)
+
+        with pytest.raises(CiCommandFailedError):
+            self._status(process)
+
+        assert len(process.calls) == 1

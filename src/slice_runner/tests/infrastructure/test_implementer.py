@@ -177,7 +177,7 @@ class TestTheSliceDataThatTravelsWithTheBrief:
     def test_a_second_round_carries_every_finding_with_where_it_was_raised_and_why(self) -> None:
         assert self._sent(AssignmentMother.of_a_second_round()).endswith(
             "- hallazgos de la vuelta anterior (1):\n"
-            "  - [media] convenciones en src/x.py:42: prose in a `.py` "
+            "  - [medium] convenciones en src/x.py:42: prose in a `.py` "
             "(detalle: the why lives in the pull request body)"
         )
 

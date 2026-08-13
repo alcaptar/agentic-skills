@@ -19,6 +19,8 @@ class Budgets:
     total_wait_seconds: int = 1800
     process_timeout_seconds: int = 3600
     slice_cost_usd: float = 50.0
+    gh_retries: int = 3
+    seconds_between_gh_retries: int = 2
 
     def wait_exhausted(self, waited_seconds: int) -> bool:
         return waited_seconds >= self.total_wait_seconds

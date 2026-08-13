@@ -149,7 +149,7 @@ class TestTheExitCodeOfTheVerdict(BlindToTheToolboxOfThisMachine):
         code = Cli(process=process, budgets=Budgets()).verify(repo=str(repo), base=Git.BASE_BRANCH, slice_id=_SLICE)
 
         assert code == ExitCode.OK
-        assert json.loads(capsys.readouterr().out) == {"veredicto": "PASA", "hallazgos": []}
+        assert json.loads(capsys.readouterr().out) == {"ruling": "PASS", "findings": []}
 
     def test_a_fail_exits_with_one_and_emits_every_finding_whoever_retries_the_slice_needs(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
@@ -161,8 +161,8 @@ class TestTheExitCodeOfTheVerdict(BlindToTheToolboxOfThisMachine):
 
         assert code == ExitCode.VETOED
         emitted = json.loads(capsys.readouterr().out)
-        assert emitted["veredicto"] == "FALLA"
-        assert [finding["severidad"] for finding in emitted["hallazgos"]] == ["alta", "alta", "media", "media"]
+        assert emitted["ruling"] == "FAIL"
+        assert [finding["severity"] for finding in emitted["findings"]] == ["high", "high", "medium", "medium"]
 
 
 @pytest.mark.integration
@@ -179,7 +179,7 @@ class TestWhenThereIsNoVerdictToTrust(BlindToTheToolboxOfThisMachine):
         assert code == ExitCode.NO_USABLE_VERDICT
         output = capsys.readouterr()
         assert output.out == ""
-        assert "PASA with 1 finding" in output.err
+        assert "PASS with 1 finding" in output.err
 
     def test_a_judge_that_cannot_be_launched_exits_with_two_instead_of_with_the_code_of_the_veto(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
@@ -270,7 +270,7 @@ class TestWhatTheJudgeWasDeniedReading(BlindToTheToolboxOfThisMachine):
         output = capsys.readouterr()
         assert code == ExitCode.OK
         assert HarnessEnvelopeMother.DENIED_READ in output.err
-        assert json.loads(output.out) == {"veredicto": "PASA", "hallazgos": []}
+        assert json.loads(output.out) == {"ruling": "PASS", "findings": []}
 
     def test_a_run_with_nothing_denied_says_nothing_so_the_warning_keeps_meaning_something(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
@@ -1316,6 +1316,8 @@ class TestWhenTheRunStaysOpen:
             children=GhConversationMother.the_slice_never_run(),
             answers=(
                 Answer(to=("git", "rev-parse"), code=1),
+                Answer(to=("git", "fetch", "origin")),
+                Answer(to=("git", "rev-list", "--count"), stdout="0\n"),
                 Answer(to=("git", "switch")),
                 Answer(to=("gh", "pr", "list"), stdout=GhConversationMother.no_open_pull_request()),
                 Answer(
@@ -1345,7 +1347,7 @@ class TestWhenTheRunStaysOpen:
             "switch",
             "-c",
             GhConversationMother.BRANCH,
-            GhConversationMother.BASE,
+            f"origin/{GhConversationMother.BASE}",
         )
 
     def test_a_slice_that_was_never_run_ticks_through_the_alignment_pause_until_the_wait_runs_out(
@@ -1372,6 +1374,8 @@ class TestWhenTheRunStaysOpen:
             children=GhConversationMother.the_slice_never_run(),
             answers=(
                 Answer(to=("git", "rev-parse"), code=1),
+                Answer(to=("git", "fetch", "origin")),
+                Answer(to=("git", "rev-list", "--count"), stdout="0\n"),
                 Answer(to=("gh", "pr", "list"), stdout=GhConversationMother.the_open_pull_request()),
             ),
         )
@@ -1380,6 +1384,31 @@ class TestWhenTheRunStaysOpen:
 
         assert code == ExitCode.PRECHECKS_BLOCKED
         assert json.loads(capsys.readouterr().out)["precheck"] == "pull-request-already-open"
+
+    def test_a_base_that_does_not_resolve_against_its_remote_exits_with_its_own_precheck_and_writes_nothing(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        invocation = RunInvocation(
+            children=GhConversationMother.the_slice_never_run(),
+            answers=(
+                Answer(to=("git", "rev-parse"), code=1),
+                Answer(to=("git", "fetch", "origin")),
+                Answer(
+                    to=("git", "rev-list", "--count"),
+                    code=128,
+                    stderr=f"fatal: ambiguous argument '{GhConversationMother.BASE}..origin/"
+                    f"{GhConversationMother.BASE}'",
+                ),
+                Answer(to=("gh", "pr", "list"), stdout=GhConversationMother.no_open_pull_request()),
+            ),
+        )
+
+        code = invocation.conduct(logs=tmp_path / "logs")
+
+        assert code == ExitCode.PRECHECKS_BLOCKED
+        assert json.loads(capsys.readouterr().out)["precheck"] == "base-not-on-remote"
+        assert not invocation.process.invoked("gh", "issue", "edit")
+        assert not invocation.process.invoked("git", "switch")
 
     def test_a_merge_that_never_arrives_spends_the_whole_wait_and_says_the_pull_request_is_still_draft(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
@@ -1535,6 +1564,13 @@ class TestTheCommandThatChecksReadiness:
         monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
         (tmp_path / "skills" / "slice-spec").mkdir(parents=True)
         (tmp_path / "skills" / "deploy-watch").mkdir(parents=True)
+        scripts = tmp_path / "skills" / "slice-runner" / "scripts"
+        scripts.mkdir(parents=True)
+        (scripts / "discover_conventions.py").write_text("x", encoding="utf-8")
+        (scripts / "discover_controles.py").write_text("x", encoding="utf-8")
+        (tmp_path / "settings.json").write_text(
+            json.dumps({"enabledPlugins": {"superpowers@claude-plugins-official": True}}), encoding="utf-8"
+        )
 
     @staticmethod
     def _process(
@@ -1574,7 +1610,16 @@ class TestTheCommandThatChecksReadiness:
         Cli(process=self._process(), budgets=Budgets()).doctor()
 
         printed = capsys.readouterr().out
-        for name in ("git", "gh", "claude", "skill slice-spec", "skill deploy-watch"):
+        for name in (
+            "git",
+            "gh",
+            "claude",
+            "skill slice-spec",
+            "skill deploy-watch",
+            "plugin superpowers",
+            "helper discover_conventions.py",
+            "helper discover_controles.py",
+        ):
             assert name in printed
 
     def test_something_missing_exits_with_its_own_code_distinct_from_a_usage_error(self) -> None:

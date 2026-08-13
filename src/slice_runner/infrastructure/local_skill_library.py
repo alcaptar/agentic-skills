@@ -12,6 +12,9 @@ if TYPE_CHECKING:
 class LocalSkillLibrary(SkillLibrary):
     TREES: ClassVar[tuple[str, ...]] = ("skills", "plugins")
 
+    def root(self) -> Path:
+        return ClaudeConfig.root()
+
     def directories(self) -> tuple[Path, ...]:
         root = ClaudeConfig.root()
 
@@ -21,3 +24,8 @@ class LocalSkillLibrary(SkillLibrary):
         candidate = ClaudeConfig.root() / "skills" / name
 
         return candidate if candidate.is_dir() else None
+
+    def file(self, relative: str) -> Path | None:
+        candidate = ClaudeConfig.root() / relative
+
+        return candidate if candidate.is_file() else None

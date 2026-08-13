@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING
 import pytest
 from conftest import _ROOT
 
+from slice_runner.application.queries.check_readiness import CheckReadiness
 from slice_runner.tests.real_process import Real
 
 if TYPE_CHECKING:
@@ -84,6 +85,53 @@ def test_every_helper_slice_spec_invokes_by_absolute_path_is_reachable_after_ins
     assert invoked, "slice-spec stopped invoking helpers by absolute path, so this contract needs rewriting"
     for helper in sorted(set(invoked)):
         assert (tmp_path / helper).exists(), f"slice-spec invokes {helper} and the installer leaves it unreachable"
+
+
+def test_the_doctor_checks_every_helper_slice_spec_invokes_by_absolute_path() -> None:
+    """The paths `slice-spec` shells out to are ones `CheckReadiness` names, not just ones the installer lays down.
+
+    Reachability after `make install-skills` is only half of what a fresh machine needs: it says nothing
+    until someone actually runs `slice-spec` and step 3 finds no helper to run, silently improvising the
+    conventions and the controls instead of discovering them. Extracting the paths from the skill instead
+    of listing them here is what makes a helper added to `slice-spec` and forgotten in the doctor fail
+    this test instead of a real run.
+    """
+    invoked = set(
+        re.findall(r"~/\.claude/(skills/\S+?\.py)", (_ROOT / "skills" / "slice-spec" / "SKILL.md").read_text())
+    )
+
+    assert invoked, "slice-spec stopped invoking helpers by absolute path, so this contract needs rewriting"
+    assert invoked == set(CheckReadiness.HELPERS), (
+        f"slice-spec invokes {sorted(invoked)} by absolute path and the doctor checks "
+        f"{sorted(CheckReadiness.HELPERS)}: a helper missing from the doctor is one whose absence looks "
+        "like a working setup"
+    )
+
+
+_LINKED_DECLARATION = re.compile(r"^LINKED\s*:=\s*(.+)$", re.MULTILINE)
+
+
+def test_the_doctor_checks_every_directory_the_installer_links() -> None:
+    """A directory `make install-skills` links and the doctor never looks at is the same gap as an unchecked helper.
+
+    `skills/slice-runner/` carries no `SKILL.md`, so it cannot be checked the way `slice-spec` and
+    `deploy-watch` are; the doctor covers it instead through the helpers it holds under `scripts/`.
+    Deriving both sides from the Makefile and from `CheckReadiness`, rather than restating the three
+    names here, is what makes a fourth linked directory -- or a check quietly dropped -- fail here
+    instead of drifting unnoticed.
+    """
+    declared = _LINKED_DECLARATION.search((_ROOT / "Makefile").read_text())
+    assert declared, "Makefile no longer declares LINKED, so this contract has nothing to compare against"
+    linked = declared.group(1).split()
+
+    checked_as_a_skill = set(CheckReadiness.SKILLS)
+    checked_through_a_helper = {relative.split("/")[1] for relative in CheckReadiness.HELPERS}
+
+    uncovered = [name for name in linked if name not in checked_as_a_skill and name not in checked_through_a_helper]
+    assert not uncovered, (
+        f"make install-skills links {uncovered}, and the doctor checks it neither as a skill "
+        f"({sorted(checked_as_a_skill)}) nor through one of the helpers it holds ({sorted(checked_through_a_helper)})"
+    )
 
 
 @pytest.mark.integration

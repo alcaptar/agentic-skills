@@ -11,6 +11,23 @@ if TYPE_CHECKING:
     import pytest
 
 
+class TestTheConfiguredRoot:
+    def test_it_honors_the_configuration_directory_variable_instead_of_a_fixed_home(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
+
+        assert LocalSkillLibrary().root() == tmp_path
+
+    def test_without_the_variable_it_falls_back_to_the_home_of_the_tool_and_expands_it(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.delenv(ClaudeConfig.VARIABLE, raising=False)
+        monkeypatch.setenv("HOME", str(tmp_path))
+
+        assert LocalSkillLibrary().root() == tmp_path / ".claude"
+
+
 class TestWhereTheYardstickLives:
     def test_both_trees_are_granted_because_the_two_skills_the_rubric_names_live_apart(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -111,3 +128,29 @@ class TestWhetherASkillIsInstalled:
         monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
 
         assert LocalSkillLibrary().installed("deploy-watch") is None
+
+
+class TestWhetherAnAbsolutePathHelperIsReachable:
+    def test_a_helper_present_at_its_relative_path_is_found(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        helper = tmp_path / "skills" / "slice-runner" / "scripts" / "discover_conventions.py"
+        helper.parent.mkdir(parents=True)
+        helper.write_text("x", encoding="utf-8")
+        monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
+
+        assert LocalSkillLibrary().file("skills/slice-runner/scripts/discover_conventions.py") == helper
+
+    def test_a_helper_not_present_reads_as_none(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        (tmp_path / "skills" / "slice-runner" / "scripts").mkdir(parents=True)
+        monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
+
+        assert LocalSkillLibrary().file("skills/slice-runner/scripts/discover_conventions.py") is None
+
+    def test_a_directory_in_place_of_the_helper_is_not_reachable_either(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        (tmp_path / "skills" / "slice-runner" / "scripts" / "discover_conventions.py").mkdir(parents=True)
+        monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
+
+        assert LocalSkillLibrary().file("skills/slice-runner/scripts/discover_conventions.py") is None

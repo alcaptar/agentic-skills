@@ -207,10 +207,18 @@ class MetricsEntryPayload(ContractModel):
                 "veredicto": closure.verdict,
                 "ci": closure.ci,
                 "hallazgos": SeverityCountPayload.model_validate(
-                    {str(severity): closed.count_findings(severity) for severity in Severity}
+                    {
+                        "alta": closed.count_findings(Severity.HIGH),
+                        "media": closed.count_findings(Severity.MEDIUM),
+                        "baja": closed.count_findings(Severity.LOW),
+                    }
                 ),
                 "hallazgos_ronda_final": SeverityCountPayload.model_validate(
-                    {str(severity): closed.count_findings_of_the_last_round(severity) for severity in Severity}
+                    {
+                        "alta": closed.count_findings_of_the_last_round(Severity.HIGH),
+                        "media": closed.count_findings_of_the_last_round(Severity.MEDIUM),
+                        "baja": closed.count_findings_of_the_last_round(Severity.LOW),
+                    }
                 ),
                 "reintentos_implement": closed.run.implement_retries,
                 "reintentos_controles": closed.run.control_retries,

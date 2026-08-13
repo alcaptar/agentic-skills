@@ -11,6 +11,7 @@ from slice_runner.domain.branches import Branches
 from slice_runner.domain.check_verdict import CheckVerdict
 from slice_runner.domain.exceptions import UnresolvableBaseError
 from slice_runner.domain.forum import Forum
+from slice_runner.domain.plugin_registry import PluginRegistry
 from slice_runner.domain.skill_library import SkillLibrary
 from slice_runner.domain.toolbox import Toolbox
 
@@ -20,6 +21,7 @@ if TYPE_CHECKING:
 
 _SLICE_SPEC = Path("/home/someone/.claude/skills/slice-spec")
 _DEPLOY_WATCH = Path("/home/someone/.claude/skills/deploy-watch")
+_HELPER_PATHS = {relative: Path(f"/home/someone/.claude/{relative}") for relative in CheckReadiness.HELPERS}
 
 
 class TestCheckReadiness:
@@ -44,12 +46,20 @@ class TestCheckReadiness:
     @pytest.fixture
     def skills(self) -> Mock:
         skills: Mock = create_autospec(SkillLibrary, spec_set=True, instance=True)
+        skills.root.return_value = Path("/home/someone/.claude")
         skills.installed.side_effect = lambda name: {"slice-spec": _SLICE_SPEC, "deploy-watch": _DEPLOY_WATCH}[name]
+        skills.file.side_effect = lambda relative: _HELPER_PATHS[relative]
         return skills
 
     @pytest.fixture
-    def query(self, toolbox: Mock, forum: Mock, branches: Mock, skills: Mock) -> CheckReadiness:
-        return CheckReadiness(toolbox=toolbox, forum=forum, branches=branches, skills=skills)
+    def plugins(self) -> Mock:
+        plugins: Mock = create_autospec(PluginRegistry, spec_set=True, instance=True)
+        plugins.enabled.return_value = True
+        return plugins
+
+    @pytest.fixture
+    def query(self, toolbox: Mock, forum: Mock, branches: Mock, skills: Mock, plugins: Mock) -> CheckReadiness:
+        return CheckReadiness(toolbox=toolbox, forum=forum, branches=branches, skills=skills, plugins=plugins)
 
     @staticmethod
     def _check(readiness: Readiness, name: str) -> ReadinessCheck:
@@ -107,7 +117,7 @@ class TestCheckReadiness:
 
         assert any(call.args == ("claude",) for call in toolbox.version_of.call_args_list)
 
-    def test_a_missing_skill_is_reported_with_the_symlink_command_that_installs_it(
+    def test_a_missing_skill_is_reported_with_the_install_command_that_fixes_it(
         self, query: CheckReadiness, skills: Mock
     ) -> None:
         skills.installed.side_effect = lambda name: None if name == "deploy-watch" else _SLICE_SPEC
@@ -117,8 +127,98 @@ class TestCheckReadiness:
         deploy_watch = self._check(readiness, "skill deploy-watch")
         assert deploy_watch.verdict is CheckVerdict.MISSING
         assert deploy_watch.fix is not None
-        assert "deploy-watch" in deploy_watch.fix
-        assert "ln -s" in deploy_watch.fix
+        assert "make install-skills" in deploy_watch.fix
+
+    def test_a_missing_skill_fix_names_the_configuration_directory_the_doctor_just_looked_at(
+        self, query: CheckReadiness, skills: Mock
+    ) -> None:
+        skills.root.return_value = Path("/repos/agentic-skills-checkout/.claude-moved")
+        skills.installed.side_effect = lambda name: None if name == "deploy-watch" else _SLICE_SPEC
+
+        readiness = query.execute(CheckReadinessParams())
+
+        deploy_watch = self._check(readiness, "skill deploy-watch")
+        assert deploy_watch.fix is not None
+        assert "/repos/agentic-skills-checkout/.claude-moved" in deploy_watch.fix
+        assert "~/.claude" not in deploy_watch.fix
+
+    def test_no_skill_or_helper_fix_leaves_a_placeholder_to_fill_in_by_hand(
+        self, query: CheckReadiness, skills: Mock
+    ) -> None:
+        skills.installed.side_effect = None
+        skills.installed.return_value = None
+        skills.file.side_effect = None
+        skills.file.return_value = None
+
+        readiness = query.execute(CheckReadinessParams())
+
+        fixes = [
+            check.fix
+            for check in readiness.checks
+            if check.name.startswith("skill ") or check.name.startswith("helper ")
+        ]
+        assert fixes
+        assert all(fix is not None and "<checkout>" not in fix for fix in fixes)
+
+    def test_the_superpowers_plugin_enabled_is_reported_as_ready(self, query: CheckReadiness, plugins: Mock) -> None:
+        plugins.enabled.return_value = True
+
+        readiness = query.execute(CheckReadinessParams())
+
+        plugin = self._check(readiness, "plugin superpowers")
+        assert plugin.verdict is CheckVerdict.READY
+        assert readiness.ready
+
+    def test_the_superpowers_plugin_not_enabled_is_reported_as_missing_and_breaks_readiness(
+        self, query: CheckReadiness, plugins: Mock
+    ) -> None:
+        plugins.enabled.return_value = False
+
+        readiness = query.execute(CheckReadinessParams())
+
+        plugin = self._check(readiness, "plugin superpowers")
+        assert plugin.verdict is CheckVerdict.MISSING
+        assert plugin.fix
+        assert not readiness.ready
+
+    def test_a_helper_present_at_its_absolute_path_is_reported_as_ready(
+        self, query: CheckReadiness, skills: Mock
+    ) -> None:
+        readiness = query.execute(CheckReadinessParams())
+
+        helper = self._check(readiness, "helper discover_conventions.py")
+        assert helper.verdict is CheckVerdict.READY
+        assert readiness.ready
+
+    def test_a_missing_helper_is_reported_with_the_install_command_that_fixes_it(
+        self, query: CheckReadiness, skills: Mock
+    ) -> None:
+        skills.file.side_effect = lambda relative: (
+            None if relative.endswith("discover_conventions.py") else _HELPER_PATHS[relative]
+        )
+
+        readiness = query.execute(CheckReadinessParams())
+
+        helper = self._check(readiness, "helper discover_conventions.py")
+        assert helper.verdict is CheckVerdict.MISSING
+        assert helper.fix is not None
+        assert "make install-skills" in helper.fix
+        assert not readiness.ready
+
+    def test_a_missing_helper_fix_names_the_configuration_directory_the_doctor_just_looked_at(
+        self, query: CheckReadiness, skills: Mock
+    ) -> None:
+        skills.root.return_value = Path("/repos/agentic-skills-checkout/.claude-moved")
+        skills.file.side_effect = lambda relative: (
+            None if relative.endswith("discover_conventions.py") else _HELPER_PATHS[relative]
+        )
+
+        readiness = query.execute(CheckReadinessParams())
+
+        helper = self._check(readiness, "helper discover_conventions.py")
+        assert helper.fix is not None
+        assert "/repos/agentic-skills-checkout/.claude-moved" in helper.fix
+        assert "~/.claude" not in helper.fix
 
     def test_without_repo_worktree_or_base_only_the_checks_that_need_none_of_them_run(
         self, query: CheckReadiness, forum: Mock, branches: Mock
@@ -131,6 +231,9 @@ class TestCheckReadiness:
             "claude",
             "skill slice-spec",
             "skill deploy-watch",
+            "plugin superpowers",
+            "helper discover_conventions.py",
+            "helper discover_controles.py",
         }
         forum.can_read.assert_not_called()
         branches.commits_behind_remote.assert_not_called()

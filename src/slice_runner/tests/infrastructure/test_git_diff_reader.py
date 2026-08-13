@@ -73,6 +73,51 @@ class TestWhatItReads:
 
 
 @pytest.mark.integration
+class TestDiffingAgainstTheBranchesActualOrigin:
+    @staticmethod
+    def _repo_branched_from_a_freshly_fetched_origin(tmp_path: Path) -> Path:
+        remote = tmp_path / "remote.git"
+        Git.run(tmp_path, "init", "--bare", str(remote))
+        repo = Git.init_repo(tmp_path / "repo")
+        (repo / "mod.py").write_text("def f() -> int:\n    return 1\n", encoding="utf-8")
+        Git.run(repo, "add", "mod.py")
+        Git.run(repo, "commit", "-m", "base")
+        Git.run(repo, "remote", "add", "origin", str(remote))
+        Git.run(repo, "push", "-u", "origin", Git.BASE_BRANCH)
+
+        elsewhere = Git.clone(remote=remote, into=tmp_path / "elsewhere")
+        (elsewhere / "upstream.py").write_text("def g() -> int:\n    return 9\n", encoding="utf-8")
+        Git.run(elsewhere, "add", "upstream.py")
+        Git.run(elsewhere, "commit", "-m", "pushed from elsewhere before the slice branched")
+        Git.run(elsewhere, "push")
+
+        Git.run(repo, "fetch", "origin")
+        Git.run(repo, "switch", "-c", "slice/01-x", f"origin/{Git.BASE_BRANCH}")
+        (repo / "mod.py").write_text("def f() -> int:\n    return 2\n", encoding="utf-8")
+        Git.run(repo, "add", "mod.py")
+
+        return repo
+
+    def test_diffing_against_the_remote_the_branch_came_from_excludes_what_was_already_there(
+        self, tmp_path: Path
+    ) -> None:
+        repo = self._repo_branched_from_a_freshly_fetched_origin(tmp_path)
+
+        read = GitDiffReader(process=Real.process()).read(repo=str(repo), base=f"origin/{Git.BASE_BRANCH}")
+
+        assert read.files == ("mod.py",)
+
+    def test_diffing_against_the_stale_local_base_leaks_a_commit_that_only_lived_on_the_remote(
+        self, tmp_path: Path
+    ) -> None:
+        repo = self._repo_branched_from_a_freshly_fetched_origin(tmp_path)
+
+        read = GitDiffReader(process=Real.process()).read(repo=str(repo), base=Git.BASE_BRANCH)
+
+        assert "upstream.py" in read.files
+
+
+@pytest.mark.integration
 class TestWhatItRefusesToRead:
     def test_an_unstaged_change_to_a_tracked_file_is_not_in_the_diff_because_the_index_is_what_commits(
         self, tmp_path: Path

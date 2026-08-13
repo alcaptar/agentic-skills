@@ -121,7 +121,7 @@ real es lo unico que se esta midiendo.
   con tests propios.
 - **No hay tests unitarios de dominio**, ni siquiera cuando el dominio tiene comportamiento. Que
   `Judge.also_reading` no muta el juez inyectado se comprueba en el test del caso de uso -ejecutandolo
-  dos veces y mirando el juez que se le paso-, y que `Verdict` rechaza un `PASA` con un hallazgo `alta`
+  dos veces y mirando el juez que se le paso-, y que `Verdict` rechaza un `PASS` con un hallazgo `high`
   se comprueba en el test de
   frontera y en el de la orden, que es el camino real por el que llega un veredicto incoherente. La
   unica excepcion es un value object con validacion propia que no se pueda alcanzar de otra forma. Un

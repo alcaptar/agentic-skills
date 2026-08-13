@@ -14,27 +14,27 @@ from slice_runner.infrastructure.json_schema import JsonSchema
 
 
 class FindingPayload(ContractModel):
-    rule: str = Field(alias="regla")
-    path: str = Field(alias="path")
-    severity: Severity = Field(alias="severidad")
-    evidence: str = Field(alias="evidencia")
-    detail: str = Field(alias="detalle")
-    line: int | None = Field(alias="linea", default=None, strict=True)
+    rule: str
+    path: str
+    severity: Severity
+    evidence: str
+    detail: str
+    line: int | None = Field(default=None, strict=True)
 
     @classmethod
     def contract_keys(cls) -> set[str]:
-        return {str(declared.alias) for declared in cls.model_fields.values()}
+        return set(cls.model_fields)
 
     @classmethod
     def from_domain(cls, finding: Finding) -> Self:
         return cls.model_validate(
             {
-                "regla": finding.rule,
+                "rule": finding.rule,
                 "path": finding.path,
-                "severidad": finding.severity,
-                "evidencia": finding.evidence,
-                "detalle": finding.detail,
-                "linea": finding.line,
+                "severity": finding.severity,
+                "evidence": finding.evidence,
+                "detail": finding.detail,
+                "line": finding.line,
             }
         )
 
@@ -50,8 +50,8 @@ class FindingPayload(ContractModel):
 
 
 class VerdictPayload(ContractModel):
-    ruling: Ruling = Field(alias="veredicto")
-    findings: list[FindingPayload] = Field(alias="hallazgos")
+    ruling: Ruling
+    findings: list[FindingPayload]
 
     @classmethod
     def json_schema(cls) -> dict[str, object]:
@@ -65,8 +65,8 @@ class VerdictPayload(ContractModel):
     def from_domain(cls, verdict: Verdict) -> Self:
         return cls.model_validate(
             {
-                "veredicto": verdict.ruling,
-                "hallazgos": [FindingPayload.from_domain(finding) for finding in verdict.findings],
+                "ruling": verdict.ruling,
+                "findings": [FindingPayload.from_domain(finding) for finding in verdict.findings],
             }
         )
 

@@ -170,6 +170,15 @@ mide. Las reglas que salen de estas decisiones siguen en su capa.
   contador, que es la misma regla que ya separaba la higiene de los controles. La reconstruccion se hizo
   por bloques consecutivos del mismo identificador de slice, que es lo unico posible mientras el corpus no
   tenga identidad ni instante por fila.
+- **Los reintentos de una llamada a `gh`, y la espera entre ellos.** No hay corpus de fallos transitorios
+  de la interfaz de programacion de GitHub del que medir un percentil, al contrario que el resto de esta
+  lista: la intencion que trajo la slice es explicita en que se quiere cubrir -"un parpadeo de red, un
+  handshake que se corrompe, una conexion que se cae"-, y esos son fallos de segundos, no de minutos. Tres
+  intentos con dos segundos entre uno y el siguiente despejan un parpadeo de varios segundos sin que un
+  servicio caido de verdad convierta la llamada en una espera larga: el tope de la invocacion sigue siendo
+  `process_timeout_seconds`, que ya cubre "el proceso no vuelve nunca". Si el corpus de runs reales
+  empieza a mostrar fallos transitorios que sobreviven a los tres intentos, este numero es el que hay que
+  revisar con esa medicion delante.
 
 ### El descarte de aprobacion pagada, y por que hay dos comprobaciones de coste
 

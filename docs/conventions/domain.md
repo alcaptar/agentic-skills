@@ -19,7 +19,7 @@ cadena, asi que ni el formato del issue ni el JSON de salida cambian, pero las c
 `choices` de cada interfaz de linea de comandos salen de un solo sitio.
 
 - Nombre del miembro en mayusculas; valor en minusculas, **salvo que el valor sea dato de un
-  contrato** que lo fije de otra forma (`Ruling.PASS = "PASA"`).
+  contrato** que lo fije de otra forma (`Ruling.PASS = "PASS"`).
 - En `argparse`, `choices=[str(x) for x in Enum]`: con `list(Enum)` el mensaje de error muestra el
   `repr` del miembro.
 - Codigos de salida de un ejecutable: `IntEnum`, y el mapeo desde el vocabulario del dominio con un

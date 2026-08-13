@@ -99,8 +99,8 @@ Recorrela **entera** y reporta item a item. No la amplies con criterios propios 
    expand-contract) que si solo cambia logica interna (gatear en el metodo). Deriva el criterio de las
    fuentes de convencion que recibes (p. ej. una skill `duplicate-action`/`deprecate-*` o reglas de
    delivery/testing), **no** de como quedo una slice anterior: el codigo ya mergeado es circunstancia,
-   no regla. Si el patron no encaja con lo que pide la convencion para este cambio, es **FALLA
-   (severidad alta)**, citando regla + path. Este es el check que un verificador que solo mira la
+   no regla. Si el patron no encaja con lo que pide la convencion para este cambio, es **FAIL
+   (severity high)**, citando regla + path. Este es el check que un verificador que solo mira la
    implementacion deja pasar.
 
 3. **Boundaries.** Nucleo sin infra, DI correcta, DTOs (Pydantic) en boundaries.
@@ -125,21 +125,21 @@ Recorrela **entera** y reporta item a item. No la amplies con criterios propios 
    asi violar lo que el criterio pedia?"-, por lectura acotada, sin re-derivar cobertura; (3) codigo que
    implementa **comportamiento que ningun criterio pidio** (feature especulativa, andamiaje de slices
    futuras). El refactor tras verde (extraer helpers, mejorar estructura) **traza al criterio** y no es
-   hallazgo. FALLA (severidad alta) si un criterio no queda pineado, si el codigo no cumple su
+   hallazgo. FAIL (severity high) si un criterio no queda pineado, si el codigo no cumple su
    intencion, o si hay comportamiento que ningun criterio justifique.
 
 6. **Manipulacion de tests (regla de hierro; siempre alta).** En el diff, mira las lineas `-` de
    los ficheros de test: comprueba que ningun test **preexistente** se haya debilitado para acomodar la
    implementacion -assert relajado (`== x` -> `is not None`/truthy), numero de asserts que baja, test
    borrado, `@skip`/`xfail` anadido, o comentarios tipo "TODO/temporal" en tests-. Debilitar un test que
-   ya existia es **FALLA (severidad alta)**, citando path + linea. Cambios puramente aditivos (nuevos
+   ya existia es **FAIL (severity high)**, citando path + linea. Cambios puramente aditivos (nuevos
    asserts, nuevos tests) o refactor de test que preserva los asserts **no** son hallazgo.
 
 7. **Fixture/wiring theater (siempre alta).** Cruza la lista de ficheros de la slice con la etiquetada
    produccion/test: si la suite esta verde pero el diff **no toca ningun fichero de produccion** (solo
    tests/fixtures), el efecto puede estarlo produciendo el fixture y no el codigo. Prueba de borrado
    (juicio por lectura): "¿pasaria la suite revirtiendo solo los cambios de test, con el codigo de
-   produccion?". Si el efecto lo da el fixture y no el codigo, es **FALLA (severidad alta)**. Excepcion
+   produccion?". Si el efecto lo da el fixture y no el codigo, es **FAIL (severity high)**. Excepcion
    legitima: slices sin codigo de produccion (migracion/infra) cuyo efecto se verifica de otro modo.
 
 8. **Calidad de tests (test-desiderata).** Si la slice **anade** tests, corre la skill
@@ -149,7 +149,7 @@ Recorrela **entera** y reporta item a item. No la amplies con criterios propios 
 
    **No cubre los tests preexistentes degradados: eso es del item 6 y ya esta contado.** Un assert
    relajado en un test que ya existia es *un* defecto, no dos: reportarlo aqui otra vez infla el
-   recuento de `alta` y hace que el veredicto parezca peor de lo que es.
+   recuento de `high` y hace que el veredicto parezca peor de lo que es.
 
 9. **Observabilidad: la senal declarada tiene que poder cumplirse.** La `SENAL` de la slice **no es
    un criterio de aceptacion** -no la verifica ningun test, la comprueba `deploy-watch` tras el
@@ -160,18 +160,18 @@ Recorrela **entera** y reporta item a item. No la amplies con criterios propios 
    - **¿Existe lo que la senal promete?** Si la senal nombra una serie/campo/span que la slice tenia que
      **crear**, el diff debe emitirlo desde **codigo de produccion**, no solo desde un test o un fixture.
      Una senal que apunta a algo que el diff no emite -y que no emitia ya el codigo previo o la libreria-
-     es **FALLA (alta)**: cita la linea de la senal y la ausencia en el diff.
+     es **FAIL (high)**: cita la linea de la senal y la ausencia en el diff.
    - **¿Esta instrumentado con el mecanismo del repo?** Si las convenciones declaran una libreria de
      monitoring, la instrumentacion nueva va por ella (puerto inyectado, decorador, logger de la
      libreria), no con un cliente o contador ad-hoc en paralelo. Instrumentacion paralela cuando existe
-     libreria es **FALLA (alta)**, citando regla + path.
+     libreria es **FAIL (high)**, citando regla + path.
    - **¿Nombre y cardinalidad sanos?** Labels que meten identificadores de alta cardinalidad (ids,
-     emails, uuids) o naming que contradice la convencion del repo: `media` normalmente, `alta` si la
+     emails, uuids) o naming que contradice la convencion del repo: `medium` normalmente, `high` si la
      convencion lo prohibe explicitamente.
    - **Si la senal apunta a algo que ya existia** (metrica que la libreria emite sola, log ya presente),
      **no hay nada que exigir al diff**: no es hallazgo. Tampoco lo es una `SENAL: exenta` con motivo
      coherente con el diff -pero si el motivo dice "refactor puro" y el diff cambia comportamiento
-     observable, eso si es hallazgo (`media`, o `alta` si el cambio es de cara al usuario).
+     observable, eso si es hallazgo (`medium`, o `high` si el cambio es de cara al usuario).
    - **Si la spec no declara `SENAL`**, no es tu hallazgo: es una spec anterior al mecanismo y el
      orquestador ya avisa. No lo reportes.
 
@@ -184,13 +184,13 @@ Recorrela **entera** y reporta item a item. No la amplies con criterios propios 
 
 ## Veredicto
 
-- **FALLA** si hay algun hallazgo `severidad: alta`. Los `media`/`baja` se reportan pero no bloquean
-  por si solos; si se acumulan, puedes subir a FALLA explicando por que.
+- **FAIL** si hay algun hallazgo `severity: high`. Los `medium`/`low` se reportan pero no bloquean
+  por si solos; si se acumulan, puedes subir a FAIL explicando por que.
 - **Un defecto, un hallazgo.** Si el mismo cambio incumple varios items, reportalo **una sola vez**,
-  bajo la regla mas especifica, y menciona las demas en `detalle`. Duplicarlo no anade informacion y
+  bajo la regla mas especifica, y menciona las demas en `detail`. Duplicarlo no anade informacion y
   falsea el recuento por severidad, que alimenta las metricas del loop.
-- **Evidencia antes de bloquear (calibracion).** Un hallazgo `severidad: alta` **exige evidencia
-  citable**: regla + path + linea + por que, en el campo `evidencia`. Si no puedes citarla
+- **Evidencia antes de bloquear (calibracion).** Un hallazgo `severity: high` **exige evidencia
+  citable**: regla + path + linea + por que, en el campo `evidence`. Si no puedes citarla
   concretamente, **degrada la severidad** en vez de bloquear. A un verificador al que se le pide
   encontrar fallos siempre encuentra alguno; obligar a citar evidencia hace que el bloqueo sea real y
   no defensivo.
@@ -200,17 +200,17 @@ bloque de codigo que lo envuelva. El orquestador lo consume como dato.
 
 ```json
 {
-  "veredicto": "PASA | FALLA",
-  "hallazgos": [
-    {"regla": "boundaries", "path": "src/infra/x.py", "linea": 42,
-     "severidad": "alta | media | baja", "evidencia": "...", "detalle": "..."}
+  "ruling": "PASS | FAIL",
+  "findings": [
+    {"rule": "boundaries", "path": "src/infra/x.py", "line": 42,
+     "severity": "high | medium | low", "evidence": "...", "detail": "..."}
   ]
 }
 ```
 
-`regla` es el nombre corto del item de la rubrica que se incumple (`convenciones`, `rollout`,
+`rule` es el nombre corto del item de la rubrica que se incumple (`convenciones`, `rollout`,
 `boundaries`, `cobertura-capa`, `conformidad-ac`, `manipulacion-tests`, `fixture-theater`,
-`test-desiderata`, `observabilidad`). Con `veredicto: PASA` y ningun hallazgo, `hallazgos` es una lista vacia.
+`test-desiderata`, `observabilidad`). Con `ruling: PASS` y ningun hallazgo, `findings` es una lista vacia.
 """
 
 

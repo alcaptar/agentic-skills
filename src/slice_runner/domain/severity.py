@@ -4,6 +4,6 @@ from enum import StrEnum
 
 
 class Severity(StrEnum):
-    HIGH = "alta"
-    MEDIUM = "media"
-    LOW = "baja"
+    HIGH = "high"
+    MEDIUM = "medium"
+    LOW = "low"

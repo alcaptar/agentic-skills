@@ -35,19 +35,6 @@ cinco cosas independientes, y eran una sola (`JudgeInvocation`). No es cosmetica
 funciones sueltas nadie noto que a la invocacion le faltaba el `--add-dir` sin el que el juez no ve
 el diff-.
 
-## Que se queda en castellano
-
-Solo lo que es **dato de un contrato** y no codigo: los valores del veredicto del juez
-(`PASA`/`FALLA`, `alta`/`media`/`baja`) y las claves de su JSON (`regla`, `evidencia`...), porque los
-fija la rubrica de `SliceVerifierJudge` (`src/slice_runner/infrastructure/slice_verifier_judge.py`), la
-valida `VerdictPayload`, y traducirlos rompe el contrato en vez de renombrar una variable.
-
-**Clave del contrato no es nombre de campo**: los campos van en ingles y la traduccion vive en el
-`alias` del modelo de frontera. Ver `docs/conventions/infrastructure.md`.
-
-Esto ya estaba dicho en `docs/design-notes.md` y aun asi `src/slice_runner/` nacio entero en
-castellano: una convencion escrita donde nadie la carga antes de escribir no mide nada.
-
 ## Imports
 
 - `from __future__ import annotations` primero, antes de cualquier otro import.

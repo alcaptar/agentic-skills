@@ -13,11 +13,19 @@ if TYPE_CHECKING:
 class Prechecks:
     @classmethod
     def of(
-        cls, *, subissue: SubIssue, parent: ParentIssue, branch_exists: bool, open_pull_request: int | None
+        cls,
+        *,
+        subissue: SubIssue,
+        parent: ParentIssue,
+        base_resolves_on_remote: bool,
+        branch_exists: bool,
+        open_pull_request: int | None,
     ) -> PrecheckOutcome:
         of_the_subissue = cls.of_the_subissue(subissue)
         if of_the_subissue is not PrecheckOutcome.CLEAR:
             return of_the_subissue
+        if not base_resolves_on_remote:
+            return PrecheckOutcome.BASE_NOT_ON_REMOTE
 
         return cls._of_the_ground(parent=parent, branch_exists=branch_exists, open_pull_request=open_pull_request)
 
