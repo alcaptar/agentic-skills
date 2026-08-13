@@ -100,7 +100,7 @@ class TestConductSliceStartingANewRun:
         assert conductor.repository.write_run.call_count == 0
 
     def test_the_invocation_that_asks_for_alignment_ticks_instead_of_writing_any_code(self) -> None:
-        conductor = Conductor(chosen=SelectSliceResultMother.about_to_start(), budgets=Budgets(total_wait_seconds=0))
+        conductor = Conductor(chosen=SelectSliceResultMother.about_to_start(), budgets=Budgets(person_wait_seconds=0))
 
         result = conductor.conduct()
 
@@ -235,7 +235,7 @@ class TestConductSliceRespondingToAlignment:
         return Conductor(chosen=SelectSliceResultMother.about_to_start(subissue=cls._subissue()), budgets=budgets)
 
     def test_no_response_yet_asks_gh_about_the_comments_of_the_one_subissue_chosen(self) -> None:
-        conductor = self._conductor(budgets=Budgets(total_wait_seconds=0))
+        conductor = self._conductor(budgets=Budgets(person_wait_seconds=0))
         conductor.repository.read_alignment_response.return_value = AlignmentResponse(
             kind=AlignmentResponseKind.NOT_YET
         )
@@ -247,7 +247,7 @@ class TestConductSliceRespondingToAlignment:
     def test_no_response_yet_ticks_until_the_wait_is_spent_without_touching_the_harness_or_the_understanding_comment(
         self,
     ) -> None:
-        conductor = self._conductor(budgets=Budgets(total_wait_seconds=0))
+        conductor = self._conductor(budgets=Budgets(person_wait_seconds=0))
         conductor.repository.read_alignment_response.return_value = AlignmentResponse(
             kind=AlignmentResponseKind.NOT_YET
         )
@@ -261,7 +261,7 @@ class TestConductSliceRespondingToAlignment:
         assert conductor.repository.write_run.call_count == 0
 
     def test_a_response_that_only_appears_on_the_second_tick_still_starts_the_implementation(self) -> None:
-        conductor = self._conductor(budgets=Budgets(total_wait_seconds=60))
+        conductor = self._conductor(budgets=Budgets(person_wait_seconds=60))
         conductor.repository.read_alignment_response.side_effect = [
             AlignmentResponse(kind=AlignmentResponseKind.NOT_YET),
             AlignmentResponse(kind=AlignmentResponseKind.GO),
@@ -273,7 +273,7 @@ class TestConductSliceRespondingToAlignment:
         assert conductor.implement.execute.call_count == 1
 
     def test_a_review_rewrites_the_understanding_with_the_correction_it_carried(self) -> None:
-        conductor = self._conductor(budgets=Budgets(total_wait_seconds=0))
+        conductor = self._conductor(budgets=Budgets(person_wait_seconds=0))
         conductor.repository.read_alignment_response.return_value = AlignmentResponse(
             kind=AlignmentResponseKind.REVIEW, correction="la senal no esta exenta"
         )
@@ -289,7 +289,7 @@ class TestConductSliceRespondingToAlignment:
         )
 
     def test_a_review_publishes_the_rewritten_understanding_and_keeps_waiting_until_the_wait_is_spent(self) -> None:
-        conductor = self._conductor(budgets=Budgets(total_wait_seconds=0))
+        conductor = self._conductor(budgets=Budgets(person_wait_seconds=0))
         conductor.repository.read_alignment_response.return_value = AlignmentResponse(
             kind=AlignmentResponseKind.REVIEW, correction="la senal no esta exenta"
         )
@@ -302,7 +302,7 @@ class TestConductSliceRespondingToAlignment:
         assert result.halt is Halt.WAIT_EXHAUSTED
 
     def test_a_review_answered_by_a_go_on_the_next_tick_publishes_once_and_starts_implementing(self) -> None:
-        conductor = self._conductor(budgets=Budgets(total_wait_seconds=60))
+        conductor = self._conductor(budgets=Budgets(person_wait_seconds=60))
         conductor.repository.read_alignment_response.side_effect = [
             AlignmentResponse(kind=AlignmentResponseKind.REVIEW, correction="la senal no esta exenta"),
             AlignmentResponse(kind=AlignmentResponseKind.GO),
@@ -315,7 +315,7 @@ class TestConductSliceRespondingToAlignment:
         assert conductor.implement.execute.call_count == 1
 
     def test_a_review_still_unanswered_on_every_tick_publishes_only_once_for_that_correction(self) -> None:
-        conductor = self._conductor(budgets=Budgets(total_wait_seconds=90))
+        conductor = self._conductor(budgets=Budgets(person_wait_seconds=90))
         conductor.repository.read_alignment_response.return_value = AlignmentResponse(
             kind=AlignmentResponseKind.REVIEW, correction="la senal no esta exenta"
         )
@@ -327,7 +327,7 @@ class TestConductSliceRespondingToAlignment:
         assert result.halt is Halt.WAIT_EXHAUSTED
 
     def test_a_second_review_with_a_different_correction_still_publishes_its_own_call(self) -> None:
-        conductor = self._conductor(budgets=Budgets(total_wait_seconds=60))
+        conductor = self._conductor(budgets=Budgets(person_wait_seconds=60))
         conductor.repository.read_alignment_response.side_effect = [
             AlignmentResponse(kind=AlignmentResponseKind.REVIEW, correction="la senal no esta exenta"),
             AlignmentResponse(kind=AlignmentResponseKind.REVIEW, correction="ademas falta un criterio"),
@@ -338,7 +338,7 @@ class TestConductSliceRespondingToAlignment:
         assert conductor.understanding.write.call_count == 2
 
     def test_a_review_pauses_no_further_and_cuts_no_branch_but_still_persists_the_spend(self) -> None:
-        conductor = self._conductor(budgets=Budgets(total_wait_seconds=0))
+        conductor = self._conductor(budgets=Budgets(person_wait_seconds=0))
         conductor.repository.read_alignment_response.return_value = AlignmentResponse(
             kind=AlignmentResponseKind.REVIEW, correction="la senal no esta exenta"
         )
@@ -391,7 +391,7 @@ class TestConductSliceRespondingToAlignment:
         assert conductor.understanding.write.call_count == 0
 
     def test_a_malformed_go_is_answered_with_what_it_is_missing_instead_of_being_treated_as_silence(self) -> None:
-        conductor = self._conductor(budgets=Budgets(total_wait_seconds=0))
+        conductor = self._conductor(budgets=Budgets(person_wait_seconds=0))
         malformed = AlignmentResponse(kind=AlignmentResponseKind.MALFORMED, reason=MalformedReason.GO_CARRIES_TEXT)
         conductor.repository.read_alignment_response.return_value = malformed
 
@@ -406,7 +406,7 @@ class TestConductSliceRespondingToAlignment:
     def test_a_malformed_review_is_answered_with_what_it_is_missing_instead_of_rewriting_the_understanding(
         self,
     ) -> None:
-        conductor = self._conductor(budgets=Budgets(total_wait_seconds=0))
+        conductor = self._conductor(budgets=Budgets(person_wait_seconds=0))
         malformed = AlignmentResponse(kind=AlignmentResponseKind.MALFORMED, reason=MalformedReason.MISSING_CORRECTION)
         conductor.repository.read_alignment_response.return_value = malformed
 
@@ -418,7 +418,7 @@ class TestConductSliceRespondingToAlignment:
         assert conductor.understanding.write.call_count == 0
 
     def test_a_tick_that_finds_the_prior_malformed_comment_already_acknowledged_answers_it_no_further(self) -> None:
-        conductor = self._conductor(budgets=Budgets(total_wait_seconds=60))
+        conductor = self._conductor(budgets=Budgets(person_wait_seconds=60))
         malformed = AlignmentResponse(kind=AlignmentResponseKind.MALFORMED, reason=MalformedReason.GO_CARRIES_TEXT)
         conductor.repository.read_alignment_response.side_effect = [
             malformed,
@@ -461,7 +461,7 @@ class TestConductSliceReinvokedWhileAwaitingAlignment:
     def test_a_reinvocation_that_still_reads_the_correction_a_prior_invocation_already_published_writes_no_new_call(
         self,
     ) -> None:
-        conductor = self._conductor("la senal no esta exenta", budgets=Budgets(total_wait_seconds=0))
+        conductor = self._conductor("la senal no esta exenta", budgets=Budgets(person_wait_seconds=0))
         conductor.repository.read_alignment_response.return_value = AlignmentResponse(
             kind=AlignmentResponseKind.REVIEW, correction="la senal no esta exenta"
         )
@@ -472,7 +472,7 @@ class TestConductSliceReinvokedWhileAwaitingAlignment:
         assert result.halt is Halt.WAIT_EXHAUSTED
 
     def test_a_reinvocation_that_reads_a_correction_never_published_still_publishes_it(self) -> None:
-        conductor = self._conductor("la senal no esta exenta", budgets=Budgets(total_wait_seconds=0))
+        conductor = self._conductor("la senal no esta exenta", budgets=Budgets(person_wait_seconds=0))
         conductor.repository.read_alignment_response.return_value = AlignmentResponse(
             kind=AlignmentResponseKind.REVIEW, correction="ademas falta un criterio"
         )
@@ -493,7 +493,7 @@ class TestConductSliceRespondingToAlignmentWithAMismatchedLabel:
         )
 
     def test_a_label_moved_by_hand_still_reads_the_pending_response_instead_of_publishing_again(self) -> None:
-        conductor = self._conductor(budgets=Budgets(total_wait_seconds=0))
+        conductor = self._conductor(budgets=Budgets(person_wait_seconds=0))
         conductor.repository.read_alignment_response.return_value = AlignmentResponse(
             kind=AlignmentResponseKind.NOT_YET
         )
@@ -813,7 +813,7 @@ class TestConductSliceOnTheHappyPath:
         return Conductor(chosen=SelectSliceResultMother.resumed_at(RunMother.implementing()), budgets=budgets)
 
     def test_it_walks_the_steps_in_the_order_the_state_machine_dictates_and_persists_each_one(self) -> None:
-        conductor = self._conductor(budgets=Budgets(total_wait_seconds=30))
+        conductor = self._conductor(budgets=Budgets(ci_wait_seconds=30, person_wait_seconds=30))
         conductor.forum.pull_request_state.return_value = PullRequestState.OPEN
 
         result = conductor.conduct()
@@ -869,7 +869,7 @@ class TestConductSliceOnTheHappyPath:
         assert conductor.forum.open_pull_request.call_count == 0
 
     def test_a_green_ci_moves_the_label_to_awaiting_merge_because_the_merge_is_a_human_decision(self) -> None:
-        conductor = self._conductor(budgets=Budgets(total_wait_seconds=30))
+        conductor = self._conductor(budgets=Budgets(ci_wait_seconds=30, person_wait_seconds=30))
         conductor.forum.pull_request_state.return_value = PullRequestState.OPEN
 
         conductor.conduct()
@@ -1031,7 +1031,7 @@ class TestConductSliceReportingEvents:
         assert [e.status for e in emitted] == [EventStatus.ADVANCING] * 5 + [EventStatus.CLOSED]
 
     def test_a_pending_merge_reports_awaiting_a_person_because_the_merge_is_a_human_decision(self) -> None:
-        conductor = self._conductor(budgets=Budgets(total_wait_seconds=30))
+        conductor = self._conductor(budgets=Budgets(person_wait_seconds=30))
         conductor.forum.pull_request_state.return_value = PullRequestState.OPEN
 
         conductor.conduct()
@@ -1042,7 +1042,7 @@ class TestConductSliceReportingEvents:
     def test_a_pending_ci_reports_waiting_because_no_person_is_deciding_anything_yet(self) -> None:
         conductor = Conductor(
             chosen=SelectSliceResultMother.resumed_at(RunMother.about_to_ask_the_ci()),
-            budgets=Budgets(total_wait_seconds=90),
+            budgets=Budgets(ci_wait_seconds=90),
         )
         conductor.ci.status.return_value = CiStatus.PENDING
 
@@ -1552,7 +1552,7 @@ class TestConductSliceWaitingForTheMerge:
         return Conductor(chosen=SelectSliceResultMother.resumed_at(RunMother.awaiting_merge()), budgets=budgets)
 
     def test_a_merge_that_never_arrives_flags_the_subissue_that_its_pull_request_is_still_draft(self) -> None:
-        conductor = self._conductor(budgets=Budgets(total_wait_seconds=30))
+        conductor = self._conductor(budgets=Budgets(person_wait_seconds=30))
         conductor.forum.pull_request_state.return_value = PullRequestState.OPEN
 
         result = conductor.conduct()
@@ -1567,7 +1567,7 @@ class TestConductSliceWaitingForTheMerge:
     ) -> None:
         conductor = Conductor(
             chosen=SelectSliceResultMother.resumed_at(RunMother.about_to_ask_the_ci()),
-            budgets=Budgets(total_wait_seconds=30),
+            budgets=Budgets(ci_wait_seconds=30),
         )
         conductor.ci.status.return_value = CiStatus.PENDING
 
@@ -1582,7 +1582,7 @@ class TestConductSliceWaitingForTheCi:
         return Conductor(chosen=SelectSliceResultMother.resumed_at(RunMother.about_to_ask_the_ci()), budgets=budgets)
 
     def test_a_pending_ci_ticks_with_the_separation_the_budget_declares_until_the_total_wait_is_spent(self) -> None:
-        conductor = self._conductor(budgets=Budgets(total_wait_seconds=90))
+        conductor = self._conductor(budgets=Budgets(ci_wait_seconds=90))
         conductor.ci.status.return_value = CiStatus.PENDING
 
         result = conductor.conduct()
@@ -1590,8 +1590,27 @@ class TestConductSliceWaitingForTheCi:
         assert [call.kwargs["seconds"] for call in conductor.clock.sleep.call_args_list] == [30, 30, 30]
         assert (result.halt, result.state, result.step) == (Halt.WAIT_EXHAUSTED, RunState.OPEN, Step.AWAIT_CI)
 
+    def test_a_hung_ci_runs_out_on_its_own_cap_however_long_a_person_is_allowed_to_take(self) -> None:
+        conductor = self._conductor(budgets=Budgets(ci_wait_seconds=60, person_wait_seconds=86400))
+        conductor.ci.status.return_value = CiStatus.PENDING
+
+        result = conductor.conduct()
+
+        assert conductor.clock.sleep.call_count == 2
+        assert (result.halt, result.step) == (Halt.WAIT_EXHAUSTED, Step.AWAIT_CI)
+
+    def test_what_the_ci_took_is_not_charged_to_the_person_who_has_to_merge(self) -> None:
+        conductor = self._conductor(budgets=Budgets(ci_wait_seconds=60, person_wait_seconds=60))
+        conductor.ci.status.side_effect = [CiStatus.PENDING, CiStatus.GREEN]
+        conductor.forum.pull_request_state.return_value = PullRequestState.OPEN
+
+        result = conductor.conduct()
+
+        assert conductor.clock.sleep.call_count == 3
+        assert (result.halt, result.step) == (Halt.WAIT_EXHAUSTED, Step.AWAIT_MERGE)
+
     def test_a_tick_that_changes_nothing_does_not_rewrite_the_state_of_the_run(self) -> None:
-        conductor = self._conductor(budgets=Budgets(total_wait_seconds=30))
+        conductor = self._conductor(budgets=Budgets(ci_wait_seconds=30))
         conductor.ci.status.return_value = CiStatus.PENDING
 
         conductor.conduct()
@@ -1599,7 +1618,7 @@ class TestConductSliceWaitingForTheCi:
         assert conductor.repository.write_run.call_count == 0
 
     def test_an_invocation_that_ends_without_closing_the_run_writes_no_durable_row(self) -> None:
-        conductor = self._conductor(budgets=Budgets(total_wait_seconds=30))
+        conductor = self._conductor(budgets=Budgets(ci_wait_seconds=30))
         conductor.ci.status.return_value = CiStatus.PENDING
 
         conductor.conduct()
@@ -1628,7 +1647,7 @@ class TestConductSliceWaitingForTheCi:
 
         result = conductor.conduct()
 
-        assert conductor.clock.sleep.call_count == 2
+        assert conductor.clock.sleep.call_count == Budgets().indeterminate_ticks - 1
         assert result.state is RunState.BLOCKED_CI_INDETERMINATE
         conductor.repository.write_label.assert_called_once_with(
             repo=Conductor.REPO,
