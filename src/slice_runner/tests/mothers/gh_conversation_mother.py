@@ -26,6 +26,12 @@ _SUBISSUE_PROSE = (
     "SENAL: exenta - este repo no despliega\n"
 )
 
+_SUBISSUE_PROSE_WITH_A_SIGNAL = (
+    "INTENCION: hoy nada evita reimplementar una slice ya entregada\n"
+    "ACEPTACION: el run retoma por el paso que dice el estado persistido\n"
+    "SENAL: prometheus rate(application_slice_conducida_total[5m]) > 0 en 10m post-deploy; critical\n"
+)
+
 
 class GhConversationMother:
     REPO: ClassVar[str] = "alcaptar/agentic-skills"
@@ -73,6 +79,14 @@ class GhConversationMother:
     def the_slice_resumed_at(cls, run: Run) -> str:
         return cls._children(
             body=f"{_SUBISSUE_PROSE}\n{cls._state_block(run)}\n", label=IssueLabel.IN_PROGRESS, state=IssueState.OPEN
+        )
+
+    @classmethod
+    def the_slice_with_a_signal_resumed_at(cls, run: Run) -> str:
+        return cls._children(
+            body=f"{_SUBISSUE_PROSE_WITH_A_SIGNAL}\n{cls._state_block(run)}\n",
+            label=IssueLabel.IN_PROGRESS,
+            state=IssueState.OPEN,
         )
 
     @classmethod
