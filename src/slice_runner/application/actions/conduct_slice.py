@@ -355,7 +355,7 @@ class ConductSlice:
 
     def _exhausted(self, progress: ConductSliceProgress) -> ConductSliceResult:
         if progress.run.step is Step.AWAIT_MERGE:
-            self._repository.flag_draft_pull_request(
+            self._repository.flag_unmerged_pull_request(
                 repo=progress.params.repo, issue=progress.subissue.number, pull_request=self._pull_request_of(progress)
             )
 
@@ -511,6 +511,7 @@ class ConductSlice:
                 branch=progress.subissue.branch,
                 base=progress.params.base,
                 title=self._pull_request.title(progress.subissue),
+                commit_message=self._pull_request.commit_message(progress.subissue),
                 body=self._pull_request.body(
                     progress.subissue, debt=progress.debt, findings=progress.findings_of_the_last_round
                 ),

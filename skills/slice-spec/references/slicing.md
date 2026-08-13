@@ -48,6 +48,34 @@ mismo concepto operativo: un disparo que atraviesa todas las capas y cuyo codigo
 Si la feature toca arquitectura o integracion nueva, empieza siempre por aqui: el resto de slices
 son incrementos que caen sobre este andamio.
 
+### 1b. Si hay frontera, el contrato va primero — es lo que deja paralelizar
+
+**Dispara cuando la feature tiene una pieza que habla con algo que no es ella**: un endpoint, un
+evento que se publica o al que alguien se suscribe, el esquema de un mensaje, la respuesta de un
+servicio del que dependemos, una interfaz de linea de comandos, un fichero que otro proceso lee.
+
+Entonces la **primera slice fija el contrato**: los nombres, los campos, sus tipos, que es
+obligatorio, que pasa cuando falla, y **un test que lo fije**. Aunque detras todavia no haya logica,
+y aunque el unico consumidor sea un doble.
+
+**El motivo es el paralelismo, y es la diferencia entre una tarde y tres.** Sin contrato, quien
+produce y quien consume no pueden empezar a la vez: el segundo tiene que esperar a ver que emitio el
+primero, y si no espera, cada uno inventa su version y alguien reconcilia despues -que es trabajo que
+no estaba en ninguna slice-. Con el contrato mergeado primero, las dos slices se escriben **contra el
+mismo texto** y pueden correr en worktrees distintos el mismo rato (paso 7 del `SKILL.md`).
+
+Es tambien lo que hace verificable a cada lado por separado: el productor se mide contra el contrato
+sin montar al consumidor, y el consumidor contra un doble que cumple el contrato sin montar al
+productor.
+
+**Vara: el contrato merece slice propia si lo va a leer alguien que no es quien lo define.** Otro
+repo, otro equipo, otra slice de esta misma feature, un proceso externo. Si el unico que lo usa es el
+modulo que lo declara, no es una frontera: es diseno interno, y sacarlo a slice es ceremonia.
+
+**Y se fija con el primer caso real, no con todos los imaginables.** Un contrato escrito para casos
+que nadie ha pedido es especulacion con otro nombre, y ademas envejece antes de tener consumidor: la
+slice del contrato cubre lo que la feature necesita **hoy**, y crece con la que traiga el caso nuevo.
+
 ### 2. Heuristica ordenada
 
 Aplica la primera que funcione. Si una sola no basta para entrar en el budget, **combinala** con
@@ -195,6 +223,8 @@ Como llega una slice vertical a prod siendo reversible y desplegable sola sin ro
 - Dejar el caso mas arriesgado para el final.
 - Slices con "y"/"o" en el titulo que esconden varias features.
 - Un set de slices donde **no puedes despriorizar ninguna** (senal de corte horizontal disfrazado).
+- Dos slices que definen **cada una su mitad** del mismo contrato de frontera: o lo fija una sola
+  antes que las dos, o el formato se decide dos veces y alguien reconcilia despues.
 
 ## Fuentes
 

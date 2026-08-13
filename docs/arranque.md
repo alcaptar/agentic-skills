@@ -48,7 +48,8 @@ En el repo donde vas a trabajar:
 - `--slice slice-NN` elige cual conducir. Sin el, coge la siguiente ejecutable en orden.
 - `-GO` se lee por coincidencia exacta: con texto detras **no arranca**. Con varias respuestas, gana
   la ultima escrita.
-- Las pull requests nacen en borrador. Reinvocar no las saca de ahi.
+- Las pull requests nacen **listas para revisar** y **asignadas a ti**, con los commits acreditando a
+  Claude como co-autor. Mergear sigue siendo tuyo: el programa nunca mergea.
 
 ## Permisos
 

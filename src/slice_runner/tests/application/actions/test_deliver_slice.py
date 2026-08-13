@@ -15,6 +15,7 @@ _REPO = "alcaptar/agentic-skills"
 _BRANCH = "slice/08-entrega-de-la-slice"
 _BASE = "master"
 _TITLE = "feat(entrega-de-la-slice): commitear solo lo juzgado y abrir la pull request"
+_COMMIT_MESSAGE = f"{_TITLE}\n\nCo-Authored-By: Claude <noreply@anthropic.com>"
 _BODY = "## Intencion\nsin esto el programa verifica y no entrega\n\nCloses #46\n"
 
 
@@ -38,21 +39,29 @@ class TestDeliverSlice:
 
     @staticmethod
     def _params() -> DeliverSliceParams:
-        return DeliverSliceParams(worktree=_WORKTREE, repo=_REPO, branch=_BRANCH, base=_BASE, title=_TITLE, body=_BODY)
+        return DeliverSliceParams(
+            worktree=_WORKTREE,
+            repo=_REPO,
+            branch=_BRANCH,
+            base=_BASE,
+            title=_TITLE,
+            commit_message=_COMMIT_MESSAGE,
+            body=_BODY,
+        )
 
-    def test_the_commit_message_is_the_conventional_commit_title_the_pull_request_carries(
+    def test_the_commit_carries_the_message_it_was_given_and_not_the_title_of_the_pull_request(
         self, action: DeliverSlice, workspace: Mock
     ) -> None:
         action.execute(self._params())
 
-        workspace.commit.assert_called_once_with(worktree=_WORKTREE, message=_TITLE)
+        workspace.commit.assert_called_once_with(worktree=_WORKTREE, message=_COMMIT_MESSAGE)
 
     def test_the_branch_is_pushed_only_once_the_commit_exists(self, action: DeliverSlice, workspace: Mock) -> None:
         action.execute(self._params())
 
         assert workspace.mock_calls == [
             call.current_branch(worktree=_WORKTREE),
-            call.commit(worktree=_WORKTREE, message=_TITLE),
+            call.commit(worktree=_WORKTREE, message=_COMMIT_MESSAGE),
             call.push(worktree=_WORKTREE, branch=_BRANCH),
         ]
 
@@ -70,7 +79,7 @@ class TestDeliverSlice:
 
         assert action.execute(self._params()) == 48
 
-        workspace.commit.assert_called_once_with(worktree=_WORKTREE, message=_TITLE)
+        workspace.commit.assert_called_once_with(worktree=_WORKTREE, message=_COMMIT_MESSAGE)
         workspace.push.assert_called_once_with(worktree=_WORKTREE, branch=_BRANCH)
         forum.create_pull_request.assert_not_called()
 

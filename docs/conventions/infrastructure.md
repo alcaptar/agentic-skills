@@ -352,8 +352,26 @@ importar**: un smoke que solo importe el modulo lo da por bueno. Lo evita
   compone los mismos encabezados y en el mismo orden, y es la misma duplicacion declarada que la de la
   rubrica del juez y la del brief del implementador, por el mismo motivo -el flujo viejo esta condenado y
   el programa no lee sus `.md`-. Los encabezados se quedan en castellano: son **contenido del artefacto
-  que lee una persona**, en el idioma del issue, no identificadores. Y `gh pr create` va siempre con
-  `--draft`, porque el merge lo decide una persona (ver `CLAUDE.md`).
+  que lee una persona**, en el idioma del issue, no identificadores.
+
+  **`gh pr create` nace lista para revisar, y eso no afloja el control humano** (decision 2026-08-13,
+  antes iba con `--draft`). Lo que hace que el merge lo decida una persona es que el programa **no
+  mergea**: se para en `esperando-merge` y termina. El borrador no anadia esa garantia -ya estaba- y si
+  anadia un paso manual invisible: la pull request salia con la integracion continua verde, el
+  veredicto dado y todo hecho, y no se podia mergear hasta que alguien se acordara de sacarla de
+  borrador. Medido el 2026-08-13: el run de la slice-10 de este repo agoto su espera de merge sin que
+  nadie pudiera mergear, y el propio programa tuvo que decirlo por un aviso que existia **solo** para
+  compensar el borrador.
+  - **Va `--assignee @me`**: quien conduce el run es quien tiene que mergear, asi que la pull request
+    aparece en su lista. Se usa `@me` y no el login que devuelve `Forum.authenticated_as` porque lo
+    resuelve `gh` en la misma llamada, sin una segunda para preguntar quien eres.
+  - **El commit lleva `Co-Authored-By: Claude`** (`infrastructure/slice_commit_message.py`), porque el
+    codigo lo escribio un harness y el registro duradero deberia decirlo. Es un objeto propio y no una
+    cadena pegada en `SlicePullRequest.title` porque el **asunto** del commit y el **titulo** de la
+    pull request dejan de ser lo mismo en cuanto uno de los dos crece: el puerto expone los dos
+    (`title` y `commit_message`) y `DeliverSlice` recibe cada uno por su campo. Lo que **no** se hace
+    es anadir a Claude como asignado: GitHub solo deja asignar colaboradores del repo, asi que seria
+    una llamada que falla o que se ignora en silencio.
 
   **Diverge del paso 8 que tenia el `SKILL.md` del runner (retirado), y cada divergencia es
   deliberada.** Al contrario que la duplicacion de los prefijos prohibidos, **esta no tiene test de

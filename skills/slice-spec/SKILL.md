@@ -1,6 +1,6 @@
 ---
 name: slice-spec
-description: Crea (o valida) una spec de slices en el formato exacto que consume slice-runner. Usar cuando el usuario quiera "escribir una spec", "montar el plan de slices", "trocear una feature en slices", "slice-spec", o tenga una idea/feature y necesite convertirla en una spec ejecutable por slice-runner. Envuelve superpowers:brainstorming para el diseno y luego crea el issue padre (intencion, fuentes de convencion y controles) con una subissue por slice (titulo con identificador y nombre, intencion, criterios de aceptacion, senal y etiqueta de estado). Modo `validate` para revisar una spec existente contra el contrato. No implementa codigo: produce la spec que slice-runner luego ejecuta.
+description: Crea (o valida) una spec de slices en el formato exacto que consume slice-runner. Usar cuando el usuario quiera "escribir una spec", "montar el plan de slices", "trocear una feature en slices", "slice-spec", o tenga una idea/feature y necesite convertirla en una spec ejecutable por slice-runner. Envuelve superpowers:brainstorming para el diseno y luego crea el issue padre (intencion, fuentes de convencion y controles) con una subissue por slice (titulo con identificador y nombre, intencion, criterios de aceptacion, senal y etiqueta de estado). Modo `validate` para revisar una spec existente contra el contrato. Cierra proponiendo que slices pueden correr en paralelo y, si se confirma, monta un worktree por slice y lanza sus runs. No implementa codigo: produce la spec que slice-runner luego ejecuta.
 ---
 
 # Slice Spec
@@ -101,6 +101,12 @@ Dos modos:
   nadie reescribe el documento de nadie. Su coste es que la spec deja de leerse de un tiron, y lo paga
   el paso 5: se muestra completa en el terminal antes de crear nada. **No** se paga repitiendo las
   slices en el cuerpo del padre, que seria estado duplicado que deriva.
+- **Trocear termina cuando el trabajo esta lanzado, no cuando el issue esta escrito.** Quien acaba de
+  cortar es quien mejor sabe que va a tocar cada slice, asi que el reparto en paralelo -que puede ir
+  con que, y que no- se propone aqui (paso 7) y, confirmado, se monta aqui: un worktree por slice y su
+  run. Dejarlo para despues obliga a reconstruir a ojo lo que en este momento se sabe. **Lo que no se
+  hace es prometer que las slices son disjuntas**: se declara el solape que se espera, porque la
+  version comoda ya ha fallado dos veces y una fusion avisada no cuesta nada.
 
 ## Contrato de formato (lo que el programa lee)
 
@@ -252,6 +258,9 @@ SENAL: prometheus min_over_time(application_stock_actual[10m]) < 0 dispara la al
      (`gh pr list --state merged --search ...`, `gh issue list --state closed --search ...`). Vale un
      numero y lo que le paso.
    - **¿Donde acopla?** Vale el sitio concreto del que cuelga.
+   - **¿Cual es el fichero de orquestacion del repo?** El uno o dos sitios donde un conflicto deja de
+     ser cosmetico -el caso de uso que dirige el flujo, el entrypoint que monta las dependencias-. No
+     cambia el corte, pero **decide el paso 7**: son carriles de uno.
 
    **Vara: si no puedes citar una ruta o un numero, no es un hallazgo, es una impresion**, y no entra.
    Es la misma vara de falsabilidad que gobierna los criterios de aceptacion, aplicada aguas arriba.
@@ -270,7 +279,10 @@ SENAL: prometheus min_over_time(application_stock_actual[10m]) < 0 dispara la al
    ausencia silenciosa no son lo mismo, igual que en `SENAL:` y en los controles.
 
 2. **Trocea en slices verticales (guia activa).** Carga `references/slicing.md` y aplica su
-   procedimiento sobre el diseno aprobado: identifica el **walking skeleton** (slice #1), genera el
+   procedimiento sobre el diseno aprobado: identifica el **walking skeleton** (slice #1), **saca
+   delante el contrato de toda frontera** -un endpoint, un evento, un esquema de mensaje, lo que otro
+   repo o proceso vaya a leer-, porque es lo que permite que productor y consumidor se construyan a la
+   vez en vez de en fila (paso 1b de `slicing.md`, y es de donde sale el paralelismo del paso 7), genera el
    resto por la **heuristica ordenada**, y **solo abre dialogo con la persona** (opciones graduadas
    por capa, estilo hamburger) cuando el corte no es obvio o una slice supera el budget. Valida cada
    slice contra los criterios de validez y el conjunto contra el **test de despriorizacion** e
@@ -344,7 +356,46 @@ SENAL: prometheus min_over_time(application_stock_actual[10m]) < 0 dispara la al
      (`gh label create estado:pendiente --repo <org>/<repo>`) y reintenta: una subissue sin etiqueta de
      estado es una slice sin estado que nadie puede consultar.
 6. **Cierra** diciendo el numero/URL del padre, las subissues creadas con su numero, y que se ejecuta
-   con `uv run slice-runner run <N> --repo <org>/<repo> --base master`, una invocacion por slice.
+   con `slice-runner run <N> --repo <org>/<repo> --base master`, una invocacion por slice.
+
+7. **Propon el reparto en paralelo y, si te lo confirman, montalo tu.** Una invocacion conduce **una**
+   slice, asi que una feature de ocho son ocho invocaciones; en serie eso es toda la tarde. Se pueden
+   correr a la vez en **worktrees distintos**, y quien acaba de trocear es quien mejor sabe que va a
+   tocar cada slice, asi que la propuesta se hace aqui y no se deja para que la improvise otro.
+
+   **El reparto lo decides por semantica: no hay helper, y el riesgo se declara en vez de negarse.**
+   Lee lo que acabas de trocear y estima, slice a slice, **que ficheros va a tocar**. Luego cruza las
+   estimaciones. Lo que **no** vale es la conclusion comoda: decir "son disjuntas" es lo que ha fallado
+   dos veces en este flujo -una pareja elegida como la mas disjunta mirando su fichero protagonista
+   compartio cuatro ficheros, y otra compartio siete, incluido uno que **las dos crearon**-. La forma
+   honesta es *"comparten `<fichero>`; si hay conflicto sera pequeno"*, y **no** *"no se tocan"*.
+
+   Tres reglas duras, que no dependen de lo bien que estimes:
+
+   - **Dos slices que toquen el mismo fichero de orquestacion no van juntas.** En todo repo hay uno o
+     dos ficheros donde el conflicto deja de ser cosmetico y pasa a ser logica que hay que rehacer.
+     Identificalos en el paso 1b y trata cada uno como un carril de uno.
+   - **Los ficheros iman se comparten casi siempre**: el entrypoint que monta las dependencias, los
+     dobles de test, el vocabulario de errores, el `README.md` y los docs de convencion. Compartir uno
+     no impide lanzar; **garantiza una fusion**, y la segunda en mergear la resuelve.
+   - **Una slice que depende de otra va detras**, nunca al lado. Si el paso 1b encontro un `- acopla:`
+     entre dos, esas dos son secuenciales aunque toquen ficheros distintos.
+
+   Presenta el reparto en **tandas**, y para cada slice di su worktree y el solape que esperas.
+   **Espera confirmacion** (`check-alignment`): crear worktrees y lanzar runs gasta dinero en el
+   harness de otra persona.
+
+   Con la confirmacion dada, montalo tu, un worktree por slice de la tanda:
+
+   ```bash
+   git worktree add <ruta-del-worktree> --detach origin/<base>
+   slice-runner run <padre> --repo <org>/<repo> --base <base> --slice slice-NN --worktree <ruta-del-worktree>
+   ```
+
+   Cada run **en background**, nunca encadenados en una shell que bloquee: son procesos largos y el
+   principio de este flujo es que ninguna espera congele una sesion. Y avisa de lo que viene despues,
+   porque es lo que sorprende: **cada run se para en su pausa de alineacion**, asi que N runs en
+   paralelo son N entendimientos que revisar y N `-GO` que dar, no uno.
 
 ## Steps — modo `validate`
 

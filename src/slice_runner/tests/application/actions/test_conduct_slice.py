@@ -1551,14 +1551,14 @@ class TestConductSliceWaitingForTheMerge:
     def _conductor(*, budgets: Budgets | None = None) -> Conductor:
         return Conductor(chosen=SelectSliceResultMother.resumed_at(RunMother.awaiting_merge()), budgets=budgets)
 
-    def test_a_merge_that_never_arrives_flags_the_subissue_that_its_pull_request_is_still_draft(self) -> None:
+    def test_a_merge_that_never_arrives_flags_the_subissue_that_its_pull_request_was_left_unmerged(self) -> None:
         conductor = self._conductor(budgets=Budgets(person_wait_seconds=30))
         conductor.forum.pull_request_state.return_value = PullRequestState.OPEN
 
         result = conductor.conduct()
 
         assert result.halt is Halt.WAIT_EXHAUSTED
-        conductor.repository.flag_draft_pull_request.assert_called_once_with(
+        conductor.repository.flag_unmerged_pull_request.assert_called_once_with(
             repo=Conductor.REPO, issue=_SUBISSUE, pull_request=Conductor.PULL_REQUEST
         )
 
@@ -1573,7 +1573,7 @@ class TestConductSliceWaitingForTheMerge:
 
         conductor.conduct()
 
-        assert conductor.repository.flag_draft_pull_request.call_count == 0
+        assert conductor.repository.flag_unmerged_pull_request.call_count == 0
 
 
 class TestConductSliceWaitingForTheCi:
