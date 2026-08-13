@@ -28,6 +28,7 @@ from slice_runner.application.queries.list_closed_slices import ListClosedSlices
 from slice_runner.application.queries.read_conversation import ReadConversation, ReadConversationParams
 from slice_runner.application.queries.run_prechecks import RunPrechecks
 from slice_runner.application.queries.select_slice import SelectSlice
+from slice_runner.application.queries.show_feature_status import ShowFeatureStatus, ShowFeatureStatusParams
 from slice_runner.application.queries.spend_by_role import SpendByRole, SpendByRoleParams
 from slice_runner.application.queries.spend_of_step import SpendOfStep, SpendOfStepParams
 from slice_runner.domain.budgets import Budgets
@@ -70,6 +71,7 @@ from slice_runner.infrastructure.conducted_slice_payload import ConductedSlicePa
 from slice_runner.infrastructure.conversation_report import ConversationReport
 from slice_runner.infrastructure.conversation_tool_use_recorder import ConversationToolUseRecorder
 from slice_runner.infrastructure.exit_code import ExitCode
+from slice_runner.infrastructure.feature_status_report import FeatureStatusReport
 from slice_runner.infrastructure.gh_call import GhCall
 from slice_runner.infrastructure.gh_ci import GhCi
 from slice_runner.infrastructure.gh_forum import GhForum
@@ -202,6 +204,10 @@ class Cli:
                 result = cls(process=LocalProcess(budgets=budgets), budgets=budgets).reset(
                     repo=arguments.repo, issue=arguments.issue
                 )
+            case Subcommand.STATUS:
+                result = cls(process=LocalProcess(budgets=budgets), budgets=budgets).status(
+                    repo=arguments.repo, issue=arguments.issue
+                )
 
         return result
 
@@ -279,6 +285,13 @@ class Cli:
         )
         reset.add_argument("issue", type=int, help="number of the subissue to reset")
         reset.add_argument("--repo", required=True, help="repo of the issue the subissue belongs to")
+
+        status = subcommands.add_parser(
+            Subcommand.STATUS,
+            help="print one line per slice of an issue with its state, step, spend and pull request, reading only",
+        )
+        status.add_argument("issue", type=int, help="number of the parent issue whose slices are shown")
+        status.add_argument("--repo", required=True, help="repo of the issue, as `<org>/<repo>`")
 
         return parser
 
@@ -460,6 +473,21 @@ class Cli:
             f"subissue #{issue} was reset to `{reset.subissue.label}`; the branch `{reset.subissue.branch}` and "
             "the working tree were left untouched"
         )
+
+        return ExitCode.OK
+
+    def status(self, *, repo: str, issue: int) -> int:
+        gh_call = self._gh_call(clock=SystemClock())
+        try:
+            statuses = ShowFeatureStatus(repository=GhRunRepository(call=gh_call), forum=GhForum(call=gh_call)).execute(
+                ShowFeatureStatusParams(repo=repo, issue=issue)
+            )
+        except (LaggingSearchIndexError, UnreadableIssueError, UnreadableForumError) as error:
+            return self._reported(f"the status of the feature could not be read: {error}", ExitCode.USAGE_ERROR)
+        except GhCommandFailedError as error:
+            return self._reported(f"the status of the feature could not be read: {error}", ExitCode.RUN_INTERRUPTED)
+
+        print(FeatureStatusReport(statuses=statuses).rendered())
 
         return ExitCode.OK
 

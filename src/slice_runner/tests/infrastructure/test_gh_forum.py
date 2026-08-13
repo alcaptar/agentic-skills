@@ -4,6 +4,7 @@ import json
 
 import pytest
 
+from slice_runner.domain.branch_pull_request import BranchPullRequest
 from slice_runner.domain.exceptions import UnreadableForumError
 from slice_runner.domain.pull_request_mergeability import PullRequestMergeability
 from slice_runner.domain.pull_request_state import PullRequestState
@@ -16,6 +17,7 @@ from slice_runner.tests.mothers.gh_response_mother import GhResponseMother
 
 _REPO = "alcaptar/agentic-skills"
 _BRANCH = "slice/05-prechecks-deterministas"
+_OTHER_BRANCH = "slice/06-pausa-de-alineacion"
 _BASE = "master"
 _TITLE = "feat(entrega-de-la-slice): commitear solo lo juzgado y abrir la pull request"
 _BODY = "## Intencion\nsin esto el programa verifica y no entrega\n\nCloses #46\n"
@@ -93,6 +95,63 @@ class TestGhForumLookingForThePullRequestOfAResumedRun:
 
         with pytest.raises(GhCommandFailedError, match="Could not resolve"):
             GhForum(call=GhCallDoubles.wired(process)).any_pull_request(repo=_REPO, branch=_BRANCH)
+
+
+class TestGhForumListingThePullRequestsOfSeveralBranchesAtOnce:
+    def test_it_asks_gh_for_every_open_pull_request_of_the_repo_in_a_single_call(self) -> None:
+        process = ScriptedProcess(ProcessOutput(code=0, stdout="[]", stderr=""))
+
+        GhForum(call=GhCallDoubles.wired(process)).open_pull_requests(repo=_REPO, branches=(_BRANCH,))
+
+        argv = Argv(process.calls[0].argv)
+        assert process.calls[0].argv[:3] == ["gh", "pr", "list"]
+        assert argv.value_of("--repo") == _REPO
+        assert argv.value_of("--state") == "open"
+        assert argv.value_of("--json") == "number,headRefName"
+        assert not argv.contains("--head")
+        assert len(process.calls) == 1
+
+    def test_only_the_branches_asked_for_come_back_matched_to_their_pull_request(self) -> None:
+        process = ScriptedProcess(
+            ProcessOutput(
+                code=0,
+                stdout=json.dumps(
+                    [{"number": 47, "headRefName": _BRANCH}, {"number": 48, "headRefName": "slice/09-otra"}]
+                ),
+                stderr="",
+            )
+        )
+
+        result = GhForum(call=GhCallDoubles.wired(process)).open_pull_requests(
+            repo=_REPO, branches=(_BRANCH, _OTHER_BRANCH)
+        )
+
+        assert result == (BranchPullRequest(branch=_BRANCH, number=47),)
+
+    def test_a_branch_with_no_open_pull_request_is_simply_absent_instead_of_carrying_a_none(self) -> None:
+        process = ScriptedProcess(ProcessOutput(code=0, stdout="[]", stderr=""))
+
+        result = GhForum(call=GhCallDoubles.wired(process)).open_pull_requests(repo=_REPO, branches=(_BRANCH,))
+
+        assert result == ()
+
+    def test_a_non_zero_exit_raises_with_the_stderr_it_carried(self) -> None:
+        process = ScriptedProcess(ProcessOutput(code=1, stdout="", stderr="GraphQL: Could not resolve to a Repository"))
+
+        with pytest.raises(GhCommandFailedError, match="Could not resolve"):
+            GhForum(call=GhCallDoubles.wired(process)).open_pull_requests(repo=_REPO, branches=(_BRANCH,))
+
+    def test_a_response_that_is_not_json_is_rejected_instead_of_crashing_on_a_decode_error(self) -> None:
+        process = ScriptedProcess(ProcessOutput(code=0, stdout="not json at all", stderr=""))
+
+        with pytest.raises(UnreadableForumError):
+            GhForum(call=GhCallDoubles.wired(process)).open_pull_requests(repo=_REPO, branches=(_BRANCH,))
+
+    def test_a_response_that_is_not_an_array_is_rejected_too(self) -> None:
+        process = ScriptedProcess(ProcessOutput(code=0, stdout=json.dumps({"number": 47}), stderr=""))
+
+        with pytest.raises(UnreadableForumError):
+            GhForum(call=GhCallDoubles.wired(process)).open_pull_requests(repo=_REPO, branches=(_BRANCH,))
 
 
 class TestGhForumOpeningTheSlicePullRequest:
