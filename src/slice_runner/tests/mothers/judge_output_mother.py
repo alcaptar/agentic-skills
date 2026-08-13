@@ -63,6 +63,12 @@ class HarnessEnvelopeMother:
         return (cls._DIRECTORY / f"{name}.jsonl").read_text(encoding="utf-8")
 
     @classmethod
+    def streamed_then_a_background_task_ends(cls, name: str = "implementer-streamed") -> str:
+        notification = json.dumps({"task_id": "b5wtvyehs", "tool_use_id": "toolu_01ABC", "status": "completed"})
+
+        return f"{cls.streamed(name).rstrip()}\n{notification}\n"
+
+    @classmethod
     def carrying(cls, verdict: dict[str, object], *, recorded: str = "full-recipe") -> dict[str, object]:
         return cls.recorded(recorded) | {"structured_output": verdict}
 
