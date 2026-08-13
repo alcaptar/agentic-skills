@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING, ClassVar
 
 from slice_runner.domain.pull_request_writer import PullRequestWriter
 from slice_runner.infrastructure.pull_request_body import PullRequestBody
+from slice_runner.infrastructure.slice_commit_message import SliceCommitMessage
 
 if TYPE_CHECKING:
     from slice_runner.domain.finding import Finding
@@ -22,6 +23,9 @@ class SlicePullRequest(PullRequestWriter):
 
     def title(self, subissue: SubIssue) -> str:
         return f"{self.COMMIT_TYPE}({subissue.name}): {subissue.summary}"
+
+    def commit_message(self, subissue: SubIssue) -> str:
+        return SliceCommitMessage(subject=self.title(subissue)).rendered()
 
     def body(self, subissue: SubIssue, *, debt: tuple[str, ...], findings: tuple[Finding, ...]) -> str:
         return PullRequestBody(

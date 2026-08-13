@@ -197,12 +197,12 @@ class GhRunRepository(RunRepository):
         ]
         self._edit_with_label_fallback(argv, repo=repo, issue=issue, add=IssueLabel.AWAITING_ALIGNMENT)
 
-    def flag_draft_pull_request(self, *, repo: str, issue: int, pull_request: int) -> None:
+    def flag_unmerged_pull_request(self, *, repo: str, issue: int, pull_request: int) -> None:
         self._run(
             ["gh", "issue", "comment", str(issue), "--repo", repo, "--body-file", "-"],
             stdin=AutomationMark.appended_to(
-                f"La pull request #{pull_request} nace en borrador (`--draft`); hay que sacarla de "
-                "borrador para que el merge pueda ocurrir."
+                f"La espera del merge se agoto con la pull request #{pull_request} sin fusionar. Si esta en "
+                "borrador, sacala: en borrador el merge no puede ocurrir."
             ),
             safe_to_repeat=False,
         )

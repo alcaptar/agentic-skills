@@ -121,7 +121,7 @@ sola al mergear.
 
 | Pieza | Que es | Para que |
 |---|---|---|
-| `skills/slice-spec/SKILL.md` | Skill de autoria | Convierte una idea en una spec bien formada y **crea el issue padre mas una subissue por slice**. Envuelve `superpowers:brainstorming` para el diseno; el troceo lo lleva su propio cerebro (`skills/slice-spec/references/slicing.md`). Modo `validate` para auditar una spec existente. No escribe codigo. |
+| `skills/slice-spec/SKILL.md` | Skill de autoria | Convierte una idea en una spec bien formada y **crea el issue padre mas una subissue por slice**. Envuelve `superpowers:brainstorming` para el diseno; el troceo lo lleva su propio cerebro (`skills/slice-spec/references/slicing.md`), que saca delante el **contrato de toda frontera** porque es lo que deja construir productor y consumidor a la vez. Cierra proponiendo **que slices pueden correr en paralelo** y, confirmado, monta un worktree por slice y lanza sus runs. Modo `validate` para auditar una spec existente. No escribe codigo. |
 | `skills/deploy-watch/SKILL.md` | Skill de post-merge | Vigila el despliegue en produccion, read-only. Orquesta por tick las skills de observabilidad que haya (Prometheus, Elasticsearch, logs de Google Cloud, Sentry...) segun el radio de impacto del cambio. Nunca ejecuta rollback: lo redacta. |
 | `skills/slice-runner/scripts/discover_controles.py` / `discover_conventions.py` | Helpers de descubrimiento | Los usa `slice-spec` para **proponer** los controles y las fuentes de convencion del repo. Descubren y no deciden: confirma la persona. |
 | `skills/slice-runner/scripts/metrics.py` | Reporte de la telemetria | Agrega `~/.claude/slice-runner/metrics.jsonl` (veredicto, reintentos de controles / de verificacion / de integracion continua, descartes del juez) para decidir cuando subir de nivel de autonomia. El programa escribe esa fila el mismo, sin lanzar este script (`src/slice_runner/infrastructure/local_metrics_log.py`); este script solo la agrega. |
@@ -248,7 +248,7 @@ El codigo de salida es el contrato con quien lo invoca:
 | `3` | No hay nada que juzgar: el indice esta vacio (¿falto el `git add`?) |
 | `4` | Error de uso: el repo o la base no resuelven, falta un argumento, el issue o el estado que se quiere leer no se pueden leer, `read` no encuentra la conversacion pedida, o el rastro/registro durable que `read` o `spend` leen trae una linea corrupta |
 | `5` | `run`: la slice cerro **sin** mergear (controles, juez, integracion continua o presupuesto). Hay que mirar el issue; reinvocar sin tocar nada repite el cierre |
-| `7` | `run`: se agoto la espera con el run todavia abierto -pausa de alineacion, integracion continua o merge-. Reinvocar es exactamente lo que toca, salvo esperando el merge: ahi la pull request nace en borrador (`--draft`) y reinvocar no la saca de ahi -hay que sacarla a mano-, y tanto la salida como un comentario en la subissue lo dicen |
+| `7` | `run`: se agoto la espera con el run todavia abierto -pausa de alineacion, integracion continua o merge-. Reinvocar es exactamente lo que toca. Esperando el merge, ademas, un comentario en la subissue dice que la pull request quedo sin fusionar y recuerda que en borrador el merge no puede ocurrir |
 | `8` | `run`: los prechecks pararon la invocacion antes de tocar codigo |
 | `9` | `run`: el issue no tiene ninguna slice ejecutable (todas cerradas, bloqueadas o abortadas) |
 | `10` | `run`: el run se interrumpio antes de llegar a una parada -`gh` o `git` fallaron, el foro contesto algo ilegible, el registro durable no se pudo escribir-. El estado persistido sigue siendo bueno. Cualquier subcomando sale con este mismo codigo ante una excepcion que el programa no sabe nombrar, con su tipo y su mensaje por `stderr` en vez de un volcado de la pila |
@@ -260,8 +260,8 @@ El codigo de salida es el contrato con quien lo invoca:
 `1` es un veredicto y `2` no lo es: esa es la distincion que hace el codigo de salida y que un booleano
 perderia. Del `5` en adelante la pregunta es otra -¿que hace quien invoca ahora?-, y por eso hay un codigo
 por decision y no uno por excepcion: **cada fila de la tabla dice si reinvocar sirve o no**, que es lo
-unico que quien automatiza necesita saber. El `7` esperando el merge es la excepcion dentro del propio
-codigo: la pull request nace en borrador, asi que reinvocar sin sacarla de ahi repite la misma espera.
+unico que quien automatiza necesita saber. Y reinvocar tras un `7` sirve **siempre**: la pull request nace
+lista para revisar y asignada a quien conduce, asi que lo unico que falta es la decision de una persona.
 
 ### La secuencia y los presupuestos, interrogables sin montar un run
 

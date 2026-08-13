@@ -11,6 +11,17 @@ class TestSlicePullRequest:
 
         assert title == "feat(prechecks-deterministas): comprobar antes de tocar codigo"
 
+    def test_the_commit_message_opens_with_that_same_title_so_the_subject_line_stays_conventional(self) -> None:
+        message = SlicePullRequest().commit_message(SubIssueMother.pending())
+
+        assert message.splitlines()[0] == SlicePullRequest().title(SubIssueMother.pending())
+
+    def test_the_commit_message_credits_claude_as_co_author_because_a_harness_wrote_the_code(self) -> None:
+        message = SlicePullRequest().commit_message(SubIssueMother.pending())
+
+        assert message.endswith("Co-Authored-By: Claude <noreply@anthropic.com>")
+        assert message.splitlines()[1] == ""
+
     def test_the_body_carries_the_intention_a_confirmation_of_the_criteria_and_the_signal_the_subissue_declared(
         self,
     ) -> None:

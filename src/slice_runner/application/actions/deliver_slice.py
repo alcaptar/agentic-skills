@@ -18,6 +18,7 @@ class DeliverSliceParams:
     branch: str
     base: str
     title: str
+    commit_message: str
     body: str
 
 
@@ -36,7 +37,7 @@ class DeliverSlice:
                 f"the commit and the pull request would land on different branches"
             )
 
-        self._workspace.commit(worktree=params.worktree, message=params.title)
+        self._workspace.commit(worktree=params.worktree, message=params.commit_message)
         self._workspace.push(worktree=params.worktree, branch=params.branch)
 
         already_open = self._forum.open_pull_request(repo=params.repo, branch=params.branch)

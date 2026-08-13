@@ -1064,11 +1064,11 @@ class TestPausingForAlignment:
         assert len(process.calls) == 1
 
 
-class TestFlaggingADraftPullRequest:
-    def test_the_call_is_a_comment_naming_the_pull_request_and_that_it_is_still_a_draft(self) -> None:
+class TestFlaggingAPullRequestLeftUnmerged:
+    def test_the_call_is_a_comment_naming_the_pull_request_left_unmerged(self) -> None:
         process = ScriptedProcess(ProcessOutput(code=0, stdout="", stderr=""))
 
-        GhRunRepository(call=GhCallDoubles.wired(process)).flag_draft_pull_request(
+        GhRunRepository(call=GhCallDoubles.wired(process)).flag_unmerged_pull_request(
             repo=_REPO, issue=45, pull_request=61
         )
 
@@ -1079,7 +1079,7 @@ class TestFlaggingADraftPullRequest:
     def test_the_comment_carries_the_visible_automation_mark(self) -> None:
         process = ScriptedProcess(ProcessOutput(code=0, stdout="", stderr=""))
 
-        GhRunRepository(call=GhCallDoubles.wired(process)).flag_draft_pull_request(
+        GhRunRepository(call=GhCallDoubles.wired(process)).flag_unmerged_pull_request(
             repo=_REPO, issue=45, pull_request=61
         )
 
@@ -1089,7 +1089,7 @@ class TestFlaggingADraftPullRequest:
         process = ScriptedProcess(ProcessOutput(code=1, stdout="", stderr="HTTP 422: Unprocessable Entity"))
 
         with pytest.raises(GhCommandFailedError, match="HTTP 422"):
-            GhRunRepository(call=GhCallDoubles.wired(process)).flag_draft_pull_request(
+            GhRunRepository(call=GhCallDoubles.wired(process)).flag_unmerged_pull_request(
                 repo=_REPO, issue=45, pull_request=61
             )
 

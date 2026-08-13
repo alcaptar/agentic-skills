@@ -104,7 +104,7 @@ class TestGhForumOpeningTheSlicePullRequest:
             repo=_REPO, branch=_BRANCH, base=_BASE, title=_TITLE, body=_BODY
         )
 
-    def test_it_asks_gh_for_a_draft_of_this_branch_against_this_base(self) -> None:
+    def test_it_asks_gh_for_a_pull_request_of_this_branch_against_this_base(self) -> None:
         process = self._created()
 
         self._create(process)
@@ -115,7 +115,20 @@ class TestGhForumOpeningTheSlicePullRequest:
         assert argv.value_of("--base") == _BASE
         assert argv.value_of("--head") == _BRANCH
         assert argv.value_of("--title") == _TITLE
-        assert argv.contains("--draft")
+
+    def test_it_is_born_ready_for_review_because_a_draft_is_a_pull_request_nobody_is_asked_to_merge(self) -> None:
+        process = self._created()
+
+        self._create(process)
+
+        assert not Argv(process.calls[0].argv).contains("--draft")
+
+    def test_it_is_assigned_to_whoever_gh_is_authenticated_as_so_it_lands_in_their_own_list(self) -> None:
+        process = self._created()
+
+        self._create(process)
+
+        assert Argv(process.calls[0].argv).value_of("--assignee") == "@me"
 
     def test_the_body_travels_by_stdin_so_no_shell_has_to_survive_its_markdown(self) -> None:
         process = self._created()
