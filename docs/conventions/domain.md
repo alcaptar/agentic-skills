@@ -120,6 +120,20 @@ uno esta en `docs/design-notes.md`**: aqui va la regla que los gobierna, no la m
   merge, y un `gh` colgado tarda en morir lo mismo que una suite entera.
 - **El tope de espera acota la invocacion, no el run.** Agotarlo **no cierra** nada: deja el run abierto y
   persistido en su paso, diciendo que reinvocar es justo lo que toca.
+- **La espera tiene dos topes, y eso no rompe el bullet de arriba: lo aplica.** Esperar a la integracion
+  continua y esperar a una persona **no son el mismo concepto**, aunque los dos se midan en segundos y
+  durante un tiempo compartieran numero. A la CI se la espera porque **esta trabajando**, y su tope existe
+  para cazarla **colgada**: media hora es de sobra, y pasado eso el numero ya no dice "ten paciencia" sino
+  "algo va mal". A una persona se la espera porque **esta en otra cosa**, y ahi no hay nada que cazar: un
+  `-GO` que tarda media manana es el flujo funcionando, no una anomalia. Un solo numero obliga a elegir
+  entre no detectar nunca una CI colgada o matar runs sanos por ir a comer, y **elegia lo segundo**.
+- **Y el contador se reinicia en cada paso, que es lo que hace honestos a los dos topes.** Con un
+  acumulador unico para todo el run, **el ultimo que espera paga lo que gastaron los demas**: medido en la
+  slice-10 de este repo el 2026-08-13, 42 ticks esperando el `-GO` y 2 la CI dejaron **16** para el merge
+  -8 minutos de los 30-, y el run murio en `WAIT_EXHAUSTED` con la pull request sana y a punto de
+  mergearse. Nada de eso se leia en el tope: decia 30 minutos y entregaba 8, con el reparto dependiendo de
+  lo que una persona hubiera tardado antes. Un tope que solo se cumple si nadie se entretiene aguas arriba
+  no acota nada.
 - **El tope por llamada vive en `Budgets` aunque quien lo aplique sea un adaptador**, porque es el mismo
   tipo de dato que los demas: un numero medido con el que se acota una espera. Tenerlo aqui es lo que
   evita que cada adaptador se invente el suyo.
