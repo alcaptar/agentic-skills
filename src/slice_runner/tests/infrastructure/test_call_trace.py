@@ -24,7 +24,7 @@ _STAMP = datetime(2026, 8, 10, 12, 0, 0, tzinfo=UTC)
 class WrittenTrace:
     @staticmethod
     def records_under(root: Path) -> list[dict[str, object]]:
-        ledger = root / "slice-runner" / "trace" / "calls.jsonl"
+        ledger = root / "slice-runner" / "log" / "calls.jsonl"
 
         return [json.loads(line) for line in ledger.read_text(encoding="utf-8").splitlines()]
 
@@ -146,7 +146,7 @@ class TestFindingTheSessionOfAPastCall(WithTheTraceOutOfTheRealHome):
     def test_a_line_from_before_this_run_carried_identity_is_still_readable_and_never_matches_by_accident(
         self, tmp_path: Path
     ) -> None:
-        ledger = tmp_path / "slice-runner" / "trace" / "calls.jsonl"
+        ledger = tmp_path / "slice-runner" / "log" / "calls.jsonl"
         ledger.parent.mkdir(parents=True)
         ledger.write_text(
             json.dumps({"slice_id": HarnessCallMother.SLICE_ID, "step": "implement", "session": "old-session"}) + "\n",
@@ -163,7 +163,7 @@ class TestFindingTheSessionOfAPastCall(WithTheTraceOutOfTheRealHome):
         assert found == ()
 
     def test_a_line_that_is_not_json_is_refused_instead_of_being_skipped_in_silence(self, tmp_path: Path) -> None:
-        ledger = tmp_path / "slice-runner" / "trace" / "calls.jsonl"
+        ledger = tmp_path / "slice-runner" / "log" / "calls.jsonl"
         ledger.parent.mkdir(parents=True)
         ledger.write_text("not json\n", encoding="utf-8")
 
@@ -178,7 +178,7 @@ class TestFindingTheSessionOfAPastCall(WithTheTraceOutOfTheRealHome):
     def test_a_line_this_program_did_not_write_is_refused_instead_of_being_skipped_in_silence(
         self, tmp_path: Path
     ) -> None:
-        ledger = tmp_path / "slice-runner" / "trace" / "calls.jsonl"
+        ledger = tmp_path / "slice-runner" / "log" / "calls.jsonl"
         ledger.parent.mkdir(parents=True)
         ledger.write_text(json.dumps({"step": "implement"}) + "\n", encoding="utf-8")
 
@@ -247,4 +247,4 @@ class TestWhereTheTraceLives:
 
         LocalCallTrace(clock=WithTheTraceOutOfTheRealHome.frozen_at()).record(HarnessCallMother.of_the_judge())
 
-        assert (tmp_path / "never-used-before" / "slice-runner" / "trace" / "calls.jsonl").exists()
+        assert (tmp_path / "never-used-before" / "slice-runner" / "log" / "calls.jsonl").exists()

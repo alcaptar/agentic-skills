@@ -124,7 +124,7 @@ sola al mergear.
 | `skills/slice-spec/SKILL.md` | Skill de autoria | Convierte una idea en una spec bien formada y **crea el issue padre mas una subissue por slice**. Envuelve `superpowers:brainstorming` para el diseno; el troceo lo lleva su propio cerebro (`skills/slice-spec/references/slicing.md`), que saca delante el **contrato de toda frontera** porque es lo que deja construir productor y consumidor a la vez. Cierra proponiendo **que slices pueden correr en paralelo** y, confirmado, monta un worktree por slice y lanza sus runs. Modo `validate` para auditar una spec existente. No escribe codigo. |
 | `skills/deploy-watch/SKILL.md` | Skill de post-merge | Vigila el despliegue en produccion, read-only. Orquesta por tick las skills de observabilidad que haya (Prometheus, Elasticsearch, logs de Google Cloud, Sentry...) segun el radio de impacto del cambio. Nunca ejecuta rollback: lo redacta. |
 | `skills/slice-runner/scripts/discover_controles.py` / `discover_conventions.py` | Helpers de descubrimiento | Los usa `slice-spec` para **proponer** los controles y las fuentes de convencion del repo. Descubren y no deciden: confirma la persona. |
-| `skills/slice-runner/scripts/metrics.py` | Reporte de la telemetria | Agrega `~/.claude/slice-runner/metrics.jsonl` (veredicto, reintentos de controles / de verificacion / de integracion continua, descartes del juez) para decidir cuando subir de nivel de autonomia. El programa escribe esa fila el mismo, sin lanzar este script (`src/slice_runner/infrastructure/local_metrics_log.py`); este script solo la agrega. |
+| `skills/slice-runner/scripts/metrics.py` | Reporte de la telemetria | Agrega `~/.claude/slice-runner/log/metrics.jsonl` (veredicto, reintentos de controles / de verificacion / de integracion continua, descartes del juez) para decidir cuando subir de nivel de autonomia. El programa escribe esa fila el mismo, sin lanzar este script (`src/slice_runner/infrastructure/local_metrics_log.py`); este script solo la agrega. |
 | `skills/deploy-watch/scripts/deploy_core.py` | Nucleo puro | La decision go/no-go: umbrales relativos a baseline, confirmacion sostenida, scorecard, veredicto. La toma el codigo, no la impresion del agente. |
 | `skills/deploy-watch/references/monitoring.md`, `skills/slice-spec/references/slicing.md`, `skills/slice-spec/references/observabilidad.md` | Documentos de referencia | Conocimiento cargado bajo demanda: que senales mirar y como leerlas, como trocear, y como decidir la observabilidad de una slice. |
 | `src/slice_runner/` | Programa orquestador | El trozo del pipeline que ya **no** es un agente: `run` conduce una slice de punta a punta; `verify`, que calcula el diff de la slice, se lo pasa **dentro del prompt** al juez -invocado como una llamada sin estado, `claude -p` con el esquema del veredicto- y emite el veredicto por salida estandar con su codigo de salida (tabla en "El paso que ya es un programa"); `explain` contesta que paso viene despues de un resultado y cuando se agota un presupuesto, sin montar un run; y `read` abre la conversacion grabada de una llamada concreta. Cada llamada al harness deja su rastro en `src/slice_runner/infrastructure/local_call_trace.py` y cada veredicto de `verify` en `src/slice_runner/infrastructure/local_corpus.py`, los dos escritos fuera del repo (ver "El paso que ya es un programa"). Capas separadas (`domain/`, `application/`, `infrastructure/`) y tests co-localizados. El *por que* de esta forma esta en `docs/superpowers/specs/2026-07-31-orquestador-como-programa-design.md`. |
@@ -210,20 +210,30 @@ uv run slice-runner verify --repo . --base master --slice slice-01
 Juzga **lo que hay staged** contra el branch-point de la base -que es lo que sera el commit-, emite el
 veredicto como JSON por salida estandar y **cualquier motivo por el que no haya veredicto** por salida de
 error, nunca mezclados. Ademas escribe: cada verificacion anexa una linea a
-`~/.claude/slice-runner/corpus/verdicts.jsonl` -o al equivalente bajo `CLAUDE_CONFIG_DIR`- con el repo y el
-issue del run, el identificador de la slice, el diff juzgado, el veredicto entero, su conteo por severidad
-y cuando se escribio. Es un registro append-only, y vive **fuera del repo** para que ningun `git add` de la
-slice se lo lleve a la pull request. Un `verify` suelto -invocado sin que `run` este conduciendo ningun
-issue- escribe esa fila con el repo vacio y el issue a `0`: no hay identidad real que registrar fuera de
-un run conducido.
+`~/.claude/slice-runner/log/verdicts.jsonl` -o al equivalente bajo `CLAUDE_CONFIG_DIR`- con el repo y el
+issue del run, el identificador de la slice, el veredicto entero, su conteo por severidad y cuando se
+escribio; el diff juzgado se anexa aparte, a `~/.claude/slice-runner/log/diffs.jsonl`, unido a su fila por
+el mismo identificador de slice y la misma marca de tiempo -es lo que pesa, y separarlo es lo que deja
+contar hallazgos sin cargarlo-. Los dos son un registro append-only, y viven **fuera del repo** para que
+ningun `git add` de la slice se los lleve a la pull request. Un `verify` suelto -invocado sin que `run`
+este conduciendo ningun issue- escribe esas filas con el repo vacio y el issue a `0`: no hay identidad real
+que registrar fuera de un run conducido.
 
 Y **cada llamada al harness** -la que entiende, la que implementa y la que juzga- anexa su linea a
-`~/.claude/slice-runner/trace/calls.jsonl`, con el repo y el issue del run, la slice, el paso que servia, el
+`~/.claude/slice-runner/log/calls.jsonl`, con el repo y el issue del run, la slice, el paso que servia, el
 identificador de sesion de su conversacion y cuando se escribio. El repo y el issue son los que distinguen
 dos features que comparten el mismo identificador de slice -`slice-01` no es unico entre issues-, asi que
 una fila nunca se puede confundir con la de otro run. Es lo que permite abrir la conversacion de una llamada
 concreta -viven en `~/.claude/projects/`, una por sesion- sin adivinar por marcas de tiempo entre decenas de
 ficheros. Tambien append-only y tambien fuera del repo, y por el mismo motivo.
+
+Los cuatro almacenes durables del programa -`metrics.jsonl`, `calls.jsonl`, `spend.jsonl` y el par
+`verdicts.jsonl`/`diffs.jsonl`- viven bajo el mismo directorio y el mismo patron de nombre,
+`~/.claude/slice-runner/log/<concepto>.jsonl`: es el sitio a mirar para leer cualquiera de ellos junto, sin
+recordar que unos colgaban de la raiz y otros de `trace/` o `corpus/`. Cada uno declara su esquema con un
+`json_schema()` propio (`HarnessCallPayload`, `CallSpendPayload`, `MetricsEntryPayload`,
+`CorpusVerdictPayload`, `CorpusDiffPayload`), asi que que campos trae una fila se puede preguntar a un
+programa en vez de abrir el fichero.
 
 `read` es quien la abre:
 

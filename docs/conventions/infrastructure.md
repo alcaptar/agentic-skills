@@ -144,10 +144,10 @@ importar**: un smoke que solo importe el modulo lo da por bueno. Lo evita
   `~/.claude` expandido, con la variable vacia tratada como ausente). La comparte todo adaptador que
   necesite saber donde vive esa configuracion, porque lo que comparten no es una regla del programa sino
   **la convencion de Claude Code**: de ahi que viva en un objeto propio y no colgada de uno de los
-  adaptadores. **`LocalCorpus` se queda con su copia**, y eso es
-  deuda declarada y abierta, no precedente: migrarla obliga a renombrar la constante por la que **todos**
-  los tests que ejecutan una verificacion mantienen la suite fuera del home real, que es mas superficie
-  tocada de la que ha pedido ninguna slice; se hace entera cuando se toque ese adaptador, no a medias.
+  adaptadores. `LocalCorpus` tenia su propia copia de esa resolucion -deuda declarada mientras ningun otro
+  motivo tocaba ese adaptador-; se cerro migrandolo a `ClaudeConfig.root()` a la vez que se le daba
+  ubicacion propia (ver el bullet de los cuatro almacenes durables, mas abajo), que era el motivo que
+  faltaba.
 - **Un adaptador que escribe a disco fuera del camino de error no captura su `OSError`.** Sale del
   programa sin mapear, aunque eso colapse con un codigo de salida que significa otra cosa. Se acepta
   porque la alternativa es peor: **decidir aqui que hacer con el fallo de escritura seria inventar una
@@ -215,13 +215,33 @@ importar**: un smoke que solo importe el modulo lo da por bueno. Lo evita
   `tuple[dict[str, object], ...]` sin tipar cada elemento contra un `BaseModel`, y
   `GhCommentPayload.from_dict` proyecta a mano solo `body` antes de validar, igual que
   `TranscriptMessage.content`.
+- **Los cuatro almacenes durables viven bajo un mismo directorio y un mismo patron de nombre.**
+  `LocalMetricsLog.LEDGER`, `LocalCallTrace.LEDGER`, `LocalCallSpendLog.LEDGER` y las dos rutas de
+  `LocalCorpus` (`LEDGER` para los veredictos, `DIFF_LEDGER` para el diff que juzgo cada uno) resuelven
+  todas bajo `ClaudeConfig.root() / "slice-runner" / "log" / "<concepto>.jsonl"`. Antes no compartian ni
+  el directorio (`metrics.jsonl` colgaba de la raiz de `slice-runner/`, `calls.jsonl`/`spend.jsonl` de
+  `trace/`, `verdicts.jsonl` de `corpus/`) ni la forma de resolver esa raiz (`LocalCorpus` tenia su propia
+  copia de `ClaudeConfig`, ver el bullet de arriba); ahora un solo criterio contesta "donde vive esto" para
+  los cuatro, documentado tambien en la tabla de `README.md`.
+
+  **El corpus se parte en dos ficheros hermanos porque lo que pesa y lo que se consulta a menudo no son lo
+  mismo.** `CorpusEntryPayload` cargaba el diff entero de cada verificacion en la misma fila que su
+  veredicto, asi que contar hallazgos obligaba a leer megas de codigo que nadie iba a mirar.
+  `LocalCorpus.record` ahora escribe dos lineas por verificacion, con el mismo `slice_id` y el mismo `ts`
+  para poder unirlas: `CorpusVerdictPayload` (`slice_id`, `verdict`, `severity_counts`, `repo`, `issue`,
+  `ts`) en `verdicts.jsonl`, y `CorpusDiffPayload` (`slice_id`, `diff`, `repo`, `issue`, `ts`) en
+  `diffs.jsonl`. `test_corpus.py` mide que `verdicts.jsonl` nunca trae la clave `diff`.
+
+  **Los cinco payloads de estos almacenes declaran su esquema con `json_schema()`**, reusando
+  `JsonSchema.flat` igual que `VerdictPayload`: `HarnessCallPayload`, `CallSpendPayload`,
+  `MetricsEntryPayload`, `CorpusVerdictPayload` y `CorpusDiffPayload`. Es lo que deja preguntar que campos
+  trae una fila sin abrir el fichero.
 - **El registro durable lo escribe el programa el mismo, igual que el rastro, el gasto y el corpus, y su
-  vocabulario sigue duplicado a proposito.** `LocalMetricsLog` implementa el puerto `MetricsLog` con el
-  mismo patron que `LocalCallTrace`/`LocalCallSpendLog`/`LocalCorpus`: sin proceso externo, con
-  `ClaudeConfig.root()` para resolver la raiz y un payload de frontera (`MetricsEntryPayload`, en
-  `infrastructure/metrics_entry_payload.py`) que traduce el dominio a las claves en castellano del log
-  -el formato no se elige: **el fichero es durable y tiene historico escrito**, y `metrics.py` sigue
-  siendo quien lo agrega en `report`-. **El programa no delega esa escritura en un
+  vocabulario sigue duplicado a proposito, pero solo donde `metrics.py` lo necesita.** `LocalMetricsLog`
+  implementa el puerto `MetricsLog` con el mismo patron que `LocalCallTrace`/`LocalCallSpendLog`/
+  `LocalCorpus`: sin proceso externo, con `ClaudeConfig.root()` para resolver la raiz y un payload de
+  frontera (`MetricsEntryPayload`, en `infrastructure/metrics_entry_payload.py`) que traduce el dominio a
+  las claves del log. **El programa no delega esa escritura en un
   script fuera de su paquete**: hacerlo seria una dependencia fisica con codigo que no es referencia (ver
   `CLAUDE.md`). Consecuencia aceptada, y no
   cambia con el transporte: los vocabularios del cierre existen dos veces -en ingles dentro del programa
@@ -232,18 +252,34 @@ importar**: un smoke que solo importe el modulo lo da por bueno. Lo evita
   duplicacion la **mide** `test_metrics_bridge_contract.py`, que compara los conjuntos de ambos lados y
   ademas pasa la fila que construye el payload por el lector real del script (`Fila.from_row`): una clave
   renombrada solo se veria al cerrar una slice, que es justo el momento en que un fallo pierde la fila.
-- **`budgets` y `models_by_role` son la excepcion declarada de "un alias por campo", y el motivo es el
-  criterio que los trajo.** `MetricsEntryPayload.budgets`/`models_by_role`
+
+  **Solo lo que `metrics.py` lee por clave literal se queda en castellano; el resto habla el idioma del
+  codigo.** `Fila.from_row` fija ese contrato: `veredicto`, `ci`, `reintentos_implement`,
+  `reintentos_controles` (con `reintentos_puertas` como forma retirada), `reintentos_ci`,
+  `reintentos_verify`, `descartes_verify`, el grupo `harness` completo (`coste_usd`, `turnos`,
+  `duracion_ms`, `tokens_cache`), `descartes_verify_causa`, `ci_indeterminada_causa`, `modelos` y
+  `variante` son contrato del flujo viejo -sus alias se quedan como estaban, y tocarlos rompe
+  `test_metrics_bridge_contract.py`-. `findings`, `findings_of_the_last_round`, `correction_retries`,
+  `debt`, el grupo `diff` (`files_changed`/`lines_added`/`lines_deleted`), `budgets` y `models_by_role`
+  no los lee ese script, asi que ya no llevan `alias`: el campo se sirve con su propio nombre, que ya es
+  ingles. `MetricsLedgerRowPayload` -el lado que **relee** el log, en `metrics_ledger_entry.py`- tolera las
+  dos formas con `validation_alias=AliasChoices(nombre_ingles, alias_castellano_viejo)`, para que una fila
+  ya escrita con la forma vieja se siga agregando: `test_metrics_ledger_entry.py::TestToleratingHistory` lo
+  mide fila a fila. `SeverityCountPayload` (`infrastructure/corpus_verdict_payload.py`, compartida por
+  `findings`/`findings_of_the_last_round` de este payload y por `severity_counts` del corpus) sigue la
+  misma regla: escribe `high`/`medium`/`low` y tolera `alta`/`media`/`baja` en la lectura, porque
+  `metrics.py` tampoco mira dentro de ese grupo.
+- **`budgets` y `models_by_role` no llevan un `BaseModel` propio ni un `alias` por campo interno, y el
+  motivo es el criterio que los trajo.** `MetricsEntryPayload.budgets`/`models_by_role`
   (`infrastructure/metrics_entry_payload.py`) vuelcan `dataclasses.asdict(closed.budgets)`/
-  `asdict(closed.models)` en `dict[str, object]`, sin un `BaseModel` propio ni un `alias` por campo
-  interno, al contrario que el resto de esta clase, que nombra cada clave en castellano. La regla general
-  existe para que un contrato que cambia de forma rompa donde se declara; aqui se invierte a proposito,
-  porque el criterio que trajo esta fila pide justo lo contrario: que anadir un campo a `Budgets` o a
-  `RoleModels` (`docs/conventions/domain.md`) no obligue a tocar el registro. Nombrar cada campo aqui
-  volveria a acoplar la fila durable a la forma exacta de esos dos value objects, que es la dependencia
-  que el criterio prohibe. Las claves que llegan son las del dataclass en ingles (`control_retries`,
-  `slice_cost_usd`, `understand`...), sin traducir: es la misma lectura generica que `metrics.py._grupo`
-  ya hace con `harness`, que agrega cualquier `dict` anidado sin conocer sus claves.
+  `asdict(closed.models)` en `dict[str, object]`. La regla general existe para que un contrato que cambia
+  de forma rompa donde se declara; aqui se invierte a proposito, porque el criterio que trajo esta fila
+  pide justo lo contrario: que anadir un campo a `Budgets` o a `RoleModels` (`docs/conventions/domain.md`)
+  no obligue a tocar el registro. Nombrar cada campo aqui volveria a acoplar la fila durable a la forma
+  exacta de esos dos value objects, que es la dependencia que el criterio prohibe. Las claves que llegan
+  son las del dataclass en ingles (`control_retries`, `slice_cost_usd`, `understand`...), sin traducir: es
+  la misma lectura generica que `metrics.py._grupo` ya hace con `harness`, que agrega cualquier `dict`
+  anidado sin conocer sus claves.
 - **El programa no escribe ningun numero que no venga del harness.** Del sobre salen coste en dolares,
   turnos y duracion, sumados por slice; `--duracion-s` (reloj de pared) y `--coste-tokens` **no se pasan**,
   porque no son dato del harness: hay puerto de reloj (`Clock.now`, que sella cada evento del run), pero lo

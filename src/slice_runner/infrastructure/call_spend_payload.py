@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING, Self
 
 from slice_runner.domain.exceptions import UnreadableCallSpendLogError
 from slice_runner.infrastructure.contract_model import ContractModel
+from slice_runner.infrastructure.json_schema import JsonSchema
 from slice_runner.infrastructure.spend_payload import SpendPayload
 
 if TYPE_CHECKING:
@@ -16,6 +17,10 @@ class CallSpendPayload(ContractModel):
     repo: str | None = None
     issue: int | None = None
     ts: str | None = None
+
+    @classmethod
+    def json_schema(cls) -> dict[str, object]:
+        return JsonSchema.flat(cls)
 
     @classmethod
     def from_call(cls, call: HarnessCallSpend, *, ts: str) -> Self:

@@ -28,7 +28,7 @@ _STAMP = datetime(2026, 8, 10, 12, 0, 0, tzinfo=UTC)
 class WrittenLedger:
     @staticmethod
     def records_under(root: Path) -> list[dict[str, object]]:
-        ledger = root / "slice-runner" / "trace" / "spend.jsonl"
+        ledger = root / "slice-runner" / "log" / "spend.jsonl"
 
         return [json.loads(line) for line in ledger.read_text(encoding="utf-8").splitlines()]
 
@@ -157,7 +157,7 @@ class TestAddingUpTheSpendOfSomeSessions(WithTheLedgerOutOfTheRealHome):
         assert found == HarnessSpend.nothing()
 
     def test_a_line_from_before_this_run_carried_identity_is_still_summed_without_raising(self, tmp_path: Path) -> None:
-        ledger = tmp_path / "slice-runner" / "trace" / "spend.jsonl"
+        ledger = tmp_path / "slice-runner" / "log" / "spend.jsonl"
         ledger.parent.mkdir(parents=True)
         old_call = HarnessCallSpendMother.of_the_implementer()
         old_line = CallSpendPayload.from_call(old_call, ts=_STAMP.isoformat()).model_dump(
@@ -170,7 +170,7 @@ class TestAddingUpTheSpendOfSomeSessions(WithTheLedgerOutOfTheRealHome):
         assert found == HarnessSpendMother.of_the_implementer_call()
 
     def test_a_line_that_is_not_json_is_refused_instead_of_being_skipped_in_silence(self, tmp_path: Path) -> None:
-        ledger = tmp_path / "slice-runner" / "trace" / "spend.jsonl"
+        ledger = tmp_path / "slice-runner" / "log" / "spend.jsonl"
         ledger.parent.mkdir(parents=True)
         ledger.write_text("not json\n", encoding="utf-8")
 
@@ -180,7 +180,7 @@ class TestAddingUpTheSpendOfSomeSessions(WithTheLedgerOutOfTheRealHome):
     def test_a_line_this_program_did_not_write_is_refused_instead_of_being_skipped_in_silence(
         self, tmp_path: Path
     ) -> None:
-        ledger = tmp_path / "slice-runner" / "trace" / "spend.jsonl"
+        ledger = tmp_path / "slice-runner" / "log" / "spend.jsonl"
         ledger.parent.mkdir(parents=True)
         ledger.write_text(json.dumps({"session": "some-session"}) + "\n", encoding="utf-8")
 
@@ -258,4 +258,4 @@ class TestWhereTheLedgerLives:
 
         LocalCallSpendLog(clock=WithTheLedgerOutOfTheRealHome.frozen_at()).record(HarnessCallSpendMother.of_the_judge())
 
-        assert (tmp_path / "never-used-before" / "slice-runner" / "trace" / "spend.jsonl").exists()
+        assert (tmp_path / "never-used-before" / "slice-runner" / "log" / "spend.jsonl").exists()

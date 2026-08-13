@@ -20,7 +20,7 @@ if TYPE_CHECKING:
 
 
 class LocalMetricsLog(MetricsLog):
-    LEDGER: ClassVar[tuple[str, ...]] = ("slice-runner", "metrics.jsonl")
+    LEDGER: ClassVar[tuple[str, ...]] = ("slice-runner", "log", "metrics.jsonl")
 
     def __init__(self, *, clock: Clock) -> None:
         self._clock = clock

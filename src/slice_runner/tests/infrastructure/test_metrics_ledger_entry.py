@@ -1,18 +1,25 @@
 from __future__ import annotations
 
+from dataclasses import asdict
 from datetime import UTC, datetime
 
 import pytest
 
+from slice_runner.domain.budgets import Budgets
 from slice_runner.domain.ci_indeterminate_cause import CiIndeterminateCause
 from slice_runner.domain.diff_stats import DiffStats
 from slice_runner.domain.discard_cause import DiscardCause
 from slice_runner.domain.exceptions import UnreadableMetricsLogError
+from slice_runner.domain.role_models import RoleModels
 from slice_runner.domain.run_state import RunState
+from slice_runner.domain.severity import Severity
+from slice_runner.domain.severity_count import SeverityCount
 from slice_runner.infrastructure.metrics_entry_payload import MetricsEntryPayload
 from slice_runner.infrastructure.metrics_ledger_entry import MetricsLedgerEntry
 from slice_runner.tests.mothers.closed_slice_mother import ClosedSliceMother
 from slice_runner.tests.mothers.harness_spend_mother import HarnessSpendMother
+from slice_runner.tests.mothers.run_mother import RunMother
+from slice_runner.tests.mothers.verdict_mother import FindingMother
 
 _STAMP = datetime(2026, 8, 10, 12, 0, 0, tzinfo=UTC)
 
@@ -120,8 +127,8 @@ class TestReadingBackARowThisProgramWrote:
         record = MetricsLedgerEntry.read(row)
 
         assert record is not None
-        assert record.budgets == row["presupuestos"]
-        assert record.models_by_role == row["modelos_por_papel"]
+        assert record.budgets == row["budgets"]
+        assert record.models_by_role == row["models_by_role"]
 
 
 class TestToleratingHistory:
@@ -150,12 +157,89 @@ class TestToleratingHistory:
         self,
     ) -> None:
         row = MetricsEntryPayload.from_domain(ClosedSliceMother.merged(), ts=_STAMP.isoformat()).to_contract()
-        del row["deuda"]
+        del row["debt"]
 
         record = MetricsLedgerEntry.read(row)
 
         assert record is not None
         assert record.debt == 0
+
+    def test_the_old_spanish_key_for_debt_is_still_read_into_the_same_field(self) -> None:
+        row = MetricsEntryPayload.from_domain(
+            ClosedSliceMother.merged_leaving_out("no cubri el binario", "falta el caso de rename"),
+            ts=_STAMP.isoformat(),
+        ).to_contract()
+        row["deuda"] = row.pop("debt")
+
+        record = MetricsLedgerEntry.read(row)
+
+        assert record is not None
+        assert record.debt == 2
+
+    def test_the_old_spanish_key_for_correction_retries_is_still_read_into_the_same_field(self) -> None:
+        row = MetricsEntryPayload.from_domain(
+            ClosedSliceMother.merged_after_going_back_for_every_reason(), ts=_STAMP.isoformat()
+        ).to_contract()
+        row["reintentos_correcciones"] = row.pop("correction_retries")
+
+        record = MetricsLedgerEntry.read(row)
+
+        assert record is not None
+        assert record.correction_retries == RunMother.that_went_back_for_every_reason().correction_retries
+
+    def test_the_old_spanish_keys_for_the_findings_groups_are_still_read_into_the_same_fields(self) -> None:
+        row = MetricsEntryPayload.from_domain(
+            ClosedSliceMother.vetoed_over(FindingMother.without_line(severity=Severity.HIGH)),
+            ts=_STAMP.isoformat(),
+        ).to_contract()
+        row["hallazgos"] = row.pop("findings")
+        row["hallazgos_ronda_final"] = row.pop("findings_of_the_last_round")
+
+        record = MetricsLedgerEntry.read(row)
+
+        assert record is not None
+        assert record.findings == SeverityCount(high=1, medium=0, low=0)
+
+    def test_the_old_spanish_keys_for_the_diff_group_are_still_read_into_the_same_fields(self) -> None:
+        stats = DiffStats(files_changed=4, lines_added=51, lines_deleted=9)
+        row = MetricsEntryPayload.from_domain(
+            ClosedSliceMother.merged_measuring_the_diff(stats), ts=_STAMP.isoformat()
+        ).to_contract()
+        assert isinstance(row["diff"], dict)
+        row["diff"] = {
+            "ficheros": row["diff"]["files_changed"],
+            "lineas_anadidas": row["diff"]["lines_added"],
+            "lineas_borradas": row["diff"]["lines_deleted"],
+        }
+
+        record = MetricsLedgerEntry.read(row)
+
+        assert record is not None
+        assert record.diff == stats
+
+    def test_the_old_spanish_key_for_budgets_is_still_read_into_the_same_field(self) -> None:
+        budgets = Budgets(slice_cost_usd=12.5, verify_retries=4)
+        row = MetricsEntryPayload.from_domain(
+            ClosedSliceMother.merged_with_config(budgets=budgets), ts=_STAMP.isoformat()
+        ).to_contract()
+        row["presupuestos"] = row.pop("budgets")
+
+        record = MetricsLedgerEntry.read(row)
+
+        assert record is not None
+        assert record.budgets == asdict(budgets)
+
+    def test_the_old_spanish_key_for_models_by_role_is_still_read_into_the_same_field(self) -> None:
+        models = RoleModels(understand="haiku", implement="opus")
+        row = MetricsEntryPayload.from_domain(
+            ClosedSliceMother.merged_with_config(models=models), ts=_STAMP.isoformat()
+        ).to_contract()
+        row["modelos_por_papel"] = row.pop("models_by_role")
+
+        record = MetricsLedgerEntry.read(row)
+
+        assert record is not None
+        assert record.models_by_role == {"understand": "haiku", "implement": "opus"}
 
     def test_a_row_without_a_timestamp_cannot_be_placed_in_a_range_and_is_skipped(self) -> None:
         row = MetricsEntryPayload.from_domain(ClosedSliceMother.merged(), ts=_STAMP.isoformat()).to_contract()
