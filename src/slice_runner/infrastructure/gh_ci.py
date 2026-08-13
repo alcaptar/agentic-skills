@@ -9,7 +9,7 @@ from slice_runner.domain.exceptions import CiCommandFailedError, UnreadableCiErr
 from slice_runner.infrastructure.gh_check_payload import GhCheckPayload
 
 if TYPE_CHECKING:
-    from slice_runner.infrastructure.process import Process
+    from slice_runner.infrastructure.gh_call import GhCall
 
 
 class GhCi(Ci):
@@ -19,16 +19,16 @@ class GhCi(Ci):
     OK_BUCKETS: ClassVar[frozenset[str]] = frozenset({PASSED_BUCKET, "skipping"})
     KNOWN_BUCKETS: ClassVar[frozenset[str]] = RED_BUCKETS | OK_BUCKETS | frozenset({PENDING_BUCKET})
 
-    def __init__(self, *, process: Process) -> None:
-        self._process = process
+    def __init__(self, *, call: GhCall) -> None:
+        self._call = call
 
     def status(self, *, repo: str, pull_request: int) -> CiStatus:
         argv = ["gh", "pr", "checks", str(pull_request), "--repo", repo, "--json", "name,bucket"]
-        output = self._process.run(argv, stdin="")
-        if output.code != 0 and output.stderr:
-            raise CiCommandFailedError(f"gh pr checks failed for {repo}#{pull_request}: {output.stderr.strip()}")
+        outcome = self._call.run(argv, stdin="", safe_to_repeat=True)
+        if outcome.output.code != 0 and outcome.output.stderr:
+            raise CiCommandFailedError(f"gh pr checks failed for {repo}#{pull_request}: {outcome.reason}")
 
-        return self._classified(self._checks(output.stdout))
+        return self._classified(self._checks(outcome.output.stdout))
 
     @classmethod
     def _checks(cls, stdout: str) -> list[GhCheckPayload]:

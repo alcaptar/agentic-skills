@@ -49,6 +49,7 @@ from slice_runner.domain.exceptions import (
     UnreadableRunError,
     UnresolvableRepoOrBaseError,
 )
+from slice_runner.domain.gh_retry_policy import GhRetryPolicy
 from slice_runner.domain.halt import Halt
 from slice_runner.domain.role_models import RoleModels
 from slice_runner.domain.state_machine import StateMachine
@@ -61,6 +62,7 @@ from slice_runner.infrastructure.conducted_slice_payload import ConductedSlicePa
 from slice_runner.infrastructure.conversation_report import ConversationReport
 from slice_runner.infrastructure.conversation_tool_use_recorder import ConversationToolUseRecorder
 from slice_runner.infrastructure.exit_code import ExitCode
+from slice_runner.infrastructure.gh_call import GhCall
 from slice_runner.infrastructure.gh_ci import GhCi
 from slice_runner.infrastructure.gh_forum import GhForum
 from slice_runner.infrastructure.gh_run_repository import GhCommandFailedError, GhRunRepository
@@ -338,7 +340,7 @@ class Cli:
     def doctor(self, *, repo: str | None = None, worktree: str | None = None, base: str | None = None) -> int:
         readiness = CheckReadiness(
             toolbox=LocalToolbox(process=self._process),
-            forum=GhForum(process=self._process),
+            forum=GhForum(call=self._gh_call(clock=SystemClock())),
             branches=GitBranches(process=self._process),
             skills=LocalSkillLibrary(),
             plugins=LocalPluginRegistry(),
@@ -375,11 +377,12 @@ class Cli:
                 return self._reported(f"the run stopped before reaching a halt: {error}", ExitCode.RUN_INTERRUPTED)
 
     def _conductor(self) -> ConductSlice:
-        repository = GhRunRepository(process=self._process)
-        branches = GitBranches(process=self._process)
-        forum = GhForum(process=self._process)
-        workspace = GitWorkspace(process=self._process)
         clock = SystemClock()
+        gh_call = self._gh_call(clock=clock)
+        repository = GhRunRepository(call=gh_call)
+        branches = GitBranches(process=self._process)
+        forum = GhForum(call=gh_call)
+        workspace = GitWorkspace(process=self._process)
         machine = StateMachine(budgets=self._budgets)
 
         return ConductSlice(
@@ -407,7 +410,7 @@ class Cli:
                 repository=repository,
                 branches=branches,
                 controls=LocalControlRunner(process=self._process),
-                ci=GhCi(process=self._process),
+                ci=GhCi(call=gh_call),
                 forum=forum,
                 clock=clock,
                 understanding=ClaudeUnderstanding(
@@ -424,6 +427,9 @@ class Cli:
             budgets=self._budgets,
             models=RoleModels(understand=UnderstandingInvocation.MODEL, implement=ImplementerInvocation.MODEL),
         )
+
+    def _gh_call(self, *, clock: Clock) -> GhCall:
+        return GhCall(process=self._process, policy=GhRetryPolicy(budgets=self._budgets), clock=clock)
 
     def _action(self, *, clock: Clock | None = None) -> VerifySlice:
         used = clock or SystemClock()
