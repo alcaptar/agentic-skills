@@ -20,6 +20,7 @@ from slice_runner.application.actions.implement_slice import ImplementSlice
 from slice_runner.application.actions.record_closure import RecordClosure
 from slice_runner.application.actions.record_step import RecordStep
 from slice_runner.application.actions.reopen_slice import ReopenSlice
+from slice_runner.application.actions.reset_slice import ResetSlice, ResetSliceParams
 from slice_runner.application.actions.stage_slice import StageSlice
 from slice_runner.application.actions.verify_slice import VerifySlice, VerifySliceParams
 from slice_runner.application.queries.check_readiness import CheckReadiness, CheckReadinessParams
@@ -41,6 +42,7 @@ from slice_runner.domain.exceptions import (
     MissingBranchError,
     NoConversationRecordedError,
     NoPullRequestError,
+    NoRecognizableSpecError,
     NoSliceLeftError,
     ProtectedBranchError,
     RunNotClosedError,
@@ -196,6 +198,10 @@ class Cli:
                     until=cls._parsed_date(arguments.until, default=SystemClock().now()),
                     out=arguments.out,
                 )
+            case Subcommand.RESET:
+                result = cls(process=LocalProcess(budgets=budgets), budgets=budgets).reset(
+                    repo=arguments.repo, issue=arguments.issue
+                )
 
         return result
 
@@ -266,6 +272,13 @@ class Cli:
         metrics.add_argument("--since", default=None, help="earliest date included, as `YYYY-MM-DD` (default: all)")
         metrics.add_argument("--until", default=None, help="latest date included, as `YYYY-MM-DD` (default: now)")
         metrics.add_argument("--out", type=Path, required=True, help="path where the HTML view is written")
+
+        reset = subcommands.add_parser(
+            Subcommand.RESET,
+            help="clear a subissue's persisted run and label it pending again, without touching git",
+        )
+        reset.add_argument("issue", type=int, help="number of the subissue to reset")
+        reset.add_argument("--repo", required=True, help="repo of the issue the subissue belongs to")
 
         return parser
 
@@ -429,6 +442,26 @@ class Cli:
         print(ReadinessReport(readiness=readiness).rendered())
 
         return ExitCode.OK if readiness.ready else ExitCode.ENVIRONMENT_NOT_READY
+
+    def reset(self, *, repo: str, issue: int) -> int:
+        clock = SystemClock()
+        repository = GhRunRepository(call=self._gh_call(clock=clock))
+        try:
+            subissue = repository.read_subissue(repo=repo, issue=issue)
+            reset = ResetSlice(repository=repository, clock=clock).execute(
+                ResetSliceParams(repo=repo, subissue=subissue)
+            )
+        except (UnreadableIssueError, UnreadableRunError, NoRecognizableSpecError) as error:
+            return self._reported(f"there is no spec to reset: {error}", ExitCode.USAGE_ERROR)
+        except GhCommandFailedError as error:
+            return self._reported(f"the reset could not be written: {error}", ExitCode.RUN_INTERRUPTED)
+
+        print(
+            f"subissue #{issue} was reset to `{reset.subissue.label}`; the branch `{reset.subissue.branch}` and "
+            "the working tree were left untouched"
+        )
+
+        return ExitCode.OK
 
     def _why_the_run_stopped(self, error: Exception) -> ExitCode:
         match error:

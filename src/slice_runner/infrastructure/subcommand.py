@@ -11,3 +11,4 @@ class Subcommand(StrEnum):
     SPEND = "spend"
     DOCTOR = "doctor"
     METRICS = "metrics"
+    RESET = "reset"

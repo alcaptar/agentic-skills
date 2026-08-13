@@ -26,6 +26,7 @@ from slice_runner.infrastructure.judge_invocation import JudgeInvocation
 from slice_runner.infrastructure.local_call_spend_log import LocalCallSpendLog
 from slice_runner.infrastructure.local_call_trace import LocalCallTrace
 from slice_runner.infrastructure.local_metrics_log import LocalMetricsLog
+from slice_runner.infrastructure.reset_comment import ResetComment
 from slice_runner.infrastructure.system_clock import SystemClock
 from slice_runner.infrastructure.understanding_invocation import UnderstandingInvocation
 from slice_runner.tests.argv import Argv
@@ -34,6 +35,7 @@ from slice_runner.tests.git_repo import Git
 from slice_runner.tests.mothers.closed_slice_mother import ClosedSliceMother
 from slice_runner.tests.mothers.conversation_transcript_mother import ConversationTranscriptMother
 from slice_runner.tests.mothers.gh_conversation_mother import GhConversationMother
+from slice_runner.tests.mothers.gh_response_mother import GhResponseMother
 from slice_runner.tests.mothers.harness_call_spend_mother import HarnessCallSpendMother
 from slice_runner.tests.mothers.harness_spend_mother import HarnessSpendMother
 from slice_runner.tests.mothers.judge_output_mother import HarnessEnvelopeMother, JudgeVerdictMother
@@ -1799,3 +1801,73 @@ class TestTheCommandThatChecksReadiness:
         printed = capsys.readouterr().out
         assert "ready" in printed
         assert "missing" in printed
+
+
+class TestTheCommandThatResetsASlice:
+    _REPO = "alcaptar/agentic-skills"
+    _ISSUE = 50
+
+    @classmethod
+    def _process(cls, *, view: dict[str, object] | None = None) -> AnsweringByArgv:
+        payload = view if view is not None else GhResponseMother.children_of_parent()[0]
+        body = payload["body"]
+        assert isinstance(body, str)
+
+        return AnsweringByArgv(
+            Answer(to=("view", "--json", "number,title,body,labels,state"), stdout=json.dumps(payload)),
+            Answer(to=("view", "--json", "body"), stdout=json.dumps({"body": body})),
+            Answer(to=("edit", "--body-file")),
+            Answer(to=("edit", "--add-label")),
+            Answer(to=("comment",)),
+        )
+
+    def test_it_exits_with_zero_and_declares_the_branch_and_the_working_tree_untouched(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        code = Cli(process=self._process(), budgets=Budgets()).reset(repo=self._REPO, issue=self._ISSUE)
+
+        assert code == ExitCode.OK
+        printed = capsys.readouterr().out
+        assert "slice/01-primera-de-prueba" in printed
+        assert "untouched" in printed
+
+    def test_the_label_write_removes_the_blocking_label_and_adds_pending(self) -> None:
+        process = self._process()
+
+        Cli(process=process, budgets=Budgets()).reset(repo=self._REPO, issue=self._ISSUE)
+
+        edit = next(call for call in process.calls if "--add-label" in call.argv)
+        assert Argv(edit.argv).value_of("--add-label") == "estado:pendiente"
+        assert Argv(edit.argv).value_of("--remove-label") == "estado:en-curso"
+
+    def test_the_execution_state_block_is_gone_from_the_body_it_writes_back(self) -> None:
+        process = self._process()
+
+        Cli(process=process, budgets=Budgets()).reset(repo=self._REPO, issue=self._ISSUE)
+
+        rewritten = next(call for call in process.calls if "--body-file" in call.argv)
+        assert "slice-runner:estado" not in rewritten.stdin
+
+    def test_a_comment_is_left_marking_the_reset(self) -> None:
+        process = self._process()
+
+        Cli(process=process, budgets=Budgets()).reset(repo=self._REPO, issue=self._ISSUE)
+
+        comment = next(call for call in process.calls if "comment" in call.argv)
+        assert ResetComment.MARKER in comment.stdin
+
+    def test_a_subissue_with_no_recognizable_spec_is_rejected_as_a_usage_error_writing_nothing(self) -> None:
+        bodiless = {"number": self._ISSUE, "title": "slice-01 (x): y", "body": "", "labels": [], "state": "OPEN"}
+        process = self._process(view=bodiless)
+
+        code = Cli(process=process, budgets=Budgets()).reset(repo=self._REPO, issue=self._ISSUE)
+
+        assert code == ExitCode.USAGE_ERROR
+        assert len(process.calls) == 1
+
+    def test_a_response_gh_cannot_read_is_reported_as_a_usage_error(self) -> None:
+        process = AnsweringByArgv(Answer(to=("view",), stdout="not json"))
+
+        code = Cli(process=process, budgets=Budgets()).reset(repo=self._REPO, issue=self._ISSUE)
+
+        assert code == ExitCode.USAGE_ERROR

@@ -79,6 +79,10 @@ class SubIssueMother:
         return replace(SubIssueMother.pending(), intention="")
 
     @staticmethod
+    def without_a_recognizable_spec() -> SubIssue:
+        return replace(SubIssueMother.pending(), intention="", criteria=())
+
+    @staticmethod
     def with_a_single_criterion() -> SubIssue:
         return replace(
             SubIssueMother.pending(),
