@@ -11,7 +11,7 @@ from slice_runner.domain.exceptions import UnreadableMetricsLogError
 from slice_runner.domain.recorded_spend import RecordedSpend
 from slice_runner.domain.severity_count import SeverityCount
 from slice_runner.infrastructure.contract_model import ContractModel
-from slice_runner.infrastructure.corpus_entry_payload import SeverityCountPayload
+from slice_runner.infrastructure.corpus_verdict_payload import SeverityCountPayload
 from slice_runner.infrastructure.metrics_entry_payload import (
     DiffStatsPayload,
     DurableCi,
@@ -39,23 +39,29 @@ class MetricsLedgerRowPayload(ContractModel):
     name: str | None = None
     verdict: DurableVerdict | None = Field(alias="veredicto", default=None)
     ci: DurableCi | None = None
-    findings: SeverityCountPayload | None = Field(alias="hallazgos", default=None)
-    findings_of_the_last_round: SeverityCountPayload | None = Field(alias="hallazgos_ronda_final", default=None)
+    findings: SeverityCountPayload | None = Field(validation_alias=AliasChoices("findings", "hallazgos"), default=None)
+    findings_of_the_last_round: SeverityCountPayload | None = Field(
+        validation_alias=AliasChoices("findings_of_the_last_round", "hallazgos_ronda_final"), default=None
+    )
     implement_retries: int = Field(alias="reintentos_implement", default=0)
     control_retries: int = Field(validation_alias=AliasChoices("reintentos_controles", "reintentos_puertas"), default=0)
     ci_retries: int = Field(alias="reintentos_ci", default=0)
     verify_retries: int = Field(alias="reintentos_verify", default=0)
-    correction_retries: int = Field(alias="reintentos_correcciones", default=0)
+    correction_retries: int = Field(
+        validation_alias=AliasChoices("correction_retries", "reintentos_correcciones"), default=0
+    )
     verify_discards: int = Field(alias="descartes_verify", default=0)
     discard_cause: DurableDiscardCause | None = Field(alias="descartes_verify_causa", default=None)
     ci_indeterminate_cause: DurableCiIndeterminateCause | None = Field(alias="ci_indeterminada_causa", default=None)
     harness: HarnessMeasurementPayload | None = None
     variant: str | None = Field(alias="variante", default=None)
     models: list[str] | None = Field(alias="modelos", default=None)
-    debt: int = Field(alias="deuda", default=0)
+    debt: int = Field(validation_alias=AliasChoices("debt", "deuda"), default=0)
     diff: DiffStatsPayload | None = None
-    budgets: dict[str, object] = Field(alias="presupuestos", default_factory=dict)
-    models_by_role: dict[str, object] = Field(alias="modelos_por_papel", default_factory=dict)
+    budgets: dict[str, object] = Field(validation_alias=AliasChoices("budgets", "presupuestos"), default_factory=dict)
+    models_by_role: dict[str, object] = Field(
+        validation_alias=AliasChoices("models_by_role", "modelos_por_papel"), default_factory=dict
+    )
 
     @field_validator("verdict", mode="before")
     @classmethod

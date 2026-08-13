@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 
 
 class LocalCallTrace(CallTrace):
-    LEDGER: ClassVar[tuple[str, ...]] = ("slice-runner", "trace", "calls.jsonl")
+    LEDGER: ClassVar[tuple[str, ...]] = ("slice-runner", "log", "calls.jsonl")
 
     def __init__(self, *, clock: Clock) -> None:
         self._clock = clock

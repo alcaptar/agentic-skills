@@ -5,7 +5,7 @@ El estado del run vive en el issue de GitHub, no en el repo. Para decidir con da
 "cuando subir de nivel" hace falta ademas un rastro de telemetria que NUNCA entre en el
 repo/PR y sobreviva a los runs. Este log vive fuera del repo:
 
-    ~/.claude/slice-runner/metrics.jsonl   append-only, una linea por slice cerrada
+    ~/.claude/slice-runner/log/metrics.jsonl   append-only, una linea por slice cerrada
 
 Lo anexa el programa el mismo, en Python puro y sin lanzar este script como subproceso
 (`LocalMetricsLog`, `docs/conventions/infrastructure.md`); este modulo solo lo agrega. Las cifras
@@ -56,7 +56,7 @@ if TYPE_CHECKING:
 
 _Causa = TypeVar("_Causa", bound=StrEnum)
 
-DEFAULT_PATH = Path.home() / ".claude" / "slice-runner" / "metrics.jsonl"
+DEFAULT_PATH = Path.home() / ".claude" / "slice-runner" / "log" / "metrics.jsonl"
 DESCONOCIDO = "desconocido"
 """Etiqueta de agrupacion para una fila que no declara modelo o variante.
 

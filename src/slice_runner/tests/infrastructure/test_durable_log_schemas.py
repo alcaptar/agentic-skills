@@ -1,0 +1,49 @@
+from __future__ import annotations
+
+import json
+
+from slice_runner.infrastructure.call_spend_payload import CallSpendPayload
+from slice_runner.infrastructure.corpus_diff_payload import CorpusDiffPayload
+from slice_runner.infrastructure.corpus_verdict_payload import CorpusVerdictPayload
+from slice_runner.infrastructure.harness_call_payload import HarnessCallPayload
+from slice_runner.infrastructure.metrics_entry_payload import MetricsEntryPayload
+
+
+class TestEveryDurableLogDeclaresASchemaAProgramCanRead:
+    def test_the_call_trace_schema_requires_the_identity_of_the_call(self) -> None:
+        assert self._required(HarnessCallPayload.json_schema()) == {"slice_id", "step", "session"}
+
+    def test_the_spend_log_schema_requires_the_session_and_the_spend_it_carries(self) -> None:
+        assert self._required(CallSpendPayload.json_schema()) == {"session", "spend"}
+
+    def test_the_metrics_log_schema_requires_the_identity_and_the_closure_of_the_slice(self) -> None:
+        required = self._required(MetricsEntryPayload.json_schema())
+
+        assert {"ts", "repo", "issue", "slice_id", "name", "veredicto", "ci"} <= required
+
+    def test_the_corpus_verdict_schema_requires_the_slice_and_the_verdict_the_judge_gave(self) -> None:
+        assert self._required(CorpusVerdictPayload.json_schema()) == {"slice_id", "verdict", "severity_counts"}
+
+    def test_the_corpus_diff_schema_requires_the_slice_and_the_diff_that_was_judged(self) -> None:
+        assert self._required(CorpusDiffPayload.json_schema()) == {"slice_id", "diff"}
+
+    def test_none_of_the_five_schemas_leaves_a_reference_unresolved(self) -> None:
+        for payload in (
+            HarnessCallPayload,
+            CallSpendPayload,
+            MetricsEntryPayload,
+            CorpusVerdictPayload,
+            CorpusDiffPayload,
+        ):
+            emitted = json.dumps(payload.json_schema())
+
+            assert "$ref" not in emitted
+            assert "$defs" not in emitted
+
+    @staticmethod
+    def _required(schema: dict[str, object]) -> set[str]:
+        required = schema["required"]
+        assert isinstance(required, list)
+        assert all(isinstance(field, str) for field in required)
+
+        return set(required)

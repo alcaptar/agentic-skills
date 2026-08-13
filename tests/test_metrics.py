@@ -521,3 +521,7 @@ def test_report_con_un_path_que_no_existe_no_revienta(tmp_path: Path) -> None:
     code = metrics.main(["report", "--path", str(tmp_path / "no-existe.jsonl")])
 
     assert code == 0
+
+
+def test_default_path_vive_bajo_el_mismo_directorio_que_los_otros_almacenes_durables() -> None:
+    assert metrics.DEFAULT_PATH.parts[-3:] == ("slice-runner", "log", "metrics.jsonl")

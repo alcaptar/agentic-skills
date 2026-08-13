@@ -33,7 +33,7 @@ _STAMP = datetime(2026, 8, 10, 12, 0, 0, tzinfo=UTC)
 class WrittenMetricsLog:
     @staticmethod
     def rows_under(root: Path) -> list[dict[str, object]]:
-        ledger = root / "slice-runner" / "metrics.jsonl"
+        ledger = root / "slice-runner" / "log" / "metrics.jsonl"
 
         return [json.loads(line) for line in ledger.read_text(encoding="utf-8").splitlines()]
 
@@ -62,7 +62,7 @@ class TestWhereTheDurableLogIsWrittenFrom(WithTheLedgerOutOfTheRealHome):
     def test_the_log_is_written_by_the_program_itself_and_not_by_launching_a_process(self, tmp_path: Path) -> None:
         LocalMetricsLog(clock=self.frozen_at()).record(ClosedSliceMother.merged())
 
-        assert (tmp_path / "slice-runner" / "metrics.jsonl").exists()
+        assert (tmp_path / "slice-runner" / "log" / "metrics.jsonl").exists()
 
 
 class TestHowEachClosureIsRecorded(WithTheLedgerOutOfTheRealHome):
@@ -90,7 +90,7 @@ class TestHowEachClosureIsRecorded(WithTheLedgerOutOfTheRealHome):
         with pytest.raises(RunNotClosedError, match="one line per closed slice"):
             LocalMetricsLog(clock=self.frozen_at()).record(ClosedSliceMother.still_open())
 
-        assert not (tmp_path / "slice-runner" / "metrics.jsonl").exists()
+        assert not (tmp_path / "slice-runner" / "log" / "metrics.jsonl").exists()
 
     def test_the_slice_travels_by_the_three_names_the_log_indexes_it_with(self, tmp_path: Path) -> None:
         LocalMetricsLog(clock=self.frozen_at()).record(ClosedSliceMother.merged())
@@ -193,12 +193,12 @@ class TestHowMuchTheSliceChanged(WithTheLedgerOutOfTheRealHome):
             ClosedSliceMother.merged_leaving_out("no cubri el binario", "falta el caso de rename")
         )
 
-        assert WrittenMetricsLog.row_under(tmp_path)["deuda"] == 2
+        assert WrittenMetricsLog.row_under(tmp_path)["debt"] == 2
 
     def test_a_slice_that_left_nothing_out_writes_zero_debt_instead_of_omitting_it(self, tmp_path: Path) -> None:
         LocalMetricsLog(clock=self.frozen_at()).record(ClosedSliceMother.merged())
 
-        assert WrittenMetricsLog.row_under(tmp_path)["deuda"] == 0
+        assert WrittenMetricsLog.row_under(tmp_path)["debt"] == 0
 
     def test_the_size_of_the_diff_measured_at_the_verify_that_passed_travels_as_its_own_group(
         self, tmp_path: Path
@@ -208,9 +208,9 @@ class TestHowMuchTheSliceChanged(WithTheLedgerOutOfTheRealHome):
         LocalMetricsLog(clock=self.frozen_at()).record(ClosedSliceMother.merged_measuring_the_diff(stats))
 
         assert WrittenMetricsLog.row_under(tmp_path)["diff"] == {
-            "ficheros": 4,
-            "lineas_anadidas": 51,
-            "lineas_borradas": 9,
+            "files_changed": 4,
+            "lines_added": 51,
+            "lines_deleted": 9,
         }
 
     def test_a_closure_with_no_diff_measured_this_invocation_writes_no_group_instead_of_a_zero_one(
@@ -229,7 +229,7 @@ class TestWhatConfigurationTheRunWasConductedWith(WithTheLedgerOutOfTheRealHome)
 
         LocalMetricsLog(clock=self.frozen_at()).record(ClosedSliceMother.merged_with_config(budgets=budgets))
 
-        assert WrittenMetricsLog.row_under(tmp_path)["presupuestos"] == asdict(budgets)
+        assert WrittenMetricsLog.row_under(tmp_path)["budgets"] == asdict(budgets)
 
     def test_the_model_assigned_to_each_role_travels_whole_and_not_one_field_at_a_time(self, tmp_path: Path) -> None:
         models = RoleModels(understand="haiku", implement="opus")
@@ -237,7 +237,7 @@ class TestWhatConfigurationTheRunWasConductedWith(WithTheLedgerOutOfTheRealHome)
         LocalMetricsLog(clock=self.frozen_at()).record(ClosedSliceMother.merged_with_config(models=models))
 
         row = WrittenMetricsLog.row_under(tmp_path)
-        assert row["modelos_por_papel"] == {"understand": "haiku", "implement": "opus"}
+        assert row["models_by_role"] == {"understand": "haiku", "implement": "opus"}
 
     def test_two_runs_with_different_configurations_write_rows_that_differ_on_that_configuration_and_not_only_on_cost(
         self, tmp_path: Path
@@ -252,7 +252,7 @@ class TestWhatConfigurationTheRunWasConductedWith(WithTheLedgerOutOfTheRealHome)
 
         rows = WrittenMetricsLog.rows_under(tmp_path)
         assert rows[0]["harness"] == rows[1]["harness"]
-        assert rows[0]["modelos_por_papel"] != rows[1]["modelos_por_papel"]
+        assert rows[0]["models_by_role"] != rows[1]["models_by_role"]
 
 
 class TestWhatTheRunAlreadyCounted(WithTheLedgerOutOfTheRealHome):
@@ -285,11 +285,11 @@ class TestWhatTheRunAlreadyCounted(WithTheLedgerOutOfTheRealHome):
         LocalMetricsLog(clock=self.frozen_at()).record(ClosedSliceMother.merged_after_going_back_for_every_reason())
 
         row = WrittenMetricsLog.row_under(tmp_path)
-        assert (row["reintentos_verify"], row["reintentos_correcciones"]) == (
+        assert (row["reintentos_verify"], row["correction_retries"]) == (
             run.verify_retries,
             run.correction_retries,
         )
-        assert row["reintentos_verify"] != row["reintentos_correcciones"]
+        assert row["reintentos_verify"] != row["correction_retries"]
 
     def test_the_findings_travel_counted_by_severity_and_not_as_a_single_total(self, tmp_path: Path) -> None:
         LocalMetricsLog(clock=self.frozen_at()).record(
@@ -300,7 +300,7 @@ class TestWhatTheRunAlreadyCounted(WithTheLedgerOutOfTheRealHome):
             )
         )
 
-        assert WrittenMetricsLog.row_under(tmp_path)["hallazgos"] == {"alta": 1, "media": 0, "baja": 2}
+        assert WrittenMetricsLog.row_under(tmp_path)["findings"] == {"high": 1, "medium": 0, "low": 2}
 
     def test_the_findings_of_the_last_round_travel_apart_so_a_pass_with_one_accumulated_is_never_ambiguous(
         self, tmp_path: Path
@@ -310,8 +310,8 @@ class TestWhatTheRunAlreadyCounted(WithTheLedgerOutOfTheRealHome):
         )
 
         row = WrittenMetricsLog.row_under(tmp_path)
-        assert row["hallazgos"] == {"alta": 1, "media": 0, "baja": 0}
-        assert row["hallazgos_ronda_final"] == {"alta": 0, "media": 0, "baja": 0}
+        assert row["findings"] == {"high": 1, "medium": 0, "low": 0}
+        assert row["findings_of_the_last_round"] == {"high": 0, "medium": 0, "low": 0}
 
 
 class TestWhyTheJudgeWasReinvoked(WithTheLedgerOutOfTheRealHome):
@@ -432,7 +432,7 @@ class TestReadingBackTheClosedSlices(WithTheLedgerOutOfTheRealHome):
     def test_a_line_that_is_not_json_is_refused_instead_of_being_skipped_in_silence(self, tmp_path: Path) -> None:
         log = LocalMetricsLog(clock=self.frozen_at())
         log.record(ClosedSliceMother.merged())
-        ledger = tmp_path / "slice-runner" / "metrics.jsonl"
+        ledger = tmp_path / "slice-runner" / "log" / "metrics.jsonl"
         with ledger.open("a", encoding="utf-8") as fh:
             fh.write("not json\n")
 
@@ -448,4 +448,4 @@ class TestWhereTheLedgerLives:
 
         LocalMetricsLog(clock=WithTheLedgerOutOfTheRealHome.frozen_at()).record(ClosedSliceMother.merged())
 
-        assert (tmp_path / "never-used-before" / "slice-runner" / "metrics.jsonl").exists()
+        assert (tmp_path / "never-used-before" / "slice-runner" / "log" / "metrics.jsonl").exists()

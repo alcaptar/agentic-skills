@@ -4,7 +4,7 @@ from dataclasses import asdict, dataclass
 from enum import StrEnum
 from typing import TYPE_CHECKING, ClassVar, Self
 
-from pydantic import Field
+from pydantic import AliasChoices, Field
 
 from slice_runner.domain.ci_indeterminate_cause import CiIndeterminateCause
 from slice_runner.domain.discard_cause import DiscardCause
@@ -12,7 +12,8 @@ from slice_runner.domain.exceptions import RunNotClosedError
 from slice_runner.domain.run_state import RunState
 from slice_runner.domain.severity import Severity
 from slice_runner.infrastructure.contract_model import ContractModel
-from slice_runner.infrastructure.corpus_entry_payload import SeverityCountPayload
+from slice_runner.infrastructure.corpus_verdict_payload import SeverityCountPayload
+from slice_runner.infrastructure.json_schema import JsonSchema
 
 if TYPE_CHECKING:
     from slice_runner.domain.closed_slice import ClosedSlice
@@ -150,17 +151,17 @@ class HarnessMeasurementPayload(ContractModel):
 
 
 class DiffStatsPayload(ContractModel):
-    files_changed: int = Field(alias="ficheros")
-    lines_added: int = Field(alias="lineas_anadidas")
-    lines_deleted: int = Field(alias="lineas_borradas")
+    files_changed: int = Field(validation_alias=AliasChoices("files_changed", "ficheros"))
+    lines_added: int = Field(validation_alias=AliasChoices("lines_added", "lineas_anadidas"))
+    lines_deleted: int = Field(validation_alias=AliasChoices("lines_deleted", "lineas_borradas"))
 
     @classmethod
     def from_domain(cls, stats: DiffStats) -> Self:
         return cls.model_validate(
             {
-                "ficheros": stats.files_changed,
-                "lineas_anadidas": stats.lines_added,
-                "lineas_borradas": stats.lines_deleted,
+                "files_changed": stats.files_changed,
+                "lines_added": stats.lines_added,
+                "lines_deleted": stats.lines_deleted,
             }
         )
 
@@ -175,23 +176,27 @@ class MetricsEntryPayload(ContractModel):
     name: str
     verdict: DurableVerdict = Field(alias="veredicto")
     ci: DurableCi
-    findings: SeverityCountPayload = Field(alias="hallazgos")
-    findings_of_the_last_round: SeverityCountPayload = Field(alias="hallazgos_ronda_final")
+    findings: SeverityCountPayload
+    findings_of_the_last_round: SeverityCountPayload
     implement_retries: int = Field(alias="reintentos_implement")
     control_retries: int = Field(alias="reintentos_controles")
     ci_retries: int = Field(alias="reintentos_ci")
     verify_retries: int = Field(alias="reintentos_verify")
-    correction_retries: int = Field(alias="reintentos_correcciones")
+    correction_retries: int
     verify_discards: int = Field(alias="descartes_verify")
     harness: HarnessMeasurementPayload | None = None
     discard_cause: DurableDiscardCause | None = Field(alias="descartes_verify_causa", default=None)
     ci_indeterminate_cause: DurableCiIndeterminateCause | None = Field(alias="ci_indeterminada_causa", default=None)
     models: list[str] | None = Field(alias="modelos", default=None)
     variant: str = Field(alias="variante")
-    debt: int = Field(alias="deuda")
+    debt: int
     diff: DiffStatsPayload | None = None
-    budgets: dict[str, object] = Field(alias="presupuestos")
-    models_by_role: dict[str, object] = Field(alias="modelos_por_papel")
+    budgets: dict[str, object]
+    models_by_role: dict[str, object]
+
+    @classmethod
+    def json_schema(cls) -> dict[str, object]:
+        return JsonSchema.flat(cls)
 
     @classmethod
     def from_domain(cls, closed: ClosedSlice, *, ts: str) -> Self:
@@ -206,25 +211,25 @@ class MetricsEntryPayload(ContractModel):
                 "name": closed.name,
                 "veredicto": closure.verdict,
                 "ci": closure.ci,
-                "hallazgos": SeverityCountPayload.model_validate(
+                "findings": SeverityCountPayload.model_validate(
                     {
-                        "alta": closed.count_findings(Severity.HIGH),
-                        "media": closed.count_findings(Severity.MEDIUM),
-                        "baja": closed.count_findings(Severity.LOW),
+                        "high": closed.count_findings(Severity.HIGH),
+                        "medium": closed.count_findings(Severity.MEDIUM),
+                        "low": closed.count_findings(Severity.LOW),
                     }
                 ),
-                "hallazgos_ronda_final": SeverityCountPayload.model_validate(
+                "findings_of_the_last_round": SeverityCountPayload.model_validate(
                     {
-                        "alta": closed.count_findings_of_the_last_round(Severity.HIGH),
-                        "media": closed.count_findings_of_the_last_round(Severity.MEDIUM),
-                        "baja": closed.count_findings_of_the_last_round(Severity.LOW),
+                        "high": closed.count_findings_of_the_last_round(Severity.HIGH),
+                        "medium": closed.count_findings_of_the_last_round(Severity.MEDIUM),
+                        "low": closed.count_findings_of_the_last_round(Severity.LOW),
                     }
                 ),
                 "reintentos_implement": closed.run.implement_retries,
                 "reintentos_controles": closed.run.control_retries,
                 "reintentos_ci": closed.run.ci_retries,
                 "reintentos_verify": closed.run.verify_retries,
-                "reintentos_correcciones": closed.run.correction_retries,
+                "correction_retries": closed.run.correction_retries,
                 "descartes_verify": closed.run.verify_discards,
                 "harness": HarnessMeasurementPayload.from_domain(spend) if spend.measured else None,
                 "descartes_verify_causa": DurableDiscardCause.of(closed.discard_cause)
@@ -235,10 +240,10 @@ class MetricsEntryPayload(ContractModel):
                 else None,
                 "modelos": list(spend.models) or None,
                 "variante": cls.VARIANT,
-                "deuda": len(closed.debt),
+                "debt": len(closed.debt),
                 "diff": DiffStatsPayload.from_domain(closed.diff_stats) if closed.diff_stats is not None else None,
-                "presupuestos": asdict(closed.budgets),
-                "modelos_por_papel": asdict(closed.models),
+                "budgets": asdict(closed.budgets),
+                "models_by_role": asdict(closed.models),
             }
         )
 
