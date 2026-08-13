@@ -398,6 +398,17 @@ SENAL: prometheus min_over_time(application_stock_actual[10m]) < 0 dispara la al
    slice-runner run <padre> --repo <org>/<repo> --base <base> --slice slice-NN --worktree <ruta-del-worktree>
    ```
 
+   **El `--detach` vale para una slice que arranca de cero, y solo para esa.** El programa crea la rama
+   el mismo antes de implementar, asi que ahi el worktree suelto es lo limpio. Pero una slice **que ya
+   tiene estado persistido** -porque un run anterior murio, o quedo esperando algo- **retoma por su paso
+   y no vuelve a crear la rama**: si el worktree esta suelto, implementa entero sobre nada y revienta al
+   commitear, con el trabajo hecho, el juez pasado y el harness ya pagado. Antes de relanzar una slice
+   asi, **ponla en su rama**:
+
+   ```bash
+   git -C <ruta-del-worktree> switch slice/NN-name
+   ```
+
    Cada run **en background**, nunca encadenados en una shell que bloquee: son procesos largos y el
    principio de este flujo es que ninguna espera congele una sesion. Y avisa de lo que viene despues,
    porque es lo que sorprende: **cada run se para en su pausa de alineacion**, asi que N runs en
