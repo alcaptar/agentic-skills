@@ -138,12 +138,23 @@ mide. Las reglas que salen de estas decisiones siguen en su capa.
 
 ### De donde salen los numeros de `Budgets`
 
-- **El tope de espera de una invocacion.** La integracion continua de este repo esta medida entre 15 y
-  33 segundos sobre 25 runs, asi que el numero no lo fija ella: lo fija el repo destino peor, y hay uno
-  escrito -un `make test` de ~20 minutos, en `skills/slice-spec/SKILL.md`- que hay que despejar con
-  margen. Por arriba lo acota la otra espera: el merge es **una decision humana**, y el tope tiene que
-  ser lo bastante corto para que agotarlo termine la invocacion en vez de retener el proceso durante
-  horas.
+- **Los topes de espera de una invocacion, que fueron uno solo hasta el 2026-08-13.** El de la
+  integracion continua sale de que la de este repo esta medida entre 15 y 33 segundos sobre 25 runs, asi
+  que el numero no lo fija ella: lo fija el repo destino peor, y hay uno escrito -un `make test` de ~20
+  minutos, en `skills/slice-spec/SKILL.md`- que hay que despejar con margen. El de las esperas humanas
+  -alineacion y merge- sale de otra pregunta distinta: cuanto puede tardar una persona en estar delante
+  sin que eso signifique que algo va mal, y ahi una jornada es lo razonable.
+
+  **Fueron el mismo numero, con un acumulador unico para todo el run, y eso hacia que el ultimo que
+  esperaba pagase lo que gastaron los demas.** Medido en la slice-10 de este repo el 2026-08-13: 42
+  ticks esperando el `-GO` y 2 la integracion continua dejaron **16** para el merge -8 minutos de los
+  30-, y el run murio en `WAIT_EXHAUSTED` con la pull request sana, verde y a punto de mergearse. Nada
+  de eso se leia en el tope: decia 30 minutos y entregaba 8, con el reparto dependiendo de lo que una
+  persona hubiera tardado antes. De ahi salen las dos mitades del arreglo -un tope por clase de espera,
+  y el contador reiniciandose en cada paso-, cuya **regla** vive en `docs/conventions/domain.md`.
+
+  La ventana de gracia de la CI indeterminada subio a la vez, y por su propio motivo: 3 ticks son 90
+  segundos, que no es una ventana de gracia sino una carrera contra la cola de GitHub Actions.
 - **El tope de una llamada a un proceso externo.** Lo mas largo que se ha medido llamar son los sobres
   de `claude -p` de `src/slice_runner/tests/payloads/`, cuyo mayor tarda 51 segundos, y lo mas largo
   declarado es ese `make test` de ~20 minutos. El valor elegido los despeja a los dos con margen, que es
@@ -268,6 +279,24 @@ del diff final que se pidio cambiar. Lo que devuelve la vuelta atras no es solo 
 de acreditar en el historial el orden en que se hizo el trabajo, que se habia dado por perdida. Lo que
 **no** cambia es lo que era decision propia y no consecuencia: `git add` con rutas explicitas, la higiene
 del indice antes de cada commit, y `--merge` al fusionar.
+
+### La pull request deja de nacer en borrador, y gana asignado y co-autor (2026-08-13)
+
+Nacia con `--draft` desde el commit inicial del programa, y el motivo escrito era "el merge lo decide una
+persona". Ese motivo **ya lo garantizaba otra cosa**: el programa no mergea, se para en `esperando-merge`
+y termina. Lo que el borrador anadia encima no era control, era un paso manual que nada recordaba.
+
+Se pago el mismo dia que se retiro: el run de la slice-10 de este repo agoto su espera de merge con la
+pull request verde, el veredicto dado y todo hecho, porque nadie la habia sacado de borrador. El programa
+tuvo que decirlo con un aviso que existia **solo** para compensar el borrador -y que se queda, porque
+sigue habiendo esperas que se agotan, pero deja de afirmar que la pull request nace en borrador, que ya no
+es cierto-.
+
+Entran a la vez dos cosas que hacen visible quien hizo que: **asignada a quien conduce el run**, porque es
+quien tiene que mergear y asi le aparece en su lista, y **el commit acreditando a Claude como co-autor**,
+que es el mismo mecanismo que usan las pull requests que salen de una sesion de Claude Code. Lo que **no**
+entra es Claude como asignado: comprobado contra la interfaz de programacion de GitHub, solo se puede
+asignar a colaboradores del repo, asi que seria una llamada que falla o que se ignora en silencio.
 
 ### Que se rompe hoy al reanudar un run, y en que orden vale la pena arreglarlo (2026-08-11)
 

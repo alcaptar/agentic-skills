@@ -60,9 +60,8 @@ dato, igual que el `Judge` (ver `docs/conventions/application.md`).
   subcomando que la expone. No hay tests unitarios de dominio (`docs/conventions/testing.md`).
 
 **El vocabulario de cierres duplica uno durable, y esta declarado.** `RunState` es una copia declarada
--en ingles- de `Veredicto` en `skills/slice-runner/scripts/metrics.py`. (Duplicaba tambien
-`Estado`/`MotivoBloqueada` de `issue_body.py`, retirado ya con el flujo
-viejo por no tener consumidor.) Es la misma decision que el resto del programa -**no importa nada de
+-en ingles- de `Veredicto` en `skills/slice-runner/scripts/metrics.py`. Es la misma decision que el
+resto del programa -**no importa nada de
 `skills/`**, ver `docs/conventions/infrastructure.md`- y el mismo motivo: sus scripts son stdlib puro
 con otra vara, y acoplarse a ellos para ahorrar la duplicacion sale mas caro que la duplicacion. El
 traductor es `IssueLabel.of(state, step)`
@@ -77,11 +76,9 @@ manual es la que se escribe fuera de cualquier `(state, step)` que `IssueLabel.o
 es lo que pasa antes de que exista ningun `Run`. Una etiqueta nueva sin proyeccion ni fuente manual
 declarada pone `make check` en rojo.
 
-**`CiStatus` repite en ingles el vocabulario `verde`/`rojo`/`pendiente`/`sin-checks`/`desconocido`.**
-Hasta que se retiro con el flujo viejo, `domain/ci_status.py` era la copia declarada de `EstadoCI` en
-`controles.py`, igual que `RunState` repite a `Veredicto` y que
-`StagedHygiene.FORBIDDEN_PREFIXES` repetia los suyos: el motivo era que el programa **no importa nada
-de `skills/`**. Retirado el script, `CiStatus` es el unico sitio donde vive ese vocabulario. Los dos
+**`CiStatus` nombra en ingles el vocabulario con el que se clasifica la integracion continua.** Es el
+unico sitio donde vive: el programa **no importa nada de `skills/`**, asi que un vocabulario suyo que
+tambien exista alli se declara y se mide con un contrato, nunca se comparte por import. Los dos
 traductores al vocabulario con el que se interroga a `StateMachine` viven del lado del destino, como
 `IssueLabel.of`: `Outcome.of_the_ci(status)` y `Outcome.of_the_verdict(verdict)`, los dos con `match`
 exhaustivo y sin rama generica, para que la regla no acabe siendo un `if` de quien conduce el run.
@@ -104,10 +101,9 @@ implementador declaro, y la tupla vacia es el indice limpio. Las decisiones que 
   que cae solo de la regla general. Y **"nada staged" no es asunto de esta politica**: eso ya lo dice
   `EmptyIndexError` cuando se va a leer el diff, y reimplementarlo aqui seria un segundo sitio donde
   decidir lo mismo.
-- **Los prefijos duplicaban a proposito los de `controles.py`**, por el
-  mismo motivo que `RunState` duplica a `Veredicto`: el programa no importa nada de `skills/` (ver
-  `docs/conventions/infrastructure.md`). El script se retiro con el flujo viejo por no tener consumidor,
-  asi que `StagedHygiene.FORBIDDEN_PREFIXES` es hoy el unico sitio donde viven estos prefijos.
+- **`StagedHygiene.FORBIDDEN_PREFIXES` es el unico sitio donde viven estos prefijos.** Si un script de
+  `skills/` volviera a necesitarlos, se duplican y se miden con un contrato en vez de importarse: el
+  programa no importa nada de `skills/` (ver `docs/conventions/infrastructure.md`).
 
 Las decisiones de `StateMachine` y de los `Budgets` que le entran tampoco son deriva, y estan aqui para
 que no se "arreglen" hacia el lado facil. **Los valores concretos viven en `Budgets`, y de donde sale cada
@@ -120,20 +116,17 @@ uno esta en `docs/design-notes.md`**: aqui va la regla que los gobierna, no la m
   merge, y un `gh` colgado tarda en morir lo mismo que una suite entera.
 - **El tope de espera acota la invocacion, no el run.** Agotarlo **no cierra** nada: deja el run abierto y
   persistido en su paso, diciendo que reinvocar es justo lo que toca.
-- **La espera tiene dos topes, y eso no rompe el bullet de arriba: lo aplica.** Esperar a la integracion
-  continua y esperar a una persona **no son el mismo concepto**, aunque los dos se midan en segundos y
-  durante un tiempo compartieran numero. A la CI se la espera porque **esta trabajando**, y su tope existe
-  para cazarla **colgada**: media hora es de sobra, y pasado eso el numero ya no dice "ten paciencia" sino
-  "algo va mal". A una persona se la espera porque **esta en otra cosa**, y ahi no hay nada que cazar: un
-  `-GO` que tarda media manana es el flujo funcionando, no una anomalia. Un solo numero obliga a elegir
-  entre no detectar nunca una CI colgada o matar runs sanos por ir a comer, y **elegia lo segundo**.
-- **Y el contador se reinicia en cada paso, que es lo que hace honestos a los dos topes.** Con un
-  acumulador unico para todo el run, **el ultimo que espera paga lo que gastaron los demas**: medido en la
-  slice-10 de este repo el 2026-08-13, 42 ticks esperando el `-GO` y 2 la CI dejaron **16** para el merge
-  -8 minutos de los 30-, y el run murio en `WAIT_EXHAUSTED` con la pull request sana y a punto de
-  mergearse. Nada de eso se leia en el tope: decia 30 minutos y entregaba 8, con el reparto dependiendo de
-  lo que una persona hubiera tardado antes. Un tope que solo se cumple si nadie se entretiene aguas arriba
-  no acota nada.
+- **La espera tiene un tope por clase de espera, y eso no rompe el bullet de arriba: lo aplica.** Esperar
+  a una maquina y esperar a una persona **no son el mismo concepto**, aunque los dos se midan en segundos.
+  A la maquina se la espera porque **esta trabajando**, y su tope existe para cazarla **colgada**: pasado
+  el suyo, el numero ya no dice "ten paciencia" sino "algo va mal". A una persona se la espera porque
+  **esta en otra cosa**, y ahi no hay nada que cazar: una respuesta que tarda media manana es el flujo
+  funcionando, no una anomalia. Un solo numero obliga a elegir entre no detectar nunca una espera colgada
+  y cerrar runs sanos porque alguien no estaba delante.
+- **Y el contador se reinicia en cada paso, que es lo que hace honestos a esos topes.** Con un acumulador
+  unico para todo el run, **el ultimo que espera paga lo que gastaron los demas**, y cuanto le queda
+  depende de lo que una persona haya tardado antes: el tope dice una cosa y entrega otra. Un tope que solo
+  se cumple si nadie se entretiene aguas arriba no acota nada.
 - **El tope por llamada vive en `Budgets` aunque quien lo aplique sea un adaptador**, porque es el mismo
   tipo de dato que los demas: un numero medido con el que se acota una espera. Tenerlo aqui es lo que
   evita que cada adaptador se invente el suyo.

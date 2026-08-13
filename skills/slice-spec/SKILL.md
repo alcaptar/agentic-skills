@@ -280,9 +280,9 @@ SENAL: prometheus min_over_time(application_stock_actual[10m]) < 0 dispara la al
 
 2. **Trocea en slices verticales (guia activa).** Carga `references/slicing.md` y aplica su
    procedimiento sobre el diseno aprobado: identifica el **walking skeleton** (slice #1), **saca
-   delante el contrato de toda frontera** -un endpoint, un evento, un esquema de mensaje, lo que otro
-   repo o proceso vaya a leer-, porque es lo que permite que productor y consumidor se construyan a la
-   vez en vez de en fila (paso 1b de `slicing.md`, y es de donde sale el paralelismo del paso 7), genera el
+   delante el contrato de toda frontera** -un endpoint o un evento hacia fuera, pero tambien un puerto o
+   un modelo compartido entre capas-, porque es lo que permite que sus dos lados se construyan a la vez
+   en vez de en fila (paso 1b de `slicing.md`, y es de donde sale el paralelismo del paso 7), genera el
    resto por la **heuristica ordenada**, y **solo abre dialogo con la persona** (opciones graduadas
    por capa, estilo hamburger) cuando el corte no es obvio o una slice supera el budget. Valida cada
    slice contra los criterios de validez y el conjunto contra el **test de despriorizacion** e

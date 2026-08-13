@@ -89,18 +89,15 @@ importar**: un smoke que solo importe el modulo lo da por bueno. Lo evita
   tres cosas repartidas por capas: repartidas, nada obliga a que cuadren, y una rubrica puede acabar
   ordenando cargar lo que el agente no puede leer sin que el veredicto lo delate. **Un puerto para un
   valor constante es indireccion; un invariante entre varios valores pide un objeto.**
-- **El texto de la rubrica se queda en infraestructura**, no en la factoria de aplicacion como en el chat
-  de agentes de ese repo: aqui el prompt es lo que se le manda a **un ejecutable concreto** por su
-  entrada estandar, con su esquema y sus flags, y cambia con la receta medida contra `claude -p`. Que la
-  capa que conoce el harness sea la misma que redacta lo que el harness recibe es lo que evita que
-  aplicacion tenga opinion sobre el transporte. `SliceVerifierJudge` es la unica fuente de esa rubrica:
-  el `agents/slice-verifier.md` del **flujo viejo** se retiro porque nada lo leia -el programa nunca lo
-  leyo, y la skill que lo citaba ya no vive aqui-, asi que no hay dos copias que mantener sincronizadas.
-- **La metodologia del implementador vive solo aqui, por el mismo motivo.**
-  `SliceImplementerBrief` (`src/slice_runner/infrastructure/slice_implementer_brief.py`) es lo que el
-  programa le manda a `claude -p` por su entrada estandar, con su propio `TOOLS` y su propio texto de
-  metodologia. El `agents/slice-implementer.md` del flujo viejo se retiro por la misma razon que
-  `agents/slice-verifier.md`: el programa no lo leia.
+- **El texto de la rubrica del juez y la metodologia del implementador se quedan en infraestructura**, no
+  en una factoria de aplicacion: el prompt es lo que se le manda a **un ejecutable concreto** por su
+  entrada estandar, con su esquema y sus flags, y cambia con la receta medida contra ese ejecutable. Que
+  la capa que conoce el harness sea la misma que redacta lo que el harness recibe es lo que evita que
+  aplicacion tenga opinion sobre el transporte.
+
+  **Y cada una tiene un solo sitio donde vive.** Un `.md` que repita la rubrica o la metodologia es una
+  segunda copia que nadie compara, y el programa **no lee `.md` de agente**: si hay que cambiar lo que se
+  le pide al juez o al implementador, se cambia aqui y no hay nada mas que sincronizar.
 - **Lo que no cambia entre invocaciones es constante; los datos de la slice los compone la invocacion.**
   `SliceImplementerBrief.TEXT` y la rubrica de `SliceVerifierJudge` son texto fijo, y `## Datos de la
   slice` y `## Datos del run` los redactan `ImplementerInvocation` y `JudgeInvocation` a partir del
@@ -223,10 +220,10 @@ importar**: un smoke que solo importe el modulo lo da por bueno. Lo evita
   mismo patron que `LocalCallTrace`/`LocalCallSpendLog`/`LocalCorpus`: sin proceso externo, con
   `ClaudeConfig.root()` para resolver la raiz y un payload de frontera (`MetricsEntryPayload`, en
   `infrastructure/metrics_entry_payload.py`) que traduce el dominio a las claves en castellano del log
-  -mismo formato que escribia el flujo viejo, porque el fichero es durable y tiene historico escrito, y
-  `metrics.py` sigue siendo quien lo agrega en `report`-. Antes de esta slice lo escribia `metrics.py`
-  como subproceso; retirar ese puente es lo que cierra la dependencia fisica del programa con un script
-  fuera de su paquete (abajo, `Codigo que NO es referencia` de `CLAUDE.md`). Consecuencia aceptada, y no
+  -el formato no se elige: **el fichero es durable y tiene historico escrito**, y `metrics.py` sigue
+  siendo quien lo agrega en `report`-. **El programa no delega esa escritura en un
+  script fuera de su paquete**: hacerlo seria una dependencia fisica con codigo que no es referencia (ver
+  `CLAUDE.md`). Consecuencia aceptada, y no
   cambia con el transporte: los vocabularios del cierre existen dos veces -en ingles dentro del programa
   (`RunState`, `DiscardCause`) y con las palabras del log en la frontera (`DurableVerdict`, `DurableCi`,
   `DurableDiscardCause`, en `metrics_entry_payload.py`)-, con un `match`
@@ -276,19 +273,16 @@ importar**: un smoke que solo importe el modulo lo da por bueno. Lo evita
   siguiente.** Si su pull request esta mergeada, se escribe la fila durable y se retira la etiqueta; si no,
   se deja intacta. Sin eso, un merge hecho entre invocaciones deja el trabajo hecho y sin registrar,
   porque el precheck de subissue cerrada corta antes de llegar a ningun cierre.
-- **Una pieza se apaga por el cableado, con un adaptador que no hace nada, y la decision es del
-  entrypoint.** `MutedDeployWatch` implementa `DeployWatch` sin lanzar nada, y es lo que `Cli` inyecta
-  desde 2026-08-13 en vez de `ClaudeDeployWatch`, para que mergear una slice no encadene `deploy-watch`
-  mientras esa skill se pule. **Lo que se apaga es el cableado, no el flujo**: el conductor sigue
-  llamando al puerto en el mismo sitio y con los mismos datos, la linea `SENAL:` se sigue exigiendo y
-  su emision sigue siendo criterio de aceptacion, asi que reencender es cambiar **una linea** de
-  `cli.py`. La alternativa -borrar la llamada de `ConductSlice`- dejaba el puerto sin consumidor, que
-  es el olor que este mismo apartado persigue, y obligaba a reescribir codigo y test para volver.
-  Consecuencia aceptada: **`ClaudeDeployWatch` se queda vivo y sin cablear**, sostenido solo por su
-  test de frontera. Y lo que se mide no es el adaptador mudo -un test suyo mediria el lenguaje, ver
-  `docs/conventions/testing.md`- sino que **un run que mergea con la senal declarada no lanza ningun
-  proceso**, en `test_cli.py`: el doble de `Process` revienta con el `argv` delante si alguien vuelve a
-  cablear el adaptador de verdad.
+- **Una pieza del flujo se apaga por el cableado, con un adaptador que no hace nada, y quien lo decide
+  es el entrypoint.** Un adaptador mudo implementa el puerto y no lanza nada; el entrypoint lo inyecta
+  en lugar del real. **Lo que se apaga es el cableado, no el flujo**: el caso de uso sigue llamando al
+  puerto en el mismo sitio y con los mismos datos, asi que reencender es cambiar la linea que lo
+  inyecta, y no hay puerto sin consumidor ni codigo que reescribir para volver. Consecuencia aceptada:
+  el adaptador real se queda vivo y sin cablear, sostenido solo por su test de frontera.
+
+  **Lo que se mide es que el proceso no se lanza, no que el adaptador mudo no haga nada** -un test
+  suyo mediria el lenguaje, ver `docs/conventions/testing.md`-: el doble del puerto `Process` revienta
+  con el `argv` delante si alguien vuelve a cablear el real.
 - Un codigo de salida distinto de cero **es un dato**, no una excepcion: se lanza el proceso con
   `check=False` y el adaptador interpreta, porque el motivo esta en `stderr` y una excepcion lo borra.
 - **Ninguna llamada a un proceso externo se lanza sin tope, y el tope no lo elige el adaptador.**
@@ -304,10 +298,8 @@ importar**: un smoke que solo importe el modulo lo da por bueno. Lo evita
   media respuesta no es una respuesta, y devolver un `ProcessOutput` con un `stdout` truncado es
   exactamente como un veredicto a medias pasaria por veredicto. No hay reintento aqui: reintentar es
   politica, y esta capa no la decide (ver antipatrones).
-- **`GhCi` clasifica la respuesta de `gh pr checks`.** El clasificador fue durante un tiempo una copia
-  declarada del de `controles.py`, retirado ya con el flujo viejo -no
-  quedaba dos veces para divergir-. Dos decisiones sobre `GhCi` que no son deriva, y estan escritas aqui
-  para que no se "arreglen" hacia el lado facil mas adelante:
+- **`GhCi` clasifica la respuesta de `gh pr checks`.** Dos decisiones suyas que no son deriva, y estan
+  escritas aqui para que no se "arreglen" hacia el lado facil mas adelante:
 
   1. **El codigo de salida de `gh pr checks` no se usa para clasificar: se clasifica el `stdout`.** `gh` sale
      distinto de cero con checks en rojo, con checks pendientes y con una pull request que no existe, asi que
@@ -336,7 +328,7 @@ importar**: un smoke que solo importe el modulo lo da por bueno. Lo evita
      dos causas de arriba -el comando no corrio, la respuesta no se entendio- se convirtieron de un `UNKNOWN`
      mudo a una excepcion con motivo, y `ConductSlice` las captura para seguir produciendo
      `Outcome.INDETERMINATE`: la clasificacion que ve `StateMachine` **no cambia**, solo gana un porque que
-     antes se perdia en el `except UnreadableCiError: return CiStatus.UNKNOWN` que las fundia a las dos.
+     un `except` generico que devolviera `CiStatus.UNKNOWN` fundiria en un valor mudo.
 - **`GhForum` reutiliza `GhCommandFailedError` de `gh_run_repository.py`** para un exit distinto de cero de
   `gh pr list`, en vez de declarar su propia excepcion: es el mismo fallo -un comando de `gh` que sale
   mal- y vive donde lo necesito el primer adaptador que lo tuvo. Su casa natural es un modulo de
@@ -347,40 +339,30 @@ importar**: un smoke que solo importe el modulo lo da por bueno. Lo evita
   `stderr`- y vive donde lo necesito el primer adaptador de `git` que lo tuvo. La unica diferencia es que
   `GitWorkspace` cae al `stdout` cuando el `stderr` viene vacio, porque `git commit` sin nada staged
   explica el motivo por `stdout` y una excepcion sin motivo obliga a reproducirlo a mano.
-- **El cuerpo de la pull request duplica a proposito el formato que en su dia declaraba el paso 8 del
-  `SKILL.md` del runner** (retirado; ver `CLAUDE.md`). `PullRequestBody` (`infrastructure/pull_request_body.py`)
-  compone los mismos encabezados y en el mismo orden, y es la misma duplicacion declarada que la de la
-  rubrica del juez y la del brief del implementador, por el mismo motivo -el flujo viejo esta condenado y
-  el programa no lee sus `.md`-. Los encabezados se quedan en castellano: son **contenido del artefacto
-  que lee una persona**, en el idioma del issue, no identificadores.
+- **El cuerpo de la pull request lo compone un modelo de frontera** (`PullRequestBody`), que fija sus
+  encabezados y su orden. Se quedan en castellano: son **contenido del artefacto que lee una persona**,
+  en el idioma del issue, no identificadores.
 
-  **`gh pr create` nace lista para revisar, y eso no afloja el control humano** (decision 2026-08-13,
-  antes iba con `--draft`). Lo que hace que el merge lo decida una persona es que el programa **no
-  mergea**: se para en `esperando-merge` y termina. El borrador no anadia esa garantia -ya estaba- y si
-  anadia un paso manual invisible: la pull request salia con la integracion continua verde, el
-  veredicto dado y todo hecho, y no se podia mergear hasta que alguien se acordara de sacarla de
-  borrador. Medido el 2026-08-13: el run de la slice-10 de este repo agoto su espera de merge sin que
-  nadie pudiera mergear, y el propio programa tuvo que decirlo por un aviso que existia **solo** para
-  compensar el borrador.
-  - **Va `--assignee @me`**: quien conduce el run es quien tiene que mergear, asi que la pull request
-    aparece en su lista. Se usa `@me` y no el login que devuelve `Forum.authenticated_as` porque lo
-    resuelve `gh` en la misma llamada, sin una segunda para preguntar quien eres.
-  - **El commit lleva `Co-Authored-By: Claude`** (`infrastructure/slice_commit_message.py`), porque el
-    codigo lo escribio un harness y el registro duradero deberia decirlo. Es un objeto propio y no una
-    cadena pegada en `SlicePullRequest.title` porque el **asunto** del commit y el **titulo** de la
-    pull request dejan de ser lo mismo en cuanto uno de los dos crece: el puerto expone los dos
-    (`title` y `commit_message`) y `DeliverSlice` recibe cada uno por su campo. Lo que **no** se hace
-    es anadir a Claude como asignado: GitHub solo deja asignar colaboradores del repo, asi que seria
-    una llamada que falla o que se ignora en silencio.
+  **La pull request nace lista para revisar, y eso no afloja el control humano.** Lo que hace que el
+  merge lo decida una persona es que el programa **no mergea**: se para y termina. Un borrador no anade
+  esa garantia y si anade un paso manual que nada recuerda: la pull request queda con todo hecho y sin
+  poder fusionarse hasta que alguien se acuerde de sacarla de ahi.
+  - **Se asigna a quien esta autenticado**, que es quien conduce el run y quien tiene que mergear, para
+    que le aparezca en su lista. Se declara con la forma que resuelve `gh` en la misma llamada, no
+    preguntando antes quien eres: una llamada que se puede ahorrar es una llamada que puede fallar.
+  - **El commit acredita como co-autor al harness que escribio el codigo**, en un objeto de frontera
+    propio y no como una cadena pegada al titulo, porque el **asunto** del commit y el **titulo** de la
+    pull request dejan de ser lo mismo en cuanto uno de los dos crece: el puerto expone los dos y el
+    caso de uso recibe cada uno por su campo. Lo que **no** se hace es anadirlo como asignado: GitHub
+    solo deja asignar colaboradores del repo, asi que seria una llamada que falla o se ignora en
+    silencio.
 
-  **Diverge del paso 8 que tenia el `SKILL.md` del runner (retirado), y cada divergencia es
-  deliberada.** Al contrario que la duplicacion de los prefijos prohibidos, **esta no tiene test de
-  contrato**: no hay vocabulario que extraer de un cuerpo en prosa, asi que estos parrafos son lo unico
-  que la sostiene.
+  **Cuatro decisiones sobre ese cuerpo, y ninguna tiene test de contrato**: no hay vocabulario que
+  extraer de un cuerpo en prosa, asi que estos parrafos son lo unico que las sostiene.
 
-  1. **Cierra con `Closes #<N>` donde el paso 8 ponia `Part of #<N>`.** En el formato nuevo hay **una
-     subissue por slice**, asi que la pull request si cierra su issue; en el viejo el issue era la
-     feature entera y cerrarlo con una slice habria sido mentir.
+  1. **Cierra con `Closes #<subissue>`.** Hay **una subissue por slice**, asi que la pull request si
+     cierra su issue, y GitHub lo hace solo al fusionar. Con un issue por feature entera esto seria
+     mentira, y por eso la referencia depende del formato y no se elige por costumbre.
   2. **No sabe expresar la referencia cross-repo**, porque la subissue le llega como un numero suelto.
      Consecuencia: una slice que viva en otro repo referenciaria ese numero **en el repo de la pull
      request**, que no es donde vive la subissue. No es un olvido: quien conoce los dos repos es quien

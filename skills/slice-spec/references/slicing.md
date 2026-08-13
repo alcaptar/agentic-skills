@@ -50,13 +50,26 @@ son incrementos que caen sobre este andamio.
 
 ### 1b. Si hay frontera, el contrato va primero — es lo que deja paralelizar
 
-**Dispara cuando la feature tiene una pieza que habla con algo que no es ella**: un endpoint, un
-evento que se publica o al que alguien se suscribe, el esquema de un mensaje, la respuesta de un
-servicio del que dependemos, una interfaz de linea de comandos, un fichero que otro proceso lee.
+**Dispara cuando dos piezas van a hablarse y ninguna de las dos es la otra.** Hay dos familias, y la
+segunda se olvida mas:
+
+- **Frontera externa** — la comun: un endpoint, un evento que se publica o al que alguien se
+  suscribe, el esquema de un mensaje, la respuesta de un servicio del que dependemos, una interfaz de
+  linea de comandos, un fichero que otro proceso lee.
+- **Frontera entre capas** — dentro del mismo repo, y desbloquea exactamente igual: **el puerto** que
+  el dominio declara y la infraestructura implementa, el value object que cruza de una capa a otra, el
+  modelo de frontera con el que se valida lo que entra, la forma del payload que un caso de uso
+  devuelve. Que las dos mitades vivan en el mismo `git log` no las hace una sola pieza: siguen siendo
+  dos autores distintos escribiendo contra la misma firma.
 
 Entonces la **primera slice fija el contrato**: los nombres, los campos, sus tipos, que es
 obligatorio, que pasa cuando falla, y **un test que lo fije**. Aunque detras todavia no haya logica,
 y aunque el unico consumidor sea un doble.
+
+En hexagonal el caso mas rentable es el puerto: mergeado el puerto -con su firma y sus excepciones-,
+una slice escribe el adaptador contra un caso de uso doblado y otra el caso de uso contra un
+adaptador doblado, **a la vez y sin verse**. Sin el, la que llegue segunda descubre que la firma que
+esperaba no es la que hay.
 
 **El motivo es el paralelismo, y es la diferencia entre una tarde y tres.** Sin contrato, quien
 produce y quien consume no pueden empezar a la vez: el segundo tiene que esperar a ver que emitio el
@@ -68,9 +81,12 @@ Es tambien lo que hace verificable a cada lado por separado: el productor se mid
 sin montar al consumidor, y el consumidor contra un doble que cumple el contrato sin montar al
 productor.
 
-**Vara: el contrato merece slice propia si lo va a leer alguien que no es quien lo define.** Otro
-repo, otro equipo, otra slice de esta misma feature, un proceso externo. Si el unico que lo usa es el
-modulo que lo declara, no es una frontera: es diseno interno, y sacarlo a slice es ceremonia.
+**Vara: el contrato merece slice propia si lo va a escribir contra el alguien que no es quien lo
+define** -otro repo, otro equipo, otra capa, otra slice de esta misma feature, un proceso externo-,
+**y ese alguien podria estar trabajando a la vez**. Las dos mitades cuentan: si nadie mas lo usa es
+diseno interno, y si lo usa uno solo que ademas va detras en el orden, sacarlo a slice es ceremonia
+-lo fija la slice que lo estrena-. Lo que decide no es si la frontera es externa: es **cuantos
+autores distintos** escriben contra ella y **cuando**.
 
 **Y se fija con el primer caso real, no con todos los imaginables.** Un contrato escrito para casos
 que nadie ha pedido es especulacion con otro nombre, y ademas envejece antes de tener consumidor: la
