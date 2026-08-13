@@ -350,7 +350,7 @@ class ConductSlice:
                 return self._closing(progress, transition.state)
             if transition.wait_seconds > 0:
                 progress = self._waiting(progress, transition.wait_seconds)
-                if self._budgets.wait_exhausted(progress.waited_seconds):
+                if self._budgets.wait_exhausted(progress.waited_seconds, step=progress.run.step):
                     return self._exhausted(progress)
 
     def _exhausted(self, progress: ConductSliceProgress) -> ConductSliceResult:
@@ -569,7 +569,19 @@ class ConductSlice:
             )
         )
 
-        return replace(progress, run=recorded.run, label=recorded.label)
+        return replace(
+            progress,
+            run=recorded.run,
+            label=recorded.label,
+            waited_seconds=self._carried(progress, stepped_to=recorded.run.step),
+        )
+
+    @staticmethod
+    def _carried(progress: ConductSliceProgress, *, stepped_to: Step) -> int:
+        if stepped_to is progress.run.step:
+            return progress.waited_seconds
+
+        return 0
 
     def _closing_a_merge_missed_between_invocations(self, params: ConductSliceParams, subissue: SubIssue) -> None:
         run = subissue.run

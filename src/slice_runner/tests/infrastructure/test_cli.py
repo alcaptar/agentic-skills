@@ -104,7 +104,7 @@ _TABLE: list[tuple[Step, Outcome, dict[str, int], tuple[Step, RunState, int]]] =
     (
         Step.AWAIT_CI,
         Outcome.INDETERMINATE,
-        {"indeterminate_ticks": 2},
+        {"indeterminate_ticks": Budgets().indeterminate_ticks - 1},
         (Step.AWAIT_CI, RunState.BLOCKED_CI_INDETERMINATE, 0),
     ),
     (Step.AWAIT_CI, Outcome.FAILED, {}, (Step.IMPLEMENT, RunState.OPEN, 0)),
@@ -1371,7 +1371,7 @@ class TestWhenTheRunStaysOpen:
         monkeypatch.setattr("time.sleep", lambda seconds: None)
         invocation = self._never_run()
 
-        invocation.conduct(logs=tmp_path / "logs", budgets=Budgets(total_wait_seconds=0))
+        invocation.conduct(logs=tmp_path / "logs", budgets=Budgets(person_wait_seconds=0))
 
         assert invocation.process.ran(
             "git",
@@ -1390,10 +1390,10 @@ class TestWhenTheRunStaysOpen:
         monkeypatch.setattr("time.sleep", slept.append)
         invocation = self._never_run()
 
-        code = invocation.conduct(logs=tmp_path / "logs", budgets=Budgets(total_wait_seconds=0))
+        code = invocation.conduct(logs=tmp_path / "logs", budgets=Budgets(person_wait_seconds=0))
 
         assert code == ExitCode.WAIT_EXHAUSTED
-        assert sum(slept) == Budgets(total_wait_seconds=0).seconds_between_ticks
+        assert sum(slept) == Budgets(person_wait_seconds=0).seconds_between_ticks
         assert json.loads(capsys.readouterr().out) == {
             "halt": "wait-exhausted",
             "state": "open",
@@ -1465,7 +1465,7 @@ class TestWhenTheRunStaysOpen:
         captured = capsys.readouterr()
 
         assert code == ExitCode.WAIT_EXHAUSTED
-        assert sum(slept) == Budgets().total_wait_seconds
+        assert sum(slept) == Budgets().person_wait_seconds
         assert json.loads(captured.out)["halt"] == "wait-exhausted"
         assert invocation.process.invoked("gh", "issue", "comment")
         assert "draft" in captured.err
@@ -1598,7 +1598,7 @@ class TestTheBudgetsTheEntrypointInjects:
             ),
         )
 
-        code = invocation.conduct(logs=tmp_path / "logs", budgets=Budgets(total_wait_seconds=60))
+        code = invocation.conduct(logs=tmp_path / "logs", budgets=Budgets(person_wait_seconds=60))
 
         assert code == ExitCode.WAIT_EXHAUSTED
         assert sum(slept) == 60

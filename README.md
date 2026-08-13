@@ -285,12 +285,16 @@ mientras siga vivo, y si no, el cierre concreto- y **cuantos segundos hay que es
 proximo tick, para que el numero de la ventana de gracia no lo decida quien tickea. Los presupuestos son
 dos reintentos de controles, dos de verificacion del veto del juez, dos de correcciones que el juez pide
 sin vetar -presupuesto propio, agotarlo entrega igual y no cierra la slice-, uno de integracion continua
-roja, y 3 ticks indeterminados consecutivos con 30 s o mas entre tick y tick. Por encima de todos ellos
-hay dos topes que no cuentan intentos sino gasto: **25 $ de harness por slice**, que cierra el run como abortado y es el
+roja, y 10 ticks indeterminados consecutivos con 30 s o mas entre tick y tick. Por encima de todos ellos
+hay dos topes que no cuentan intentos sino gasto: **50 $ de harness por slice**, que cierra el run como abortado y es el
 backstop del unico bucle sin cierre propio -el descarte de un veredicto incoherente, que no gasta reintento
-porque no se toco el codigo-, y **30 minutos de espera**, que terminan la invocacion dejando el run abierto
-donde estaba. El motivo de los dos numeros esta en `docs/conventions/domain.md`. Un par (paso, resultado)
-que la secuencia no describe **no cae en una rama generica**: sale por `4`.
+porque no se toco el codigo-, y **la espera**, que termina la invocacion dejando el run abierto donde
+estaba. La espera son **dos** topes, no uno, porque esperar a una maquina no es esperar a una persona:
+**30 minutos para la integracion continua** -que no tarda mas salvo que este colgada- y **8 horas para
+las esperas humanas**, la alineacion y el merge. Y **cada paso estrena su cuenta**: lo que tardes en dar
+el `-GO` no sale del rato que el programa aguantara luego a que mergees. El motivo de los numeros esta en
+`docs/conventions/domain.md`. Un par (paso, resultado) que la secuencia no describe **no cae en una rama
+generica**: sale por `4`.
 
 ## Ejemplo: una feature de punta a punta
 
