@@ -34,7 +34,6 @@ from slice_runner.domain.event_log import EventLog
 from slice_runner.domain.forum import Forum
 from slice_runner.domain.metrics_log import MetricsLog
 from slice_runner.domain.precheck_outcome import PrecheckOutcome
-from slice_runner.domain.pull_request_state import PullRequestState
 from slice_runner.domain.pull_request_writer import PullRequestWriter
 from slice_runner.domain.role_models import RoleModels
 from slice_runner.domain.run_repository import RunRepository
@@ -42,6 +41,7 @@ from slice_runner.domain.state_machine import StateMachine
 from slice_runner.domain.understanding_writer import UnderstandingWriter
 from slice_runner.tests.mothers.control_outcome_mother import ControlOutcomeMother
 from slice_runner.tests.mothers.implementation_mother import ImplementationMother
+from slice_runner.tests.mothers.pull_request_status_mother import PullRequestStatusMother
 from slice_runner.tests.mothers.understanding_mother import UnderstandingMother
 from slice_runner.tests.mothers.verification_mother import VerificationMother
 
@@ -87,7 +87,7 @@ class Conductor:
         self.ci: Mock = create_autospec(Ci, spec_set=True, instance=True)
         self.ci.status.return_value = CiStatus.GREEN
         self.forum: Mock = create_autospec(Forum, spec_set=True, instance=True)
-        self.forum.pull_request_state.return_value = PullRequestState.MERGED
+        self.forum.pull_request_state.return_value = PullRequestStatusMother.merged()
         self.forum.open_pull_request.return_value = self.PULL_REQUEST
         self.forum.any_pull_request.return_value = self.PULL_REQUEST
         self.clock: Mock = create_autospec(Clock, spec_set=True, instance=True)

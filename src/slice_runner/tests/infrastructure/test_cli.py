@@ -110,6 +110,7 @@ _TABLE: list[tuple[Step, Outcome, dict[str, int], tuple[Step, RunState, int]]] =
     (Step.AWAIT_CI, Outcome.FAILED, {}, (Step.IMPLEMENT, RunState.OPEN, 0)),
     (Step.AWAIT_CI, Outcome.FAILED, {"ci_retries": 1}, (Step.AWAIT_CI, RunState.BLOCKED_CI_RED, 0)),
     (Step.AWAIT_CI, Outcome.OVER_BUDGET, {}, (Step.AWAIT_CI, RunState.ABORTED_BUDGET, 0)),
+    (Step.AWAIT_CI, Outcome.CONFLICTING, {}, (Step.AWAIT_CI, RunState.BLOCKED_CI_CONFLICT, 0)),
     (Step.AWAIT_MERGE, Outcome.DONE, {}, (Step.AWAIT_MERGE, RunState.MERGED, 0)),
     (Step.AWAIT_MERGE, Outcome.PENDING, {}, (Step.AWAIT_MERGE, RunState.OPEN, 30)),
     (Step.AWAIT_MERGE, Outcome.OVER_BUDGET, {}, (Step.AWAIT_MERGE, RunState.ABORTED_BUDGET, 0)),
@@ -1264,6 +1265,32 @@ class TestWhenTheRunClosesWithoutBeingMerged:
         assert json.loads(capsys.readouterr().out) == {
             "halt": "run-closed",
             "state": "blocked-ci-red",
+            "step": "await-ci",
+            "pull_request": GhConversationMother.PULL_REQUEST,
+        }
+
+    def test_a_pull_request_in_conflict_with_no_checks_closes_on_the_first_tick_without_waiting_for_the_window(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        invocation = RunInvocation(
+            children=GhConversationMother.the_slice_resumed_at(RunMother.about_to_ask_the_ci()),
+            answers=(
+                Answer(to=("git", "rev-parse"), code=0),
+                Answer(
+                    to=("gh", "pr", "list", "--state", "all"),
+                    stdout=GhConversationMother.the_pull_request_of_the_branch(),
+                ),
+                Answer(to=("gh", "pr", "checks"), stdout="[]"),
+                Answer(to=("gh", "pr", "view"), stdout=GhConversationMother.a_pull_request_in_conflict_with_its_base()),
+            ),
+        )
+
+        code = invocation.conduct(logs=tmp_path / "logs")
+
+        assert code == ExitCode.RUN_UNMERGED
+        assert json.loads(capsys.readouterr().out) == {
+            "halt": "run-closed",
+            "state": "blocked-ci-conflict",
             "step": "await-ci",
             "pull_request": GhConversationMother.PULL_REQUEST,
         }

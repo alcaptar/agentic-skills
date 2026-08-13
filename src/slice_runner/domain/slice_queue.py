@@ -63,6 +63,7 @@ class SliceQueue:
                 | IssueLabel.BLOCKED_VERIFY
                 | IssueLabel.BLOCKED_CI_RED
                 | IssueLabel.BLOCKED_CI_INDETERMINATE
+                | IssueLabel.BLOCKED_CI_CONFLICT
                 | IssueLabel.ABORTED_BUDGET
             ):
                 return True

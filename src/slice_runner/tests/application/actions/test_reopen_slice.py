@@ -46,6 +46,11 @@ _BLOCKS: list[tuple[IssueLabel, Run, Run]] = [
         replace(RunMother.blocked_on_indeterminate_ci(), indeterminate_ticks=0),
     ),
     (
+        IssueLabel.BLOCKED_CI_CONFLICT,
+        RunMother.blocked_on_conflict(),
+        replace(RunMother.blocked_on_conflict(), indeterminate_ticks=0),
+    ),
+    (
         IssueLabel.ABORTED_BUDGET,
         RunMother.aborted_for_budget(HarnessSpendMother.of_the_implementer_call()),
         replace(

@@ -31,6 +31,7 @@ _CLOSURES_OF_A_PREVIOUS_RUN = (
     IssueLabel.BLOCKED_VERIFY,
     IssueLabel.BLOCKED_CI_RED,
     IssueLabel.BLOCKED_CI_INDETERMINATE,
+    IssueLabel.BLOCKED_CI_CONFLICT,
     IssueLabel.ABORTED_BUDGET,
 )
 

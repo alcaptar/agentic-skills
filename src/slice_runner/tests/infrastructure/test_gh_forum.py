@@ -5,6 +5,7 @@ import json
 import pytest
 
 from slice_runner.domain.exceptions import UnreadableForumError
+from slice_runner.domain.pull_request_mergeability import PullRequestMergeability
 from slice_runner.domain.pull_request_state import PullRequestState
 from slice_runner.infrastructure.gh_forum import GhForum
 from slice_runner.infrastructure.gh_run_repository import GhCommandFailedError
@@ -154,10 +155,12 @@ class TestGhForumOpeningTheSlicePullRequest:
 
 class TestGhForumAskingWhatStateThePullRequestIsIn:
     @staticmethod
-    def _answering(state: str) -> ScriptedProcess:
-        return ScriptedProcess(ProcessOutput(code=0, stdout=json.dumps({"state": state}), stderr=""))
+    def _answering(state: str, *, mergeable: str = "MERGEABLE") -> ScriptedProcess:
+        return ScriptedProcess(
+            ProcessOutput(code=0, stdout=json.dumps({"state": state, "mergeable": mergeable}), stderr="")
+        )
 
-    def test_it_asks_gh_for_the_state_of_exactly_this_pull_request(self) -> None:
+    def test_it_asks_gh_for_the_state_and_the_mergeability_of_exactly_this_pull_request(self) -> None:
         process = self._answering("MERGED")
 
         GhForum(call=GhCallDoubles.wired(process)).pull_request_state(repo=_REPO, number=60)
@@ -165,26 +168,47 @@ class TestGhForumAskingWhatStateThePullRequestIsIn:
         argv = Argv(process.calls[0].argv)
         assert process.calls[0].argv[:4] == ["gh", "pr", "view", "60"]
         assert argv.value_of("--repo") == _REPO
-        assert argv.value_of("--json") == "state"
+        assert argv.value_of("--json") == "state,mergeable"
 
     def test_a_merged_pull_request_reads_as_merged(self) -> None:
-        state = GhForum(call=GhCallDoubles.wired(self._answering("MERGED"))).pull_request_state(repo=_REPO, number=60)
+        status = GhForum(call=GhCallDoubles.wired(self._answering("MERGED"))).pull_request_state(repo=_REPO, number=60)
 
-        assert state is PullRequestState.MERGED
+        assert status.state is PullRequestState.MERGED
 
     def test_a_pull_request_closed_without_merging_is_told_apart_from_one_still_open(self) -> None:
-        state = GhForum(call=GhCallDoubles.wired(self._answering("CLOSED"))).pull_request_state(repo=_REPO, number=60)
+        status = GhForum(call=GhCallDoubles.wired(self._answering("CLOSED"))).pull_request_state(repo=_REPO, number=60)
 
-        assert state is PullRequestState.CLOSED
+        assert status.state is PullRequestState.CLOSED
 
     def test_a_pull_request_still_open_reads_as_open(self) -> None:
-        state = GhForum(call=GhCallDoubles.wired(self._answering("OPEN"))).pull_request_state(repo=_REPO, number=60)
+        status = GhForum(call=GhCallDoubles.wired(self._answering("OPEN"))).pull_request_state(repo=_REPO, number=60)
 
-        assert state is PullRequestState.OPEN
+        assert status.state is PullRequestState.OPEN
 
     def test_a_state_that_is_not_one_of_the_three_gh_returns_is_rejected_instead_of_read_as_unmerged(self) -> None:
         with pytest.raises(UnreadableForumError):
             GhForum(call=GhCallDoubles.wired(self._answering("DRAFT"))).pull_request_state(repo=_REPO, number=60)
+
+    def test_a_mergeable_pull_request_reads_as_mergeable(self) -> None:
+        status = GhForum(call=GhCallDoubles.wired(self._answering("OPEN", mergeable="MERGEABLE"))).pull_request_state(
+            repo=_REPO, number=60
+        )
+
+        assert status.mergeability is PullRequestMergeability.MERGEABLE
+
+    def test_a_pull_request_in_conflict_with_its_base_reads_as_conflicting(self) -> None:
+        status = GhForum(call=GhCallDoubles.wired(self._answering("OPEN", mergeable="CONFLICTING"))).pull_request_state(
+            repo=_REPO, number=60
+        )
+
+        assert status.mergeability is PullRequestMergeability.CONFLICTING
+
+    def test_a_mergeability_gh_has_not_computed_yet_reads_as_unknown(self) -> None:
+        status = GhForum(call=GhCallDoubles.wired(self._answering("OPEN", mergeable="UNKNOWN"))).pull_request_state(
+            repo=_REPO, number=60
+        )
+
+        assert status.mergeability is PullRequestMergeability.UNKNOWN
 
     def test_a_non_zero_exit_raises_with_the_stderr_it_carried(self) -> None:
         process = ScriptedProcess(ProcessOutput(code=1, stdout="", stderr="no pull requests found for branch"))
@@ -194,7 +218,11 @@ class TestGhForumAskingWhatStateThePullRequestIsIn:
 
     def test_a_response_with_a_key_we_did_not_ask_for_is_rejected_instead_of_read_around(self) -> None:
         process = ScriptedProcess(
-            ProcessOutput(code=0, stdout=json.dumps({"state": "MERGED", "mergedAt": "2026-08-05"}), stderr="")
+            ProcessOutput(
+                code=0,
+                stdout=json.dumps({"state": "MERGED", "mergeable": "MERGEABLE", "mergedAt": "2026-08-05"}),
+                stderr="",
+            )
         )
 
         with pytest.raises(UnreadableForumError):

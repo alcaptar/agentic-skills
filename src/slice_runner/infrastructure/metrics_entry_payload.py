@@ -32,6 +32,7 @@ class DurableCi(StrEnum):
     GREEN = "green"
     RED = "red"
     NONE = "none"
+    CONFLICT = "conflict"
 
 
 class DurableDiscardCause(StrEnum):
@@ -96,6 +97,7 @@ class DurableClosure:
         DurableCi.GREEN: RunState.MERGED,
         DurableCi.RED: RunState.BLOCKED_CI_RED,
         DurableCi.NONE: RunState.BLOCKED_CI_INDETERMINATE,
+        DurableCi.CONFLICT: RunState.BLOCKED_CI_CONFLICT,
     }
 
     @classmethod
@@ -107,6 +109,8 @@ class DurableClosure:
                 return cls(verdict=DurableVerdict.PASS, ci=DurableCi.RED)
             case RunState.BLOCKED_CI_INDETERMINATE:
                 return cls(verdict=DurableVerdict.PASS, ci=DurableCi.NONE)
+            case RunState.BLOCKED_CI_CONFLICT:
+                return cls(verdict=DurableVerdict.PASS, ci=DurableCi.CONFLICT)
             case (
                 RunState.BLOCKED_VERIFY | RunState.BLOCKED_CONTROLS | RunState.BLOCKED_HYGIENE | RunState.ABORTED_BUDGET
             ):

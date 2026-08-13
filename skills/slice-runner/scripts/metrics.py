@@ -91,6 +91,7 @@ class Ci(StrEnum):
     VERDE = "green"
     ROJA = "red"
     NINGUNA = "none"
+    CONFLICTO = "conflict"
 
 
 class CausaDescarte(StrEnum):

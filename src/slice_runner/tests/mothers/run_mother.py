@@ -67,6 +67,10 @@ class RunMother:
         return Run(step=Step.AWAIT_CI, indeterminate_ticks=3)
 
     @staticmethod
+    def blocked_on_conflict() -> Run:
+        return Run(step=Step.AWAIT_CI, indeterminate_ticks=3)
+
+    @staticmethod
     def aborted_for_budget(spend: HarnessSpend) -> Run:
         return Run(step=Step.VERIFY, spend=spend)
 

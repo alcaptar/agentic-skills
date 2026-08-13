@@ -55,6 +55,7 @@ class ExitCode(IntEnum):
                 | RunState.BLOCKED_VERIFY
                 | RunState.BLOCKED_CI_RED
                 | RunState.BLOCKED_CI_INDETERMINATE
+                | RunState.BLOCKED_CI_CONFLICT
                 | RunState.ABORTED_BUDGET
             ):
                 return cls.RUN_UNMERGED

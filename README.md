@@ -361,7 +361,8 @@ los controles verdes -> juzga el diff con `claude -p` -> commit -> abre la pull 
 verde -> etiqueta la subissue `estado:esperando-merge` y **para**.
 
 Si algo se rompe, la etiqueta lo dice y el run para en vez de seguir: `bloqueada:controles`,
-`bloqueada:verify`, `bloqueada:ci-roja`, `bloqueada:ci-indeterminada` o `abortada:presupuesto`.
+`bloqueada:verify`, `bloqueada:ci-roja`, `bloqueada:ci-indeterminada`, `bloqueada:conflicto` o
+`abortada:presupuesto`.
 
 **3. Mergear (tu)**
 
