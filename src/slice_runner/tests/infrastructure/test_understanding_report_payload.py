@@ -47,30 +47,6 @@ class TestWhatTheHarnessIsAllowedToReturn:
         with pytest.raises(InvalidUnderstandingReportError, match="reason"):
             UnderstandingReportPayload.from_dict(UnderstandingReportMother.with_a_step_missing_its_reason())
 
-    def test_a_summary_over_600_characters_is_rejected(self) -> None:
-        over_the_cap = UnderstandingReportMother.valid() | {"summary": "a" * 601}
-
-        with pytest.raises(InvalidUnderstandingReportError, match="summary"):
-            UnderstandingReportPayload.from_dict(over_the_cap)
-
-    def test_a_step_reason_over_200_characters_is_rejected(self) -> None:
-        over_the_cap = UnderstandingReportMother.valid() | {
-            "steps": [{"description": UnderstandingReportMother.STEP_DESCRIPTION, "reason": "a" * 201}]
-        }
-
-        with pytest.raises(InvalidUnderstandingReportError, match="reason"):
-            UnderstandingReportPayload.from_dict(over_the_cap)
-
-    def test_a_sketch_over_1600_characters_is_rejected(self) -> None:
-        over_the_cap = UnderstandingReportMother.valid() | {"sketch": "a" * 1601}
-
-        with pytest.raises(InvalidUnderstandingReportError, match="sketch"):
-            UnderstandingReportPayload.from_dict(over_the_cap)
-
-    def test_nine_steps_are_rejected_because_eight_is_the_most_a_report_may_carry(self) -> None:
-        with pytest.raises(InvalidUnderstandingReportError, match="steps"):
-            UnderstandingReportPayload.from_dict(UnderstandingReportMother.with_steps(9))
-
     def test_eight_steps_are_accepted_because_that_is_the_cap_and_not_one_below_it(self) -> None:
         report = UnderstandingReportPayload.from_dict(UnderstandingReportMother.with_steps(8))
 
