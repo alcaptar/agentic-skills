@@ -139,3 +139,7 @@ class UnreadableMetricsLogError(ValueError):
 
 class UnreadablePluginRegistryError(ValueError):
     pass
+
+
+class UnreadableFindingsError(ValueError):
+    pass

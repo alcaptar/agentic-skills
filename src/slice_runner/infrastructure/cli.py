@@ -455,7 +455,7 @@ class Cli:
                 deliver=DeliverSlice(workspace=workspace, forum=forum),
                 close=CloseParent(repository=repository),
                 record_step=RecordStep(repository=repository, events=StderrEventLog(), clock=clock),
-                record_closure=RecordClosure(metrics=LocalMetricsLog(clock=clock)),
+                record_closure=RecordClosure(metrics=LocalMetricsLog(clock=clock), repository=repository),
             ),
             ports=ConductSlicePorts(
                 repository=repository,
