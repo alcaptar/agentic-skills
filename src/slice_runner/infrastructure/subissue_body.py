@@ -51,6 +51,10 @@ class SubissueBody:
 
         return f"{prose}\n\n{block}\n"
 
+    @classmethod
+    def without_run(cls, body: str) -> str:
+        return _STATE_BLOCK.sub("", body, count=1)
+
     @staticmethod
     def _first(line: re.Pattern[str], body: str) -> str | None:
         found = line.search(body)

@@ -4,6 +4,8 @@ from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from datetime import datetime
+
     from slice_runner.domain.alignment_response import AlignmentResponse
     from slice_runner.domain.finding import Finding
     from slice_runner.domain.issue_label import IssueLabel
@@ -22,6 +24,9 @@ class RunRepository(ABC):
     def read_children(self, *, repo: str, parent: int, expected: int) -> tuple[SubIssue, ...]: ...
 
     @abstractmethod
+    def read_subissue(self, *, repo: str, issue: int) -> SubIssue: ...
+
+    @abstractmethod
     def read_understanding(self, *, repo: str, issue: int) -> str: ...
 
     @abstractmethod
@@ -38,6 +43,12 @@ class RunRepository(ABC):
 
     @abstractmethod
     def write_run(self, *, repo: str, issue: int, run: Run) -> None: ...
+
+    @abstractmethod
+    def clear_run(self, *, repo: str, issue: int) -> None: ...
+
+    @abstractmethod
+    def mark_reset(self, *, repo: str, issue: int, branch: str, at: datetime) -> None: ...
 
     @abstractmethod
     def write_understanding(self, *, repo: str, issue: int, understanding: str) -> None: ...

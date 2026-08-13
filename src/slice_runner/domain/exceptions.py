@@ -92,6 +92,10 @@ class EmptyIssueBodyError(UnreadableIssueError):
     pass
 
 
+class NoRecognizableSpecError(UnreadableIssueError):
+    pass
+
+
 class MalformedConventionLineError(UnreadableIssueError):
     pass
 

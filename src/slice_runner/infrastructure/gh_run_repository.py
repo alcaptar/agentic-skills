@@ -19,11 +19,14 @@ from slice_runner.infrastructure.gh_sub_issue_payload import GhSubIssuePayload
 from slice_runner.infrastructure.malformed_response_comment import MalformedResponseComment
 from slice_runner.infrastructure.parent_body import ParentBody
 from slice_runner.infrastructure.reopened_comment import ReopenedComment
+from slice_runner.infrastructure.reset_comment import ResetComment
 from slice_runner.infrastructure.subissue_body import SubissueBody
 from slice_runner.infrastructure.understanding_comment import UnderstandingComment
 from slice_runner.infrastructure.veto_findings_comment import VetoFindingsComment
 
 if TYPE_CHECKING:
+    from datetime import datetime
+
     from slice_runner.domain.finding import Finding
     from slice_runner.domain.malformed_reason import MalformedReason
     from slice_runner.domain.run import Run
@@ -91,13 +94,32 @@ class GhRunRepository(RunRepository):
 
         return tuple(sorted(children, key=self._slice_number))
 
+    def read_subissue(self, *, repo: str, issue: int) -> SubIssue:
+        output = self._run(
+            ["gh", "issue", "view", str(issue), "--repo", repo, "--json", "number,title,body,labels,state"],
+            safe_to_repeat=True,
+        )
+
+        return self._sub_issue_from(GhSubIssuePayload.from_dict(self._decoded_object(output)))
+
     def write_run(self, *, repo: str, issue: int, run: Run) -> None:
-        current = GhBodyPayload.from_dict(
+        current = self._current_body(repo=repo, issue=issue)
+        self._write_body_if_changed(
+            repo=repo, issue=issue, current=current, updated=SubissueBody.with_run(current, run)
+        )
+
+    def clear_run(self, *, repo: str, issue: int) -> None:
+        current = self._current_body(repo=repo, issue=issue)
+        self._write_body_if_changed(repo=repo, issue=issue, current=current, updated=SubissueBody.without_run(current))
+
+    def _current_body(self, *, repo: str, issue: int) -> str:
+        return GhBodyPayload.from_dict(
             self._decoded_object(
                 self._run(["gh", "issue", "view", str(issue), "--repo", repo, "--json", "body"], safe_to_repeat=True)
             )
         ).body
-        updated = SubissueBody.with_run(current, run)
+
+    def _write_body_if_changed(self, *, repo: str, issue: int, current: str, updated: str) -> None:
         if updated == current:
             return
 
@@ -139,6 +161,13 @@ class GhRunRepository(RunRepository):
         self._run(
             ["gh", "issue", "comment", str(issue), "--repo", repo, "--body-file", "-"],
             stdin=ReopenedComment.rendered(instruction),
+            safe_to_repeat=False,
+        )
+
+    def mark_reset(self, *, repo: str, issue: int, branch: str, at: datetime) -> None:
+        self._run(
+            ["gh", "issue", "comment", str(issue), "--repo", repo, "--body-file", "-"],
+            stdin=ResetComment.rendered(branch=branch, at=at),
             safe_to_repeat=False,
         )
 

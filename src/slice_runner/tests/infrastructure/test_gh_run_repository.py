@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+from datetime import UTC, datetime
 
 import pytest
 
@@ -27,6 +28,7 @@ from slice_runner.infrastructure.gh_run_repository import GhCommandFailedError, 
 from slice_runner.infrastructure.malformed_response_comment import MalformedResponseComment
 from slice_runner.infrastructure.process import ProcessOutput
 from slice_runner.infrastructure.reopened_comment import ReopenedComment
+from slice_runner.infrastructure.reset_comment import ResetComment
 from slice_runner.infrastructure.understanding_comment import UnderstandingComment
 from slice_runner.infrastructure.veto_findings_comment import VetoFindingsComment
 from slice_runner.tests.argv import Argv
@@ -370,6 +372,45 @@ class TestReadingTheChildren:
             )
 
 
+class TestReadingASingleSubissue:
+    @staticmethod
+    def _process() -> ScriptedProcess:
+        payload = GhResponseMother.children_of_parent()[1]
+
+        return ScriptedProcess(ProcessOutput(code=0, stdout=json.dumps(payload), stderr=""))
+
+    def test_it_asks_gh_to_view_this_one_issue_and_only_the_fields_it_reads(self) -> None:
+        process = self._process()
+
+        GhRunRepository(call=GhCallDoubles.wired(process)).read_subissue(repo=_REPO, issue=49)
+
+        assert process.calls[0].argv == [
+            "gh",
+            "issue",
+            "view",
+            "49",
+            "--repo",
+            _REPO,
+            "--json",
+            "number,title,body,labels,state",
+        ]
+
+    def test_the_subissue_it_returns_carries_the_same_fields_a_search_result_would(self) -> None:
+        subissue = GhRunRepository(call=GhCallDoubles.wired(self._process())).read_subissue(repo=_REPO, issue=49)
+
+        assert subissue.slice_id == "slice-02"
+        assert subissue.repo == _OTHER_REPO
+        assert subissue.label is IssueLabel.PENDING
+        assert subissue.state is IssueState.OPEN
+        assert subissue.run is None
+
+    def test_a_non_zero_exit_raises_with_the_stderr_it_carried(self) -> None:
+        process = ScriptedProcess(ProcessOutput(code=1, stdout="", stderr="HTTP 404: Not Found"))
+
+        with pytest.raises(GhCommandFailedError, match="HTTP 404"):
+            GhRunRepository(call=GhCallDoubles.wired(process)).read_subissue(repo=_REPO, issue=49)
+
+
 class TestWritingTheExecutionStateBlock:
     @staticmethod
     def _process(*, body: str, edit_code: int = 0) -> ScriptedProcess:
@@ -469,6 +510,43 @@ class TestWritingTheExecutionStateBlock:
             )
 
         assert len(process.calls) == 1
+
+
+class TestClearingTheExecutionStateBlock:
+    @staticmethod
+    def _process(*, body: str, edit_code: int = 0) -> ScriptedProcess:
+        return ScriptedProcess(
+            ProcessOutput(code=0, stdout=json.dumps({"body": body}), stderr=""),
+            ProcessOutput(code=edit_code, stdout="", stderr=""),
+        )
+
+    def test_a_body_with_a_block_gets_it_removed_and_the_prose_around_it_survives_byte_for_byte(self) -> None:
+        process = self._process(body=_SUB1_BODY)
+
+        GhRunRepository(call=GhCallDoubles.wired(process)).clear_run(repo=_REPO, issue=45)
+
+        assert process.calls[1].stdin == (
+            "INTENCION: hoy no hay forma de medir el formato nuevo sin crearlo\n"
+            "ACEPTACION: el cuerpo se lee entero; los criterios llegan como lineas\n"
+            "ACEPTACION: el bloque de estado se puede reescribir sin tocar lo de arriba\n"
+            "SENAL: exenta - spike de medicion\n"
+            "\n\n\n"
+        )
+
+    def test_a_body_with_no_block_yet_is_left_unchanged_and_issues_no_edit_call(self) -> None:
+        process = self._process(body=_SUB2_BODY)
+
+        GhRunRepository(call=GhCallDoubles.wired(process)).clear_run(repo=_OTHER_REPO, issue=44)
+
+        assert len(process.calls) == 1
+
+    def test_reading_and_writing_only_ever_name_the_one_issue_being_cleared(self) -> None:
+        process = self._process(body=_SUB1_BODY)
+
+        GhRunRepository(call=GhCallDoubles.wired(process)).clear_run(repo=_REPO, issue=45)
+
+        assert all("45" in call.argv for call in process.calls)
+        assert all("44" not in call.argv for call in process.calls)
 
 
 class TestWritingTheMacroStateLabel:
@@ -952,6 +1030,57 @@ class TestMarkingASliceReopened:
 
         with pytest.raises(GhCommandFailedError, match="HTTP 422"):
             GhRunRepository(call=GhCallDoubles.wired(process)).mark_reopened(repo=_REPO, issue=45, instruction="x")
+
+
+class TestMarkingASliceReset:
+    _AT = datetime(2026, 8, 13, 9, 0, tzinfo=UTC)
+    _BRANCH = "slice/16-reseteo-de-una-slice"
+
+    def test_the_call_is_a_comment_carrying_the_rendered_reset_notice(self) -> None:
+        process = ScriptedProcess(ProcessOutput(code=0, stdout="", stderr=""))
+
+        GhRunRepository(call=GhCallDoubles.wired(process)).mark_reset(
+            repo=_REPO, issue=45, branch=self._BRANCH, at=self._AT
+        )
+
+        assert process.calls[0].argv == ["gh", "issue", "comment", "45", "--repo", _REPO, "--body-file", "-"]
+        assert process.calls[0].stdin == ResetComment.rendered(branch=self._BRANCH, at=self._AT)
+
+    def test_the_comment_names_the_branch_and_says_neither_it_nor_the_working_tree_were_touched(self) -> None:
+        process = ScriptedProcess(ProcessOutput(code=0, stdout="", stderr=""))
+
+        GhRunRepository(call=GhCallDoubles.wired(process)).mark_reset(
+            repo=_REPO, issue=45, branch=self._BRANCH, at=self._AT
+        )
+
+        assert self._BRANCH in process.calls[0].stdin
+        assert "arbol de trabajo" in process.calls[0].stdin
+
+    def test_the_comment_carries_the_marker_that_lets_a_later_read_find_it_back(self) -> None:
+        process = ScriptedProcess(ProcessOutput(code=0, stdout="", stderr=""))
+
+        GhRunRepository(call=GhCallDoubles.wired(process)).mark_reset(
+            repo=_REPO, issue=45, branch=self._BRANCH, at=self._AT
+        )
+
+        assert ResetComment.MARKER in process.calls[0].stdin
+
+    def test_the_comment_carries_the_visible_automation_mark(self) -> None:
+        process = ScriptedProcess(ProcessOutput(code=0, stdout="", stderr=""))
+
+        GhRunRepository(call=GhCallDoubles.wired(process)).mark_reset(
+            repo=_REPO, issue=45, branch=self._BRANCH, at=self._AT
+        )
+
+        assert AutomationMark.TEXT in process.calls[0].stdin
+
+    def test_a_non_zero_exit_raises_with_the_stderr_it_carried(self) -> None:
+        process = ScriptedProcess(ProcessOutput(code=1, stdout="", stderr="HTTP 422: Unprocessable Entity"))
+
+        with pytest.raises(GhCommandFailedError, match="HTTP 422"):
+            GhRunRepository(call=GhCallDoubles.wired(process)).mark_reset(
+                repo=_REPO, issue=45, branch=self._BRANCH, at=self._AT
+            )
 
 
 class TestWritingAMalformedResponse:
