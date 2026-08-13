@@ -12,6 +12,9 @@ if TYPE_CHECKING:
 class LocalSkillLibrary(SkillLibrary):
     TREES: ClassVar[tuple[str, ...]] = ("skills", "plugins")
 
+    def root(self) -> Path:
+        return ClaudeConfig.root()
+
     def directories(self) -> tuple[Path, ...]:
         root = ClaudeConfig.root()
 

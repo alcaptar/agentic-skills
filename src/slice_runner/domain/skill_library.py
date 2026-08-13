@@ -9,6 +9,9 @@ if TYPE_CHECKING:
 
 class SkillLibrary(ABC):
     @abstractmethod
+    def root(self) -> Path: ...
+
+    @abstractmethod
     def directories(self) -> tuple[Path, ...]: ...
 
     @abstractmethod
