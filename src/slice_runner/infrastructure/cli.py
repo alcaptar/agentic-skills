@@ -58,7 +58,6 @@ from slice_runner.domain.halt import Halt
 from slice_runner.domain.role_models import RoleModels
 from slice_runner.domain.state_machine import StateMachine
 from slice_runner.domain.step import Step
-from slice_runner.infrastructure.claude_deploy_watch import ClaudeDeployWatch
 from slice_runner.infrastructure.claude_implementer import ClaudeImplementer
 from slice_runner.infrastructure.claude_understanding import ClaudeUnderstanding
 from slice_runner.infrastructure.claude_verifier import ClaudeVerifier
@@ -87,6 +86,7 @@ from slice_runner.infrastructure.local_process import LocalProcess
 from slice_runner.infrastructure.local_skill_library import LocalSkillLibrary
 from slice_runner.infrastructure.local_tool_use_log import LocalToolUseLog
 from slice_runner.infrastructure.local_toolbox import LocalToolbox
+from slice_runner.infrastructure.muted_deploy_watch import MutedDeployWatch
 from slice_runner.infrastructure.process import ProcessNotRunnableError, ProcessTimedOutError
 from slice_runner.infrastructure.readiness_report import ReadinessReport
 from slice_runner.infrastructure.slice_pull_request import SlicePullRequest
@@ -472,7 +472,7 @@ class Cli:
                     tool_uses=self._tool_uses(),
                 ),
                 pull_request=SlicePullRequest(),
-                deploy_watch=ClaudeDeployWatch(process=self._process),
+                deploy_watch=MutedDeployWatch(),
             ),
             machine=machine,
             budgets=self._budgets,
