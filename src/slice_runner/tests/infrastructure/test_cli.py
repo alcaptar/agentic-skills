@@ -1898,3 +1898,122 @@ class TestTheCommandThatResetsASlice:
         code = Cli(process=process, budgets=Budgets()).reset(repo=self._REPO, issue=self._ISSUE)
 
         assert code == ExitCode.USAGE_ERROR
+
+
+class TestTheCommandThatShowsFeatureStatus:
+    _REPO = "alcaptar/agentic-skills"
+    _ISSUE = 38
+
+    @classmethod
+    def _process(
+        cls, *, children: list[dict[str, object]] | None = None, pull_requests: list[dict[str, object]] | None = None
+    ) -> AnsweringByArgv:
+        return AnsweringByArgv(
+            Answer(
+                to=("view", "--json", "body,subIssuesSummary,state"),
+                stdout=json.dumps(GhResponseMother.parent_with_two_children()),
+            ),
+            Answer(
+                to=("issue", "list", "--json", "number,title,body,labels,state"),
+                stdout=json.dumps(children if children is not None else GhResponseMother.children_of_parent()),
+            ),
+            Answer(
+                to=("pr", "list", "--json", "number,headRefName"),
+                stdout=json.dumps(pull_requests or []),
+            ),
+        )
+
+    @staticmethod
+    def _labelled(*, number: int, title: str, label: str) -> dict[str, object]:
+        return {
+            "body": "INTENCION: x\nACEPTACION: y\nSENAL: exenta - x\n",
+            "labels": [{"id": str(number), "name": label, "description": "", "color": "000000"}],
+            "number": number,
+            "state": "OPEN",
+            "title": title,
+        }
+
+    def test_it_exits_with_zero_and_prints_one_line_per_slice(self, capsys: pytest.CaptureFixture[str]) -> None:
+        code = Cli(process=self._process(), budgets=Budgets()).status(repo=self._REPO, issue=self._ISSUE)
+
+        assert code == ExitCode.OK
+        printed = capsys.readouterr().out
+        lines = printed.strip().splitlines()
+        assert len(lines) == 2
+        assert any("slice-01" in line for line in lines)
+        assert any("slice-02" in line for line in lines)
+
+    def test_a_slice_with_a_run_shows_the_step_it_is_on(self, capsys: pytest.CaptureFixture[str]) -> None:
+        Cli(process=self._process(), budgets=Budgets()).status(repo=self._REPO, issue=self._ISSUE)
+
+        lines = capsys.readouterr().out.strip().splitlines()
+        slice_01 = next(line for line in lines if "slice-01" in line)
+        assert Step.AWAIT_CI.value in slice_01
+
+    def test_a_slice_that_never_started_shows_no_step_at_all(self, capsys: pytest.CaptureFixture[str]) -> None:
+        Cli(process=self._process(), budgets=Budgets()).status(repo=self._REPO, issue=self._ISSUE)
+
+        lines = capsys.readouterr().out.strip().splitlines()
+        slice_02 = next(line for line in lines if "slice-02" in line)
+        assert not any(step.value in slice_02 for step in Step)
+
+    def test_the_pull_request_of_a_branch_is_shown_next_to_its_own_slice_only(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        pull_requests = [{"number": 47, "headRefName": "slice/01-primera-de-prueba"}]
+
+        Cli(process=self._process(pull_requests=pull_requests), budgets=Budgets()).status(
+            repo=self._REPO, issue=self._ISSUE
+        )
+
+        lines = capsys.readouterr().out.strip().splitlines()
+        slice_01 = next(line for line in lines if "slice-01" in line)
+        slice_02 = next(line for line in lines if "slice-02" in line)
+        assert "47" in slice_01
+        assert "47" not in slice_02
+
+    def test_it_never_writes_anything_gh_only_ever_reads(self) -> None:
+        process = self._process()
+
+        Cli(process=process, budgets=Budgets()).status(repo=self._REPO, issue=self._ISSUE)
+
+        assert not any(token in call.argv for call in process.calls for token in ("edit", "comment", "create", "label"))
+
+    def test_a_feature_with_a_blocked_and_an_aborted_slice_still_exits_with_zero(self) -> None:
+        children = [
+            self._labelled(number=50, title="slice-01 (x): y", label=IssueLabel.BLOCKED_CI_RED.value),
+            self._labelled(number=51, title="slice-02 (x): y", label=IssueLabel.ABORTED_BUDGET.value),
+        ]
+
+        code = Cli(process=self._process(children=children), budgets=Budgets()).status(
+            repo=self._REPO, issue=self._ISSUE
+        )
+
+        assert code == ExitCode.OK
+
+    def test_a_response_gh_cannot_read_is_reported_on_standard_error_and_not_on_standard_output(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        process = AnsweringByArgv(Answer(to=("view",), stdout="not json"))
+
+        code = Cli(process=process, budgets=Budgets()).status(repo=self._REPO, issue=self._ISSUE)
+
+        assert code == ExitCode.USAGE_ERROR
+        output = capsys.readouterr()
+        assert output.out == ""
+        assert output.err != ""
+
+
+class TestTheStatusCommandParsing:
+    def test_it_parses_with_the_issue_as_a_positional_and_the_repo_as_a_flag(self) -> None:
+        arguments = Cli.parser().parse_args(["status", "38", "--repo", "alcaptar/agentic-skills"])
+
+        assert (arguments.issue, arguments.repo) == (38, "alcaptar/agentic-skills")
+
+    def test_the_repo_has_no_default_because_a_guessed_one_reads_another_issue(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        with pytest.raises(SystemExit):
+            Cli.parser().parse_args(["status", "38"])
+
+        assert "the following arguments are required: --repo" in capsys.readouterr().err

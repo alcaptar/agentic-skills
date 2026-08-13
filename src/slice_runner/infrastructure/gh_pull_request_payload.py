@@ -3,6 +3,9 @@ from __future__ import annotations
 from enum import StrEnum
 from typing import Self
 
+from pydantic import Field
+
+from slice_runner.domain.branch_pull_request import BranchPullRequest
 from slice_runner.domain.exceptions import UnreadableForumError
 from slice_runner.domain.pull_request_mergeability import PullRequestMergeability
 from slice_runner.domain.pull_request_state import PullRequestState
@@ -24,6 +27,18 @@ class GhPullRequestMergeable(StrEnum):
 
 class GhPullRequestPayload(ContractModel):
     number: int
+
+    @classmethod
+    def from_dict(cls, data: dict[str, object]) -> Self:
+        return cls._validated(data, "gh did not return a readable pull request", UnreadableForumError)
+
+
+class GhPullRequestBranchPayload(ContractModel):
+    number: int
+    head_ref_name: str = Field(alias="headRefName")
+
+    def to_domain(self) -> BranchPullRequest:
+        return BranchPullRequest(branch=self.head_ref_name, number=self.number)
 
     @classmethod
     def from_dict(cls, data: dict[str, object]) -> Self:

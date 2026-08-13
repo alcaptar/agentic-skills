@@ -5,10 +5,15 @@ from typing import TYPE_CHECKING
 
 from slice_runner.domain.exceptions import UnreadableForumError
 from slice_runner.domain.forum import Forum
-from slice_runner.infrastructure.gh_pull_request_payload import GhPullRequestPayload, GhPullRequestStatePayload
+from slice_runner.infrastructure.gh_pull_request_payload import (
+    GhPullRequestBranchPayload,
+    GhPullRequestPayload,
+    GhPullRequestStatePayload,
+)
 from slice_runner.infrastructure.gh_run_repository import GhCommandFailedError
 
 if TYPE_CHECKING:
+    from slice_runner.domain.branch_pull_request import BranchPullRequest
     from slice_runner.domain.pull_request_status import PullRequestStatus
     from slice_runner.infrastructure.gh_call import GhCall
 
@@ -22,6 +27,19 @@ class GhForum(Forum):
 
     def any_pull_request(self, *, repo: str, branch: str) -> int | None:
         return self._listed(repo=repo, branch=branch, state="all")
+
+    def open_pull_requests(self, *, repo: str, branches: tuple[str, ...]) -> tuple[BranchPullRequest, ...]:
+        argv = ["gh", "pr", "list", "--repo", repo, "--state", "open", "--json", "number,headRefName"]
+        outcome = self._call.run(argv, stdin="", safe_to_repeat=True)
+        if outcome.output.code != 0:
+            raise GhCommandFailedError(f"{' '.join(argv)}: {outcome.reason}")
+
+        pulls = (
+            GhPullRequestBranchPayload.from_dict(item).to_domain()
+            for item in self._decoded_array(outcome.output.stdout)
+        )
+
+        return tuple(pull for pull in pulls if pull.branch in branches)
 
     def _listed(self, *, repo: str, branch: str, state: str) -> int | None:
         argv = ["gh", "pr", "list", "--repo", repo, "--head", branch, "--state", state, "--json", "number"]

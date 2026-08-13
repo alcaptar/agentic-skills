@@ -12,3 +12,4 @@ class Subcommand(StrEnum):
     DOCTOR = "doctor"
     METRICS = "metrics"
     RESET = "reset"
+    STATUS = "status"
