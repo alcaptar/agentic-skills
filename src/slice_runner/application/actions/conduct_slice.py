@@ -33,6 +33,7 @@ from slice_runner.domain.issue_label import IssueLabel
 from slice_runner.domain.outcome import Outcome
 from slice_runner.domain.precheck_outcome import PrecheckOutcome
 from slice_runner.domain.prechecks import Prechecks
+from slice_runner.domain.pull_request_mergeability import PullRequestMergeability
 from slice_runner.domain.pull_request_state import PullRequestState
 from slice_runner.domain.ruling import Ruling
 from slice_runner.domain.run import Run
@@ -526,17 +527,26 @@ class ConductSlice:
         try:
             status = self._ci.status(repo=progress.params.repo, pull_request=opened)
         except (CiCommandFailedError, UnreadableCiError) as unreadable:
-            cause = CiIndeterminateCause.of_the_failure(unreadable)
+            return self._indeterminate(asked, cause=CiIndeterminateCause.of_the_failure(unreadable))
 
-            return SteppedSlice(progress=replace(asked, ci_indeterminate_cause=cause), outcome=Outcome.INDETERMINATE)
+        outcome = Outcome.of_the_ci(status)
+        if outcome is Outcome.INDETERMINATE:
+            return self._indeterminate(asked, cause=None)
 
-        return SteppedSlice(progress=asked, outcome=Outcome.of_the_ci(status))
+        return SteppedSlice(progress=asked, outcome=outcome)
+
+    def _indeterminate(self, progress: ConductSliceProgress, *, cause: CiIndeterminateCause | None) -> SteppedSlice:
+        status = self._forum.pull_request_state(repo=progress.params.repo, number=self._pull_request_of(progress))
+        if status.mergeability is PullRequestMergeability.CONFLICTING:
+            return SteppedSlice(progress=progress, outcome=Outcome.CONFLICTING)
+
+        return SteppedSlice(progress=replace(progress, ci_indeterminate_cause=cause), outcome=Outcome.INDETERMINATE)
 
     def _asking_for_the_merge(self, progress: ConductSliceProgress) -> SteppedSlice | HaltedSlice:
         opened = self._pull_request_of(progress)
         asked = replace(progress, pull_request=opened)
 
-        match self._forum.pull_request_state(repo=progress.params.repo, number=opened):
+        match self._forum.pull_request_state(repo=progress.params.repo, number=opened).state:
             case PullRequestState.MERGED:
                 return SteppedSlice(progress=asked, outcome=Outcome.DONE)
             case PullRequestState.OPEN:
@@ -592,7 +602,7 @@ class ConductSlice:
         opened = self._forum.any_pull_request(repo=params.repo, branch=subissue.branch)
         if (
             opened is None
-            or self._forum.pull_request_state(repo=params.repo, number=opened) is not PullRequestState.MERGED
+            or self._forum.pull_request_state(repo=params.repo, number=opened).state is not PullRequestState.MERGED
         ):
             return
 

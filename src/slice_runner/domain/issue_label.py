@@ -16,6 +16,7 @@ class IssueLabel(StrEnum):
     BLOCKED_VERIFY = "bloqueada:verify"
     BLOCKED_CI_RED = "bloqueada:ci-roja"
     BLOCKED_CI_INDETERMINATE = "bloqueada:ci-indeterminada"
+    BLOCKED_CI_CONFLICT = "bloqueada:conflicto"
     ABORTED_BUDGET = "abortada:presupuesto"
 
     @classmethod
@@ -31,6 +32,7 @@ class IssueLabel(StrEnum):
                 | RunState.BLOCKED_VERIFY
                 | RunState.BLOCKED_CI_RED
                 | RunState.BLOCKED_CI_INDETERMINATE
+                | RunState.BLOCKED_CI_CONFLICT
             ):
                 return cls._of_the_blocked_reason(state)
             case RunState.ABORTED_BUDGET:
@@ -54,4 +56,5 @@ class IssueLabel(StrEnum):
             RunState.BLOCKED_VERIFY: cls.BLOCKED_VERIFY,
             RunState.BLOCKED_CI_RED: cls.BLOCKED_CI_RED,
             RunState.BLOCKED_CI_INDETERMINATE: cls.BLOCKED_CI_INDETERMINATE,
+            RunState.BLOCKED_CI_CONFLICT: cls.BLOCKED_CI_CONFLICT,
         }[state]

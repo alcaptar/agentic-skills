@@ -151,15 +151,19 @@ class GhConversationMother:
 
     @classmethod
     def a_merged_pull_request(cls) -> str:
-        return json.dumps({"state": "MERGED"})
+        return json.dumps({"state": "MERGED", "mergeable": "MERGEABLE"})
 
     @classmethod
     def a_pull_request_still_open(cls) -> str:
-        return json.dumps({"state": "OPEN"})
+        return json.dumps({"state": "OPEN", "mergeable": "MERGEABLE"})
 
     @classmethod
     def a_pull_request_closed_without_merging(cls) -> str:
-        return json.dumps({"state": "CLOSED"})
+        return json.dumps({"state": "CLOSED", "mergeable": "UNKNOWN"})
+
+    @classmethod
+    def a_pull_request_in_conflict_with_its_base(cls) -> str:
+        return json.dumps({"state": "OPEN", "mergeable": "CONFLICTING"})
 
     @classmethod
     def checks_in_red(cls) -> str:

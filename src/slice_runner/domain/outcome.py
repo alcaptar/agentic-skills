@@ -23,6 +23,7 @@ class Outcome(StrEnum):
     INDETERMINATE = "indeterminate"
     DISCARDED = "discarded"
     OVER_BUDGET = "over-budget"
+    CONFLICTING = "conflicting"
 
     @classmethod
     def of_the_alignment(cls, kind: AlignmentResponseKind) -> Outcome:

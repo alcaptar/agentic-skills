@@ -26,11 +26,14 @@ cadena, asi que ni el formato del issue ni el JSON de salida cambian, pero las c
   `match` exhaustivo, para que anadir un miembro rompa en `mypy` en vez de caer en silencio en la
   rama generica.
 - **Un puerto contesta con el vocabulario, no con un `bool` derivado de el.** `Forum.pull_request_state`
-  devuelve `PullRequestState` (`merged`, `open`, `closed`) porque `gh pr view --json state` ya distingue
-  los tres. El `merged: bool` que hubo antes colapsaba "cerrada sin mergear" con "todavia abierta", que es
-  el mismo fallo que el `Optional[Enum]` del apartado de antipatrones: quien conducia el run tickeaba el
-  tope entero esperando un merge que ya no podia llegar, y cada reinvocacion repetia la espera. La
-  traduccion desde las cadenas de `gh` vive en la frontera (`docs/conventions/infrastructure.md`).
+  devuelve `PullRequestStatus` (`domain/pull_request_status.py`), que junta el `PullRequestState`
+  (`merged`, `open`, `closed`) con el `PullRequestMergeability` (`mergeable`, `conflicting`, `unknown`)
+  porque `gh pr view --json state,mergeable` ya distingue las dos cosas **en la misma llamada**: no es un
+  segundo puerto ni una segunda llamada, es un campo mas de una respuesta que ya se estaba leyendo. El
+  `merged: bool` que hubo antes colapsaba "cerrada sin mergear" con "todavia abierta", que es el mismo
+  fallo que el `Optional[Enum]` del apartado de antipatrones: quien conducia el run tickeaba el tope
+  entero esperando un merge que ya no podia llegar, y cada reinvocacion repetia la espera. La traduccion
+  desde las cadenas de `gh` vive en la frontera (`docs/conventions/infrastructure.md`).
 - **La pertenencia se pregunta contra los valores, no con `in`.** `ProtectedBranch.protects(name)`
   compara contra el `value` de cada miembro: en Python 3.11 -el minimo que declara
   `docs/conventions/architecture.md`- un `name in cls` con una cadena que no es miembro lanza
@@ -82,6 +85,18 @@ tambien exista alli se declara y se mide con un contrato, nunca se comparte por 
 traductores al vocabulario con el que se interroga a `StateMachine` viven del lado del destino, como
 `IssueLabel.of`: `Outcome.of_the_ci(status)` y `Outcome.of_the_verdict(verdict)`, los dos con `match`
 exhaustivo y sin rama generica, para que la regla no acabe siendo un `if` de quien conduce el run.
+
+**Un conflicto con la base no se resuelve tickeando, asi que no gasta la ventana de gracia de la CI
+indeterminada.** `Outcome.CONFLICTING` cierra directo a `RunState.BLOCKED_CI_CONFLICT` desde
+`StateMachine._after_asking_the_ci`, sin pasar por `_counting_a_tick_with_no_answer`: es la misma
+politica de "un numero por concepto" de mas abajo aplicada al reves -aqui la regla es que **cero** ticks
+son la cuenta correcta, porque ningun tick arregla un conflicto y esperarlo es tiempo tirado-. Quien
+produce ese `Outcome` es `ConductSlice`, no esta politica: la CI indeterminada por si sola no distingue
+"todavia no hay checks" de "esta pull request no se puede mergear", asi que **solo** cuando la
+integracion continua ya salio indeterminada -por excepcion o por `CiStatus.NO_CHECKS`/`UNKNOWN`- se le
+pregunta a `Forum.pull_request_state` por la `mergeability`; una integracion continua que contesta verde,
+roja o pendiente no paga esa llamada de mas. Si la pull request es mergeable, nada cambia: la ventana de
+gracia se gasta entera como hoy y el cierre sigue siendo `bloqueada:ci-indeterminada`.
 
 **La higiene del indice es politica, y sus prefijos prohibidos son una duplicacion declarada mas.**
 `StagedHygiene.of(staged=..., declared=...)` (`domain/staged_hygiene.py`) devuelve las ofensas

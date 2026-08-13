@@ -30,7 +30,6 @@ from slice_runner.domain.harness_spend import HarnessSpend
 from slice_runner.domain.issue_label import IssueLabel
 from slice_runner.domain.malformed_reason import MalformedReason
 from slice_runner.domain.precheck_outcome import PrecheckOutcome
-from slice_runner.domain.pull_request_state import PullRequestState
 from slice_runner.domain.retry_response import RetryResponse
 from slice_runner.domain.retry_response_kind import RetryResponseKind
 from slice_runner.domain.role_models import RoleModels
@@ -42,6 +41,7 @@ from slice_runner.tests.mothers.control_outcome_mother import ControlOutcomeMoth
 from slice_runner.tests.mothers.harness_spend_mother import HarnessSpendMother
 from slice_runner.tests.mothers.implementation_mother import ImplementationMother
 from slice_runner.tests.mothers.parent_issue_mother import ParentIssueMother
+from slice_runner.tests.mothers.pull_request_status_mother import PullRequestStatusMother
 from slice_runner.tests.mothers.rejection_mother import RejectionMother
 from slice_runner.tests.mothers.run_mother import RunMother
 from slice_runner.tests.mothers.select_slice_result_mother import SelectSliceResultMother
@@ -559,7 +559,7 @@ class TestConductSliceClosingAMergeMissedBetweenInvocations:
     def test_a_dangling_subissue_whose_pull_request_closed_without_merging_is_left_untouched(self) -> None:
         dangling = SubIssueMother.dangling()
         conductor = self._conductor(dangling=(dangling,))
-        conductor.forum.pull_request_state.return_value = PullRequestState.CLOSED
+        conductor.forum.pull_request_state.return_value = PullRequestStatusMother.closed()
 
         conductor.conduct()
 
@@ -603,7 +603,7 @@ class TestConductSliceClosingAMergeMissedBetweenInvocations:
     def test_a_dangling_subissue_whose_pull_request_closed_without_merging_asks_to_close_nothing(self) -> None:
         dangling = SubIssueMother.dangling()
         conductor = self._conductor(dangling=(dangling,))
-        conductor.forum.pull_request_state.return_value = PullRequestState.CLOSED
+        conductor.forum.pull_request_state.return_value = PullRequestStatusMother.closed()
 
         conductor.conduct()
 
@@ -814,7 +814,7 @@ class TestConductSliceOnTheHappyPath:
 
     def test_it_walks_the_steps_in_the_order_the_state_machine_dictates_and_persists_each_one(self) -> None:
         conductor = self._conductor(budgets=Budgets(ci_wait_seconds=30, person_wait_seconds=30))
-        conductor.forum.pull_request_state.return_value = PullRequestState.OPEN
+        conductor.forum.pull_request_state.return_value = PullRequestStatusMother.open_and_mergeable()
 
         result = conductor.conduct()
 
@@ -870,7 +870,7 @@ class TestConductSliceOnTheHappyPath:
 
     def test_a_green_ci_moves_the_label_to_awaiting_merge_because_the_merge_is_a_human_decision(self) -> None:
         conductor = self._conductor(budgets=Budgets(ci_wait_seconds=30, person_wait_seconds=30))
-        conductor.forum.pull_request_state.return_value = PullRequestState.OPEN
+        conductor.forum.pull_request_state.return_value = PullRequestStatusMother.open_and_mergeable()
 
         conductor.conduct()
 
@@ -1032,7 +1032,7 @@ class TestConductSliceReportingEvents:
 
     def test_a_pending_merge_reports_awaiting_a_person_because_the_merge_is_a_human_decision(self) -> None:
         conductor = self._conductor(budgets=Budgets(person_wait_seconds=30))
-        conductor.forum.pull_request_state.return_value = PullRequestState.OPEN
+        conductor.forum.pull_request_state.return_value = PullRequestStatusMother.open_and_mergeable()
 
         conductor.conduct()
 
@@ -1519,7 +1519,7 @@ class TestConductSliceWhenThePullRequestWasClosedWithoutMerging:
     @staticmethod
     def _conductor() -> Conductor:
         conductor = Conductor(chosen=SelectSliceResultMother.resumed_at(RunMother.awaiting_merge()))
-        conductor.forum.pull_request_state.return_value = PullRequestState.CLOSED
+        conductor.forum.pull_request_state.return_value = PullRequestStatusMother.closed()
 
         return conductor
 
@@ -1553,7 +1553,7 @@ class TestConductSliceWaitingForTheMerge:
 
     def test_a_merge_that_never_arrives_flags_the_subissue_that_its_pull_request_was_left_unmerged(self) -> None:
         conductor = self._conductor(budgets=Budgets(person_wait_seconds=30))
-        conductor.forum.pull_request_state.return_value = PullRequestState.OPEN
+        conductor.forum.pull_request_state.return_value = PullRequestStatusMother.open_and_mergeable()
 
         result = conductor.conduct()
 
@@ -1602,7 +1602,7 @@ class TestConductSliceWaitingForTheCi:
     def test_what_the_ci_took_is_not_charged_to_the_person_who_has_to_merge(self) -> None:
         conductor = self._conductor(budgets=Budgets(ci_wait_seconds=60, person_wait_seconds=60))
         conductor.ci.status.side_effect = [CiStatus.PENDING, CiStatus.GREEN]
-        conductor.forum.pull_request_state.return_value = PullRequestState.OPEN
+        conductor.forum.pull_request_state.return_value = PullRequestStatusMother.open_and_mergeable()
 
         result = conductor.conduct()
 
@@ -1656,6 +1656,43 @@ class TestConductSliceWaitingForTheCi:
             add=IssueLabel.BLOCKED_CI_INDETERMINATE,
         )
 
+    def test_a_conflicting_pull_request_with_no_checks_closes_on_the_first_tick_without_spending_the_window(
+        self,
+    ) -> None:
+        conductor = self._conductor()
+        conductor.ci.status.return_value = CiStatus.NO_CHECKS
+        conductor.forum.pull_request_state.return_value = PullRequestStatusMother.open_and_conflicting()
+
+        result = conductor.conduct()
+
+        assert conductor.clock.sleep.call_count == 0
+        assert result.state is RunState.BLOCKED_CI_CONFLICT
+        conductor.repository.write_label.assert_called_once_with(
+            repo=Conductor.REPO,
+            issue=_SUBISSUE,
+            remove=IssueLabel.IN_PROGRESS,
+            add=IssueLabel.BLOCKED_CI_CONFLICT,
+        )
+
+    def test_a_conflicting_pull_request_that_closes_is_left_open_because_the_fix_is_merging_the_base(self) -> None:
+        conductor = self._conductor()
+        conductor.ci.status.return_value = CiStatus.NO_CHECKS
+        conductor.forum.pull_request_state.return_value = PullRequestStatusMother.open_and_conflicting()
+
+        conductor.conduct()
+
+        assert conductor.close.execute.call_count == 0
+
+    def test_a_mergeable_pull_request_with_no_checks_still_spends_the_whole_grace_window(self) -> None:
+        conductor = self._conductor()
+        conductor.ci.status.return_value = CiStatus.NO_CHECKS
+        conductor.forum.pull_request_state.return_value = PullRequestStatusMother.open_and_mergeable()
+
+        result = conductor.conduct()
+
+        assert conductor.clock.sleep.call_count == Budgets().indeterminate_ticks - 1
+        assert result.state is RunState.BLOCKED_CI_INDETERMINATE
+
     def test_a_ci_state_nobody_can_read_counts_as_indeterminate_and_not_as_a_failure_of_the_slice(self) -> None:
         conductor = self._conductor(budgets=Budgets(indeterminate_ticks=1))
         conductor.ci.status.return_value = CiStatus.UNKNOWN
@@ -1674,6 +1711,38 @@ class TestConductSliceWaitingForTheCi:
         assert conductor.implement.execute.call_count == 1
         assert result.state is RunState.BLOCKED_CI_RED
         assert conductor.metrics.record.call_args.args[0].state is RunState.BLOCKED_CI_RED
+
+
+class TestConductSliceAsksAboutTheConflictOnlyWhenTheCiIsIndeterminate:
+    @staticmethod
+    def _conductor(*, budgets: Budgets | None = None) -> Conductor:
+        return Conductor(chosen=SelectSliceResultMother.resumed_at(RunMother.about_to_ask_the_ci()), budgets=budgets)
+
+    def test_a_pending_ci_never_asks_about_mergeability(self) -> None:
+        conductor = self._conductor(budgets=Budgets(ci_wait_seconds=30))
+        conductor.ci.status.return_value = CiStatus.PENDING
+
+        conductor.conduct()
+
+        assert conductor.forum.pull_request_state.call_count == 0
+
+    def test_a_red_ci_with_no_retry_left_never_asks_about_mergeability(self) -> None:
+        conductor = self._conductor(budgets=Budgets(ci_retries=0))
+        conductor.ci.status.return_value = CiStatus.RED
+
+        conductor.conduct()
+
+        assert conductor.forum.pull_request_state.call_count == 0
+
+    def test_a_green_ci_asks_about_the_pull_request_only_once_to_poll_the_merge_and_not_to_check_a_conflict(
+        self,
+    ) -> None:
+        conductor = self._conductor()
+        conductor.ci.status.return_value = CiStatus.GREEN
+
+        conductor.conduct()
+
+        assert conductor.forum.pull_request_state.call_count == 1
 
 
 class TestConductSliceWhenTheCiCannotBeRead:
@@ -1715,6 +1784,27 @@ class TestConductSliceWhenTheCiCannotBeRead:
     def test_a_legitimate_no_checks_reading_leaves_the_cause_out_because_nothing_failed(self) -> None:
         conductor = self._conductor()
         conductor.ci.status.return_value = CiStatus.NO_CHECKS
+
+        conductor.conduct()
+
+        recorded = conductor.metrics.record.call_args.args[0]
+        assert recorded.ci_indeterminate_cause is None
+
+    def test_a_failed_command_against_a_conflicting_pull_request_closes_as_conflict_and_not_as_indeterminate(
+        self,
+    ) -> None:
+        conductor = self._conductor()
+        conductor.ci.status.side_effect = CiCommandFailedError("gh pr checks failed for owner/repo#61: rate limited")
+        conductor.forum.pull_request_state.return_value = PullRequestStatusMother.open_and_conflicting()
+
+        result = conductor.conduct()
+
+        assert result.state is RunState.BLOCKED_CI_CONFLICT
+
+    def test_a_failed_command_against_a_conflicting_pull_request_records_no_indeterminate_cause(self) -> None:
+        conductor = self._conductor()
+        conductor.ci.status.side_effect = CiCommandFailedError("gh pr checks failed for owner/repo#61: rate limited")
+        conductor.forum.pull_request_state.return_value = PullRequestStatusMother.open_and_conflicting()
 
         conductor.conduct()
 

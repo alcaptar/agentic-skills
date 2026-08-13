@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from slice_runner.domain.pull_request_state import PullRequestState
+    from slice_runner.domain.pull_request_status import PullRequestStatus
 
 
 class Forum(ABC):
@@ -18,7 +18,7 @@ class Forum(ABC):
     def create_pull_request(self, *, repo: str, branch: str, base: str, title: str, body: str) -> int: ...
 
     @abstractmethod
-    def pull_request_state(self, *, repo: str, number: int) -> PullRequestState: ...
+    def pull_request_state(self, *, repo: str, number: int) -> PullRequestStatus: ...
 
     @abstractmethod
     def authenticated_as(self) -> str | None: ...

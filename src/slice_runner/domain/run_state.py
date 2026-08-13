@@ -11,4 +11,5 @@ class RunState(StrEnum):
     BLOCKED_VERIFY = "blocked-verify"
     BLOCKED_CI_RED = "blocked-ci-red"
     BLOCKED_CI_INDETERMINATE = "blocked-ci-indeterminate"
+    BLOCKED_CI_CONFLICT = "blocked-ci-conflict"
     ABORTED_BUDGET = "aborted-budget"

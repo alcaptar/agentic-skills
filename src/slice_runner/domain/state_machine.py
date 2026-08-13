@@ -36,7 +36,7 @@ class StateMachine:
                 return replace(run, verify_retries=0)
             case IssueLabel.BLOCKED_CI_RED:
                 return replace(run, ci_retries=0)
-            case IssueLabel.BLOCKED_CI_INDETERMINATE:
+            case IssueLabel.BLOCKED_CI_INDETERMINATE | IssueLabel.BLOCKED_CI_CONFLICT:
                 return replace(run, indeterminate_ticks=0)
             case IssueLabel.ABORTED_BUDGET:
                 return replace(run, spend=HarnessSpend.nothing())
@@ -158,6 +158,8 @@ class StateMachine:
                 return self._counting_a_tick_with_no_answer(run)
             case Outcome.FAILED:
                 return self._retrying_a_red_ci(self._answered(run))
+            case Outcome.CONFLICTING:
+                return self._closed(run, RunState.BLOCKED_CI_CONFLICT)
             case _:
                 self._impossible(run, outcome)
 

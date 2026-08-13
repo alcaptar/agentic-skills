@@ -9,7 +9,7 @@ from slice_runner.infrastructure.gh_pull_request_payload import GhPullRequestPay
 from slice_runner.infrastructure.gh_run_repository import GhCommandFailedError
 
 if TYPE_CHECKING:
-    from slice_runner.domain.pull_request_state import PullRequestState
+    from slice_runner.domain.pull_request_status import PullRequestStatus
     from slice_runner.infrastructure.gh_call import GhCall
 
 
@@ -59,8 +59,8 @@ class GhForum(Forum):
 
         return self._number_of(outcome.output.stdout)
 
-    def pull_request_state(self, *, repo: str, number: int) -> PullRequestState:
-        argv = ["gh", "pr", "view", str(number), "--repo", repo, "--json", "state"]
+    def pull_request_state(self, *, repo: str, number: int) -> PullRequestStatus:
+        argv = ["gh", "pr", "view", str(number), "--repo", repo, "--json", "state,mergeable"]
         outcome = self._call.run(argv, stdin="", safe_to_repeat=True)
         if outcome.output.code != 0:
             raise GhCommandFailedError(f"{' '.join(argv)}: {outcome.reason}")
