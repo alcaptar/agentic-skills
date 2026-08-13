@@ -186,6 +186,12 @@ SENAL: prometheus min_over_time(application_stock_actual[10m]) < 0 dispara la al
 - El padre lleva `## Fuentes de convencion` con lineas `- doc: <ruta>` o `- skill: <ruta>`: punteros
   confirmados a la vara de medir del repo (los escribe el paso 3; slice-runner los exige). Punteros,
   nunca el contenido de la convencion.
+- **Cada ruta es un fichero, nunca un directorio.** `slice-runner` **lee el contenido** de cada fuente
+  y lo mete en el prompt de los tres agentes, asi que `- doc: docs/conventions/` no es un puntero mas
+  corto: es una fuente que no se puede leer, y para el run en los prechecks. Y listar la carpeta
+  tampoco valdria: meteria en el prompt lo que **no** es la vara del codigo -el flujo de trabajo de una
+  persona, la convencion de como se redacta una convencion- y haria que anadir un fichero ahi cambiase
+  en silencio lo que ven los tres agentes. Se listan los ficheros, uno por linea.
 - **Las fuentes son por repo.** Las lineas antes de cualquier `### <org>/<repo>` son las del repo del
   padre; cada subseccion `###` declara la vara de un repo destino. Si una slice lleva `REPO:`, su repo
   **tiene que** tener su subseccion: medir una alerta del repo de manifiestos con las convenciones del
@@ -461,6 +467,15 @@ trabajo. Ofrece corregirlas. Checklist:
   `- skill:`). Si falta (p. ej. un issue anterior a este mecanismo), **es la desviacion a corregir**:
   corre el descubrimiento (paso 3), confirmala con la persona y anadela al cuerpo del padre. Este modo
   es el unico sitio que rellena un padre sin la seccion: slice-runner solo la consume, no la genera.
+- **Y cada fuente es un fichero que existe y se puede leer**, no un directorio ni una ruta que se
+  movio. **Compruebalo de verdad, una por una, contra el repo**: es el unico item de este checklist que
+  no se decide leyendo el issue. Un directorio como `docs/conventions/` valia cuando las fuentes eran
+  punteros que el implementador abria y elegia; desde que **su contenido viaja dentro del prompt**, una
+  fuente que no se puede leer para el run en los prechecks, antes de escribir nada. Si encuentras una,
+  la desviacion se corrige **listando los ficheros** que de verdad son la vara del codigo -no todos los
+  que haya en la carpeta: `git-workflow.md` y el `CLAUDE.md` los lee una persona en sesion, no quien
+  implementa-. Es la revision que hay que pasarle a **todo issue creado antes de que la vara viajara en
+  el prompt**, y hacerlo aqui cuesta un minuto; descubrirlo al lanzar cuesta el lanzamiento.
 - Nombres unicos y estables (no colisionan al derivar ramas `slice/NN-name`).
 - **Calidad del corte** (contra `references/slicing.md`): cada slice es vertical, desplegable sola y
   reversible; el conjunto pasa el **test de despriorizacion** (hay >=1 slice que se podria posponer)
