@@ -4,6 +4,7 @@ import json
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar
 
+from slice_runner.infrastructure.cited_sources import CitedSources
 from slice_runner.infrastructure.counted_lines import CountedLines
 from slice_runner.infrastructure.prior_art_block import PriorArtBlock
 from slice_runner.infrastructure.understanding_brief import UnderstandingBrief
@@ -13,6 +14,7 @@ if TYPE_CHECKING:
     from slice_runner.domain.alignment import Alignment
     from slice_runner.domain.controls import Controls
     from slice_runner.domain.parent_issue import ParentIssue
+    from slice_runner.domain.source_reader import SourceReader
     from slice_runner.domain.sub_issue import SubIssue
 
 
@@ -26,6 +28,7 @@ class UnderstandingInvocation:
     repo: str
     worktree: str
     alignment: Alignment
+    reader: SourceReader
 
     @property
     def cwd(self) -> str:
@@ -92,8 +95,8 @@ class UnderstandingInvocation:
                 *PriorArtBlock.of(self.parent.prior_art),
                 f"- senal: {subissue.signal}",
                 *CountedLines.of("criterios de aceptacion", subissue.criteria),
-                *CountedLines.of(
-                    "fuentes de convencion", tuple(f"{source.kind}: {source.path}" for source in self.parent.sources)
+                *CitedSources.of(
+                    "fuentes de convencion", reader=self.reader, worktree=self.worktree, sources=self.parent.sources
                 ),
                 *self._controls,
             ]

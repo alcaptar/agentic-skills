@@ -9,9 +9,12 @@ from unittest.mock import Mock, create_autospec
 from slice_runner.domain.budgets import Budgets
 from slice_runner.domain.call_spend_log import CallSpendLog
 from slice_runner.domain.call_trace import CallTrace
+from slice_runner.domain.cited_source import CitedSource
 from slice_runner.domain.clock import Clock
+from slice_runner.domain.exceptions import UnreadableSourceError
 from slice_runner.domain.gh_retry_policy import GhRetryPolicy
 from slice_runner.domain.harness_spend import HarnessSpend
+from slice_runner.domain.source_reader import SourceReader
 from slice_runner.infrastructure.gh_call import GhCall
 from slice_runner.infrastructure.judge_invocation import JudgeInvocation
 from slice_runner.infrastructure.process import (
@@ -29,6 +32,7 @@ if TYPE_CHECKING:
 
     from slice_runner.domain.call_spend_log import HarnessCallSpend
     from slice_runner.domain.call_trace import HarnessCall
+    from slice_runner.domain.source import Source
     from slice_runner.domain.step import Step
     from slice_runner.infrastructure.turn_log import HarnessTurn
 
@@ -281,6 +285,26 @@ class RecordingClock(Clock):
 
     def now(self) -> datetime:
         return datetime(2026, 1, 1, tzinfo=UTC)
+
+
+class RecordedSourceReader(SourceReader):
+    DEFAULT_CONTENT: ClassVar[str] = "reglas del repo"
+
+    def __init__(self, *, contents: dict[str, str] | None = None, unreadable: frozenset[str] = frozenset()) -> None:
+        self._contents = contents or {}
+        self._unreadable = unreadable
+        self.calls: list[tuple[str, Source]] = []
+
+    def read_all(self, *, worktree: str, sources: tuple[Source, ...]) -> tuple[CitedSource, ...]:
+        cited = []
+        for source in sources:
+            self.calls.append((worktree, source))
+            if source.path in self._unreadable:
+                raise UnreadableSourceError(f"{source.path} was scripted as unreadable for this test")
+
+            cited.append(CitedSource(source=source, content=self._contents.get(source.path, self.DEFAULT_CONTENT)))
+
+        return tuple(cited)
 
 
 class GhCallDoubles:

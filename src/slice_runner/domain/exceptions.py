@@ -141,5 +141,13 @@ class UnreadablePluginRegistryError(ValueError):
     pass
 
 
+class UnreadableSourceError(ValueError):
+    pass
+
+
+class SourcesBudgetExceededError(ValueError):
+    pass
+
+
 class UnreadableFindingsError(ValueError):
     pass

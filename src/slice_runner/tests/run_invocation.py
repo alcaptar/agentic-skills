@@ -27,6 +27,7 @@ class RunInvocation:
             Answer(to=("gh", "issue", "view", "body"), stdout=GhConversationMother.body_of_the_subissue()),
             Answer(to=("gh", "issue", "edit")),
             Answer(to=("gh", "issue", "comment")),
+            Answer(to=("cat", "CLAUDE.md"), stdout="reglas del repo"),
         )
 
     def conduct(

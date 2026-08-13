@@ -24,6 +24,10 @@ class Budgets:
     slice_cost_usd: float = 50.0
     gh_retries: int = 3
     seconds_between_gh_retries: int = 2
+    sources_max_chars: int = 200_000
+
+    def sources_exceed(self, total_chars: int) -> bool:
+        return total_chars > self.sources_max_chars
 
     def wait_exhausted(self, waited_seconds: int, *, step: Step) -> bool:
         return waited_seconds >= self.waiting_room_of(step)

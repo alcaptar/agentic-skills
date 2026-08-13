@@ -126,6 +126,23 @@ importar**: un smoke que solo importe el modulo lo da por bueno. Lo evita
   no es "puede venir vacio", es "nunca llega". Y los campos entran **sin default** en
   `VerifySliceParams` a proposito, que es lo que obligo al conductor a llenarlos en vez de heredar el
   vacio en silencio.
+- **Una fuente declarada viaja con su contenido citado por su ruta, y quien lo lee es un adaptador
+  compartido, no cada invocacion por su cuenta.** `CitedSources.of` (`infrastructure/cited_sources.py`)
+  resuelve `tuple[Source, ...]` a las lineas que citan cada ruta seguida de su contenido, y los tres
+  invocadores (`ImplementerInvocation`, `JudgeInvocation`, `UnderstandingInvocation`) lo llaman igual: es
+  la misma "forma de una lista que deja de ser parecido y pasa a ser invariante" de mas arriba, aplicada
+  a lo que citan en vez de a como se estructura el prompt. El contenido lo trae el puerto
+  `SourceReader` (`domain/source_reader.py`), y su unico adaptador hoy, `ProcessSourceReader`
+  (`infrastructure/process_source_reader.py`), lo lee con `cat` por el puerto `Process` en vez de con
+  `pathlib.Path.read_text()` como hacen los adaptadores que leen `~/.claude`
+  (`LocalCallTrace`, `LocalConversationLog`, `LocalMetricsLog`, `LocalSkillLibrary`,
+  `LocalPluginRegistry`). **No es la misma familia**: esos leen una raiz real de la maquina que ejecuta
+  el programa, mientras que `ProcessSourceReader` lee bajo `worktree`, que es el mismo directorio que
+  `GitBranches`, `GitDiffReader` y `GitWorkspace` tratan siempre como el destino de un comando de `git`
+  por el puerto `Process` -nunca como una ruta que el programa abre por su cuenta-. Pasar a `pathlib` ahi
+  romperia la unica costura documentada en `Cli.run` ("un solo `Process`... basta para conducir un run
+  sin `gh`, sin `git` y sin harness"): un `worktree` de test no es un directorio real en disco, y toda la
+  suite que lo dobla asume que leerlo pasa siempre por ese puerto.
 - **La raiz de configuracion de la herramienta la resuelve `ClaudeConfig`** (`CLAUDE_CONFIG_DIR`, o
   `~/.claude` expandido, con la variable vacia tratada como ausente). La comparte todo adaptador que
   necesite saber donde vive esa configuracion, porque lo que comparten no es una regla del programa sino
@@ -141,6 +158,19 @@ importar**: un smoke que solo importe el modulo lo da por bueno. Lo evita
   misma capa. Cuando se cierre, se cierra **decidiendo la politica** -si esa escritura es best-effort, si
   su fallo es un cierre propio del run, y con que codigo de salida se distingue-, no capturando el
   `OSError` a escondidas dentro del adaptador.
+- **Los tres adaptadores que invocan el harness agrupan su telemetria en un objeto, por el mismo motivo
+  declarado para `ConductSlice` en `docs/conventions/application.md`.** `ClaudeImplementer`,
+  `ClaudeUnderstanding` y `ClaudeVerifier` (`infrastructure/{claude_implementer,claude_understanding,
+  claude_verifier}.py`) reciben `process`, `reader` y cuatro puertos de telemetria (`trace`, `turns`,
+  `spend_log`, `tool_uses`); listados sueltos, la firma salta `PLR0913` igual que le pasaba al
+  conductor, y las mismas dos salidas no valen aqui: relajar el linter, o partir cada adaptador en dos
+  clases que no existen por diseno sino por contar argumentos. `HarnessTelemetry`
+  (`infrastructure/harness_telemetry.py`) agrupa los cuatro puertos de telemetria -nunca `process` ni
+  `reader`, que cada adaptador usa por su cuenta y no comparten con este agrupamiento- y los tres
+  adaptadores lo reciben ya construido desde `Cli._conductor`/`Cli._action`. **La linea, para que no se
+  amplie por precedente:** esto es solo de los adaptadores que invocan `claude -p` y dejan constancia de
+  la llamada; un adaptador nuevo que no escriba trace/turnos/gasto/uso de herramientas sigue listando sus
+  dependencias sueltas.
 - **El rastro de una llamada lo escribe el adaptador que la hace, no el caso de uso.** Se anexa en cuanto
   el sobre parsea y **antes** de entrar en el bloque que mide, por dos motivos, y el segundo es el que
   cierra la decision:

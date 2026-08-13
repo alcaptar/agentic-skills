@@ -1558,6 +1558,28 @@ class TestWhenACallOutlivesItsCap(ReadingWhatWasReported):
         assert "git: killed after 1s" in self._reported(capsys)
 
 
+class TestWhenDeclaredSourcesAreOverBudget(ReadingWhatWasReported):
+    def test_conducting_a_slice_stops_with_the_code_of_the_budget_instead_of_sending_a_prompt(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        invocation = RunInvocation(
+            children=GhConversationMother.the_slice_resumed_at(RunMother.judging()),
+            answers=(
+                Answer(to=("cat", "CLAUDE.md"), stdout="a" * 11),
+                Answer(to=("git", "rev-parse"), code=0),
+                Answer(to=("git", "diff", "--cached", "--name-only"), stdout="hello.py\n"),
+                Answer(to=("git", "diff", "--cached", "--numstat"), stdout="1\t0\thello.py\n"),
+                Answer(to=("git", "diff", "--cached"), stdout="diff --git a/hello.py b/hello.py\n"),
+            ),
+        )
+
+        code = invocation.conduct(logs=tmp_path / "logs", budgets=Budgets(sources_max_chars=10))
+
+        assert code == ExitCode.SOURCES_BUDGET_EXCEEDED
+        assert "the declared sources are over the budget" in self._reported(capsys)
+        assert not invocation.process.invoked(JudgeInvocation.EXECUTABLE)
+
+
 class TestTheBudgetsTheEntrypointInjects:
     def test_a_conducted_run_waits_the_budget_the_entrypoint_was_given_and_not_one_of_its_own(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch

@@ -21,6 +21,7 @@ class ExitCode(IntEnum):
     PULL_REQUEST_CLOSED = 11
     PROCESS_TIMED_OUT = 12
     ENVIRONMENT_NOT_READY = 13
+    SOURCES_BUDGET_EXCEEDED = 14
 
     @classmethod
     def of(cls, ruling: Ruling) -> ExitCode:
