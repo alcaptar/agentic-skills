@@ -10,5 +10,7 @@ class PrecheckOutcome(StrEnum):
     PULL_REQUEST_ALREADY_OPEN = "pull-request-already-open"
     BRANCH_ALREADY_EXISTS = "branch-already-exists"
     MISSING_SOURCES = "missing-sources"
+    UNREADABLE_SOURCE = "unreadable-source"
+    SOURCES_OVER_BUDGET = "sources-over-budget"
     MISSING_CONTROLS = "missing-controls"
     BASE_NOT_ON_REMOTE = "base-not-on-remote"

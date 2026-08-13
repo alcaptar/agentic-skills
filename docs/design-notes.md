@@ -179,6 +179,16 @@ mide. Las reglas que salen de estas decisiones siguen en su capa.
   `process_timeout_seconds`, que ya cubre "el proceso no vuelve nunca". Si el corpus de runs reales
   empieza a mostrar fallos transitorios que sobreviven a los tres intentos, este numero es el que hay que
   revisar con esa medicion delante.
+- **El tope de tamano de las fuentes de convencion.** Nace con la slice que hace viajar su contenido
+  literal dentro del prompt (issue #216) y todavia no tiene corpus de runs reales que medir: lo unico
+  medido es el propio repo, cuyas seis fuentes que declara este issue suman **80126 caracteres**
+  (`wc -c docs/conventions/{code-style,architecture,domain,application,infrastructure,testing}.md`). El
+  numero elegido, **200000**, deja algo mas de dos veces y media de margen sobre ese caso real -la misma
+  logica que el techo de coste, que se fijo con margen sobre lo unico medido en su dia (arriba)-, y sigue
+  siendo un backstop y no una preferencia: existe para que una fuente declarada por error como un
+  directorio entero, o un `.md` que crecio sin que nadie lo revisara, pare el run con su motivo en vez de
+  mandar un prompt desproporcionado. Cuando el corpus de runs reales tenga fuentes mas grandes que las de
+  este repo, este numero es el que hay que revisar con esa medicion delante.
 
 ### El descarte de aprobacion pagada, y por que hay dos comprobaciones de coste
 

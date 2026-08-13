@@ -7,9 +7,10 @@ import pytest
 
 from slice_runner.application.queries.run_prechecks import RunPrechecks, RunPrechecksParams
 from slice_runner.domain.branches import Branches
-from slice_runner.domain.exceptions import UnresolvableBaseError
+from slice_runner.domain.exceptions import SourcesBudgetExceededError, UnreadableSourceError, UnresolvableBaseError
 from slice_runner.domain.forum import Forum
 from slice_runner.domain.precheck_outcome import PrecheckOutcome
+from slice_runner.domain.source_reader import SourceReader
 from slice_runner.tests.mothers.parent_issue_mother import ParentIssueMother
 from slice_runner.tests.mothers.sub_issue_mother import SubIssueMother
 
@@ -38,8 +39,14 @@ class TestRunPrechecks:
         return forum
 
     @pytest.fixture
-    def query(self, branches: Mock, forum: Mock) -> RunPrechecks:
-        return RunPrechecks(branches=branches, forum=forum)
+    def sources(self) -> Mock:
+        sources: Mock = create_autospec(SourceReader, spec_set=True, instance=True)
+        sources.read_all.return_value = ()
+        return sources
+
+    @pytest.fixture
+    def query(self, branches: Mock, forum: Mock, sources: Mock) -> RunPrechecks:
+        return RunPrechecks(branches=branches, forum=forum, sources=sources)
 
     @staticmethod
     def _params(*, subissue: SubIssue, parent: ParentIssue) -> RunPrechecksParams:
@@ -114,6 +121,54 @@ class TestRunPrechecks:
 
         assert query.execute(params) is PrecheckOutcome.MISSING_CONTROLS
 
+    def test_a_declared_source_that_cannot_be_read_is_its_own_reason(self, query: RunPrechecks, sources: Mock) -> None:
+        sources.read_all.side_effect = UnreadableSourceError("CLAUDE.md does not exist under the worktree")
+        params = self._params(subissue=SubIssueMother.pending(), parent=ParentIssueMother.with_sources_and_controls())
+
+        assert query.execute(params) is PrecheckOutcome.UNREADABLE_SOURCE
+
+    def test_an_unreadable_source_wins_over_missing_controls_because_it_is_checked_first(
+        self, query: RunPrechecks, sources: Mock
+    ) -> None:
+        sources.read_all.side_effect = UnreadableSourceError("CLAUDE.md does not exist under the worktree")
+        params = self._params(subissue=SubIssueMother.pending(), parent=ParentIssueMother.without_controls())
+
+        assert query.execute(params) is PrecheckOutcome.UNREADABLE_SOURCE
+
+    def test_declared_sources_over_the_size_budget_are_their_own_reason(
+        self, query: RunPrechecks, sources: Mock
+    ) -> None:
+        sources.read_all.side_effect = SourcesBudgetExceededError("the declared sources are over budget")
+        params = self._params(subissue=SubIssueMother.pending(), parent=ParentIssueMother.with_sources_and_controls())
+
+        assert query.execute(params) is PrecheckOutcome.SOURCES_OVER_BUDGET
+
+    def test_sources_over_budget_wins_over_missing_controls_because_it_is_checked_first(
+        self, query: RunPrechecks, sources: Mock
+    ) -> None:
+        sources.read_all.side_effect = SourcesBudgetExceededError("the declared sources are over budget")
+        params = self._params(subissue=SubIssueMother.pending(), parent=ParentIssueMother.without_controls())
+
+        assert query.execute(params) is PrecheckOutcome.SOURCES_OVER_BUDGET
+
+    def test_an_existing_branch_wins_over_sources_that_are_over_budget_because_it_is_the_more_informative_reason(
+        self, query: RunPrechecks, branches: Mock, sources: Mock
+    ) -> None:
+        branches.exists.return_value = True
+        sources.read_all.side_effect = SourcesBudgetExceededError("the declared sources are over budget")
+        params = self._params(subissue=SubIssueMother.pending(), parent=ParentIssueMother.with_sources_and_controls())
+
+        assert query.execute(params) is PrecheckOutcome.BRANCH_ALREADY_EXISTS
+
+    def test_an_open_pull_request_wins_over_sources_that_are_over_budget_because_it_is_the_more_informative_reason(
+        self, query: RunPrechecks, forum: Mock, sources: Mock
+    ) -> None:
+        forum.open_pull_request.return_value = 47
+        sources.read_all.side_effect = SourcesBudgetExceededError("the declared sources are over budget")
+        params = self._params(subissue=SubIssueMother.pending(), parent=ParentIssueMother.with_sources_and_controls())
+
+        assert query.execute(params) is PrecheckOutcome.PULL_REQUEST_ALREADY_OPEN
+
     def test_everything_in_its_place_is_clear(self, query: RunPrechecks) -> None:
         params = self._params(subissue=SubIssueMother.pending(), parent=ParentIssueMother.with_sources_and_controls())
 
@@ -125,11 +180,13 @@ class TestRunPrechecks:
         assert query.execute(params) is PrecheckOutcome.CLEAR
 
     def test_the_ports_are_asked_about_the_worktree_the_branch_and_the_repo_the_params_carried(
-        self, query: RunPrechecks, branches: Mock, forum: Mock
+        self, query: RunPrechecks, branches: Mock, forum: Mock, sources: Mock
     ) -> None:
-        params = self._params(subissue=SubIssueMother.pending(), parent=ParentIssueMother.with_sources_and_controls())
+        parent = ParentIssueMother.with_sources_and_controls()
+        params = self._params(subissue=SubIssueMother.pending(), parent=parent)
 
         query.execute(params)
 
         branches.exists.assert_called_once_with(worktree=_WORKTREE, name=_BRANCH)
         forum.open_pull_request.assert_called_once_with(repo=_REPO, branch=_BRANCH)
+        sources.read_all.assert_called_once_with(worktree=_WORKTREE, sources=parent.sources)

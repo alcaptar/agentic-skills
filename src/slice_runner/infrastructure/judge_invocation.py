@@ -4,12 +4,14 @@ import json
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar
 
+from slice_runner.infrastructure.cited_sources import CitedSources
 from slice_runner.infrastructure.counted_lines import CountedLines
 from slice_runner.infrastructure.verdict_payload import VerdictPayload
 
 if TYPE_CHECKING:
     from slice_runner.domain.judge import Judge
     from slice_runner.domain.slice_under_review import SliceUnderReview
+    from slice_runner.domain.source_reader import SourceReader
 
 
 @dataclass(frozen=True, kw_only=True, slots=True)
@@ -18,6 +20,7 @@ class JudgeInvocation:
 
     judge: Judge
     review: SliceUnderReview
+    reader: SourceReader
 
     @property
     def argv(self) -> list[str]:
@@ -56,8 +59,8 @@ class JudgeInvocation:
                 f"- ruta del repo: {review.worktree}",
                 f"- senal: {review.signal}",
                 *CountedLines.of("criterios de aceptacion", review.criteria),
-                *CountedLines.of(
-                    "fuentes de convencion", tuple(f"{source.kind}: {source.path}" for source in review.sources)
+                *CitedSources.of(
+                    "fuentes de convencion", reader=self.reader, worktree=review.worktree, sources=review.sources
                 ),
                 *CountedLines.of(
                     "checklist de slices del issue",

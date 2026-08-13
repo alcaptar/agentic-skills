@@ -139,3 +139,11 @@ class UnreadableMetricsLogError(ValueError):
 
 class UnreadablePluginRegistryError(ValueError):
     pass
+
+
+class UnreadableSourceError(ValueError):
+    pass
+
+
+class SourcesBudgetExceededError(ValueError):
+    pass

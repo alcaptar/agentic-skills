@@ -5,6 +5,7 @@ from typing import ClassVar
 
 from slice_runner.domain.alignment import Alignment
 from slice_runner.infrastructure.understanding_invocation import UnderstandingInvocation
+from slice_runner.tests.doubles import RecordedSourceReader
 from slice_runner.tests.mothers.parent_issue_mother import ParentIssueMother
 from slice_runner.tests.mothers.sub_issue_mother import SubIssueMother
 
@@ -21,6 +22,7 @@ class UnderstandingInvocationMother:
             repo=cls.REPO,
             worktree=cls.WORKTREE,
             alignment=Alignment(),
+            reader=RecordedSourceReader(),
         )
 
     @classmethod

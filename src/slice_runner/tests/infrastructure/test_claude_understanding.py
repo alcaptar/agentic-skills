@@ -8,8 +8,10 @@ from slice_runner.domain.alignment import Alignment
 from slice_runner.domain.exceptions import InvalidUnderstandingReportError
 from slice_runner.domain.step import Step
 from slice_runner.infrastructure.claude_understanding import ClaudeUnderstanding
+from slice_runner.infrastructure.harness_telemetry import HarnessTelemetry
 from slice_runner.tests.doubles import (
     RecordedProcess,
+    RecordedSourceReader,
     RecordedSpendLog,
     RecordedToolUseRecorder,
     RecordedTrace,
@@ -44,10 +46,13 @@ class Writing:
     ) -> Understanding:
         return ClaudeUnderstanding(
             process=process,
-            trace=trace or RecordedTrace(),
-            turns=turns or RecordedTurnLog(),
-            spend_log=spend_log or RecordedSpendLog(),
-            tool_uses=tool_uses or RecordedToolUseRecorder(),
+            telemetry=HarnessTelemetry(
+                trace=trace or RecordedTrace(),
+                turns=turns or RecordedTurnLog(),
+                spend_log=spend_log or RecordedSpendLog(),
+                tool_uses=tool_uses or RecordedToolUseRecorder(),
+            ),
+            reader=RecordedSourceReader(),
         ).write(
             subissue=SubIssueMother.pending(),
             parent=ParentIssueMother.with_sources_and_controls(),

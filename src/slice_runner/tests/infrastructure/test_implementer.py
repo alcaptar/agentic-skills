@@ -9,11 +9,13 @@ from slice_runner.domain.exceptions import InvalidImplementationReportError, Per
 from slice_runner.domain.path_kind import PathKind
 from slice_runner.domain.step import Step
 from slice_runner.infrastructure.claude_implementer import ClaudeImplementer
+from slice_runner.infrastructure.harness_telemetry import HarnessTelemetry
 from slice_runner.infrastructure.implementer_invocation import ImplementerInvocation
 from slice_runner.infrastructure.slice_implementer_brief import SliceImplementerBrief
 from slice_runner.tests.argv import Argv
 from slice_runner.tests.doubles import (
     RecordedProcess,
+    RecordedSourceReader,
     RecordedSpendLog,
     RecordedToolUseRecorder,
     RecordedTrace,
@@ -38,17 +40,22 @@ class OneRound:
     def implemented(process: Process) -> Implementation:
         return ClaudeImplementer(
             process=process,
-            trace=RecordedTrace(),
-            turns=RecordedTurnLog(),
-            spend_log=RecordedSpendLog(),
-            tool_uses=RecordedToolUseRecorder(),
+            telemetry=HarnessTelemetry(
+                trace=RecordedTrace(),
+                turns=RecordedTurnLog(),
+                spend_log=RecordedSpendLog(),
+                tool_uses=RecordedToolUseRecorder(),
+            ),
+            reader=RecordedSourceReader(),
         ).implement(AssignmentMother.of_the_first_round())
 
 
 class TestHowTheImplementerIsInvoked:
     @pytest.fixture
     def argv(self) -> Argv:
-        return Argv(ImplementerInvocation(assignment=AssignmentMother.of_the_first_round()).argv)
+        return Argv(
+            ImplementerInvocation(assignment=AssignmentMother.of_the_first_round(), reader=RecordedSourceReader()).argv
+        )
 
     def test_it_runs_with_bypassed_permissions_because_it_writes_and_runs_commands(self, argv: Argv) -> None:
         assert argv.value_of("--permission-mode") == "bypassPermissions"
@@ -99,13 +106,18 @@ class TestHowTheImplementerIsInvoked:
         assert argv.values_that_follow_another_value() == []
 
     def test_the_brief_travels_on_standard_input_and_not_in_the_argv(self) -> None:
-        invocation = ImplementerInvocation(assignment=AssignmentMother.of_the_first_round())
+        invocation = ImplementerInvocation(
+            assignment=AssignmentMother.of_the_first_round(), reader=RecordedSourceReader()
+        )
 
         assert SliceImplementerBrief.TEXT in invocation.text
         assert invocation.text not in invocation.argv
 
     def test_the_cwd_the_process_needs_travels_with_the_invocation_and_not_only_as_a_bare_repo(self) -> None:
-        assert ImplementerInvocation(assignment=AssignmentMother.of_the_first_round()).cwd == AssignmentMother.WORKTREE
+        assert (
+            ImplementerInvocation(assignment=AssignmentMother.of_the_first_round(), reader=RecordedSourceReader()).cwd
+            == AssignmentMother.WORKTREE
+        )
 
 
 class TestWhereTheProcessRuns:
@@ -114,10 +126,13 @@ class TestWhereTheProcessRuns:
 
         ClaudeImplementer(
             process=process,
-            trace=RecordedTrace(),
-            turns=RecordedTurnLog(),
-            spend_log=RecordedSpendLog(),
-            tool_uses=RecordedToolUseRecorder(),
+            telemetry=HarnessTelemetry(
+                trace=RecordedTrace(),
+                turns=RecordedTurnLog(),
+                spend_log=RecordedSpendLog(),
+                tool_uses=RecordedToolUseRecorder(),
+            ),
+            reader=RecordedSourceReader(),
         ).implement(AssignmentMother.of_the_first_round())
 
         assert process.cwd == AssignmentMother.WORKTREE
@@ -127,10 +142,13 @@ class TestWhereTheProcessRuns:
 
         ClaudeImplementer(
             process=process,
-            trace=RecordedTrace(),
-            turns=RecordedTurnLog(),
-            spend_log=RecordedSpendLog(),
-            tool_uses=RecordedToolUseRecorder(),
+            telemetry=HarnessTelemetry(
+                trace=RecordedTrace(),
+                turns=RecordedTurnLog(),
+                spend_log=RecordedSpendLog(),
+                tool_uses=RecordedToolUseRecorder(),
+            ),
+            reader=RecordedSourceReader(),
         ).implement(AssignmentMother.of_the_first_round())
 
         assert process.calls == 1
@@ -143,10 +161,13 @@ class TestTheSliceDataThatTravelsWithTheBrief:
 
         ClaudeImplementer(
             process=process,
-            trace=RecordedTrace(),
-            turns=RecordedTurnLog(),
-            spend_log=RecordedSpendLog(),
-            tool_uses=RecordedToolUseRecorder(),
+            telemetry=HarnessTelemetry(
+                trace=RecordedTrace(),
+                turns=RecordedTurnLog(),
+                spend_log=RecordedSpendLog(),
+                tool_uses=RecordedToolUseRecorder(),
+            ),
+            reader=RecordedSourceReader(),
         ).implement(assignment)
 
         return process.stdin
@@ -169,6 +190,7 @@ class TestTheSliceDataThatTravelsWithTheBrief:
             "  - cada precheck falla con un motivo distinguible, no con un booleano\n"
             "- fuentes de convencion (1):\n"
             "  - doc: CLAUDE.md\n"
+            "    reglas del repo\n"
             "- controles del repo (1):\n"
             "  - lint: make linting\n"
             "- hallazgos de la vuelta anterior: ninguno, esta es la primera"
@@ -209,10 +231,13 @@ class TestTheAgreedUnderstandingThatTravelsWithTheBrief:
 
         ClaudeImplementer(
             process=process,
-            trace=RecordedTrace(),
-            turns=RecordedTurnLog(),
-            spend_log=RecordedSpendLog(),
-            tool_uses=RecordedToolUseRecorder(),
+            telemetry=HarnessTelemetry(
+                trace=RecordedTrace(),
+                turns=RecordedTurnLog(),
+                spend_log=RecordedSpendLog(),
+                tool_uses=RecordedToolUseRecorder(),
+            ),
+            reader=RecordedSourceReader(),
         ).implement(assignment)
 
         return process.stdin
@@ -250,10 +275,13 @@ class TestTheRetryInstructionThatTravelsWithTheBrief:
 
         ClaudeImplementer(
             process=process,
-            trace=RecordedTrace(),
-            turns=RecordedTurnLog(),
-            spend_log=RecordedSpendLog(),
-            tool_uses=RecordedToolUseRecorder(),
+            telemetry=HarnessTelemetry(
+                trace=RecordedTrace(),
+                turns=RecordedTurnLog(),
+                spend_log=RecordedSpendLog(),
+                tool_uses=RecordedToolUseRecorder(),
+            ),
+            reader=RecordedSourceReader(),
         ).implement(assignment)
 
         return process.stdin
@@ -315,10 +343,13 @@ class TestTheTraceOfTheCall:
 
         ClaudeImplementer(
             process=process,
-            trace=trace,
-            turns=RecordedTurnLog(),
-            spend_log=RecordedSpendLog(),
-            tool_uses=RecordedToolUseRecorder(),
+            telemetry=HarnessTelemetry(
+                trace=trace,
+                turns=RecordedTurnLog(),
+                spend_log=RecordedSpendLog(),
+                tool_uses=RecordedToolUseRecorder(),
+            ),
+            reader=RecordedSourceReader(),
         ).implement(AssignmentMother.of_the_first_round())
 
         assert [(call.slice_id, call.step, call.session) for call in trace.calls] == [
@@ -332,10 +363,13 @@ class TestTheTraceOfTheCall:
         with pytest.raises(PermissionDeniedError):
             ClaudeImplementer(
                 process=process,
-                trace=trace,
-                turns=RecordedTurnLog(),
-                spend_log=RecordedSpendLog(),
-                tool_uses=RecordedToolUseRecorder(),
+                telemetry=HarnessTelemetry(
+                    trace=trace,
+                    turns=RecordedTurnLog(),
+                    spend_log=RecordedSpendLog(),
+                    tool_uses=RecordedToolUseRecorder(),
+                ),
+                reader=RecordedSourceReader(),
             ).implement(AssignmentMother.of_the_first_round())
 
         assert [call.session for call in trace.calls] == [HarnessEnvelopeMother.SESSION_OF_THE_IMPLEMENTER]
@@ -349,10 +383,13 @@ class TestTheRunTheCallIsTracedUnder:
 
         ClaudeImplementer(
             process=process,
-            trace=trace,
-            turns=RecordedTurnLog(),
-            spend_log=spend_log,
-            tool_uses=RecordedToolUseRecorder(),
+            telemetry=HarnessTelemetry(
+                trace=trace,
+                turns=RecordedTurnLog(),
+                spend_log=spend_log,
+                tool_uses=RecordedToolUseRecorder(),
+            ),
+            reader=RecordedSourceReader(),
         ).implement(AssignmentMother.of_the_first_round())
 
         assert [(call.repo, call.issue) for call in trace.calls] == [(AssignmentMother.REPO, 45)]
@@ -366,10 +403,13 @@ class TestTheSpendLogOfTheCall:
 
         ClaudeImplementer(
             process=process,
-            trace=RecordedTrace(),
-            turns=RecordedTurnLog(),
-            spend_log=spend_log,
-            tool_uses=RecordedToolUseRecorder(),
+            telemetry=HarnessTelemetry(
+                trace=RecordedTrace(),
+                turns=RecordedTurnLog(),
+                spend_log=spend_log,
+                tool_uses=RecordedToolUseRecorder(),
+            ),
+            reader=RecordedSourceReader(),
         ).implement(AssignmentMother.of_the_first_round())
 
         assert spend_log.calls == [HarnessCallSpendMother.of_the_implementer()]
@@ -381,10 +421,13 @@ class TestTheSpendLogOfTheCall:
         with pytest.raises(PermissionDeniedError):
             ClaudeImplementer(
                 process=process,
-                trace=RecordedTrace(),
-                turns=RecordedTurnLog(),
-                spend_log=spend_log,
-                tool_uses=RecordedToolUseRecorder(),
+                telemetry=HarnessTelemetry(
+                    trace=RecordedTrace(),
+                    turns=RecordedTurnLog(),
+                    spend_log=spend_log,
+                    tool_uses=RecordedToolUseRecorder(),
+                ),
+                reader=RecordedSourceReader(),
             ).implement(AssignmentMother.of_the_first_round())
 
         assert [call.session for call in spend_log.calls] == [HarnessEnvelopeMother.SESSION_OF_THE_IMPLEMENTER]
@@ -397,10 +440,13 @@ class TestTheToolUseRecordingOfTheCall:
 
         ClaudeImplementer(
             process=process,
-            trace=RecordedTrace(),
-            turns=RecordedTurnLog(),
-            spend_log=RecordedSpendLog(),
-            tool_uses=tool_uses,
+            telemetry=HarnessTelemetry(
+                trace=RecordedTrace(),
+                turns=RecordedTurnLog(),
+                spend_log=RecordedSpendLog(),
+                tool_uses=tool_uses,
+            ),
+            reader=RecordedSourceReader(),
         ).implement(AssignmentMother.of_the_first_round())
 
         assert [(call.slice_id, call.step, call.session, call.repo) for call in tool_uses.calls] == [
@@ -421,10 +467,13 @@ class TestTheToolUseRecordingOfTheCall:
         with pytest.raises(PermissionDeniedError):
             ClaudeImplementer(
                 process=process,
-                trace=RecordedTrace(),
-                turns=RecordedTurnLog(),
-                spend_log=RecordedSpendLog(),
-                tool_uses=tool_uses,
+                telemetry=HarnessTelemetry(
+                    trace=RecordedTrace(),
+                    turns=RecordedTurnLog(),
+                    spend_log=RecordedSpendLog(),
+                    tool_uses=tool_uses,
+                ),
+                reader=RecordedSourceReader(),
             ).implement(AssignmentMother.of_the_first_round())
 
         assert [call.session for call in tool_uses.calls] == [HarnessEnvelopeMother.SESSION_OF_THE_IMPLEMENTER]
@@ -437,10 +486,13 @@ class TestTheTurnsObservedWhileTheCallIsInFlight:
 
         ClaudeImplementer(
             process=process,
-            trace=RecordedTrace(),
-            turns=turns,
-            spend_log=RecordedSpendLog(),
-            tool_uses=RecordedToolUseRecorder(),
+            telemetry=HarnessTelemetry(
+                trace=RecordedTrace(),
+                turns=turns,
+                spend_log=RecordedSpendLog(),
+                tool_uses=RecordedToolUseRecorder(),
+            ),
+            reader=RecordedSourceReader(),
         ).implement(AssignmentMother.of_the_first_round())
 
         assert [(turn.slice_id, turn.step, turn.number, turn.tool, turn.target) for turn in turns.turns] == [
@@ -454,10 +506,13 @@ class TestTheTurnsObservedWhileTheCallIsInFlight:
 
         ClaudeImplementer(
             process=process,
-            trace=RecordedTrace(),
-            turns=turns,
-            spend_log=RecordedSpendLog(),
-            tool_uses=RecordedToolUseRecorder(),
+            telemetry=HarnessTelemetry(
+                trace=RecordedTrace(),
+                turns=turns,
+                spend_log=RecordedSpendLog(),
+                tool_uses=RecordedToolUseRecorder(),
+            ),
+            reader=RecordedSourceReader(),
         ).implement(AssignmentMother.of_the_first_round())
 
         assert len(turns.turns) == 2
@@ -468,10 +523,13 @@ class TestTheTurnsObservedWhileTheCallIsInFlight:
 
         ClaudeImplementer(
             process=process,
-            trace=RecordedTrace(),
-            turns=turns,
-            spend_log=RecordedSpendLog(),
-            tool_uses=RecordedToolUseRecorder(),
+            telemetry=HarnessTelemetry(
+                trace=RecordedTrace(),
+                turns=turns,
+                spend_log=RecordedSpendLog(),
+                tool_uses=RecordedToolUseRecorder(),
+            ),
+            reader=RecordedSourceReader(),
         ).implement(AssignmentMother.of_the_first_round())
 
         assert len(turns.turns) == 2
@@ -482,10 +540,13 @@ class TestTheTurnsObservedWhileTheCallIsInFlight:
 
         ClaudeImplementer(
             process=process,
-            trace=RecordedTrace(),
-            turns=turns,
-            spend_log=RecordedSpendLog(),
-            tool_uses=RecordedToolUseRecorder(),
+            telemetry=HarnessTelemetry(
+                trace=RecordedTrace(),
+                turns=turns,
+                spend_log=RecordedSpendLog(),
+                tool_uses=RecordedToolUseRecorder(),
+            ),
+            reader=RecordedSourceReader(),
         ).implement(AssignmentMother.of_the_first_round())
 
         assert len(turns.turns) == 2
@@ -504,10 +565,13 @@ class TestTheTurnsObservedWhileTheCallIsInFlight:
 
         ClaudeImplementer(
             process=process,
-            trace=RecordedTrace(),
-            turns=turns,
-            spend_log=RecordedSpendLog(),
-            tool_uses=RecordedToolUseRecorder(),
+            telemetry=HarnessTelemetry(
+                trace=RecordedTrace(),
+                turns=turns,
+                spend_log=RecordedSpendLog(),
+                tool_uses=RecordedToolUseRecorder(),
+            ),
+            reader=RecordedSourceReader(),
         ).implement(AssignmentMother.of_the_first_round())
 
         assert len(turns.turns) == 2

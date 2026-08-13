@@ -4,6 +4,7 @@ import json
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar
 
+from slice_runner.infrastructure.cited_sources import CitedSources
 from slice_runner.infrastructure.counted_lines import CountedLines
 from slice_runner.infrastructure.report_payload import ImplementationReportPayload
 from slice_runner.infrastructure.slice_implementer_brief import SliceImplementerBrief
@@ -11,6 +12,7 @@ from slice_runner.infrastructure.slice_implementer_brief import SliceImplementer
 if TYPE_CHECKING:
     from slice_runner.domain.assignment import Assignment
     from slice_runner.domain.finding import Finding
+    from slice_runner.domain.source_reader import SourceReader
 
 
 @dataclass(frozen=True, kw_only=True, slots=True)
@@ -19,6 +21,7 @@ class ImplementerInvocation:
     MODEL: ClassVar[str] = "sonnet"
 
     assignment: Assignment
+    reader: SourceReader
 
     @property
     def cwd(self) -> str:
@@ -62,8 +65,11 @@ class ImplementerInvocation:
                 f"- intencion: {assignment.intention}",
                 f"- senal: {assignment.signal}",
                 *CountedLines.of("criterios de aceptacion", assignment.criteria),
-                *CountedLines.of(
-                    "fuentes de convencion", tuple(f"{source.kind}: {source.path}" for source in assignment.sources)
+                *CitedSources.of(
+                    "fuentes de convencion",
+                    reader=self.reader,
+                    worktree=assignment.worktree,
+                    sources=assignment.sources,
                 ),
                 *self._controls,
                 *self._findings,

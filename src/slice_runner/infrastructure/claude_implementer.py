@@ -15,35 +15,23 @@ from slice_runner.infrastructure.report_payload import ImplementationReportPaylo
 
 if TYPE_CHECKING:
     from slice_runner.domain.assignment import Assignment
-    from slice_runner.domain.call_spend_log import CallSpendLog
-    from slice_runner.domain.call_trace import CallTrace
+    from slice_runner.domain.source_reader import SourceReader
+    from slice_runner.infrastructure.harness_telemetry import HarnessTelemetry
     from slice_runner.infrastructure.process import Process
-    from slice_runner.infrastructure.tool_use_recorder import ToolUseRecorder
-    from slice_runner.infrastructure.turn_log import TurnLog
 
 
 class ClaudeImplementer(Implementer):
-    def __init__(
-        self,
-        *,
-        process: Process,
-        trace: CallTrace,
-        turns: TurnLog,
-        spend_log: CallSpendLog,
-        tool_uses: ToolUseRecorder,
-    ) -> None:
+    def __init__(self, *, process: Process, telemetry: HarnessTelemetry, reader: SourceReader) -> None:
         self._process = process
-        self._trace = trace
-        self._turns = turns
-        self._spend_log = spend_log
-        self._tool_uses = tool_uses
+        self._telemetry = telemetry
+        self._reader = reader
 
     def implement(self, assignment: Assignment) -> Implementation:
-        invocation = ImplementerInvocation(assignment=assignment)
-        watch = HarnessTurnWatch(turns=self._turns, slice_id=assignment.slice_id, step=Step.IMPLEMENT)
+        invocation = ImplementerInvocation(assignment=assignment, reader=self._reader)
+        watch = HarnessTurnWatch(turns=self._telemetry.turns, slice_id=assignment.slice_id, step=Step.IMPLEMENT)
         output = self._process.run(invocation.argv, stdin=invocation.text, cwd=invocation.cwd, on_line=watch)
         envelope = HarnessOutput.from_process(output)
-        self._trace.record(
+        self._telemetry.trace.record(
             HarnessCall(
                 repo=assignment.repo,
                 issue=assignment.issue,
@@ -53,10 +41,10 @@ class ClaudeImplementer(Implementer):
             )
         )
         spend = envelope.to_domain()
-        self._spend_log.record(
+        self._telemetry.spend_log.record(
             HarnessCallSpend(repo=assignment.repo, issue=assignment.issue, session=envelope.session_id, spend=spend)
         )
-        self._tool_uses.record_after(
+        self._telemetry.tool_uses.record_after(
             slice_id=assignment.slice_id, step=Step.IMPLEMENT, session=envelope.session_id, repo=assignment.worktree
         )
         with envelope.measuring():

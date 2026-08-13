@@ -74,6 +74,7 @@ class TestTheSliceDataThatTravelsWithTheBrief:
             "  - cada precheck falla con un motivo distinguible, no con un booleano\n"
             "- fuentes de convencion (1):\n"
             "  - doc: CLAUDE.md\n"
+            "    reglas del repo\n"
             "- controles del repo (1):\n"
             "  - lint: make linting"
         )

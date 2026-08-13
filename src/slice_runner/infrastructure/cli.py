@@ -44,6 +44,7 @@ from slice_runner.domain.exceptions import (
     NoSliceLeftError,
     ProtectedBranchError,
     RunNotClosedError,
+    SourcesBudgetExceededError,
     UnreadableCallSpendLogError,
     UnreadableCallTraceError,
     UnreadableConversationError,
@@ -75,6 +76,7 @@ from slice_runner.infrastructure.gh_run_repository import GhCommandFailedError, 
 from slice_runner.infrastructure.git_branches import GitBranches, GitCommandFailedError
 from slice_runner.infrastructure.git_diff_reader import GitDiffReader
 from slice_runner.infrastructure.git_workspace import GitWorkspace
+from slice_runner.infrastructure.harness_telemetry import HarnessTelemetry
 from slice_runner.infrastructure.implementer_invocation import ImplementerInvocation
 from slice_runner.infrastructure.local_call_spend_log import LocalCallSpendLog
 from slice_runner.infrastructure.local_call_trace import LocalCallTrace
@@ -88,6 +90,7 @@ from slice_runner.infrastructure.local_skill_library import LocalSkillLibrary
 from slice_runner.infrastructure.local_tool_use_log import LocalToolUseLog
 from slice_runner.infrastructure.local_toolbox import LocalToolbox
 from slice_runner.infrastructure.process import ProcessNotRunnableError, ProcessTimedOutError
+from slice_runner.infrastructure.process_source_reader import ProcessSourceReader
 from slice_runner.infrastructure.readiness_report import ReadinessReport
 from slice_runner.infrastructure.slice_pull_request import SlicePullRequest
 from slice_runner.infrastructure.slice_verifier_judge import SliceVerifierJudge
@@ -129,6 +132,7 @@ class Cli:
         GhCommandFailedError,
         GitCommandFailedError,
         ProcessNotRunnableError,
+        SourcesBudgetExceededError,
     )
 
     def __init__(self, *, process: Process, budgets: Budgets) -> None:
@@ -342,27 +346,52 @@ class Cli:
     def verify(self, *, repo: str, base: str, slice_id: str) -> int:
         try:
             verification = self._action().execute(self._params(worktree=repo, base=base, slice_id=slice_id))
-        except UnresolvableRepoOrBaseError as error:
-            return self._reported(f"the repo or the base requested do not resolve: {error}", ExitCode.USAGE_ERROR)
-        except DiffNotReadableError as error:
-            return self._reported(f"there is no diff to verify: {error}", ExitCode.NO_DIFF)
-        except InvalidHarnessOutputError as error:
-            return self._reported(f"the judge left no usable verdict: {error}", ExitCode.NO_USABLE_VERDICT)
-        except ProcessTimedOutError as error:
-            return self._reported(
-                f"a process the run needs never came back and was killed at its cap: {error}",
-                ExitCode.PROCESS_TIMED_OUT,
-            )
-        except ProcessNotRunnableError as error:
-            return self._reported(
-                f"a process the run needs could not be launched, so there is no verdict: {error}",
-                ExitCode.NO_USABLE_VERDICT,
-            )
+        except (
+            UnresolvableRepoOrBaseError,
+            DiffNotReadableError,
+            InvalidHarnessOutputError,
+            ProcessTimedOutError,
+            ProcessNotRunnableError,
+            SourcesBudgetExceededError,
+        ) as error:
+            return self._why_verify_failed(error)
 
         self._warn_about(verification.denied_reads)
         print(json.dumps(VerdictPayload.from_domain(verification.verdict).to_contract(), ensure_ascii=False))
 
         return ExitCode.of(verification.verdict.ruling)
+
+    def _why_verify_failed(
+        self,
+        error: UnresolvableRepoOrBaseError
+        | DiffNotReadableError
+        | InvalidHarnessOutputError
+        | ProcessTimedOutError
+        | ProcessNotRunnableError
+        | SourcesBudgetExceededError,
+    ) -> int:
+        match error:
+            case UnresolvableRepoOrBaseError():
+                return self._reported(f"the repo or the base requested do not resolve: {error}", ExitCode.USAGE_ERROR)
+            case DiffNotReadableError():
+                return self._reported(f"there is no diff to verify: {error}", ExitCode.NO_DIFF)
+            case InvalidHarnessOutputError():
+                return self._reported(f"the judge left no usable verdict: {error}", ExitCode.NO_USABLE_VERDICT)
+            case ProcessTimedOutError():
+                return self._reported(
+                    f"a process the run needs never came back and was killed at its cap: {error}",
+                    ExitCode.PROCESS_TIMED_OUT,
+                )
+            case ProcessNotRunnableError():
+                return self._reported(
+                    f"a process the run needs could not be launched, so there is no verdict: {error}",
+                    ExitCode.NO_USABLE_VERDICT,
+                )
+            case SourcesBudgetExceededError():
+                return self._reported(
+                    f"the declared sources are over the budget, so no prompt was sent: {error}",
+                    ExitCode.SOURCES_BUDGET_EXCEEDED,
+                )
 
     def run(self, params: ConductSliceParams) -> int:
         params.logs.mkdir(parents=True, exist_ok=True)
@@ -419,13 +448,23 @@ class Cli:
                 return self._reported(f"there is no diff to verify: {error}", ExitCode.NO_DIFF)
             case MeasuredCallError():
                 return self._reported(f"the harness left nothing usable behind: {error}", ExitCode.NO_USABLE_VERDICT)
+            case ProcessTimedOutError() | SourcesBudgetExceededError():
+                return self._why_the_call_failed(error)
+            case _:
+                return self._reported(f"the run stopped before reaching a halt: {error}", ExitCode.RUN_INTERRUPTED)
+
+    def _why_the_call_failed(self, error: ProcessTimedOutError | SourcesBudgetExceededError) -> ExitCode:
+        match error:
             case ProcessTimedOutError():
                 return self._reported(
                     f"a call the run made never came back and was killed at its cap: {error}",
                     ExitCode.PROCESS_TIMED_OUT,
                 )
-            case _:
-                return self._reported(f"the run stopped before reaching a halt: {error}", ExitCode.RUN_INTERRUPTED)
+            case SourcesBudgetExceededError():
+                return self._reported(
+                    f"the declared sources are over the budget, so no prompt was sent: {error}",
+                    ExitCode.SOURCES_BUDGET_EXCEEDED,
+                )
 
     def _conductor(self) -> ConductSlice:
         clock = SystemClock()
@@ -435,19 +474,23 @@ class Cli:
         forum = GhForum(call=gh_call)
         workspace = GitWorkspace(process=self._process)
         machine = StateMachine(budgets=self._budgets)
+        reader = ProcessSourceReader(process=self._process, budgets=self._budgets)
 
         return ConductSlice(
             use_cases=ConductSliceUseCases(
                 select=SelectSlice(repository=repository),
                 reopen=ReopenSlice(repository=repository, machine=machine),
-                prechecks=RunPrechecks(branches=branches, forum=forum),
+                prechecks=RunPrechecks(branches=branches, forum=forum, sources=reader),
                 implement=ImplementSlice(
                     implementer=ClaudeImplementer(
                         process=self._process,
-                        trace=LocalCallTrace(clock=clock),
-                        turns=StderrTurnLog(),
-                        spend_log=LocalCallSpendLog(clock=clock),
-                        tool_uses=self._tool_uses(),
+                        telemetry=HarnessTelemetry(
+                            trace=LocalCallTrace(clock=clock),
+                            turns=StderrTurnLog(),
+                            spend_log=LocalCallSpendLog(clock=clock),
+                            tool_uses=self._tool_uses(),
+                        ),
+                        reader=reader,
                     )
                 ),
                 stage=StageSlice(workspace=workspace),
@@ -466,10 +509,13 @@ class Cli:
                 clock=clock,
                 understanding=ClaudeUnderstanding(
                     process=self._process,
-                    trace=LocalCallTrace(clock=clock),
-                    turns=StderrTurnLog(),
-                    spend_log=LocalCallSpendLog(clock=clock),
-                    tool_uses=self._tool_uses(),
+                    telemetry=HarnessTelemetry(
+                        trace=LocalCallTrace(clock=clock),
+                        turns=StderrTurnLog(),
+                        spend_log=LocalCallSpendLog(clock=clock),
+                        tool_uses=self._tool_uses(),
+                    ),
+                    reader=reader,
                 ),
                 pull_request=SlicePullRequest(),
                 deploy_watch=ClaudeDeployWatch(process=self._process),
@@ -489,10 +535,13 @@ class Cli:
             reader=GitDiffReader(process=self._process),
             verifier=ClaudeVerifier(
                 process=self._process,
-                trace=LocalCallTrace(clock=used),
-                turns=StderrTurnLog(),
-                spend_log=LocalCallSpendLog(clock=used),
-                tool_uses=self._tool_uses(),
+                telemetry=HarnessTelemetry(
+                    trace=LocalCallTrace(clock=used),
+                    turns=StderrTurnLog(),
+                    spend_log=LocalCallSpendLog(clock=used),
+                    tool_uses=self._tool_uses(),
+                ),
+                reader=ProcessSourceReader(process=self._process, budgets=self._budgets),
             ),
             judge=SliceVerifierJudge.adversarial(),
             skills=LocalSkillLibrary(),
