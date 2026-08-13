@@ -36,6 +36,7 @@ from slice_runner.tests.mothers.judge_output_mother import HarnessEnvelopeMother
 from slice_runner.tests.mothers.repo_mother import RepoMother
 from slice_runner.tests.mothers.run_mother import RunMother
 from slice_runner.tests.mothers.transition_request_mother import TransitionRequestMother
+from slice_runner.tests.mothers.understanding_report_mother import UnderstandingReportMother
 from slice_runner.tests.run_invocation import RunInvocation
 
 if TYPE_CHECKING:
@@ -1193,9 +1194,7 @@ class TestWhenTheRunStaysOpen:
                 Answer(
                     to=(UnderstandingInvocation.MODEL, "stream-json"),
                     stdout=json.dumps(
-                        HarnessEnvelopeMother.carrying(
-                            {"understanding": "entiendo la slice y este es mi plan"}, recorded=_IMPLEMENTER_PAYLOAD
-                        )
+                        HarnessEnvelopeMother.carrying(UnderstandingReportMother.valid(), recorded=_IMPLEMENTER_PAYLOAD)
                     ),
                 ),
                 Answer(to=("gh", "issue", "view", "--json", "comments"), stdout=json.dumps({"comments": []})),

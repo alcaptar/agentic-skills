@@ -13,8 +13,18 @@ from slice_runner.tests.mothers.verdict_mother import FindingMother
 class AssignmentMother:
     REPO: ClassVar[str] = "alcaptar/agentic-skills"
     WORKTREE: ClassVar[str] = "/repos/agentic-skills"
+    SKETCH: ClassVar[str] = (
+        "SubissueAlreadyClosedPrecheck.blocking(subissue): comprueba el precheck de subissue cerrada antes de "
+        "tocar la rama."
+    )
     UNDERSTANDING: ClassVar[str] = (
-        "El precheck de subissue cerrada se llama `SUBISSUE_ALREADY_CLOSED` y corta antes de tocar la rama."
+        "## Resumen\n"
+        "El precheck de subissue cerrada se llama `SUBISSUE_ALREADY_CLOSED` y corta antes de tocar la rama.\n"
+        "\n"
+        "## Pasos\n"
+        "- domain/precheck.py (motivo: la regla es del dominio)\n"
+        "\n"
+        f"## Esbozo\n{SKETCH}"
     )
     RETRY_INSTRUCTION: ClassVar[str] = "el control ya esta arreglado a mano"
 

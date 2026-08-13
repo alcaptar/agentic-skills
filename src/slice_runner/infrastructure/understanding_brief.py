@@ -31,8 +31,16 @@ contestas.
 
 ## Lo que devuelves
 
-Tu respuesta final es el objeto del esquema que se te ha mandado: un solo campo, `understanding`, con
-el texto que acabas de redactar.
+Tu respuesta final es el objeto del esquema que se te ha mandado, con tres campos:
+
+- `summary`: el resumen de como entiendes la slice, en tus propias palabras.
+- `steps`: los pasos que vas a dar, en el orden en que los vas a dar. Cada paso lleva su
+  `description` -que vas a tocar- y su `reason` -por que se toca eso, como campo propio y no como
+  prosa dentro de la descripcion-.
+- `sketch`: el esbozo de la forma que va a tener el codigo, redactado **despues** de haber leido las
+  fuentes de convencion declaradas, nunca antes. Una firma por pieza -clase, metodo o funcion, segun
+  mande la convencion del repo- con una linea debajo diciendo que hace ese cuerpo. Nunca codigo
+  pegable: quien revise tiene que ver la forma antes de que exista, no una implementacion adelantada.
 """
 
 
