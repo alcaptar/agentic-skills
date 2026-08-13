@@ -234,7 +234,6 @@ class TestCheckReadiness:
             "plugin superpowers",
             "helper discover_conventions.py",
             "helper discover_controles.py",
-            "helper discover_prior_art.py",
         }
         forum.can_read.assert_not_called()
         branches.commits_behind_remote.assert_not_called()

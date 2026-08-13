@@ -76,8 +76,8 @@ Dos modos:
   la metrica que consumen (repos distintos ⇒ PRs distintas), y el orden es forzoso: primero la slice
   que emite la serie, luego la alerta, luego el panel. Se declaran con `REPO:` en su linea.
 - **Investiga antes de cortar.** El troceo se hace sobre lo que ya hay, no sobre un repo imaginario:
-  antes del paso 2 se buscan **precedentes** (lo que ya se intento) y **piezas** (lo que ya existe y
-  se puede reutilizar), y lo confirmado viaja en la seccion `## Lo que ya existe` del padre. Los dos
+  antes del paso 2 se busca **que se intento antes** y **que existe ya que se pueda reutilizar**, y lo
+  confirmado viaja en la seccion `## Lo que ya existe` del padre. Los dos
   fallos que esto corrige son reales: una slice que iba a implementar algo que ningun consumidor leia,
   y otra que tradujo el vocabulario de un script que una tercera estaba jubilando. **Vara: un hallazgo
   es una ruta o un numero, no una impresion.**
@@ -241,22 +241,24 @@ SENAL: prometheus min_over_time(application_stock_actual[10m]) < 0 dispara la al
 1. **Invoca `superpowers:brainstorming`** y sigue su proceso para entender intencion, proponer
    enfoques y validar el diseno con el usuario. **Excepcion al terminal de brainstorming:** no
    invoques `writing-plans`; el paso siguiente es emitir la spec de slices (pasos 2-6).
-1b. **Investiga el repo antes de cortar (`offload-deterministic` + `check-alignment`).** Trocear sin
-   mirar que hay ya produce slices que construyen lo que existe, que traducen lo que otra esta
-   jubilando, o que implementan algo que ningun consumidor lee. Corre el helper determinista con los
-   terminos del concepto que vas a trocear:
-   `python3 ~/.claude/skills/slice-runner/scripts/discover_prior_art.py <termino> [<termino>...] --raiz <repo> --repo <org>/<repo>`.
-   Lista candidatos de dos clases -**precedentes** (pull requests mergeadas e issues cerradas) y
-   **piezas** (ficheros que ya nombran el concepto)- **sin decidir** cual cuenta.
+1b. **Investiga el repo antes de cortar (`check-alignment`).** Trocear sin mirar que hay ya produce
+   slices que construyen lo que existe, que traducen lo que otra esta jubilando, o que implementan algo
+   que ningun consumidor lee. Busca tu mismo, con los terminos del concepto que vas a trocear, y
+   contesta tres preguntas **con punteros, no con prosa**:
 
-   Con esos candidatos delante, contesta tres preguntas y **con punteros, no con prosa**:
-
-   - **¿Que hay ya que esto necesite?** Vale una ruta que existe, no "el repo ya tiene puertos".
-   - **¿Se intento antes?** Vale un numero de pull request o de issue, y lo que le paso.
+   - **¿Que hay ya que esto necesite?** Busca en el arbol quien nombra el concepto. Vale una ruta que
+     existe; no vale "el repo ya tiene puertos".
+   - **¿Se intento antes?** Mira las pull requests mergeadas y las issues cerradas
+     (`gh pr list --state merged --search ...`, `gh issue list --state closed --search ...`). Vale un
+     numero y lo que le paso.
    - **¿Donde acopla?** Vale el sitio concreto del que cuelga.
 
    **Vara: si no puedes citar una ruta o un numero, no es un hallazgo, es una impresion**, y no entra.
    Es la misma vara de falsabilidad que gobierna los criterios de aceptacion, aplicada aguas arriba.
+
+   **Acota la busqueda.** El objetivo es un punado de lineas que una persona pueda confirmar de un
+   vistazo, no un informe: para cuando dejes de encontrar cosas nuevas, y quedate con lo que de verdad
+   cambia el corte.
 
    Propon los hallazgos a la persona y **espera su confirmacion**, igual que con las fuentes y los
    controles: ella sabe cual de esos precedentes se revirtio por un motivo que sigue vigente. Lo

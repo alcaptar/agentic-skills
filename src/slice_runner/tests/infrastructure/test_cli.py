@@ -1567,7 +1567,6 @@ class TestTheCommandThatChecksReadiness:
         scripts.mkdir(parents=True)
         (scripts / "discover_conventions.py").write_text("x", encoding="utf-8")
         (scripts / "discover_controles.py").write_text("x", encoding="utf-8")
-        (scripts / "discover_prior_art.py").write_text("x", encoding="utf-8")
         (tmp_path / "settings.json").write_text(
             json.dumps({"enabledPlugins": {"superpowers@claude-plugins-official": True}}), encoding="utf-8"
         )
@@ -1619,7 +1618,6 @@ class TestTheCommandThatChecksReadiness:
             "plugin superpowers",
             "helper discover_conventions.py",
             "helper discover_controles.py",
-            "helper discover_prior_art.py",
         ):
             assert name in printed
 
