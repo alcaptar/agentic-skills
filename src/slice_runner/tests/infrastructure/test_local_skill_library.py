@@ -11,6 +11,23 @@ if TYPE_CHECKING:
     import pytest
 
 
+class TestTheConfiguredRoot:
+    def test_it_honors_the_configuration_directory_variable_instead_of_a_fixed_home(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
+
+        assert LocalSkillLibrary().root() == tmp_path
+
+    def test_without_the_variable_it_falls_back_to_the_home_of_the_tool_and_expands_it(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.delenv(ClaudeConfig.VARIABLE, raising=False)
+        monkeypatch.setenv("HOME", str(tmp_path))
+
+        assert LocalSkillLibrary().root() == tmp_path / ".claude"
+
+
 class TestWhereTheYardstickLives:
     def test_both_trees_are_granted_because_the_two_skills_the_rubric_names_live_apart(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch

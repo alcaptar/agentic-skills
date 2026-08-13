@@ -111,7 +111,7 @@ class CheckReadiness:
                 name=f"skill {name}",
                 verdict=CheckVerdict.MISSING,
                 detail="not installed",
-                fix=f"ln -s <checkout>/skills/{name} ~/.claude/skills/{name}",
+                fix=self._install_fix(),
             )
 
         return ReadinessCheck(name=f"skill {name}", verdict=CheckVerdict.READY, detail=f"installed at {path}")
@@ -131,15 +131,17 @@ class CheckReadiness:
         path = self._skills.file(relative)
         name = relative.rsplit("/", 1)[-1]
         if path is None:
-            directory = relative.split("/")[1]
             return ReadinessCheck(
                 name=f"helper {name}",
                 verdict=CheckVerdict.MISSING,
                 detail="not installed",
-                fix=f"ln -s <checkout>/skills/{directory} ~/.claude/skills/{directory}",
+                fix=self._install_fix(),
             )
 
         return ReadinessCheck(name=f"helper {name}", verdict=CheckVerdict.READY, detail=f"installed at {path}")
+
+    def _install_fix(self) -> str:
+        return f"make install-skills, to link it under {self._skills.root()}"
 
     def _of_repo(self, repo: str) -> ReadinessCheck:
         if self._forum.can_read(repo=repo):
