@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from slice_runner.domain.alignment_response import AlignmentResponse
+    from slice_runner.domain.finding import Finding
     from slice_runner.domain.issue_label import IssueLabel
     from slice_runner.domain.malformed_reason import MalformedReason
     from slice_runner.domain.parent_issue import ParentIssue
@@ -55,3 +56,9 @@ class RunRepository(ABC):
 
     @abstractmethod
     def close_parent(self, *, repo: str, issue: int, subissue_count: int) -> None: ...
+
+    @abstractmethod
+    def publish_findings(self, *, repo: str, issue: int, findings: tuple[Finding, ...]) -> None: ...
+
+    @abstractmethod
+    def find_finding(self, *, repo: str, issue: int, finding_id: str) -> Finding | None: ...

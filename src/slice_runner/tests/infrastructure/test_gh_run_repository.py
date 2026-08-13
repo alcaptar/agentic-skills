@@ -13,6 +13,7 @@ from slice_runner.domain.exceptions import (
     EmptyIssueBodyError,
     LaggingSearchIndexError,
     MalformedConventionLineError,
+    UnreadableFindingsError,
     UnreadableIssueError,
     UnreadableRunError,
 )
@@ -27,11 +28,13 @@ from slice_runner.infrastructure.malformed_response_comment import MalformedResp
 from slice_runner.infrastructure.process import ProcessOutput
 from slice_runner.infrastructure.reopened_comment import ReopenedComment
 from slice_runner.infrastructure.understanding_comment import UnderstandingComment
+from slice_runner.infrastructure.veto_findings_comment import VetoFindingsComment
 from slice_runner.tests.argv import Argv
 from slice_runner.tests.doubles import GhCallDoubles, ScriptedProcess
 from slice_runner.tests.mothers.gh_response_mother import GhResponseMother
 from slice_runner.tests.mothers.harness_spend_mother import HarnessSpendMother
 from slice_runner.tests.mothers.run_mother import RunMother
+from slice_runner.tests.mothers.verdict_mother import FindingMother
 
 _REPO = "alcaptar/agentic-skills"
 _OTHER_REPO = "alcaptar/otro-repo"
@@ -1110,6 +1113,99 @@ class TestClosingTheParent:
 
         with pytest.raises(GhCommandFailedError, match="authentication required"):
             GhRunRepository(call=GhCallDoubles.wired(process)).close_parent(repo=_REPO, issue=43, subissue_count=4)
+
+
+class TestPublishingTheVetoFindings:
+    def test_the_call_is_a_comment_carrying_the_findings_as_stdin(self) -> None:
+        process = ScriptedProcess(ProcessOutput(code=0, stdout="", stderr=""))
+        findings = (FindingMother.without_line(),)
+
+        GhRunRepository(call=GhCallDoubles.wired(process)).publish_findings(repo=_REPO, issue=45, findings=findings)
+
+        assert process.calls[0].argv == ["gh", "issue", "comment", "45", "--repo", _REPO, "--body-file", "-"]
+        assert process.calls[0].stdin == VetoFindingsComment.rendered(findings)
+
+    def test_the_comment_carries_the_marker_that_lets_a_later_read_find_it_back(self) -> None:
+        process = ScriptedProcess(ProcessOutput(code=0, stdout="", stderr=""))
+
+        GhRunRepository(call=GhCallDoubles.wired(process)).publish_findings(
+            repo=_REPO, issue=45, findings=(FindingMother.without_line(),)
+        )
+
+        assert VetoFindingsComment.MARKER in process.calls[0].stdin
+
+    def test_the_comment_carries_the_visible_automation_mark(self) -> None:
+        process = ScriptedProcess(ProcessOutput(code=0, stdout="", stderr=""))
+
+        GhRunRepository(call=GhCallDoubles.wired(process)).publish_findings(
+            repo=_REPO, issue=45, findings=(FindingMother.without_line(),)
+        )
+
+        assert AutomationMark.TEXT in process.calls[0].stdin
+
+    def test_a_non_zero_exit_raises_with_the_stderr_it_carried(self) -> None:
+        process = ScriptedProcess(ProcessOutput(code=1, stdout="", stderr="HTTP 422: Unprocessable Entity"))
+
+        with pytest.raises(GhCommandFailedError, match="HTTP 422"):
+            GhRunRepository(call=GhCallDoubles.wired(process)).publish_findings(
+                repo=_REPO, issue=45, findings=(FindingMother.without_line(),)
+            )
+
+
+class TestFindingAVetoFinding:
+    @staticmethod
+    def _process(bodies: list[str]) -> ScriptedProcess:
+        template = GhResponseMother.subissue_comments()[0]
+        payload = {"comments": [{**template, "body": body} for body in bodies]}
+
+        return ScriptedProcess(ProcessOutput(code=0, stdout=json.dumps(payload), stderr=""))
+
+    def test_a_finding_is_located_by_its_id_from_the_comment_alone_with_no_verdict_object_in_sight(self) -> None:
+        finding = FindingMother.without_line()
+        process = self._process([VetoFindingsComment.rendered((finding,))])
+
+        located = GhRunRepository(call=GhCallDoubles.wired(process)).find_finding(repo=_REPO, issue=45, finding_id="f1")
+
+        assert located == finding
+
+    def test_no_veto_findings_comment_published_yet_resolves_to_none(self) -> None:
+        process = self._process(["un comentario cualquiera"])
+
+        located = GhRunRepository(call=GhCallDoubles.wired(process)).find_finding(repo=_REPO, issue=45, finding_id="f1")
+
+        assert located is None
+
+    def test_an_unknown_id_inside_a_published_comment_resolves_to_none(self) -> None:
+        process = self._process([VetoFindingsComment.rendered((FindingMother.without_line(),))])
+
+        located = GhRunRepository(call=GhCallDoubles.wired(process)).find_finding(repo=_REPO, issue=45, finding_id="f9")
+
+        assert located is None
+
+    def test_publishing_a_new_verdict_makes_the_latest_comment_the_only_one_that_resolves_an_id(self) -> None:
+        old = (FindingMother.without_line(), FindingMother.low_severity())
+        new = (FindingMother.with_line(),)
+        process = self._process([VetoFindingsComment.rendered(old), VetoFindingsComment.rendered(new)])
+
+        located = GhRunRepository(call=GhCallDoubles.wired(process)).find_finding(repo=_REPO, issue=45, finding_id="f1")
+
+        assert located == new[0]
+
+    def test_an_id_that_only_a_prior_verdict_published_stops_resolving_once_a_new_one_is_published(self) -> None:
+        old = (FindingMother.without_line(), FindingMother.low_severity())
+        new = (FindingMother.with_line(),)
+        process = self._process([VetoFindingsComment.rendered(old), VetoFindingsComment.rendered(new)])
+
+        located = GhRunRepository(call=GhCallDoubles.wired(process)).find_finding(repo=_REPO, issue=45, finding_id="f2")
+
+        assert located is None
+
+    def test_a_findings_block_that_is_not_valid_json_is_rejected_as_unreadable(self) -> None:
+        malformed = f"{VetoFindingsComment.MARKER}\n<!-- slice-runner:hallazgos-json\n{{not json}}\n-->"
+        process = self._process([malformed])
+
+        with pytest.raises(UnreadableFindingsError):
+            GhRunRepository(call=GhCallDoubles.wired(process)).find_finding(repo=_REPO, issue=45, finding_id="f1")
 
 
 class TestGhFailuresAreInterpretedNotSwallowed:

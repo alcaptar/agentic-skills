@@ -21,8 +21,10 @@ from slice_runner.infrastructure.parent_body import ParentBody
 from slice_runner.infrastructure.reopened_comment import ReopenedComment
 from slice_runner.infrastructure.subissue_body import SubissueBody
 from slice_runner.infrastructure.understanding_comment import UnderstandingComment
+from slice_runner.infrastructure.veto_findings_comment import VetoFindingsComment
 
 if TYPE_CHECKING:
+    from slice_runner.domain.finding import Finding
     from slice_runner.domain.malformed_reason import MalformedReason
     from slice_runner.domain.run import Run
     from slice_runner.infrastructure.gh_call import GhCall
@@ -222,6 +224,24 @@ class GhRunRepository(RunRepository):
             ],
             safe_to_repeat=False,
         )
+
+    def publish_findings(self, *, repo: str, issue: int, findings: tuple[Finding, ...]) -> None:
+        self._run(
+            ["gh", "issue", "comment", str(issue), "--repo", repo, "--body-file", "-"],
+            stdin=VetoFindingsComment.rendered(findings),
+            safe_to_repeat=False,
+        )
+
+    def find_finding(self, *, repo: str, issue: int, finding_id: str) -> Finding | None:
+        published = [
+            body
+            for body in self._comment_bodies(repo=repo, issue=issue)
+            if VetoFindingsComment.is_the_veto_findings(body)
+        ]
+        if not published:
+            return None
+
+        return VetoFindingsComment.finding_of(published[-1], finding_id)
 
     @staticmethod
     def _edit_of(*, repo: str, issue: int, add: IssueLabel, remove: IssueLabel | None) -> list[str]:
