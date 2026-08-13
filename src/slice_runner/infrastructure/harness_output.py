@@ -20,6 +20,7 @@ if TYPE_CHECKING:
 
 class HarnessOutput(ContractModel):
     CAUSE_FIELDS: ClassVar[tuple[str, ...]] = ("is_error", "subtype", "stop_reason", "terminal_reason")
+    RESULT: ClassVar[str] = "result"
 
     is_error: bool = Field(strict=True)
     structured_output: dict[str, object]
@@ -106,8 +107,29 @@ class HarnessOutput(ContractModel):
             raise InvalidHarnessOutputError(
                 f"the harness returned no JSON (code {output.code}): {cls._excerpt(output)}"
             )
+        results = cls._results_streamed(lines)
+        if results:
+            return results[-1]
+
+        return cls._only_object(lines[-1], output)
+
+    @classmethod
+    def _results_streamed(cls, lines: list[str]) -> list[dict[str, object]]:
+        streamed = []
+        for line in lines:
+            try:
+                data = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(data, dict) and data.get("type") == cls.RESULT:
+                streamed.append(data)
+
+        return streamed
+
+    @classmethod
+    def _only_object(cls, line: str, output: ProcessOutput) -> dict[str, object]:
         try:
-            data = json.loads(lines[-1])
+            data = json.loads(line)
         except json.JSONDecodeError as error:
             raise InvalidHarnessOutputError(
                 f"the harness returned no JSON (code {output.code}): {cls._excerpt(output)}"

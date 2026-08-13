@@ -534,6 +534,23 @@ class TestTheTurnsObservedWhileTheCallIsInFlight:
 
         assert len(turns.turns) == 2
 
+    def test_a_background_task_that_ends_after_the_result_does_not_bury_it(self) -> None:
+        process = StreamingProcess(HarnessEnvelopeMother.streamed_then_a_background_task_ends())
+
+        implementation = ClaudeImplementer(
+            process=process,
+            telemetry=HarnessTelemetry(
+                trace=RecordedTrace(),
+                turns=RecordedTurnLog(),
+                spend_log=RecordedSpendLog(),
+                tool_uses=RecordedToolUseRecorder(),
+            ),
+            reader=RecordedSourceReader(),
+        ).implement(AssignmentMother.of_the_first_round())
+
+        assert implementation.paths
+        assert implementation.spend.cost_usd > 0
+
     def test_a_line_that_is_not_json_at_all_is_skipped_instead_of_raising(self) -> None:
         process = StreamingProcess("not json\n" + HarnessEnvelopeMother.streamed())
         turns = RecordedTurnLog()
