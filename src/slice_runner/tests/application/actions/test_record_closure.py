@@ -10,6 +10,7 @@ from slice_runner.domain.discard_cause import DiscardCause
 from slice_runner.domain.harness_spend import HarnessSpend
 from slice_runner.domain.metrics_log import MetricsLog
 from slice_runner.domain.role_models import RoleModels
+from slice_runner.domain.run_repository import RunRepository
 from slice_runner.domain.run_state import RunState
 from slice_runner.domain.severity import Severity
 from slice_runner.tests.mothers.harness_spend_mother import HarnessSpendMother
@@ -28,10 +29,11 @@ _NAME = "una-llamada-una-fila"
 class _Closer:
     def __init__(self) -> None:
         self.metrics: Mock = create_autospec(MetricsLog, spec_set=True, instance=True)
+        self.repository: Mock = create_autospec(RunRepository, spec_set=True, instance=True)
 
     @property
     def action(self) -> RecordClosure:
-        return RecordClosure(metrics=self.metrics)
+        return RecordClosure(metrics=self.metrics, repository=self.repository)
 
     def close(self, **overrides: object) -> ClosedSlice:
         params = {
@@ -153,3 +155,28 @@ class TestWhichSpendsCount:
         written = closer.close(spends=(first, HarnessSpend.nothing(), last))
 
         assert written.spends == (first, last)
+
+
+class TestPublishingTheVetoFindings:
+    def test_a_closure_by_veto_with_findings_of_the_last_round_publishes_them(self) -> None:
+        closer = _Closer()
+        last = (FindingMother.without_line(), FindingMother.low_severity())
+
+        closer.close(state=RunState.BLOCKED_VERIFY, findings_of_the_last_round=last)
+
+        closer.repository.publish_findings.assert_called_once_with(repo=_REPO, issue=_ISSUE, findings=last)
+
+    def test_a_closure_by_veto_with_no_findings_of_the_last_round_publishes_nothing(self) -> None:
+        closer = _Closer()
+
+        closer.close(state=RunState.BLOCKED_VERIFY, findings_of_the_last_round=())
+
+        closer.repository.publish_findings.assert_not_called()
+
+    def test_a_closure_in_another_state_never_publishes_even_if_findings_of_the_last_round_arrived(self) -> None:
+        closer = _Closer()
+        last = (FindingMother.without_line(),)
+
+        closer.close(state=RunState.MERGED, findings_of_the_last_round=last)
+
+        closer.repository.publish_findings.assert_not_called()

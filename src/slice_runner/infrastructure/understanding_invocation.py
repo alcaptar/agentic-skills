@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, ClassVar
 
 from slice_runner.infrastructure.cited_sources import CitedSources
 from slice_runner.infrastructure.counted_lines import CountedLines
+from slice_runner.infrastructure.prior_art_block import PriorArtBlock
 from slice_runner.infrastructure.understanding_brief import UnderstandingBrief
 from slice_runner.infrastructure.understanding_report_payload import UnderstandingReportPayload
 
@@ -91,6 +92,7 @@ class UnderstandingInvocation:
                 f"- rama: {subissue.branch}",
                 f"- ruta del repo: {self.worktree}",
                 f"- intencion: {subissue.intention}",
+                *PriorArtBlock.of(self.parent.prior_art),
                 f"- senal: {subissue.signal}",
                 *CountedLines.of("criterios de aceptacion", subissue.criteria),
                 *CitedSources.of(

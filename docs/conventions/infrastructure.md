@@ -276,6 +276,19 @@ importar**: un smoke que solo importe el modulo lo da por bueno. Lo evita
   siguiente.** Si su pull request esta mergeada, se escribe la fila durable y se retira la etiqueta; si no,
   se deja intacta. Sin eso, un merge hecho entre invocaciones deja el trabajo hecho y sin registrar,
   porque el precheck de subissue cerrada corta antes de llegar a ningun cierre.
+- **Una pieza se apaga por el cableado, con un adaptador que no hace nada, y la decision es del
+  entrypoint.** `MutedDeployWatch` implementa `DeployWatch` sin lanzar nada, y es lo que `Cli` inyecta
+  desde 2026-08-13 en vez de `ClaudeDeployWatch`, para que mergear una slice no encadene `deploy-watch`
+  mientras esa skill se pule. **Lo que se apaga es el cableado, no el flujo**: el conductor sigue
+  llamando al puerto en el mismo sitio y con los mismos datos, la linea `SENAL:` se sigue exigiendo y
+  su emision sigue siendo criterio de aceptacion, asi que reencender es cambiar **una linea** de
+  `cli.py`. La alternativa -borrar la llamada de `ConductSlice`- dejaba el puerto sin consumidor, que
+  es el olor que este mismo apartado persigue, y obligaba a reescribir codigo y test para volver.
+  Consecuencia aceptada: **`ClaudeDeployWatch` se queda vivo y sin cablear**, sostenido solo por su
+  test de frontera. Y lo que se mide no es el adaptador mudo -un test suyo mediria el lenguaje, ver
+  `docs/conventions/testing.md`- sino que **un run que mergea con la senal declarada no lanza ningun
+  proceso**, en `test_cli.py`: el doble de `Process` revienta con el `argv` delante si alguien vuelve a
+  cablear el adaptador de verdad.
 - Un codigo de salida distinto de cero **es un dato**, no una excepcion: se lanza el proceso con
   `check=False` y el adaptador interpreta, porque el motivo esta en `stderr` y una excepcion lo borra.
 - **Ninguna llamada a un proceso externo se lanza sin tope, y el tope no lo elige el adaptador.**

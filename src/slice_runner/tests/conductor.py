@@ -122,7 +122,7 @@ class Conductor:
                 deliver=self.deliver,
                 close=self.close,
                 record_step=RecordStep(repository=self.repository, events=self.events, clock=self.clock),
-                record_closure=RecordClosure(metrics=self.metrics),
+                record_closure=RecordClosure(metrics=self.metrics, repository=self.repository),
             ),
             ports=ConductSlicePorts(
                 repository=self.repository,

@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, ClassVar
 
 from slice_runner.infrastructure.cited_sources import CitedSources
 from slice_runner.infrastructure.counted_lines import CountedLines
+from slice_runner.infrastructure.prior_art_block import PriorArtBlock
 from slice_runner.infrastructure.verdict_payload import VerdictPayload
 
 if TYPE_CHECKING:
@@ -57,6 +58,7 @@ class JudgeInvocation:
                 f"- slice: {review.slice_id}",
                 f"- repo: {review.repo}",
                 f"- ruta del repo: {review.worktree}",
+                *PriorArtBlock.of(review.prior_art),
                 f"- senal: {review.signal}",
                 *CountedLines.of("criterios de aceptacion", review.criteria),
                 *CitedSources.of(

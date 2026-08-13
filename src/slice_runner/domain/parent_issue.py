@@ -12,6 +12,7 @@ if TYPE_CHECKING:
 @dataclass(frozen=True, kw_only=True, slots=True)
 class ParentIssue:
     intention: str
+    prior_art: str
     sources: tuple[Source, ...]
     controls: Controls
     subissue_count: int

@@ -147,3 +147,7 @@ class UnreadableSourceError(ValueError):
 
 class SourcesBudgetExceededError(ValueError):
     pass
+
+
+class UnreadableFindingsError(ValueError):
+    pass

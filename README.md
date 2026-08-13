@@ -75,10 +75,10 @@ flowchart TD
     ci -->|verde| gate1
 
     gate1{{"<b>MERGE: decide la persona</b>"}}
-    gate1 -->|"mergeada, cierra la subissue"| watch
+    gate1 -.->|"mergeada, cierra la subissue<br/><b>hoy el programa para aqui</b>"| watch
 
-    subgraph watch_phase["3 - Vigilar el despliegue"]
-        watch["<b>deploy-watch</b><br/>encadenado por el programa, read-only"]
+    subgraph watch_phase["3 - Vigilar el despliegue (HOY APAGADO, se lanza a mano)"]
+        watch["<b>deploy-watch</b><br/>read-only"]
         core{{"veredicto go / no-go"}}
         watch --> core
     end
@@ -157,7 +157,8 @@ sola al mergear.
   diff -eso ya lo cuenta GitHub mejor-. Vara: si borras la slice, ¿que queda roto o imposible?
 - **La observabilidad es parte de la slice.** Cada slice que cambia comportamiento en produccion
   declara su linea `SENAL:` (como se comprueba viva), que es lo que `deploy-watch` consume despues; las
-  exentas lo declaran con motivo.
+  exentas lo declaran con motivo. El encadenado automatico esta **apagado hoy** (ver el paso 4 de "El
+  flujo de un cambio"); la senal se sigue disenando y exigiendo igual.
 
 ## Como se arranca un ciclo
 
@@ -363,12 +364,27 @@ Si algo se rompe, la etiqueta lo dice y el run para en vez de seguir: `bloqueada
 Revisas la pull request en GitHub y le das a merge. Eso es tuyo, no del pipeline. GitHub cierra la
 subissue `#43` sola, porque la pull request lleva `Closes #43`.
 
-**4. El despliegue se vigila solo**
+**4. El despliegue: hoy no se vigila solo**
 
-El programa detecta el merge y **encadena `deploy-watch`**, que arranca sin preguntar nada que pueda
-inferir: captura baseline, tickea las senales relevantes al radio de impacto del cambio, y comenta su
-veredicto en la subissue `#43`. Si sale degradado, lanza el agente `sre` para el analisis de causa raiz
-y **te redacta el rollback** para que lo lances tu.
+El programa detecta el merge, cierra el run y **para ahi**. Encadenar `deploy-watch` esta **apagado a
+proposito** mientras la skill se pule (2026-08-13): el entrypoint inyecta `MutedDeployWatch` en vez del
+adaptador que lanza `claude -p`, asi que al mergear no se gasta ninguna llamada. Lo que **no** cambia es
+la linea `SENAL:`: se sigue disenando en el slicing, se sigue exigiendo, y su emision sigue siendo un
+criterio de aceptacion que el juez mide antes de mergear. Lo unico que no ocurre es la comprobacion
+**post-deploy**.
+
+Mientras dure, quien quiera el veredicto del despliegue lanza la skill a mano en el repo desplegado:
+
+```
+claude
+> /deploy-watch senal: <la linea SENAL: de la subissue>; repo destino: <org>/<repo>
+```
+
+Cuando este pulida, se vuelve a encender cambiando el adaptador cableado en `cli.py` y devolviendo esta
+seccion a lo que decia: `deploy-watch` arranca sin preguntar nada que pueda inferir -captura baseline,
+tickea las senales relevantes al radio de impacto del cambio, comenta su veredicto en la subissue `#43`,
+y si sale degradado lanza el agente `sre` para el analisis de causa raiz y **te redacta el rollback**
+para que lo lances tu-.
 
 **5. Siguiente slice**
 
@@ -429,8 +445,9 @@ Antes hacen falta tres cosas que este repo **no** instala, y una cuarta que conv
 | El plugin `superpowers` | **hoy no lo comprueba nadie**: `slice-spec` lo invoca en su paso 1 |
 
 Instalar solo una mitad deja un entorno que parece listo y no lo esta: sin `slice-spec` no hay issue
-que conducir, y sin `deploy-watch` la llamada que el programa encadena al mergear se gasta sin hacer
-nada.
+que conducir. `deploy-watch` se sigue enlazando y el doctor lo sigue exigiendo aunque el encadenado
+este apagado (ver el paso 4 de "El flujo de un cambio"): es lo que hace que lanzarlo a mano funcione
+mientras tanto, y que reencenderlo no pida reinstalar nada.
 
 Lo que hace, y por que asi:
 

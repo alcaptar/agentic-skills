@@ -14,6 +14,7 @@ class ParentIssueMother:
     def with_sources_and_controls() -> ParentIssue:
         return ParentIssue(
             intention="hoy nada evita reimplementar una slice ya entregada",
+            prior_art="",
             sources=(Source(kind=SourceKind.DOC, path="CLAUDE.md"),),
             controls=Controls(commands=(ControlCommand(name="lint", command="make linting"),), exemption_reason=None),
             subissue_count=1,

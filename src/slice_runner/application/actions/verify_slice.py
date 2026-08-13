@@ -25,6 +25,7 @@ class VerifySliceParams:
     worktree: str
     base: str
     slice_id: str
+    prior_art: str
     signal: str
     criteria: tuple[str, ...]
     sources: tuple[Source, ...]
@@ -51,6 +52,7 @@ class VerifySlice:
                 issue=params.issue,
                 worktree=params.worktree,
                 diff=diff,
+                prior_art=params.prior_art,
                 signal=params.signal,
                 criteria=params.criteria,
                 sources=params.sources,

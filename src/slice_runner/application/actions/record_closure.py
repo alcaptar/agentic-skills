@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from slice_runner.domain.closed_slice import ClosedSlice
+from slice_runner.domain.run_state import RunState
 
 if TYPE_CHECKING:
     from slice_runner.domain.budgets import Budgets
@@ -15,7 +16,7 @@ if TYPE_CHECKING:
     from slice_runner.domain.metrics_log import MetricsLog
     from slice_runner.domain.role_models import RoleModels
     from slice_runner.domain.run import Run
-    from slice_runner.domain.run_state import RunState
+    from slice_runner.domain.run_repository import RunRepository
 
 
 @dataclass(frozen=True, kw_only=True, slots=True)
@@ -38,8 +39,9 @@ class RecordClosureParams:
 
 
 class RecordClosure:
-    def __init__(self, *, metrics: MetricsLog) -> None:
+    def __init__(self, *, metrics: MetricsLog, repository: RunRepository) -> None:
         self._metrics = metrics
+        self._repository = repository
 
     def execute(self, params: RecordClosureParams) -> None:
         self._metrics.record(
@@ -61,3 +63,7 @@ class RecordClosure:
                 diff_stats=params.diff_stats,
             )
         )
+        if params.state is RunState.BLOCKED_VERIFY and params.findings_of_the_last_round:
+            self._repository.publish_findings(
+                repo=params.repo, issue=params.issue, findings=params.findings_of_the_last_round
+            )
