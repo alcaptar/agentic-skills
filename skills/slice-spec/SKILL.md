@@ -75,6 +75,12 @@ Dos modos:
 - **Alertas y paneles son slices propias, en su repo.** Una alerta o un panel no van nunca en la PR de
   la metrica que consumen (repos distintos ⇒ PRs distintas), y el orden es forzoso: primero la slice
   que emite la serie, luego la alerta, luego el panel. Se declaran con `REPO:` en su linea.
+- **Investiga antes de cortar.** El troceo se hace sobre lo que ya hay, no sobre un repo imaginario:
+  antes del paso 2 se busca **que se intento antes** y **que existe ya que se pueda reutilizar**, y lo
+  confirmado viaja en la seccion `## Lo que ya existe` del padre. Los dos
+  fallos que esto corrige son reales: una slice que iba a implementar algo que ningun consumidor leia,
+  y otra que tradujo el vocabulario de un script que una tercera estaba jubilando. **Vara: un hallazgo
+  es una ruta o un numero, no una impresion.**
 - **Declara las fuentes de convencion.** La spec incluye una seccion `## Fuentes de convencion` con
   **punteros** (no contenido) a la vara de medir del repo: docs de convencion y skills de proyecto.
   slice-runner las lee para que implementador y verificador midan contra las convenciones **reales**
@@ -102,7 +108,7 @@ Una feature = **un issue padre** + **una subissue por slice**. Un solo formato, 
 
 | Donde | Que lleva |
 |---|---|
-| Issue padre | `## Intencion`, `## Fuentes de convencion` y `## Controles`, los dos ultimos por repo. Las slices son sus subissues, y la barra de progreso la calcula GitHub |
+| Issue padre | `## Intencion`, `## Lo que ya existe`, `## Fuentes de convencion` y `## Controles`, los dos ultimos por repo. Las slices son sus subissues, y la barra de progreso la calcula GitHub |
 | Titulo de la subissue | `slice-NN (name): titulo`, de donde salen el orden de ejecucion, la rama y el scope del commit |
 | Cuerpo de la subissue | Las lineas de la slice: `REPO:`, `INTENCION:`, `ACEPTACION:`, `SENAL:` |
 | Etiqueta de la subissue | El estado macro, que arranca en `estado:pendiente` |
@@ -115,6 +121,12 @@ Hoy un ajuste de stock se hace a mano en la consola y no queda rastro de quien l
 Cuando un pedido sale con menos unidades de las pedidas, la tienda no puede reconstruir que paso y
 acaba abriendo un caso a soporte, que tampoco tiene donde mirar. Y como nada valida la cantidad, un
 ajuste negativo entra sin que nadie lo frene y deja el stock en negativo hasta que alguien lo nota.
+
+## Lo que ya existe
+- pieza: src/stock/domain/stock_repository.py - el puerto de persistencia ya existe; esta slice usa
+  el que hay, no introduce otro
+- precedente: #88 - se intento con un job nocturno y se revirtio porque no daba trazabilidad del quien
+- acopla: `AjustarStock` ya emite el evento; el ajuste manual se engancha ahi, no en el endpoint
 
 ## Fuentes de convencion
 - doc: CLAUDE.md
@@ -160,6 +172,11 @@ SENAL: prometheus min_over_time(application_stock_actual[10m]) < 0 dispara la al
 - El padre abre con `## Intencion`: el problema de la feature entera, que esta mal hoy y como se nota.
   Es lo primero que lee una persona al abrirlo, y lo que `slice-runner` reutiliza en el cuerpo de cada
   pull request. Sin ella la spec no esta terminada.
+- El padre lleva `## Lo que ya existe` con lineas `- pieza: <ruta> - <que es>`,
+  `- precedente: #<numero> - <que le paso>` o `- acopla: <sitio> - <como>`. **Cada linea cita una ruta
+  o un numero**: un hallazgo que no se puede ir a comprobar es una impresion y no entra. Si de verdad
+  no hay nada, la seccion lleva una sola linea `- nada: <motivo>`; **vacia no vale**, por lo mismo que
+  `SENAL:` distingue exenta de ausente.
 - El padre lleva `## Fuentes de convencion` con lineas `- doc: <ruta>` o `- skill: <ruta>`: punteros
   confirmados a la vara de medir del repo (los escribe el paso 3; slice-runner los exige). Punteros,
   nunca el contenido de la convencion.
@@ -224,6 +241,34 @@ SENAL: prometheus min_over_time(application_stock_actual[10m]) < 0 dispara la al
 1. **Invoca `superpowers:brainstorming`** y sigue su proceso para entender intencion, proponer
    enfoques y validar el diseno con el usuario. **Excepcion al terminal de brainstorming:** no
    invoques `writing-plans`; el paso siguiente es emitir la spec de slices (pasos 2-6).
+1b. **Investiga el repo antes de cortar (`check-alignment`).** Trocear sin mirar que hay ya produce
+   slices que construyen lo que existe, que traducen lo que otra esta jubilando, o que implementan algo
+   que ningun consumidor lee. Busca tu mismo, con los terminos del concepto que vas a trocear, y
+   contesta tres preguntas **con punteros, no con prosa**:
+
+   - **¿Que hay ya que esto necesite?** Busca en el arbol quien nombra el concepto. Vale una ruta que
+     existe; no vale "el repo ya tiene puertos".
+   - **¿Se intento antes?** Mira las pull requests mergeadas y las issues cerradas
+     (`gh pr list --state merged --search ...`, `gh issue list --state closed --search ...`). Vale un
+     numero y lo que le paso.
+   - **¿Donde acopla?** Vale el sitio concreto del que cuelga.
+
+   **Vara: si no puedes citar una ruta o un numero, no es un hallazgo, es una impresion**, y no entra.
+   Es la misma vara de falsabilidad que gobierna los criterios de aceptacion, aplicada aguas arriba.
+
+   **Acota la busqueda.** El objetivo es un punado de lineas que una persona pueda confirmar de un
+   vistazo, no un informe: para cuando dejes de encontrar cosas nuevas, y quedate con lo que de verdad
+   cambia el corte.
+
+   Propon los hallazgos a la persona y **espera su confirmacion**, igual que con las fuentes y los
+   controles: ella sabe cual de esos precedentes se revirtio por un motivo que sigue vigente. Lo
+   confirmado se escribe en la seccion `## Lo que ya existe` del issue padre, y **se usa en el paso 2**:
+   una pieza reutilizable suele quitar una slice entera, y un precedente revertido suele cambiar el
+   orden.
+
+   **Si no hay nada, dilo con esa seccion vacia y su motivo**, no la omitas: ausencia declarada y
+   ausencia silenciosa no son lo mismo, igual que en `SENAL:` y en los controles.
+
 2. **Trocea en slices verticales (guia activa).** Carga `references/slicing.md` y aplica su
    procedimiento sobre el diseno aprobado: identifica el **walking skeleton** (slice #1), genera el
    resto por la **heuristica ordenada**, y **solo abre dialogo con la persona** (opciones graduadas
@@ -323,6 +368,11 @@ trabajo. Ofrece corregirlas. Checklist:
   desviacion: nada lo lee, y desmiente a la etiqueta en cuanto las dos existen. Un cuerpo que traiga a
   mano el bloque `<!-- slice-runner:estado ... -->` es la misma desviacion al reves: ese bloque es de la
   maquina.
+- **Tiene seccion `## Lo que ya existe`**, y cada linea cita una ruta o un `#numero`. Si falta (p. ej.
+  un issue anterior a este mecanismo), **es la desviacion a corregir**: corre el descubrimiento
+  (paso 1b), confirmalo con la persona y anadela. Una linea sin referencia comprobable -"el repo ya
+  tiene puertos"- se reescribe o se quita: lo que no se puede ir a mirar no informa el corte. Ausencia
+  real se declara con `- nada: <motivo>`, nunca dejando la seccion vacia.
 - **Tiene seccion `## Intencion` con texto**, y **ninguna slice sin linea `INTENCION:`**. Si falta
   (p. ej. un issue anterior a este mecanismo), **es la desviacion a corregir**: reconstruyela con la
   persona y anadela. Comprueba tambien la **vara** en cada linea: nombra el coste de no hacerla. Si

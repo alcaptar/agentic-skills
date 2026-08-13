@@ -54,6 +54,7 @@ class GhRunRepository(RunRepository):
 
         return ParentIssue(
             intention=parsed.intention,
+            prior_art=parsed.prior_art,
             sources=parsed.sources,
             controls=parsed.controls,
             subissue_count=payload.subissues_summary.total,

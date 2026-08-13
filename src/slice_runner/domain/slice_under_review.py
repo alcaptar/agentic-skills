@@ -16,6 +16,7 @@ class SliceUnderReview:
     issue: int
     worktree: str
     diff: SliceDiff
+    prior_art: str
     signal: str
     criteria: tuple[str, ...]
     sources: tuple[Source, ...]

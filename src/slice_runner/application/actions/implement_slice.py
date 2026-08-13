@@ -43,6 +43,7 @@ class ImplementSlice:
             repo=params.repo,
             worktree=params.worktree,
             intention=params.subissue.intention,
+            prior_art=params.parent.prior_art,
             criteria=params.subissue.criteria,
             signal=params.subissue.signal,
             sources=params.parent.sources,
