@@ -46,6 +46,13 @@ class DurableDiscardCause(StrEnum):
             case DiscardCause.FAILED_CALL:
                 return cls.FAILED_CALL
 
+    def to_domain(self) -> DiscardCause:
+        match self:
+            case DurableDiscardCause.INCOHERENT_VERDICT:
+                return DiscardCause.INCOHERENT_VERDICT
+            case DurableDiscardCause.FAILED_CALL:
+                return DiscardCause.FAILED_CALL
+
 
 class DurableCiIndeterminateCause(StrEnum):
     COMMAND_FAILED = "comando-fallido"
@@ -59,6 +66,13 @@ class DurableCiIndeterminateCause(StrEnum):
             case CiIndeterminateCause.UNREADABLE_RESPONSE:
                 return cls.UNREADABLE_RESPONSE
 
+    def to_domain(self) -> CiIndeterminateCause:
+        match self:
+            case DurableCiIndeterminateCause.COMMAND_FAILED:
+                return CiIndeterminateCause.COMMAND_FAILED
+            case DurableCiIndeterminateCause.UNREADABLE_RESPONSE:
+                return CiIndeterminateCause.UNREADABLE_RESPONSE
+
 
 @dataclass(frozen=True, kw_only=True, slots=True)
 class DurableClosure:
@@ -70,6 +84,18 @@ class DurableClosure:
         RunState.BLOCKED_CONTROLS: DurableVerdict.BLOCKED_CONTROLS,
         RunState.BLOCKED_HYGIENE: DurableVerdict.BLOCKED_HYGIENE,
         RunState.ABORTED_BUDGET: DurableVerdict.ABORTED_BUDGET,
+    }
+
+    _STATES_WITH_NO_CI: ClassVar[dict[DurableVerdict, RunState]] = {
+        DurableVerdict.FAIL: RunState.BLOCKED_VERIFY,
+        DurableVerdict.BLOCKED_CONTROLS: RunState.BLOCKED_CONTROLS,
+        DurableVerdict.BLOCKED_HYGIENE: RunState.BLOCKED_HYGIENE,
+        DurableVerdict.ABORTED_BUDGET: RunState.ABORTED_BUDGET,
+    }
+    _MERGED_STATES: ClassVar[dict[DurableCi, RunState]] = {
+        DurableCi.GREEN: RunState.MERGED,
+        DurableCi.RED: RunState.BLOCKED_CI_RED,
+        DurableCi.NONE: RunState.BLOCKED_CI_INDETERMINATE,
     }
 
     @classmethod
@@ -90,6 +116,19 @@ class DurableClosure:
                     f"a run in state {RunState.OPEN} has no verdict to record: "
                     f"the durable log is one line per closed slice"
                 )
+
+    @classmethod
+    def state_of(cls, *, verdict: DurableVerdict, ci: DurableCi) -> RunState:
+        match verdict:
+            case DurableVerdict.PASS:
+                return cls._MERGED_STATES[ci]
+            case (
+                DurableVerdict.FAIL
+                | DurableVerdict.BLOCKED_CONTROLS
+                | DurableVerdict.BLOCKED_HYGIENE
+                | DurableVerdict.ABORTED_BUDGET
+            ):
+                return cls._STATES_WITH_NO_CI[verdict]
 
 
 class HarnessMeasurementPayload(ContractModel):

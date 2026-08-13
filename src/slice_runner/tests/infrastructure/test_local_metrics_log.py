@@ -13,7 +13,7 @@ from slice_runner.domain.ci_indeterminate_cause import CiIndeterminateCause
 from slice_runner.domain.clock import Clock
 from slice_runner.domain.diff_stats import DiffStats
 from slice_runner.domain.discard_cause import DiscardCause
-from slice_runner.domain.exceptions import RunNotClosedError
+from slice_runner.domain.exceptions import RunNotClosedError, UnreadableMetricsLogError
 from slice_runner.domain.role_models import RoleModels
 from slice_runner.domain.run_state import RunState
 from slice_runner.domain.severity import Severity
@@ -375,6 +375,69 @@ class TestTheLedgerOnlyGrows(WithTheLedgerOutOfTheRealHome):
         log.record(ClosedSliceMother.closed_as(RunState.BLOCKED_VERIFY))
 
         assert [row["veredicto"] for row in WrittenMetricsLog.rows_under(tmp_path)] == ["PASA", "FALLA"]
+
+
+class TestReadingBackTheClosedSlices(WithTheLedgerOutOfTheRealHome):
+    def test_a_slice_never_recorded_returns_nothing_instead_of_failing(self, tmp_path: Path) -> None:
+        found = LocalMetricsLog(clock=self.frozen_at()).closed_slices(
+            repo=None, since=datetime(2000, 1, 1, tzinfo=UTC), until=datetime(2100, 1, 1, tzinfo=UTC)
+        )
+
+        assert found == ()
+
+    def test_every_closed_slice_within_the_window_is_returned_in_the_order_it_was_recorded(
+        self, tmp_path: Path
+    ) -> None:
+        log = LocalMetricsLog(clock=self.frozen_at(datetime(2026, 1, 1, tzinfo=UTC)))
+        log.record(ClosedSliceMother.closed_as(RunState.MERGED))
+        log = LocalMetricsLog(clock=self.frozen_at(datetime(2026, 2, 1, tzinfo=UTC)))
+        log.record(ClosedSliceMother.closed_as(RunState.BLOCKED_VERIFY))
+
+        found = log.closed_slices(
+            repo=None, since=datetime(2000, 1, 1, tzinfo=UTC), until=datetime(2100, 1, 1, tzinfo=UTC)
+        )
+
+        assert [record.state for record in found] == [RunState.MERGED, RunState.BLOCKED_VERIFY]
+
+    def test_a_slice_outside_the_date_range_is_left_out(self, tmp_path: Path) -> None:
+        log = LocalMetricsLog(clock=self.frozen_at(datetime(2026, 1, 1, tzinfo=UTC)))
+        log.record(ClosedSliceMother.merged())
+
+        found = log.closed_slices(
+            repo=None, since=datetime(2026, 2, 1, tzinfo=UTC), until=datetime(2026, 3, 1, tzinfo=UTC)
+        )
+
+        assert found == ()
+
+    def test_a_slice_of_a_different_repo_is_left_out_when_a_repo_is_asked_for(self, tmp_path: Path) -> None:
+        log = LocalMetricsLog(clock=self.frozen_at())
+        log.record(ClosedSliceMother.merged())
+
+        found = log.closed_slices(
+            repo="another/repo", since=datetime(2000, 1, 1, tzinfo=UTC), until=datetime(2100, 1, 1, tzinfo=UTC)
+        )
+
+        assert found == ()
+
+    def test_without_a_repo_every_repo_in_the_window_is_returned(self, tmp_path: Path) -> None:
+        log = LocalMetricsLog(clock=self.frozen_at())
+        log.record(ClosedSliceMother.merged())
+
+        found = log.closed_slices(
+            repo=ClosedSliceMother.REPO, since=datetime(2000, 1, 1, tzinfo=UTC), until=datetime(2100, 1, 1, tzinfo=UTC)
+        )
+
+        assert [record.repo for record in found] == [ClosedSliceMother.REPO]
+
+    def test_a_line_that_is_not_json_is_refused_instead_of_being_skipped_in_silence(self, tmp_path: Path) -> None:
+        log = LocalMetricsLog(clock=self.frozen_at())
+        log.record(ClosedSliceMother.merged())
+        ledger = tmp_path / "slice-runner" / "metrics.jsonl"
+        with ledger.open("a", encoding="utf-8") as fh:
+            fh.write("not json\n")
+
+        with pytest.raises(UnreadableMetricsLogError):
+            log.closed_slices(repo=None, since=datetime(2000, 1, 1, tzinfo=UTC), until=datetime(2100, 1, 1, tzinfo=UTC))
 
 
 class TestWhereTheLedgerLives:

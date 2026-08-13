@@ -1,0 +1,107 @@
+from __future__ import annotations
+
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, ClassVar
+
+from slice_runner.domain.closed_slice_record import ClosedSliceRecord
+from slice_runner.domain.recorded_spend import RecordedSpend
+from slice_runner.domain.run_state import RunState
+from slice_runner.domain.severity_count import SeverityCount
+
+if TYPE_CHECKING:
+    from slice_runner.domain.ci_indeterminate_cause import CiIndeterminateCause
+    from slice_runner.domain.diff_stats import DiffStats
+    from slice_runner.domain.discard_cause import DiscardCause
+
+
+class ClosedSliceRecordMother:
+    REPO: ClassVar[str] = "alcaptar/agentic-skills"
+    ISSUE: ClassVar[int] = 134
+    SLICE_ID: ClassVar[str] = "slice-06"
+    NAME: ClassVar[str] = "el-analisis-y-la-vista-son-un-comando"
+    TS: ClassVar[datetime] = datetime(2026, 8, 10, 12, 0, 0, tzinfo=UTC)
+    NO_FINDINGS: ClassVar[SeverityCount] = SeverityCount(high=0, medium=0, low=0)
+    DEFAULT_SPEND: ClassVar[RecordedSpend] = RecordedSpend(
+        cost_usd=0.4, turns=10, duration_ms=50000, cache_read_tokens=200000
+    )
+
+    @classmethod
+    def merged(cls) -> ClosedSliceRecord:
+        return cls._record(RunState.MERGED)
+
+    @classmethod
+    def closed_as(cls, state: RunState) -> ClosedSliceRecord:
+        return cls._record(state)
+
+    @classmethod
+    def merged_at(cls, ts: datetime) -> ClosedSliceRecord:
+        return cls._record(RunState.MERGED, ts=ts)
+
+    @classmethod
+    def merged_in(cls, repo: str) -> ClosedSliceRecord:
+        return cls._record(RunState.MERGED, repo=repo)
+
+    @classmethod
+    def merged_measuring(cls, spend: RecordedSpend) -> ClosedSliceRecord:
+        return cls._record(RunState.MERGED, spend=spend)
+
+    @classmethod
+    def merged_measuring_nothing(cls) -> ClosedSliceRecord:
+        return cls._record(RunState.MERGED, spend=None)
+
+    @classmethod
+    def merged_measuring_the_diff(cls, diff: DiffStats) -> ClosedSliceRecord:
+        return cls._record(RunState.MERGED, diff=diff)
+
+    @classmethod
+    def merged_after_retrying(cls, *, implement_retries: int, verify_retries: int) -> ClosedSliceRecord:
+        return cls._record(RunState.MERGED, implement_retries=implement_retries, verify_retries=verify_retries)
+
+    @classmethod
+    def merged_discarding_because_of(cls, cause: DiscardCause | None) -> ClosedSliceRecord:
+        return cls._record(RunState.MERGED, discard_cause=cause)
+
+    @classmethod
+    def blocked_indeterminate_because_of(cls, cause: CiIndeterminateCause | None) -> ClosedSliceRecord:
+        return cls._record(RunState.BLOCKED_CI_INDETERMINATE, ci_indeterminate_cause=cause)
+
+    @classmethod
+    def _record(
+        cls,
+        state: RunState,
+        *,
+        ts: datetime | None = None,
+        repo: str | None = None,
+        slice_id: str | None = None,
+        spend: RecordedSpend | None = DEFAULT_SPEND,
+        diff: DiffStats | None = None,
+        implement_retries: int = 0,
+        verify_retries: int = 0,
+        discard_cause: DiscardCause | None = None,
+        ci_indeterminate_cause: CiIndeterminateCause | None = None,
+    ) -> ClosedSliceRecord:
+        return ClosedSliceRecord(
+            ts=ts or cls.TS,
+            repo=repo or cls.REPO,
+            issue=cls.ISSUE,
+            slice_id=slice_id or cls.SLICE_ID,
+            name=cls.NAME,
+            state=state,
+            findings=cls.NO_FINDINGS,
+            findings_of_the_last_round=cls.NO_FINDINGS,
+            implement_retries=implement_retries,
+            control_retries=0,
+            ci_retries=0,
+            verify_retries=verify_retries,
+            correction_retries=0,
+            verify_discards=0,
+            discard_cause=discard_cause,
+            ci_indeterminate_cause=ci_indeterminate_cause,
+            spend=spend,
+            variant="programa",
+            models=("claude-sonnet-5",),
+            debt=0,
+            diff=diff,
+            budgets={},
+            models_by_role={},
+        )

@@ -133,5 +133,9 @@ class UnreadableCiError(ValueError):
     pass
 
 
+class UnreadableMetricsLogError(ValueError):
+    pass
+
+
 class UnreadablePluginRegistryError(ValueError):
     pass

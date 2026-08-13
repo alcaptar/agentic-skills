@@ -10,3 +10,4 @@ class Subcommand(StrEnum):
     READ = "read"
     SPEND = "spend"
     DOCTOR = "doctor"
+    METRICS = "metrics"

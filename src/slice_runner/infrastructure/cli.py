@@ -4,6 +4,7 @@ import argparse
 import json
 import sys
 import tempfile
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
@@ -22,9 +23,11 @@ from slice_runner.application.actions.reopen_slice import ReopenSlice
 from slice_runner.application.actions.stage_slice import StageSlice
 from slice_runner.application.actions.verify_slice import VerifySlice, VerifySliceParams
 from slice_runner.application.queries.check_readiness import CheckReadiness, CheckReadinessParams
+from slice_runner.application.queries.list_closed_slices import ListClosedSlices, ListClosedSlicesParams
 from slice_runner.application.queries.read_conversation import ReadConversation, ReadConversationParams
 from slice_runner.application.queries.run_prechecks import RunPrechecks
 from slice_runner.application.queries.select_slice import SelectSlice
+from slice_runner.application.queries.spend_by_role import SpendByRole, SpendByRoleParams
 from slice_runner.application.queries.spend_of_step import SpendOfStep, SpendOfStepParams
 from slice_runner.domain.budgets import Budgets
 from slice_runner.domain.exceptions import (
@@ -46,6 +49,7 @@ from slice_runner.domain.exceptions import (
     UnreadableConversationError,
     UnreadableForumError,
     UnreadableIssueError,
+    UnreadableMetricsLogError,
     UnreadableRunError,
     UnresolvableRepoOrBaseError,
 )
@@ -58,6 +62,8 @@ from slice_runner.infrastructure.claude_deploy_watch import ClaudeDeployWatch
 from slice_runner.infrastructure.claude_implementer import ClaudeImplementer
 from slice_runner.infrastructure.claude_understanding import ClaudeUnderstanding
 from slice_runner.infrastructure.claude_verifier import ClaudeVerifier
+from slice_runner.infrastructure.closed_slice_metrics_view import ClosedSliceMetricsView
+from slice_runner.infrastructure.closed_slice_record_payload import ClosedSliceRecordPayload
 from slice_runner.infrastructure.conducted_slice_payload import ConductedSlicePayload
 from slice_runner.infrastructure.conversation_report import ConversationReport
 from slice_runner.infrastructure.conversation_tool_use_recorder import ConversationToolUseRecorder
@@ -147,13 +153,13 @@ class Cli:
 
         match Subcommand(arguments.command):
             case Subcommand.VERIFY:
-                return cls(process=LocalProcess(budgets=budgets), budgets=budgets).verify(
+                result = cls(process=LocalProcess(budgets=budgets), budgets=budgets).verify(
                     repo=arguments.repo, base=arguments.base, slice_id=arguments.slice_id
                 )
             case Subcommand.EXPLAIN:
-                return cls.explain(request=sys.stdin.read(), budgets=budgets)
+                result = cls.explain(request=sys.stdin.read(), budgets=budgets)
             case Subcommand.RUN:
-                return cls(process=LocalProcess(budgets=budgets), budgets=budgets).run(
+                result = cls(process=LocalProcess(budgets=budgets), budgets=budgets).run(
                     ConductSliceParams(
                         repo=arguments.repo,
                         issue=arguments.issue,
@@ -164,7 +170,7 @@ class Cli:
                     )
                 )
             case Subcommand.READ:
-                return cls.read(
+                result = cls.read(
                     repo=arguments.repo,
                     issue=arguments.issue,
                     worktree=arguments.worktree,
@@ -172,13 +178,22 @@ class Cli:
                     step=Step(arguments.step),
                 )
             case Subcommand.SPEND:
-                return cls.spend(
+                result = cls.spend(
                     repo=arguments.repo, issue=arguments.issue, slice_id=arguments.slice_id, step=Step(arguments.step)
                 )
             case Subcommand.DOCTOR:
-                return cls(process=LocalProcess(budgets=budgets), budgets=budgets).doctor(
+                result = cls(process=LocalProcess(budgets=budgets), budgets=budgets).doctor(
                     repo=arguments.repo, worktree=arguments.worktree, base=arguments.base
                 )
+            case Subcommand.METRICS:
+                result = cls.metrics(
+                    repo=arguments.repo,
+                    since=cls._parsed_date(arguments.since, default=datetime(1970, 1, 1, tzinfo=UTC)),
+                    until=cls._parsed_date(arguments.until, default=SystemClock().now()),
+                    out=arguments.out,
+                )
+
+        return result
 
     @classmethod
     def parser(cls) -> argparse.ArgumentParser:
@@ -240,6 +255,14 @@ class Cli:
         )
         doctor.add_argument("--base", default=None, help="base branch compared against its remote")
 
+        metrics = subcommands.add_parser(
+            Subcommand.METRICS, help="emit the closed slices of a window already joined, and their view"
+        )
+        metrics.add_argument("--repo", default=None, help="limit to one repo, as `<org>/<repo>` (default: every repo)")
+        metrics.add_argument("--since", default=None, help="earliest date included, as `YYYY-MM-DD` (default: all)")
+        metrics.add_argument("--until", default=None, help="latest date included, as `YYYY-MM-DD` (default: now)")
+        metrics.add_argument("--out", type=Path, required=True, help="path where the HTML view is written")
+
         return parser
 
     @classmethod
@@ -287,6 +310,34 @@ class Cli:
         print(json.dumps(SpendPayload.from_domain(spend).to_contract(), ensure_ascii=False))
 
         return ExitCode.OK
+
+    @classmethod
+    def metrics(cls, *, repo: str | None, since: datetime, until: datetime, out: Path) -> int:
+        clock = SystemClock()
+        try:
+            records = ListClosedSlices(metrics_log=LocalMetricsLog(clock=clock)).execute(
+                ListClosedSlicesParams(repo=repo, since=since, until=until)
+            )
+            role_spend = SpendByRole(
+                trace=LocalCallTrace(clock=clock), spend_log=LocalCallSpendLog(clock=clock)
+            ).execute(SpendByRoleParams(records=records))
+        except (UnreadableCallTraceError, UnreadableCallSpendLogError, UnreadableMetricsLogError) as error:
+            return cls._reported(f"the durable record cannot be read: {error}", ExitCode.USAGE_ERROR)
+
+        for record in records:
+            print(json.dumps(ClosedSliceRecordPayload.from_domain(record).to_contract(), ensure_ascii=False))
+
+        view = ClosedSliceMetricsView.rendered(
+            repo=repo, since=since, until=until, records=records, role_spend=role_spend
+        )
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(view, encoding="utf-8")
+
+        return ExitCode.OK
+
+    @staticmethod
+    def _parsed_date(value: str | None, *, default: datetime) -> datetime:
+        return datetime.strptime(value, "%Y-%m-%d").replace(tzinfo=UTC) if value else default
 
     def verify(self, *, repo: str, base: str, slice_id: str) -> int:
         try:

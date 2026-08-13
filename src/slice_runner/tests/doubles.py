@@ -231,6 +231,11 @@ class RecordedTrace(CallTrace):
             if call.repo == repo and call.issue == issue and call.slice_id == slice_id and call.step == step
         )
 
+    def calls_of(self, *, repo: str, issue: int, slice_id: str) -> tuple[HarnessCall, ...]:
+        return tuple(
+            call for call in self.calls if call.repo == repo and call.issue == issue and call.slice_id == slice_id
+        )
+
 
 class RecordedTurnLog(TurnLog):
     def __init__(self) -> None:
