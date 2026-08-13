@@ -5,6 +5,7 @@ import json
 import shutil
 import sys
 import tempfile
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -23,11 +24,13 @@ from slice_runner.infrastructure.implementer_invocation import ImplementerInvoca
 from slice_runner.infrastructure.judge_invocation import JudgeInvocation
 from slice_runner.infrastructure.local_call_spend_log import LocalCallSpendLog
 from slice_runner.infrastructure.local_call_trace import LocalCallTrace
+from slice_runner.infrastructure.local_metrics_log import LocalMetricsLog
 from slice_runner.infrastructure.system_clock import SystemClock
 from slice_runner.infrastructure.understanding_invocation import UnderstandingInvocation
 from slice_runner.tests.argv import Argv
 from slice_runner.tests.doubles import Answer, AnsweringByArgv, RealExceptTheJudge, TimingOutProcess, UnrunnableJudge
 from slice_runner.tests.git_repo import Git
+from slice_runner.tests.mothers.closed_slice_mother import ClosedSliceMother
 from slice_runner.tests.mothers.conversation_transcript_mother import ConversationTranscriptMother
 from slice_runner.tests.mothers.gh_conversation_mother import GhConversationMother
 from slice_runner.tests.mothers.harness_call_spend_mother import HarnessCallSpendMother
@@ -649,6 +652,133 @@ class TestTheCommandThatSumsSpendByRole:
             Cli.parser().parse_args(["spend", "--slice", self._SLICE, "--step", "deploy"])
 
         assert "invalid choice" in capsys.readouterr().err
+
+
+class TestTheCommandThatEmitsClosedSliceMetrics:
+    @pytest.fixture(autouse=True)
+    def toolbox(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
+
+    @staticmethod
+    def _closed() -> None:
+        LocalMetricsLog(clock=SystemClock()).record(ClosedSliceMother.merged())
+
+    def test_a_closed_slice_is_printed_as_one_json_line_and_the_view_is_written_to_the_path_given(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        self._closed()
+        out = tmp_path / "view.html"
+
+        code = Cli.metrics(
+            repo=ClosedSliceMother.REPO,
+            since=datetime(2000, 1, 1, tzinfo=UTC),
+            until=datetime(2100, 1, 1, tzinfo=UTC),
+            out=out,
+        )
+
+        assert code == ExitCode.OK
+        printed = json.loads(capsys.readouterr().out)
+        assert (printed["repo"], printed["slice_id"], printed["state"]) == (
+            ClosedSliceMother.REPO,
+            ClosedSliceMother.SLICE_ID,
+            "merged",
+        )
+        assert out.exists()
+        assert "slice-runner metrics" in out.read_text(encoding="utf-8")
+
+    def test_a_window_with_nothing_closed_writes_the_view_but_prints_nothing(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        out = tmp_path / "view.html"
+
+        code = Cli.metrics(
+            repo=ClosedSliceMother.REPO,
+            since=datetime(2000, 1, 1, tzinfo=UTC),
+            until=datetime(2100, 1, 1, tzinfo=UTC),
+            out=out,
+        )
+
+        assert code == ExitCode.OK
+        assert capsys.readouterr().out == ""
+        assert out.exists()
+
+    def test_a_corrupt_line_in_the_call_trace_exits_with_a_usage_error_instead_of_a_stack_dump(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        self._closed()
+        ledger = ClaudeConfig.root().joinpath(*LocalCallTrace.LEDGER)
+        ledger.parent.mkdir(parents=True, exist_ok=True)
+        ledger.write_text("not json\n", encoding="utf-8")
+
+        code = Cli.metrics(
+            repo=ClosedSliceMother.REPO,
+            since=datetime(2000, 1, 1, tzinfo=UTC),
+            until=datetime(2100, 1, 1, tzinfo=UTC),
+            out=tmp_path / "view.html",
+        )
+
+        assert code == ExitCode.USAGE_ERROR
+        assert "not JSON" in capsys.readouterr().err
+
+    def test_a_corrupt_line_in_the_metrics_log_itself_exits_with_a_usage_error_instead_of_a_stack_dump(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        self._closed()
+        ledger = ClaudeConfig.root().joinpath(*LocalMetricsLog.LEDGER)
+        ledger.write_text("not json\n", encoding="utf-8")
+
+        code = Cli.metrics(
+            repo=ClosedSliceMother.REPO,
+            since=datetime(2000, 1, 1, tzinfo=UTC),
+            until=datetime(2100, 1, 1, tzinfo=UTC),
+            out=tmp_path / "view.html",
+        )
+
+        assert code == ExitCode.USAGE_ERROR
+        assert "not JSON" in capsys.readouterr().err
+
+    def test_main_wires_the_parsed_arguments_into_metrics(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        self._closed()
+        out = tmp_path / "view.html"
+
+        code = Cli.main(
+            [
+                "metrics",
+                "--repo",
+                ClosedSliceMother.REPO,
+                "--since",
+                "2000-01-01",
+                "--until",
+                "2100-01-01",
+                "--out",
+                str(out),
+            ]
+        )
+
+        assert code == ExitCode.OK
+        printed = json.loads(capsys.readouterr().out)
+        assert printed["repo"] == ClosedSliceMother.REPO
+        assert out.exists()
+
+    def test_without_since_and_until_every_closed_slice_up_to_now_is_included(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        self._closed()
+
+        code = Cli.main(["metrics", "--repo", ClosedSliceMother.REPO, "--out", str(tmp_path / "view.html")])
+
+        assert code == ExitCode.OK
+        assert json.loads(capsys.readouterr().out)["repo"] == ClosedSliceMother.REPO
+
+    def test_the_out_path_has_no_default_because_a_guessed_one_hides_the_view(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        with pytest.raises(SystemExit):
+            Cli.parser().parse_args(["metrics"])
+
+        assert "the following arguments are required: --out" in capsys.readouterr().err
 
 
 class TestTheTransitionOfEveryPair:

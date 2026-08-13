@@ -23,3 +23,6 @@ class CallTrace(ABC):
 
     @abstractmethod
     def sessions_of(self, *, repo: str, issue: int, slice_id: str, step: Step) -> tuple[str, ...]: ...
+
+    @abstractmethod
+    def calls_of(self, *, repo: str, issue: int, slice_id: str) -> tuple[HarnessCall, ...]: ...

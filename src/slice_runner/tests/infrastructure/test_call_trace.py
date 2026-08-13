@@ -191,6 +191,45 @@ class TestFindingTheSessionOfAPastCall(WithTheTraceOutOfTheRealHome):
             )
 
 
+class TestFindingTheCallsOfAPastSlice(WithTheTraceOutOfTheRealHome):
+    def test_every_call_of_the_slice_across_every_step_is_returned_in_the_order_it_was_recorded(
+        self, tmp_path: Path
+    ) -> None:
+        trace = LocalCallTrace(clock=self.frozen_at())
+        trace.record(HarnessCallMother.of_the_implementer())
+        trace.record(HarnessCallMother.of_the_judge())
+
+        found = trace.calls_of(
+            repo=HarnessCallMother.REPO, issue=HarnessCallMother.ISSUE, slice_id=HarnessCallMother.SLICE_ID
+        )
+
+        assert [(call.step, call.session) for call in found] == [
+            (Step.IMPLEMENT, HarnessCallMother.SESSION_OF_THE_IMPLEMENTER),
+            (Step.VERIFY, HarnessCallMother.SESSION_OF_THE_JUDGE),
+        ]
+
+    def test_a_slice_never_recorded_returns_nothing_instead_of_guessing_a_call(self, tmp_path: Path) -> None:
+        found = LocalCallTrace(clock=self.frozen_at()).calls_of(
+            repo=HarnessCallMother.REPO, issue=HarnessCallMother.ISSUE, slice_id=HarnessCallMother.SLICE_ID
+        )
+
+        assert found == ()
+
+    def test_two_features_that_happen_to_share_a_slice_id_are_told_apart_by_their_repo_and_issue(
+        self, tmp_path: Path
+    ) -> None:
+        trace = LocalCallTrace(clock=self.frozen_at())
+        trace.record(HarnessCallMother.of_the_implementer())
+        other_feature = HarnessCallMother.of_the_implementer_of_another_feature()
+        trace.record(other_feature)
+
+        found = trace.calls_of(
+            repo=HarnessCallMother.OTHER_REPO, issue=HarnessCallMother.OTHER_ISSUE, slice_id=HarnessCallMother.SLICE_ID
+        )
+
+        assert [call.session for call in found] == [other_feature.session]
+
+
 class TestReadingBackWhatWasWritten:
     def test_a_line_written_by_this_program_is_read_back_as_the_same_call(self) -> None:
         written = HarnessCallPayload.from_call(HarnessCallMother.of_the_judge(), ts=_STAMP.isoformat())

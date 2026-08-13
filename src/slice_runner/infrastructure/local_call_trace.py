@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING, ClassVar
 
-from slice_runner.domain.call_trace import CallTrace
+from slice_runner.domain.call_trace import CallTrace, HarnessCall
 from slice_runner.domain.exceptions import UnreadableCallTraceError
 from slice_runner.infrastructure.claude_config import ClaudeConfig
 from slice_runner.infrastructure.harness_call_payload import HarnessCallPayload
@@ -11,7 +11,6 @@ from slice_runner.infrastructure.harness_call_payload import HarnessCallPayload
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from slice_runner.domain.call_trace import HarnessCall
     from slice_runner.domain.clock import Clock
     from slice_runner.domain.step import Step
 
@@ -40,6 +39,19 @@ class LocalCallTrace(CallTrace):
             call.session
             for call in calls
             if call.repo == repo and call.issue == issue and call.slice_id == slice_id and call.step == step
+        )
+
+    def calls_of(self, *, repo: str, issue: int, slice_id: str) -> tuple[HarnessCall, ...]:
+        ledger = self._ledger()
+        if not ledger.exists():
+            return ()
+
+        calls = (self._decoded(line) for line in ledger.read_text(encoding="utf-8").splitlines() if line.strip())
+
+        return tuple(
+            HarnessCall(repo=repo, issue=issue, slice_id=slice_id, step=call.step, session=call.session)
+            for call in calls
+            if call.repo == repo and call.issue == issue and call.slice_id == slice_id
         )
 
     def _ledger(self) -> Path:

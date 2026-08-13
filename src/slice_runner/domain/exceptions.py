@@ -131,3 +131,7 @@ class CiCommandFailedError(OSError):
 
 class UnreadableCiError(ValueError):
     pass
+
+
+class UnreadableMetricsLogError(ValueError):
+    pass

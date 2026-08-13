@@ -159,7 +159,16 @@ Un `dict` que cruza dos funciones propias se lee con `.get()` en el consumidor, 
 escrita y una ausente dan lo mismo -era el fallo de `build_scorecard` y de `_slice_info`, que ademas
 obligaba a tres `assert isinstance(...)` en produccion solo para `mypy`-.
 
-Los `dict[str, object]` que quedan son todos frontera de serializacion.
+Los `dict[str, object]` que quedan son todos frontera de serializacion, con una excepcion declarada:
+`ClosedSliceRecord.budgets`/`models_by_role` (`domain/closed_slice_record.py`) tambien llegan como
+`dict[str, object]`, sin tipar contra `Budgets`/`RoleModels`. Es la relectura del mismo campo que
+`docs/conventions/infrastructure.md` ya declara para `MetricsEntryPayload` en la escritura, y el motivo
+es el mismo: la fila viene de un registro durable historico que pudo escribirse con una forma distinta
+de esos dos value objects, y reconstruirlos aqui romperia con cualquier clave anadida, renombrada o
+ausente entre versiones. Ninguna logica de dominio ni de aplicacion los destructura -
+`ListClosedSlices.execute` los reenvia enteros y la vista solo los menciona como hueco declarado-; el
+unico consumidor es la frontera de serializacion de salida (`ClosedSliceRecordPayload`), que es donde
+de verdad viven.
 
 ## Antipatrones
 
