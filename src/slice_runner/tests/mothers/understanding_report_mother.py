@@ -5,26 +5,24 @@ from typing import ClassVar
 
 class UnderstandingReportMother:
     SUMMARY: ClassVar[str] = (
-        "hoy el esbozo llega como un texto libre que nadie envuelve, asi que markdown se come su "
-        "indentacion; esta slice lo convierte en una lista de piezas y deja que el programa componga "
-        "el bloque de codigo"
+        "hoy el plan y el esbozo piden el mismo contenido cuando la slice es mecanica, asi que esta "
+        "slice los funde en una unica lista ordenada de piezas con su firma, lo que hacen y por que"
     )
-    STEP_DESCRIPTION: ClassVar[str] = "infrastructure/understanding_report_payload.py"
-    STEP_REASON: ClassVar[str] = "todo lo demas depende de que campos y minimos existen"
-    SECOND_STEP_DESCRIPTION: ClassVar[str] = "infrastructure/claude_understanding.py"
-    SECOND_STEP_REASON: ClassVar[str] = "es quien compone el texto que se publica en la subissue"
-    SIGNATURE: ClassVar[str] = "UnderstandingPieceReportPayload(ContractModel): signature, does"
-    DOES: ClassVar[str] = "una pieza del esbozo, con su firma y lo que hace ese cuerpo"
+    SIGNATURE: ClassVar[str] = "UnderstandingPlanPieceReportPayload(ContractModel): signature, does, reason"
+    DOES: ClassVar[str] = "una pieza ordenada del plan, con su firma, lo que hace ese cuerpo y su motivo"
+    REASON: ClassVar[str] = "todo lo demas depende de que campos existen en el contrato"
+    SECOND_SIGNATURE: ClassVar[str] = "UnderstandingBrief.TEXT"
+    SECOND_DOES: ClassVar[str] = "describe summary y plan en vez de summary, steps y sketch"
+    SECOND_REASON: ClassVar[str] = "el brief tiene que hablar del contrato que de verdad se le pide"
 
     @classmethod
     def valid(cls) -> dict[str, object]:
         return {
             "summary": cls.SUMMARY,
-            "steps": [
-                {"description": cls.STEP_DESCRIPTION, "reason": cls.STEP_REASON},
-                {"description": cls.SECOND_STEP_DESCRIPTION, "reason": cls.SECOND_STEP_REASON},
+            "plan": [
+                {"signature": cls.SIGNATURE, "does": cls.DOES, "reason": cls.REASON},
+                {"signature": cls.SECOND_SIGNATURE, "does": cls.SECOND_DOES, "reason": cls.SECOND_REASON},
             ],
-            "sketch": [{"signature": cls.SIGNATURE, "does": cls.DOES}],
         }
 
     @classmethod
@@ -32,29 +30,19 @@ class UnderstandingReportMother:
         return {name: value for name, value in cls.valid().items() if name != key}
 
     @classmethod
-    def with_a_step_missing_its_reason(cls) -> dict[str, object]:
-        return cls.valid() | {"steps": [{"description": cls.STEP_DESCRIPTION}] * 2}
+    def with_a_piece_missing_its_signature(cls) -> dict[str, object]:
+        return cls.valid() | {"plan": [{"does": cls.DOES, "reason": cls.REASON}]}
 
     @classmethod
     def with_a_piece_missing_what_it_does(cls) -> dict[str, object]:
-        return cls.valid() | {"sketch": [{"signature": cls.SIGNATURE}]}
+        return cls.valid() | {"plan": [{"signature": cls.SIGNATURE, "reason": cls.REASON}]}
 
     @classmethod
-    def with_steps(cls, count: int) -> dict[str, object]:
-        step = {"description": cls.STEP_DESCRIPTION, "reason": cls.STEP_REASON}
-
-        return cls.valid() | {"steps": [step] * count}
+    def with_a_piece_missing_its_reason(cls) -> dict[str, object]:
+        return cls.valid() | {"plan": [{"signature": cls.SIGNATURE, "does": cls.DOES}]}
 
     @classmethod
     def with_pieces(cls, count: int) -> dict[str, object]:
-        piece = {"signature": cls.SIGNATURE, "does": cls.DOES}
+        piece = {"signature": cls.SIGNATURE, "does": cls.DOES, "reason": cls.REASON}
 
-        return cls.valid() | {"sketch": [piece] * count}
-
-    @classmethod
-    def filled_with_placeholders(cls) -> dict[str, object]:
-        return {
-            "summary": "test",
-            "steps": [{"description": "a", "reason": "b"}],
-            "sketch": [{"signature": "test", "does": "test"}],
-        }
+        return cls.valid() | {"plan": [piece] * count}
