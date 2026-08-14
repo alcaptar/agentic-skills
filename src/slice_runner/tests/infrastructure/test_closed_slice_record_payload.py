@@ -70,6 +70,15 @@ class TestTheContractEmittedForOneClosedSlice:
 
         assert contract["ci_indeterminate_cause"] == "command-failed"
 
+    def test_the_discards_of_the_understanding_and_the_implementation_calls_travel_next_to_verifys(self) -> None:
+        record = ClosedSliceRecordMother.merged_after_discarding_harness_calls(
+            understand_discards=2, implement_discards=1
+        )
+
+        contract = ClosedSliceRecordPayload.from_domain(record).to_contract()
+
+        assert (contract["understand_discards"], contract["implement_discards"]) == (2, 1)
+
     def test_the_configuration_snapshot_travels_untouched_so_a_field_added_to_it_never_breaks_this_contract(
         self,
     ) -> None:

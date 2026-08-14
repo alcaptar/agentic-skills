@@ -49,6 +49,7 @@ from slice_runner.tests.mothers.verification_mother import VerificationMother
 if TYPE_CHECKING:
     from slice_runner.application.actions.conduct_slice import ConductSliceResult
     from slice_runner.application.queries.select_slice import SelectSliceResult
+    from slice_runner.domain.closed_slice import ClosedSlice
     from slice_runner.domain.event import Event
 
 
@@ -105,6 +106,12 @@ class Conductor:
     @property
     def emitted_events(self) -> list[Event]:
         return [call.args[0] for call in self.events.emit.call_args_list]
+
+    @property
+    def closed(self) -> ClosedSlice:
+        closed: ClosedSlice = self.metrics.record.call_args.args[0]
+
+        return closed
 
     def conduct(self) -> ConductSliceResult:
         return self._action().execute(

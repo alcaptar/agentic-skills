@@ -51,6 +51,8 @@ class MetricsLedgerRowPayload(ContractModel):
         validation_alias=AliasChoices("correction_retries", "reintentos_correcciones"), default=0
     )
     verify_discards: int = Field(alias="descartes_verify", default=0)
+    understand_discards: int = 0
+    implement_discards: int = 0
     discard_cause: DurableDiscardCause | None = Field(alias="descartes_verify_causa", default=None)
     ci_indeterminate_cause: DurableCiIndeterminateCause | None = Field(alias="ci_indeterminada_causa", default=None)
     harness: HarnessMeasurementPayload | None = None
@@ -100,6 +102,8 @@ class MetricsLedgerEntry:
             verify_retries=payload.verify_retries,
             correction_retries=payload.correction_retries,
             verify_discards=payload.verify_discards,
+            understand_discards=payload.understand_discards,
+            implement_discards=payload.implement_discards,
             discard_cause=cls._discard_cause(payload.discard_cause),
             ci_indeterminate_cause=cls._ci_indeterminate_cause(payload.ci_indeterminate_cause),
             spend=cls._spend(payload.harness) if payload.harness is not None else None,

@@ -287,7 +287,8 @@ echo '{"run": {"step": "run-controls", "control_retries": 2}, "outcome": "failed
 
 ```json
 {"run": {"step": "run-controls", "control_retries": 2, "hygiene_retries": 0, "verify_retries": 0,
- "correction_retries": 0, "ci_retries": 0, "indeterminate_ticks": 0, "verify_discards": 0},
+ "correction_retries": 0, "ci_retries": 0, "indeterminate_ticks": 0, "verify_discards": 0,
+ "understand_discards": 0, "implement_discards": 0},
  "state": "blocked-controls", "wait_seconds": 0}
 ```
 

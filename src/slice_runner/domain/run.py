@@ -13,6 +13,7 @@ if TYPE_CHECKING:
 class Run:
     step: Step
     corrected: str = ""
+    understanding_pending: bool = False
     control_retries: int = 0
     hygiene_retries: int = 0
     verify_retries: int = 0
@@ -20,6 +21,8 @@ class Run:
     ci_retries: int = 0
     indeterminate_ticks: int = 0
     verify_discards: int = 0
+    understand_discards: int = 0
+    implement_discards: int = 0
     spend: HarnessSpend = field(default_factory=HarnessSpend.nothing)
 
     @property

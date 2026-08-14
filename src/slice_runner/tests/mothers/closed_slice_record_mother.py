@@ -62,6 +62,14 @@ class ClosedSliceRecordMother:
         return cls._record(RunState.MERGED, discard_cause=cause)
 
     @classmethod
+    def merged_after_discarding_harness_calls(
+        cls, *, understand_discards: int, implement_discards: int
+    ) -> ClosedSliceRecord:
+        return cls._record(
+            RunState.MERGED, understand_discards=understand_discards, implement_discards=implement_discards
+        )
+
+    @classmethod
     def blocked_indeterminate_because_of(cls, cause: CiIndeterminateCause | None) -> ClosedSliceRecord:
         return cls._record(RunState.BLOCKED_CI_INDETERMINATE, ci_indeterminate_cause=cause)
 
@@ -79,6 +87,8 @@ class ClosedSliceRecordMother:
         verify_retries: int = 0,
         discard_cause: DiscardCause | None = None,
         ci_indeterminate_cause: CiIndeterminateCause | None = None,
+        understand_discards: int = 0,
+        implement_discards: int = 0,
     ) -> ClosedSliceRecord:
         return ClosedSliceRecord(
             ts=ts or cls.TS,
@@ -95,6 +105,8 @@ class ClosedSliceRecordMother:
             verify_retries=verify_retries,
             correction_retries=0,
             verify_discards=0,
+            understand_discards=understand_discards,
+            implement_discards=implement_discards,
             discard_cause=discard_cause,
             ci_indeterminate_cause=ci_indeterminate_cause,
             spend=spend,

@@ -188,6 +188,8 @@ class MetricsEntryPayload(ContractModel):
     verify_retries: int = Field(alias="reintentos_verify")
     correction_retries: int
     verify_discards: int = Field(alias="descartes_verify")
+    understand_discards: int
+    implement_discards: int
     harness: HarnessMeasurementPayload | None = None
     discard_cause: DurableDiscardCause | None = Field(alias="descartes_verify_causa", default=None)
     ci_indeterminate_cause: DurableCiIndeterminateCause | None = Field(alias="ci_indeterminada_causa", default=None)
@@ -235,6 +237,8 @@ class MetricsEntryPayload(ContractModel):
                 "reintentos_verify": closed.run.verify_retries,
                 "correction_retries": closed.run.correction_retries,
                 "descartes_verify": closed.run.verify_discards,
+                "understand_discards": closed.run.understand_discards,
+                "implement_discards": closed.run.implement_discards,
                 "harness": HarnessMeasurementPayload.from_domain(spend) if spend.measured else None,
                 "descartes_verify_causa": DurableDiscardCause.of(closed.discard_cause)
                 if closed.discard_cause

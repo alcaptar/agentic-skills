@@ -54,8 +54,10 @@ _IMPLEMENTER_PAYLOAD = "implementer-two-paths"
 _TABLE: list[tuple[Step, Outcome, dict[str, int], tuple[Step, RunState, int]]] = [
     (Step.UNDERSTAND, Outcome.DONE, {}, (Step.IMPLEMENT, RunState.OPEN, 0)),
     (Step.UNDERSTAND, Outcome.PENDING, {}, (Step.UNDERSTAND, RunState.OPEN, 30)),
+    (Step.UNDERSTAND, Outcome.DISCARDED, {}, (Step.UNDERSTAND, RunState.OPEN, 0)),
     (Step.UNDERSTAND, Outcome.OVER_BUDGET, {}, (Step.UNDERSTAND, RunState.ABORTED_BUDGET, 0)),
     (Step.IMPLEMENT, Outcome.DONE, {}, (Step.RUN_CONTROLS, RunState.OPEN, 0)),
+    (Step.IMPLEMENT, Outcome.DISCARDED, {}, (Step.IMPLEMENT, RunState.OPEN, 0)),
     (Step.IMPLEMENT, Outcome.OVER_BUDGET, {}, (Step.IMPLEMENT, RunState.ABORTED_BUDGET, 0)),
     (Step.RUN_CONTROLS, Outcome.DONE, {}, (Step.VERIFY, RunState.OPEN, 0)),
     (Step.RUN_CONTROLS, Outcome.FAILED, {}, (Step.IMPLEMENT, RunState.OPEN, 0)),
@@ -813,6 +815,7 @@ class TestTheTransitionOfEveryPair:
             "run": {
                 "step": "implement",
                 "corrected": "",
+                "understanding_pending": False,
                 "control_retries": 1,
                 "hygiene_retries": 0,
                 "verify_retries": 0,
@@ -820,6 +823,8 @@ class TestTheTransitionOfEveryPair:
                 "ci_retries": 0,
                 "indeterminate_ticks": 0,
                 "verify_discards": 1,
+                "understand_discards": 0,
+                "implement_discards": 0,
             },
             "state": "open",
             "wait_seconds": 0,
