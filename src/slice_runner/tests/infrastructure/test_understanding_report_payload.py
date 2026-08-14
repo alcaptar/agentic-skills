@@ -33,6 +33,25 @@ class TestTheSchemaTheHarnessReceives:
         assert "minItems" not in emitted
 
 
+class TestWhatTheSchemaSaysEachFieldIsFor:
+    @staticmethod
+    def _fields() -> list[dict[str, object]]:
+        properties = UnderstandingReportPayload.json_schema()["properties"]
+
+        assert isinstance(properties, dict)
+
+        return [properties["summary"], properties["plan"], *properties["plan"]["items"]["properties"].values()]
+
+    def test_every_field_says_what_goes_in_it_because_the_schema_is_what_the_agent_reads_when_it_emits(self) -> None:
+        assert all(field.get("description") for field in self._fields())
+
+    def test_the_summary_is_told_the_plan_does_not_go_in_it_because_that_is_the_failure_measured(self) -> None:
+        properties = UnderstandingReportPayload.json_schema()["properties"]
+
+        assert isinstance(properties, dict)
+        assert "no el plan" in properties["summary"]["description"]
+
+
 class TestWhatTheHarnessIsAllowedToReturn:
     def test_a_full_report_is_accepted(self) -> None:
         report = UnderstandingReportPayload.from_dict(UnderstandingReportMother.valid())

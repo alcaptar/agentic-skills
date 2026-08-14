@@ -49,6 +49,18 @@ Si la respuesta es "ninguna que importe", laxo vale.
 medida de verdad** contra un `claude -p` real, y los `title` solo gastan tokens del prompt. Hay un test
 que falla si vuelve a colarse una referencia.
 
+**El `description` no es un `title` y por eso se queda.** Un `title` repite el nombre del campo, asi que
+solo gasta; un `description` dice **que se pone ahi**, y es lo unico que el agente tiene delante en el
+momento de emitir -el brief queda cientos de lineas mas arriba, y `--json-schema` no restringe la
+generacion, solo valida despues, asi que un campo que el agente no entiende sale mal o no sale-. Medido:
+de 442 llamadas con salida estructurada, 29 se rechazaron por un campo requerido que faltaba, en los tres
+papeles. **Consecuencia: donde el esquema describe un campo, el prompt no lo vuelve a describir** -es la
+misma regla de "cada una tiene un solo sitio donde vive" de la seccion de adaptadores-, y lo mide
+`test_understanding_brief.py::TestWhereTheFieldsAreSpecified`. Solo lo llevan los payloads cuyo esquema
+viaja en un prompt (`understanding_report_payload.py`, y son candidatos `verdict_payload.py` y
+`report_payload.py`); los que declaran esquema para un almacen durable no lo necesitan, porque ahi nadie
+emite contra el esquema.
+
 ### El `alias` traduce; cuando no hay nada que traducir, no se escribe
 
 El contrato de `explain` (`RunPayload`, `TransitionPayload`), el de `run` (`ConductedSlicePayload`) y,

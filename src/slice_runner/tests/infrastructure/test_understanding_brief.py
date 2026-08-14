@@ -20,3 +20,15 @@ class TestWhatTheBriefPublishesAboutTheFloors:
         collapsed = " ".join(UnderstandingBrief.TEXT.split()).lower()
 
         assert "no lo reduzcas para que pase" in collapsed
+
+
+class TestWhereTheFieldsAreSpecified:
+    def test_the_brief_does_not_respec_the_fields_the_schema_already_describes(self) -> None:
+        collapsed = " ".join(UnderstandingBrief.TEXT.split())
+
+        assert not any(field in collapsed for field in ("`signature`", "`does`", "`reason`"))
+
+    def test_it_still_says_both_fields_are_mandatory_because_emitting_only_one_is_the_failure_measured(self) -> None:
+        collapsed = " ".join(UnderstandingBrief.TEXT.split()).lower()
+
+        assert "los dos campos son obligatorios" in collapsed
