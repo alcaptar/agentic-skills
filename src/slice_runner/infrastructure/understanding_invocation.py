@@ -47,6 +47,8 @@ class UnderstandingInvocation:
             "--tools",
             ",".join(UnderstandingBrief.TOOLS),
             "--strict-mcp-config",
+            "--setting-sources",
+            "user",
             "--json-schema",
             json.dumps(UnderstandingReportPayload.json_schema(), ensure_ascii=False),
         ]

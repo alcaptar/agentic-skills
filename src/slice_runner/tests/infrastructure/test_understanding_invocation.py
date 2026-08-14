@@ -38,6 +38,9 @@ class TestHowTheUnderstandingCallIsInvoked:
     def test_the_mcp_servers_are_bounded(self, argv: Argv) -> None:
         assert argv.contains("--strict-mcp-config")
 
+    def test_only_user_settings_load_so_the_destination_repo_does_not_pay_its_own_claude_md(self, argv: Argv) -> None:
+        assert argv.value_of("--setting-sources") == "user"
+
     def test_the_schema_that_travels_is_the_one_the_payload_generates_and_not_another(self, argv: Argv) -> None:
         assert json.loads(argv.value_of("--json-schema")) == UnderstandingReportPayload.json_schema()
 

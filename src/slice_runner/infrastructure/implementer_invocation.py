@@ -43,6 +43,8 @@ class ImplementerInvocation:
             "--tools",
             ",".join(SliceImplementerBrief.TOOLS),
             "--strict-mcp-config",
+            "--setting-sources",
+            "user",
             "--json-schema",
             json.dumps(ImplementationReportPayload.json_schema(), ensure_ascii=False),
         ]

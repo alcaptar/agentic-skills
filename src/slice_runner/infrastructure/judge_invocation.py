@@ -35,6 +35,8 @@ class JudgeInvocation:
             ",".join(self.judge.tools),
             *self._grants_to_read,
             "--strict-mcp-config",
+            "--setting-sources",
+            "user",
             "--json-schema",
             json.dumps(VerdictPayload.json_schema(), ensure_ascii=False),
         ]
