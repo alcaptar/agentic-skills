@@ -19,3 +19,6 @@ class SkillLibrary(ABC):
 
     @abstractmethod
     def file(self, relative: str) -> Path | None: ...
+
+    @abstractmethod
+    def checkout(self, name: str) -> Path | None: ...

@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar
 
 from slice_runner.domain.check_verdict import CheckVerdict
-from slice_runner.domain.exceptions import UnresolvableBaseError
+from slice_runner.domain.exceptions import UnreadableProvenanceError, UnresolvableBaseError
 from slice_runner.domain.readiness import Readiness
 from slice_runner.domain.readiness_check import ReadinessCheck
 
@@ -12,6 +12,7 @@ if TYPE_CHECKING:
     from slice_runner.domain.branches import Branches
     from slice_runner.domain.forum import Forum
     from slice_runner.domain.plugin_registry import PluginRegistry
+    from slice_runner.domain.provenance import Provenance
     from slice_runner.domain.skill_library import SkillLibrary
     from slice_runner.domain.toolbox import Toolbox
 
@@ -23,6 +24,16 @@ class CheckReadinessParams:
     base: str | None = None
 
 
+@dataclass(frozen=True, kw_only=True, slots=True)
+class CheckReadinessPorts:
+    toolbox: Toolbox
+    forum: Forum
+    branches: Branches
+    skills: SkillLibrary
+    plugins: PluginRegistry
+    provenance: Provenance
+
+
 class CheckReadiness:
     SKILLS: ClassVar[tuple[str, ...]] = ("slice-spec", "deploy-watch")
     PLUGINS: ClassVar[tuple[str, ...]] = ("superpowers",)
@@ -31,20 +42,13 @@ class CheckReadiness:
         "skills/slice-runner/scripts/discover_controles.py",
     )
 
-    def __init__(
-        self,
-        *,
-        toolbox: Toolbox,
-        forum: Forum,
-        branches: Branches,
-        skills: SkillLibrary,
-        plugins: PluginRegistry,
-    ) -> None:
-        self._toolbox = toolbox
-        self._forum = forum
-        self._branches = branches
-        self._skills = skills
-        self._plugins = plugins
+    def __init__(self, *, ports: CheckReadinessPorts) -> None:
+        self._toolbox = ports.toolbox
+        self._forum = ports.forum
+        self._branches = ports.branches
+        self._skills = ports.skills
+        self._plugins = ports.plugins
+        self._provenance = ports.provenance
 
     def execute(self, params: CheckReadinessParams) -> Readiness:
         checks = [
@@ -54,6 +58,7 @@ class CheckReadiness:
             *(self._of_skill(name) for name in self.SKILLS),
             *(self._of_plugin(name) for name in self.PLUGINS),
             *(self._of_helper(relative) for relative in self.HELPERS),
+            self._of_provenance(),
         ]
         if params.repo is not None:
             checks.append(self._of_repo(params.repo))
@@ -175,3 +180,30 @@ class CheckReadiness:
             detail=f"{base} is {behind} commit(s) behind its remote",
             fix=f"git -C {worktree} branch -f {base} origin/{base}",
         )
+
+    def _of_provenance(self) -> ReadinessCheck:
+        try:
+            origin = self._provenance.checkout()
+        except UnreadableProvenanceError as error:
+            return ReadinessCheck(
+                name="provenance",
+                verdict=CheckVerdict.MISSING,
+                detail=f"could not tell which checkout the program came from: {error}",
+            )
+
+        for name in self.SKILLS:
+            pointed_to = self._skills.checkout(name)
+            if pointed_to is None:
+                return ReadinessCheck(
+                    name="provenance",
+                    verdict=CheckVerdict.MISSING,
+                    detail=f"could not tell which checkout the skills point to: skill {name} is not installed",
+                )
+            if pointed_to != origin:
+                return ReadinessCheck(
+                    name="provenance",
+                    verdict=CheckVerdict.MISSING,
+                    detail=f"the program came from {origin} but skill {name} points to {pointed_to}",
+                )
+
+        return ReadinessCheck(name="provenance", verdict=CheckVerdict.READY, detail=f"both come from {origin}")

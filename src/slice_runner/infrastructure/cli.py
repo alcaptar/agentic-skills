@@ -23,7 +23,7 @@ from slice_runner.application.actions.reopen_slice import ReopenSlice
 from slice_runner.application.actions.reset_slice import ResetSlice, ResetSliceParams
 from slice_runner.application.actions.stage_slice import StageSlice
 from slice_runner.application.actions.verify_slice import VerifySlice, VerifySliceParams
-from slice_runner.application.queries.check_readiness import CheckReadiness, CheckReadinessParams
+from slice_runner.application.queries.check_readiness import CheckReadiness, CheckReadinessParams, CheckReadinessPorts
 from slice_runner.application.queries.list_closed_slices import ListClosedSlices, ListClosedSlicesParams
 from slice_runner.application.queries.read_conversation import ReadConversation, ReadConversationParams
 from slice_runner.application.queries.run_prechecks import RunPrechecks
@@ -106,6 +106,7 @@ from slice_runner.infrastructure.system_clock import SystemClock
 from slice_runner.infrastructure.transition_payload import TransitionPayload
 from slice_runner.infrastructure.transition_request_payload import TransitionRequestPayload
 from slice_runner.infrastructure.understanding_invocation import UnderstandingInvocation
+from slice_runner.infrastructure.uv_program_origin import UvProgramOrigin
 from slice_runner.infrastructure.verdict_payload import VerdictPayload
 
 if TYPE_CHECKING:
@@ -445,11 +446,14 @@ class Cli:
 
     def doctor(self, *, repo: str | None = None, worktree: str | None = None, base: str | None = None) -> int:
         readiness = CheckReadiness(
-            toolbox=LocalToolbox(process=self._process),
-            forum=GhForum(call=self._gh_call(clock=SystemClock())),
-            branches=GitBranches(process=self._process),
-            skills=LocalSkillLibrary(),
-            plugins=LocalPluginRegistry(),
+            ports=CheckReadinessPorts(
+                toolbox=LocalToolbox(process=self._process),
+                forum=GhForum(call=self._gh_call(clock=SystemClock())),
+                branches=GitBranches(process=self._process),
+                skills=LocalSkillLibrary(),
+                plugins=LocalPluginRegistry(),
+                provenance=UvProgramOrigin(),
+            )
         ).execute(CheckReadinessParams(repo=repo, worktree=worktree, base=base))
 
         print(ReadinessReport(readiness=readiness).rendered())

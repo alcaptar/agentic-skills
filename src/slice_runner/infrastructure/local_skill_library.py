@@ -23,9 +23,14 @@ class LocalSkillLibrary(SkillLibrary):
     def installed(self, name: str) -> Path | None:
         candidate = ClaudeConfig.root() / "skills" / name
 
-        return candidate if candidate.is_dir() else None
+        return candidate.resolve() if candidate.is_dir() else None
 
     def file(self, relative: str) -> Path | None:
         candidate = ClaudeConfig.root() / relative
 
-        return candidate if candidate.is_file() else None
+        return candidate.resolve() if candidate.is_file() else None
+
+    def checkout(self, name: str) -> Path | None:
+        installed = self.installed(name)
+
+        return installed.parent.parent if installed is not None else None
