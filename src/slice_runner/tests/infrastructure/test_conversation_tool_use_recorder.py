@@ -60,6 +60,22 @@ class TestARecordedConversation(WithTheToolUseLogOutOfTheRealHome):
             }
         ]
 
+    def test_a_call_the_harness_refused_lands_marked_so_a_fight_can_be_counted_without_reading_the_transcript(
+        self, tmp_path: Path
+    ) -> None:
+        ConversationTranscriptMother.written_under(
+            tmp_path, repo=_REPO, recorded=ConversationTranscriptMother.REJECTED_STRUCTURED_OUTPUT
+        )
+        recorder = ConversationToolUseRecorder(conversations=LocalConversationLog(), tool_use_log=LocalToolUseLog())
+
+        recorder.record_after(
+            slice_id=_SLICE_ID, step=Step.UNDERSTAND, session=ConversationTranscriptMother.SESSION, repo=_REPO
+        )
+
+        assert WrittenToolUses.records_under(tmp_path)[0]["uses"] == [
+            {"turn": 1, "tool": "StructuredOutput", "failed": True}
+        ]
+
 
 class WrittenUnrecordedToolUses:
     LEDGER: tuple[str, ...] = ("slice-runner", "trace", "unrecorded-tool-uses.jsonl")

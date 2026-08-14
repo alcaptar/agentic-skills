@@ -431,6 +431,57 @@ Y aunque salga bien, **el experimento no mide el factor que decide**: cuantas vu
 el modelo barato contra el juez de verdad, en un repo grande. Eso solo se ve conduciendo dos o tres slices
 reales y mirando los reintentos, no en el banco.
 
+### Un esquema sin suelo deja publicar el relleno (lo que se midio)
+
+El 2026-08-13 una slice publico como entendimiento esto: resumen `test`, un paso `a` con motivo `b`,
+esbozo `test`. Se publico con la firma del programa, y le paso lo mismo a otra persona ese mismo dia.
+
+**Lo que la transcripcion de la sesion enseno.** El modelo llamo a `StructuredOutput` **cuatro veces**:
+el informe bueno con el JSON mal escapado (rechazado por no parsear), dos intentos corregidos a los que
+**se les habia caido `steps`** (rechazados por el esquema), y un cuarto minimizado a valores de relleno
+que **si valido**. El programa se queda con el ultimo. No es que el modelo no trabajase: esa llamada
+gasto 49.691 tokens de salida y 2,67 $, **mas que el entendimiento bueno que vino despues** (48.059 y
+2,25 $). Minimizar tras tres rechazos es lo que hace cualquiera para aislar un fallo; lo que no puede
+pasar es que el minimo se publique.
+
+**No era no determinismo: era una regresion con fecha.** Sobre las 115 sesiones de arnes con
+transcripcion, contando las que necesitaron mas de un intento de salida estructurada:
+
+| Paso | Sesiones | Con mas de un intento |
+|---|---|---|
+| `verify` | 39 | 0 |
+| `implement` | 45 | 4 (repartidas por todo el histórico) |
+| `understand`, esquema de un campo de texto | 25 | **0** |
+| `understand`, esquema de tres campos | 6 | **5** |
+
+El corte es el commit que partio el entendimiento en `summary`/`steps`/`sketch`, donde `sketch` pedia
+firmas de codigo. Escribir codigo dentro de un JSON es donde se rompe el escapado, y por eso `verify`
+-cuyo esquema son campos cortos- no falla nunca.
+
+**Y el esquema no tenia con que parar el relleno.** Tras retirar los cuatro topes maximos por no
+haberselos contado al modelo, quedo sin ninguna restriccion: `{"summary": "test", ...}` era formalmente
+valido, asi que el arnes contesto `Structured output provided successfully`. La simetria es la leccion:
+**los maximos sin contar mataron una slice por rechazo, y la ausencia de minimos mato a otra por
+aceptacion**. La vara va en el esquema **y** en el brief, en los dos sentidos.
+
+**Los minimos se calibraron contra lo que ya funcionaba**, para que sean suelo contra el relleno y no
+cuota que llenar. De los cinco entendimientos buenos del formato nuevo: resumenes de **669, 673, 805,
+809 y 1.075** caracteres y **7 u 8** pasos. Con el suelo en 120 caracteres y 2 pasos, el mas ajustado
+pasa con **5,5 veces** de margen, y el degradado -4 caracteres y 1 paso- no pasa.
+
+**El esbozo se veia mal por otra cosa, y tambien se arreglo aqui:** el programa pegaba el texto crudo
+bajo `## Esbozo` sin envolverlo, asi que markdown fundia las lineas de dos espacios con el parrafo
+anterior y convertia las de cuatro en bloque. Ahora el esbozo viaja como **lista de piezas**
+(`signature`, `does`) y el bloque lo compone el programa: el modelo escribe datos y no markdown, que de
+paso es menos texto libre que escapar.
+
+**Lo que sigue sin cerrarse:** el programa no ve la pelea. Sabe que hubo cuatro intentos y tres
+rechazos solo porque alguien leyo la transcripcion a mano. Se cierra a medias marcando en el registro
+durable de usos de herramienta las llamadas que el arnes rechazo (`failed`), que es lo que deja contar
+la tasa sin abrir un `.jsonl` de sesion; decidir **que hacer** con una llamada peleada -descartarla y
+repetirla, como ya hace el paso de verificar- sigue pendiente, y con la tasa de hoy rechazarlas todas
+duplicaria el coste de casi todos los entendimientos.
+
 ## deploy-watch
 
 ### Decisiones clave

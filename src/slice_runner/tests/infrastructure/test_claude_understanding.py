@@ -99,15 +99,31 @@ class TestTheUnderstandingOfARecordedCall:
             "\n"
             "## Pasos\n"
             f"- {UnderstandingReportMother.STEP_DESCRIPTION} (motivo: {UnderstandingReportMother.STEP_REASON})\n"
+            f"- {UnderstandingReportMother.SECOND_STEP_DESCRIPTION} "
+            f"(motivo: {UnderstandingReportMother.SECOND_STEP_REASON})\n"
             "\n"
             "## Esbozo\n"
-            f"{UnderstandingReportMother.SKETCH}"
+            "```\n"
+            f"{UnderstandingReportMother.SIGNATURE}\n"
+            f"    {UnderstandingReportMother.DOES}\n"
+            "```"
         )
+
+    def test_the_sketch_is_fenced_by_the_program_so_markdown_cannot_eat_the_indentation_of_the_shape(self) -> None:
+        understanding = Writing.understood(Writing.carrying(UnderstandingReportMother.with_pieces(3)))
+
+        fenced = understanding.text.split("## Esbozo\n", maxsplit=1)[1]
+
+        assert fenced.startswith("```\n")
+        assert fenced.endswith("\n```")
+        assert fenced.count(f"    {UnderstandingReportMother.DOES}") == 3
 
     def test_two_understandings_with_different_content_still_produce_the_same_section_structure(self) -> None:
         first = Writing.understood(Writing.carrying(UnderstandingReportMother.valid()))
         second = Writing.understood(
-            Writing.carrying(UnderstandingReportMother.valid() | {"summary": "otro resumen distinto del primero"})
+            Writing.carrying(
+                UnderstandingReportMother.valid() | {"summary": f"otro resumen: {UnderstandingReportMother.SUMMARY}"}
+            )
         )
 
         headings = ("## Resumen", "## Pasos", "## Esbozo")
@@ -120,13 +136,18 @@ class TestTheUnderstandingOfARecordedCall:
     ) -> None:
         padded = UnderstandingReportMother.valid() | {
             "summary": f"  {UnderstandingReportMother.SUMMARY}  \n",
-            "sketch": f"  {UnderstandingReportMother.SKETCH}  \n",
+            "sketch": [
+                {
+                    "signature": f"  {UnderstandingReportMother.SIGNATURE}  \n",
+                    "does": f"  {UnderstandingReportMother.DOES}  \n",
+                }
+            ],
         }
 
         understanding = Writing.understood(Writing.carrying(padded))
 
         assert UnderstandingReportMother.SUMMARY in understanding.text
-        assert understanding.text.endswith(UnderstandingReportMother.SKETCH)
+        assert understanding.text.endswith(f"{UnderstandingReportMother.DOES}\n```")
 
     def test_what_the_harness_spent_on_the_call_travels_with_the_understanding(self) -> None:
         understanding = Writing.understood(Writing.carrying(UnderstandingReportMother.valid()))
@@ -150,24 +171,30 @@ class TestWhatTheCallIsAllowedToReturn:
             Writing.understood(process)
 
     def test_blank_summary_is_rejected_because_it_is_not_usable_as_a_gate(self) -> None:
-        blank = UnderstandingReportMother.valid() | {"summary": "   "}
+        blank = UnderstandingReportMother.valid() | {"summary": " " * 200}
 
         with pytest.raises(InvalidUnderstandingReportError):
             Writing.understood(Writing.carrying(blank))
 
     def test_blank_sketch_is_rejected_because_it_is_not_usable_as_a_gate(self) -> None:
-        blank = UnderstandingReportMother.valid() | {"sketch": "   "}
+        blank = UnderstandingReportMother.valid() | {"sketch": [{"signature": " " * 40, "does": " " * 40}]}
 
         with pytest.raises(InvalidUnderstandingReportError):
             Writing.understood(Writing.carrying(blank))
 
     def test_a_step_with_a_blank_reason_is_rejected_because_it_is_not_usable_as_a_gate(self) -> None:
         blank = UnderstandingReportMother.valid() | {
-            "steps": [{"description": UnderstandingReportMother.STEP_DESCRIPTION, "reason": "   "}]
+            "steps": [{"description": UnderstandingReportMother.STEP_DESCRIPTION, "reason": " " * 40}] * 2
         }
 
         with pytest.raises(InvalidUnderstandingReportError):
             Writing.understood(Writing.carrying(blank))
+
+    def test_a_report_the_harness_degraded_to_placeholders_is_rejected_instead_of_published_with_its_signature(
+        self,
+    ) -> None:
+        with pytest.raises(InvalidUnderstandingReportError):
+            Writing.understood(Writing.carrying(UnderstandingReportMother.filled_with_placeholders()))
 
     def test_a_rejected_call_still_reports_what_it_spent_so_the_budget_still_sees_it(self) -> None:
         blank = UnderstandingReportMother.valid() | {"summary": "   "}

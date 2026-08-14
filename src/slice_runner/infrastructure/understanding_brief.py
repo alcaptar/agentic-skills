@@ -38,9 +38,30 @@ Tu respuesta final es el objeto del esquema que se te ha mandado, con tres campo
   `description` -que vas a tocar- y su `reason` -por que se toca eso, como campo propio y no como
   prosa dentro de la descripcion-. Una linea cada uno.
 - `sketch`: el esbozo de la forma que va a tener el codigo, redactado **despues** de haber leido las
-  fuentes de convencion declaradas, nunca antes. Una firma por pieza -clase, metodo o funcion, segun
-  mande la convencion del repo- con una linea debajo diciendo que hace ese cuerpo. Nunca codigo
-  pegable: quien revise tiene que ver la forma antes de que exista, no una implementacion adelantada.
+  fuentes de convencion declaradas, nunca antes. Es una **lista de piezas**, no un texto: cada pieza
+  lleva su `signature` -la firma de una clase, un metodo o una funcion, segun mande la convencion del
+  repo- y su `does` -una linea diciendo que hace ese cuerpo-. Nunca codigo pegable: quien revise tiene
+  que ver la forma antes de que exista, no una implementacion adelantada. **No escribas markdown ahi**:
+  el bloque de codigo lo compone el programa con lo que le des, asi que ni comillas de cerca, ni
+  guiones, ni indentacion tuya.
+
+## Los minimos que se te van a exigir
+
+El esquema **rechaza** lo que no llegue a estos minimos, y lo dice aqui para que no los descubras a
+base de que te lo devuelvan:
+
+- `summary`: al menos 120 caracteres.
+- `steps`: al menos 2 pasos, con al menos 15 caracteres en `description` y en `reason`.
+- `sketch`: al menos 1 pieza, con al menos 10 caracteres en `signature` y 15 en `does`.
+
+Son suelos contra el relleno, no cuotas que haya que llenar: estan por debajo de lo que sale de hacer
+el trabajo, asi que si tienes algo que decir no los vas a notar. Lo que impiden es entregar un objeto
+con la forma correcta y sin contenido -`test`, `a`, `b`, `pendiente`-, que es indistinguible de no
+haber entendido nada y ademas se publica con la firma del programa.
+
+**Si un intento te lo rechazan, corrige lo que te digan y vuelve a mandar el informe entero.** No lo
+reduzcas para que pase: un informe minimo que valide es peor que uno rechazado, porque el rechazo se
+ve y el relleno no.
 
 **No seas verboso.** Esto lo lee una persona para decidir en un minuto si el plan encaja, y un texto
 largo se lee peor sin contar mas. Nada de repetir los campos de la subissue, nada de justificar lo

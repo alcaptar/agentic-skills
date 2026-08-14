@@ -14,6 +14,7 @@ class ToolUse:
     turn: int
     tool: str
     path: str | None
+    failed: bool = False
 
 
 @dataclass(frozen=True, kw_only=True, slots=True)
