@@ -98,11 +98,6 @@ class TestHowTheJudgeIsCalled:
 
         assert process.calls == 1
 
-    def test_the_judge_does_not_fix_a_model_so_it_keeps_the_best_one_available(self) -> None:
-        argv = JudgeInvocation(judge=_JUDGE, review=SliceUnderReviewMother.of_the_slice(), reader=_READER).argv
-
-        assert "--model" not in argv
-
 
 class TestWhatTheJudgeCallCost:
     def test_the_spend_of_the_call_comes_back_with_the_verdict_because_the_judge_is_not_free(self) -> None:

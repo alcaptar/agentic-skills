@@ -588,7 +588,7 @@ class TestConductSliceClosingAMergeMissedBetweenInvocations:
         self,
     ) -> None:
         dangling = SubIssueMother.dangling()
-        models = RoleModels(understand="opus", implement="opus")
+        models = RoleModels(understand="opus", implement="opus", verify="opus")
         conductor = self._conductor(dangling=(dangling,), models=models)
 
         conductor.conduct()
@@ -1025,7 +1025,7 @@ class TestConductSliceOnTheHappyPath:
         )
 
     def test_the_durable_row_carries_the_budgets_and_the_models_this_invocation_ran_with(self) -> None:
-        models = RoleModels(understand="opus", implement="opus")
+        models = RoleModels(understand="opus", implement="opus", verify="opus")
         conductor = Conductor(
             chosen=SelectSliceResultMother.resumed_at(RunMother.implementing()),
             budgets=Budgets(slice_cost_usd=99.0),

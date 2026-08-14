@@ -25,6 +25,9 @@ class TestWhatTheJudgeIsGranted:
             ).argv
         )
 
+    def test_the_model_is_fixed_and_not_inherited_from_whoever_launches_the_run(self, argv: Argv) -> None:
+        assert argv.value_of("--model") == "opus"
+
     def test_the_tools_travel_in_a_single_comma_separated_argument(self, argv: Argv) -> None:
         assert argv.value_of("--tools") == "Read,Grep,Glob,Skill"
 

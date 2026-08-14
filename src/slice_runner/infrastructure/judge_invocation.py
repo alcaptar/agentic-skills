@@ -18,6 +18,7 @@ if TYPE_CHECKING:
 @dataclass(frozen=True, kw_only=True, slots=True)
 class JudgeInvocation:
     EXECUTABLE: ClassVar[str] = "claude"
+    MODEL: ClassVar[str] = "opus"
 
     judge: Judge
     review: SliceUnderReview
@@ -28,6 +29,8 @@ class JudgeInvocation:
         return [
             self.EXECUTABLE,
             "-p",
+            "--model",
+            self.MODEL,
             "--output-format",
             "stream-json",
             "--verbose",

@@ -7,3 +7,4 @@ from dataclasses import dataclass
 class RoleModels:
     understand: str
     implement: str
+    verify: str

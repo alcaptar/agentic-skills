@@ -15,6 +15,7 @@ from datetime import UTC, datetime
 import metrics
 from slice_runner.domain.ci_indeterminate_cause import CiIndeterminateCause
 from slice_runner.domain.discard_cause import DiscardCause
+from slice_runner.domain.role_models import RoleModels
 from slice_runner.infrastructure.metrics_entry_payload import (
     DurableCi,
     DurableCiIndeterminateCause,
@@ -74,6 +75,14 @@ def test_the_row_the_program_writes_is_one_metrics_py_can_still_read() -> None:
     assert fila.modelos == tuple(sorted(closed.spend.models))
     assert fila.variante == MetricsEntryPayload.VARIANT
     assert fila.primer_intento
+
+
+def test_the_model_the_judge_ran_with_reaches_the_row_so_a_verdict_can_be_traced_to_what_measured_it() -> None:
+    models = RoleModels(understand="sonnet", implement="sonnet", verify="opus")
+    closed = ClosedSliceMother.merged_with_config(models=models)
+    row = MetricsEntryPayload.from_domain(closed, ts=datetime(2026, 8, 10, tzinfo=UTC).isoformat()).to_contract()
+
+    assert row["models_by_role"] == {"understand": "sonnet", "implement": "sonnet", "verify": "opus"}
 
 
 def test_a_row_that_discards_the_judge_is_read_with_the_cause_metrics_py_knows() -> None:

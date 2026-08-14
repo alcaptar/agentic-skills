@@ -65,7 +65,7 @@ class Conductor:
     UNDERSTANDING: ClassVar[str] = UnderstandingMother.TEXT
     NOW: ClassVar[datetime] = datetime(2024, 1, 1, tzinfo=UTC)
 
-    MODELS: ClassVar[RoleModels] = RoleModels(understand="sonnet", implement="sonnet")
+    MODELS: ClassVar[RoleModels] = RoleModels(understand="sonnet", implement="sonnet", verify="sonnet")
 
     def __init__(
         self, *, chosen: SelectSliceResult, budgets: Budgets | None = None, models: RoleModels | None = None

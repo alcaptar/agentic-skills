@@ -210,11 +210,27 @@ medicion no anade nada a la suma, bastaba **una** medicion previa en la invocaci
 quedase medido para siempre, y a partir de ahi cada llamada que muriera sin sobre parseable dejaba el
 total congelado por debajo del limite.
 
-### Por que el implementador fija modelo y el juez no
+### Por que el juez tambien fija modelo, y por que uno mas caro que el implementador
 
-Los 25-28 $ se pagaron con Opus porque ninguna invocacion declaraba modelo. El que produce se puede
-permitir el barato porque su trabajo lo revisa otro; el que juzga es el ultimo control antes de una pull
-request, y ahi ahorrar es ahorrar en la garantia. Hay test de las dos cosas.
+Los 25-28 $ se pagaron con Opus porque ninguna invocacion declaraba modelo. La primera correccion fue
+asimetrica: el implementador fija el barato porque su trabajo lo revisa otro, y el juez se dejaba heredar
+el de quien lanza el run. El problema de esa asimetria no era el argumento: era que "heredar" no es una
+politica declarada, es la ausencia de una. `RoleModels` no tenia campo `verify`, asi que ni el conductor
+podia decir con que modelo corria el juez ni la fila durable lo escribia -no se podia saber con que se
+juzgo una slice ya cerrada, ni separar su coste del de la sesion que lanzo el run (issue #259)-.
+
+Declarado hay que elegir, y la eleccion es `"opus"`, frente al `"sonnet"` que fijan `ImplementerInvocation`
+y `UnderstandingInvocation`. **No la sostiene ningun corpus**: nada de las 60 verificaciones registradas
+(mas arriba) compara el mismo diff juzgado por dos modelos distintos. Lo que la sostiene es la asimetria
+del coste del error. Un implementador flojo cuesta una ronda de correccion mas, que se ve en el momento y
+se paga una vez; un juez flojo aprueba una pull request mala, que no se ve y la paga quien venga detras.
+Mientras no haya medicion, se prefiere pagar de mas en el ultimo control antes que de menos.
+
+Lo que hace que esto sea una decision reversible y no una preferencia enterrada es la otra mitad de la
+slice: `models_by_role.verify` viaja en la fila durable, asi que en cuanto haya runs del mismo diff
+juzgados por modelos distintos se podran comparar, y bajarlo sera cambiar una constante con los datos
+delante. Hay test de las tres cosas: que `RoleModels` no se construye sin `verify`, que
+`JudgeInvocation.argv` emite `--model`, y que la fila durable lo trae.
 
 ### La duplicacion con `skills/`: por que se acepta
 
