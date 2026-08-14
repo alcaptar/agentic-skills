@@ -27,6 +27,7 @@ class RunPayload(ContractModel):
     verify_discards: Spent = 0
     understand_discards: Spent = 0
     implement_discards: Spent = 0
+    control_rounds_logged: Spent = 0
     spend: SpendPayload | None = None
 
     @classmethod
@@ -48,6 +49,7 @@ class RunPayload(ContractModel):
             verify_discards=run.verify_discards,
             understand_discards=run.understand_discards,
             implement_discards=run.implement_discards,
+            control_rounds_logged=run.control_rounds_logged,
             spend=SpendPayload.from_domain(run.spend) if run.spend.measured else None,
         )
 
@@ -65,5 +67,6 @@ class RunPayload(ContractModel):
             verify_discards=self.verify_discards,
             understand_discards=self.understand_discards,
             implement_discards=self.implement_discards,
+            control_rounds_logged=self.control_rounds_logged,
             spend=self.spend.to_domain() if self.spend is not None else HarnessSpend.nothing(),
         )

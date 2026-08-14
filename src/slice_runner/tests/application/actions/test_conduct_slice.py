@@ -781,6 +781,29 @@ class TestConductSliceReopeningABlockedRun:
 
         assert conductor.implement.execute.call_args.args[0].retry_instruction == _RETRY_INSTRUCTION
 
+    def test_reopening_a_run_blocked_on_controls_names_the_next_round_after_the_ones_already_logged(self) -> None:
+        conductor, _ = self._blocked_and_reopened(
+            IssueLabel.BLOCKED_CONTROLS,
+            RunMother.blocked_on_controls(),
+            replace(RunMother.blocked_on_controls(), control_retries=0),
+        )
+
+        conductor.conduct()
+
+        slice_dir = Conductor.LOGS / SubIssueMother.pending().slice_id
+        assert conductor.controls.run.call_args.kwargs["out"] == slice_dir / "round-4"
+
+    def test_a_fresh_invocation_resuming_a_run_reopened_by_an_earlier_one_still_names_the_round_after_the_ones_logged(
+        self,
+    ) -> None:
+        reopened_run = replace(RunMother.blocked_on_controls(), control_retries=0)
+        conductor = Conductor(chosen=SelectSliceResultMother.resumed_at(reopened_run))
+
+        conductor.conduct()
+
+        slice_dir = Conductor.LOGS / SubIssueMother.pending().slice_id
+        assert conductor.controls.run.call_args_list[0].kwargs["out"] == slice_dir / "round-4"
+
 
 class TestConductSliceResumingAnInterruptedRun:
     @staticmethod
@@ -1232,7 +1255,7 @@ class TestConductSliceWhenTheControlsComeBackRed:
 
         assert conductor.controls.run.call_args.kwargs == {
             "repo": Conductor.WORKTREE,
-            "out": Conductor.LOGS / "round-1",
+            "out": Conductor.LOGS / SubIssueMother.pending().slice_id / "round-1",
         }
 
     def test_each_retried_round_of_controls_writes_under_a_directory_of_its_own(self) -> None:
@@ -1242,7 +1265,38 @@ class TestConductSliceWhenTheControlsComeBackRed:
         conductor.conduct()
 
         outs = [call.kwargs["out"] for call in conductor.controls.run.call_args_list]
-        assert outs == [Conductor.LOGS / "round-1", Conductor.LOGS / "round-2"]
+        slice_dir = Conductor.LOGS / SubIssueMother.pending().slice_id
+        assert outs == [slice_dir / "round-1", slice_dir / "round-2"]
+
+    def test_two_slices_with_the_same_logs_base_write_their_controls_under_different_directories(self) -> None:
+        first = self._conductor()
+        second = Conductor(
+            chosen=SelectSliceResultMother.resumed_at(
+                RunMother.implementing(), subissue=SubIssueMother.of_a_second_slice()
+            )
+        )
+
+        first.conduct()
+        second.conduct()
+
+        assert (
+            first.controls.run.call_args.kwargs["out"] == Conductor.LOGS / SubIssueMother.pending().slice_id / "round-1"
+        )
+        assert (
+            second.controls.run.call_args.kwargs["out"]
+            == Conductor.LOGS / SubIssueMother.of_a_second_slice().slice_id / "round-1"
+        )
+
+    def test_resuming_a_run_with_rounds_already_logged_names_the_next_round_not_round_one(self) -> None:
+        conductor = Conductor(
+            chosen=SelectSliceResultMother.resumed_at(RunMother.running_the_controls_with_one_round_already_logged())
+        )
+
+        conductor.conduct()
+
+        assert conductor.controls.run.call_args_list[0].kwargs["out"] == (
+            Conductor.LOGS / SubIssueMother.pending().slice_id / "round-2"
+        )
 
     def test_the_exhausted_control_budget_closes_the_run_writes_its_label_and_records_the_row(self) -> None:
         conductor = self._conductor(budgets=Budgets(control_retries=0))

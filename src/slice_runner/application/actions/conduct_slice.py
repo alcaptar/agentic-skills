@@ -107,7 +107,6 @@ class ConductSliceProgress:
     verdicts: tuple[Verdict, ...] = field(default=())
     spends: tuple[HarnessSpend, ...] = field(default=())
     control_logs: tuple[Path, ...] = field(default=())
-    control_rounds: int = 0
     hygiene_refusal: str = ""
     understanding: str = ""
     retry_instruction: str = ""
@@ -487,7 +486,7 @@ class ConductSlice:
                 outcome=Outcome.HYGIENE_REJECTED,
             )
 
-        round_progress = replace(progress, control_rounds=progress.control_rounds + 1, hygiene_refusal="")
+        round_progress = replace(progress, hygiene_refusal="")
         outcomes = self._ran_controls(round_progress)
         red = tuple(
             outcome.log for outcome in outcomes if outcome.status is ControlStatus.RED and outcome.log is not None
@@ -502,7 +501,7 @@ class ConductSlice:
         if controls.exemption_reason is not None:
             return ()
 
-        out = progress.params.logs / f"round-{progress.control_rounds}"
+        out = progress.params.logs / progress.subissue.slice_id / f"round-{progress.run.control_rounds_logged + 1}"
 
         return tuple(
             self._controls.run(command, repo=progress.params.worktree, out=out) for command in controls.commands

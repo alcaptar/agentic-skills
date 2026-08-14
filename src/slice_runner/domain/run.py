@@ -23,6 +23,7 @@ class Run:
     verify_discards: int = 0
     understand_discards: int = 0
     implement_discards: int = 0
+    control_rounds_logged: int = 0
     spend: HarnessSpend = field(default_factory=HarnessSpend.nothing)
 
     @property

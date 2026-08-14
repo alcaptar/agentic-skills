@@ -15,12 +15,20 @@ class RunMother:
         return Run(step=Step.IMPLEMENT)
 
     @staticmethod
+    def implementing_with_one_round_already_logged() -> Run:
+        return Run(step=Step.IMPLEMENT, control_rounds_logged=1)
+
+    @staticmethod
     def judging_after_spending(spend: HarnessSpend) -> Run:
         return Run(step=Step.VERIFY, spend=spend)
 
     @staticmethod
     def running_the_controls() -> Run:
         return Run(step=Step.RUN_CONTROLS)
+
+    @staticmethod
+    def running_the_controls_with_one_round_already_logged() -> Run:
+        return Run(step=Step.RUN_CONTROLS, control_rounds_logged=1)
 
     @staticmethod
     def judging() -> Run:
@@ -52,7 +60,7 @@ class RunMother:
 
     @staticmethod
     def blocked_on_controls() -> Run:
-        return Run(step=Step.RUN_CONTROLS, control_retries=2)
+        return Run(step=Step.RUN_CONTROLS, control_retries=2, control_rounds_logged=3)
 
     @staticmethod
     def blocked_on_hygiene() -> Run:
