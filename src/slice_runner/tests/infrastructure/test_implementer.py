@@ -263,12 +263,12 @@ class TestTheAgreedUnderstandingThatTravelsWithTheBrief:
     def test_a_slice_conducted_without_an_alignment_carries_no_section_instead_of_an_empty_one(self) -> None:
         assert "\n## Entendimiento acordado\n" not in self._sent(AssignmentMother.of_the_first_round())
 
-    def test_the_sketch_of_the_agreed_understanding_reaches_the_implementer_because_it_travels_inside_it(
+    def test_the_plan_of_the_agreed_understanding_reaches_the_implementer_because_it_travels_inside_it(
         self,
     ) -> None:
         sent = self._sent(AssignmentMother.of_the_first_round_with_an_agreed_understanding())
 
-        assert AssignmentMother.SKETCH in sent
+        assert AssignmentMother.PLAN_PIECE in sent
 
 
 class TestTheRetryInstructionThatTravelsWithTheBrief:

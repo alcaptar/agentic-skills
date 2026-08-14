@@ -489,27 +489,42 @@ firmas de codigo. Escribir codigo dentro de un JSON es donde se rompe el escapad
 
 **Y el esquema no tenia con que parar el relleno.** Tras retirar los cuatro topes maximos por no
 haberselos contado al modelo, quedo sin ninguna restriccion: `{"summary": "test", ...}` era formalmente
-valido, asi que el arnes contesto `Structured output provided successfully`. La simetria es la leccion:
-**los maximos sin contar mataron una slice por rechazo, y la ausencia de minimos mato a otra por
-aceptacion**. La vara va en el esquema **y** en el brief, en los dos sentidos.
+valido, asi que el arnes contesto `Structured output provided successfully`. La respuesta fueron suelos
+minimos -120 caracteres de resumen, 2 pasos, 1 pieza-, calibrados contra los cinco entendimientos buenos
+del formato nuevo (resumenes de **669 a 1.075** caracteres y **7 u 8** pasos, o sea 5,5 veces de margen
+para el mas ajustado) y publicados en el brief para que no se descubriesen a base de rechazo.
 
-**Los minimos se calibraron contra lo que ya funcionaba**, para que sean suelo contra el relleno y no
-cuota que llenar. De los cinco entendimientos buenos del formato nuevo: resumenes de **669, 673, 805,
-809 y 1.075** caracteres y **7 u 8** pasos. Con el suelo en 120 caracteres y 2 pasos, el mas ajustado
-pasa con **5,5 veces** de margen, y el degradado -4 caracteres y 1 paso- no pasa.
+**Duraron un dia, y por que es la leccion de verdad.** Esa misma tarde el agente los uso como diana:
+tras rechazarle informes de **2.113 y 3.654** caracteres entrego uno de **85** y otro de **434**,
+calibrados para pasar justo los suelos que el brief le habia contado. La instruccion que lo prohibia
+estaba escrita en ese mismo brief -"no lo reduzcas para que pase"- y perdio contra tres rechazos
+seguidos. Medido sobre 728 transcripciones: 44 rechazos, **ninguno** causado por un minimo, y las dos
+degradaciones a relleno solo en el entendimiento, que era el unico papel con suelo en el esquema **y**
+con los numeros publicados. Donde no hay diana no hay a que encoger: implementador y juez reintentan al
+mismo tamano (ratios de 1,0 a 1,2) y aciertan.
+
+Asi que el pendulo dio la vuelta entera -maximos secretos que rechazaban trabajo bueno, minimos
+publicados que ensenaban cuan poco basta- y los dos extremos acabaron retirados. **El instrumento era el
+error**: `minLength` y `minItems` no los puede hacer cumplir la generacion estructurada de la API -solo
+tipos, enums y `required`-, asi que solo existen como rechazo posterior, y miden forma y longitud, que
+no son entendimiento. Lo que se queda es lo que mide vacio y no brevedad: el esquema exige los campos
+por `required`, y `_usable_text` rechaza el informe que traiga alguno en blanco.
 
 **El esbozo se veia mal por otra cosa, y tambien se arreglo aqui:** el programa pegaba el texto crudo
 bajo `## Esbozo` sin envolverlo, asi que markdown fundia las lineas de dos espacios con el parrafo
-anterior y convertia las de cuatro en bloque. Ahora el esbozo viaja como **lista de piezas**
-(`signature`, `does`) y el bloque lo compone el programa: el modelo escribe datos y no markdown, que de
-paso es menos texto libre que escapar.
+anterior y convertia las de cuatro en bloque. Ahora viaja como **lista de piezas** y el bloque lo compone
+el programa: el modelo escribe datos y no markdown, que de paso es menos texto libre que escapar. En el
+mismo movimiento que retiro los suelos, `steps` y `sketch` se fundieron en un unico `plan` con
+`signature`, `does` y `reason`: pedian el mismo contenido cuando la slice es mecanica, y **18 de los 44**
+rechazos medidos fueron `falta 'steps'`, el agente entregando una sola de las dos listas.
 
 **Lo que sigue sin cerrarse:** el programa no ve la pelea. Sabe que hubo cuatro intentos y tres
 rechazos solo porque alguien leyo la transcripcion a mano. Se cierra a medias marcando en el registro
 durable de usos de herramienta las llamadas que el arnes rechazo (`failed`), que es lo que deja contar
-la tasa sin abrir un `.jsonl` de sesion; decidir **que hacer** con una llamada peleada -descartarla y
-repetirla, como ya hace el paso de verificar- sigue pendiente, y con la tasa de hoy rechazarlas todas
-duplicaria el coste de casi todos los entendimientos.
+la tasa sin abrir un `.jsonl` de sesion; falta el **tamano** de cada intento, sin el cual la ratio entre
+lo aceptado y lo rechazado -el 4% y el 12% de arriba- no se puede calcular sin volver a la transcripcion.
+Frenar por esa ratio se descarto: seria un tercer suelo secreto, aplicado despues de pagar la llamada y
+calibrado con dos casos, los dos del mecanismo que se acaba de retirar.
 
 ## deploy-watch
 
