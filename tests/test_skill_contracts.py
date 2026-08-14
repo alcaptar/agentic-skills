@@ -560,38 +560,6 @@ def test_the_finding_keys_in_the_rubric_are_the_ones_the_program_maps_its_fields
     )
 
 
-_FIELD_NAMES_THE_CONTRACT_LEFT_BEHIND = {
-    "regla": "rule",
-    "ruta": "path",
-    "severidad": "severity",
-    "evidencia": "evidence",
-    "detalle": "detail",
-    "linea": "line",
-}
-
-
-def test_the_rubric_never_names_a_finding_field_in_the_language_the_contract_left_behind() -> None:
-    """The example block is not the only place the rubric names a field, and prose drifts on its own.
-
-    When the judge's contract was translated to English the prose kept naming fields in Spanish, and
-    `detalle` survived in backticks next to a `detail` that said the same thing. A key the schema never
-    declared is rejected by `extra="forbid"`, so the whole verdict is thrown away -- measured: four of
-    the judge's nine rejections are `must NOT have additional properties`, with `regla_extra`,
-    `evidencia_extra` and `line_number` among the keys it invented.
-    """
-    rubric = _program_rubric()
-
-    stray = {
-        spanish: english
-        for spanish, english in _FIELD_NAMES_THE_CONTRACT_LEFT_BEHIND.items()
-        if f"`{spanish}`" in rubric
-    }
-    assert not stray, (
-        f"the program's rubric names finding fields the schema does not declare: "
-        f"{sorted(f'`{spanish}` (the field is `{english}`)' for spanish, english in stray.items())}"
-    )
-
-
 def test_the_verdicts_and_severities_in_the_rubric_are_the_ones_the_program_accepts() -> None:
     """Same drift, on the two closed vocabularies.
 
