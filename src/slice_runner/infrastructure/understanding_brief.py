@@ -30,21 +30,16 @@ contestas.
 
 ## Lo que devuelves
 
-Tu respuesta final es el objeto del esquema que se te ha mandado. **Que va en cada campo lo dice el
-propio esquema, en la descripcion de ese campo**: leelas antes de escribir, porque es el unico sitio
-donde estan y ninguna se repite aqui.
+Tu respuesta final es el objeto del esquema que se te ha mandado, que tiene **un solo campo**. Que va
+dentro lo dice el propio esquema, en la descripcion de ese campo: leela antes de escribir, porque es
+el unico sitio donde esta y no se repite aqui.
 
-El reparto entre los dos campos es lo unico que se dice dos veces, porque es donde se falla: el
-**entendimiento** va en `summary` y el **plan** va en `plan`. Volcar el plan en prosa dentro del
-resumen no es una version larga del informe, es un informe al que le falta la mitad.
-
-**Los dos campos son obligatorios.** Un objeto con `summary` y sin `plan` no vale, y se te va a
-rechazar aunque el resumen sea excelente.
+Va todo en ese campo: el entendimiento y el plan, uno detras del otro, en el mismo texto. No hay
+segundo campo que rellenar ni nada que repartir.
 
 **Si un intento te lo rechazan, corrige lo que te digan y vuelve a mandar el informe entero.** No lo
 reduzcas para que pase: un informe minimo que valide es peor que uno rechazado, porque el rechazo se
-ve y el relleno no. Lo que se te ha rechazado es la **forma**, no el contenido: si te falta un campo,
-anadelo y deja el resto como estaba.
+ve y el relleno no.
 
 **No seas verboso.** Esto lo lee una persona para decidir en un minuto si el plan encaja, y un texto
 largo se lee peor sin contar mas. Nada de repetir los campos de la subissue, nada de justificar lo

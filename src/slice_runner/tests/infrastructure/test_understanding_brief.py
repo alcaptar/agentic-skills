@@ -23,12 +23,12 @@ class TestWhatTheBriefPublishesAboutTheFloors:
 
 
 class TestWhereTheFieldsAreSpecified:
-    def test_the_brief_does_not_respec_the_fields_the_schema_already_describes(self) -> None:
+    def test_the_brief_does_not_respec_the_field_the_schema_already_describes(self) -> None:
         collapsed = " ".join(UnderstandingBrief.TEXT.split())
 
-        assert not any(field in collapsed for field in ("`signature`", "`does`", "`reason`"))
+        assert not any(field in collapsed for field in ("`signature`", "`does`", "`reason`", "`summary`", "`plan`"))
 
-    def test_it_still_says_both_fields_are_mandatory_because_emitting_only_one_is_the_failure_measured(self) -> None:
+    def test_it_says_the_report_travels_in_a_single_field_because_a_second_one_is_what_the_harness_loses(self) -> None:
         collapsed = " ".join(UnderstandingBrief.TEXT.split()).lower()
 
-        assert "los dos campos son obligatorios" in collapsed
+        assert "un solo campo" in collapsed

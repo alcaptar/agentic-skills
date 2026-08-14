@@ -4,45 +4,27 @@ from typing import ClassVar
 
 
 class UnderstandingReportMother:
-    SUMMARY: ClassVar[str] = (
-        "hoy el plan y el esbozo piden el mismo contenido cuando la slice es mecanica, asi que esta "
-        "slice los funde en una unica lista ordenada de piezas con su firma, lo que hacen y por que"
+    REPORT: ClassVar[str] = (
+        "El entendimiento viaja en un solo campo porque el arnes pierde la frontera entre parametros: "
+        "el primero se traga su cierre y lo que viene detras.\n\n"
+        "- infrastructure/understanding_report_payload.py: deja `report` como unico campo; "
+        "todo lo demas depende de que campos existen en el contrato\n"
+        "- infrastructure/claude_understanding.py: publica el texto tal cual en vez de componerlo; "
+        "es quien escribe el comentario de la subissue"
     )
-    SIGNATURE: ClassVar[str] = "UnderstandingPlanPieceReportPayload(ContractModel): signature, does, reason"
-    DOES: ClassVar[str] = "una pieza ordenada del plan, con su firma, lo que hace ese cuerpo y su motivo"
-    REASON: ClassVar[str] = "todo lo demas depende de que campos existen en el contrato"
-    SECOND_SIGNATURE: ClassVar[str] = "UnderstandingBrief.TEXT"
-    SECOND_DOES: ClassVar[str] = "describe summary y plan en vez de summary, steps y sketch"
-    SECOND_REASON: ClassVar[str] = "el brief tiene que hablar del contrato que de verdad se le pide"
 
     @classmethod
     def valid(cls) -> dict[str, object]:
-        return {
-            "summary": cls.SUMMARY,
-            "plan": [
-                {"signature": cls.SIGNATURE, "does": cls.DOES, "reason": cls.REASON},
-                {"signature": cls.SECOND_SIGNATURE, "does": cls.SECOND_DOES, "reason": cls.SECOND_REASON},
-            ],
-        }
+        return {"report": cls.REPORT}
 
     @classmethod
     def without(cls, key: str) -> dict[str, object]:
         return {name: value for name, value in cls.valid().items() if name != key}
 
     @classmethod
-    def with_a_piece_missing_its_signature(cls) -> dict[str, object]:
-        return cls.valid() | {"plan": [{"does": cls.DOES, "reason": cls.REASON}]}
+    def blank(cls) -> dict[str, object]:
+        return {"report": "   \n  "}
 
     @classmethod
-    def with_a_piece_missing_what_it_does(cls) -> dict[str, object]:
-        return cls.valid() | {"plan": [{"signature": cls.SIGNATURE, "reason": cls.REASON}]}
-
-    @classmethod
-    def with_a_piece_missing_its_reason(cls) -> dict[str, object]:
-        return cls.valid() | {"plan": [{"signature": cls.SIGNATURE, "does": cls.DOES}]}
-
-    @classmethod
-    def with_pieces(cls, count: int) -> dict[str, object]:
-        piece = {"signature": cls.SIGNATURE, "does": cls.DOES, "reason": cls.REASON}
-
-        return cls.valid() | {"plan": [piece] * count}
+    def with_an_unknown_field(cls) -> dict[str, object]:
+        return cls.valid() | {"plan": []}
