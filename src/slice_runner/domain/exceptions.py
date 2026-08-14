@@ -145,6 +145,10 @@ class UnreadablePluginRegistryError(ValueError):
     pass
 
 
+class UnreadableProvenanceError(ValueError):
+    pass
+
+
 class UnreadableSourceError(ValueError):
     pass
 

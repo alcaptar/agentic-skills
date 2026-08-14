@@ -102,7 +102,7 @@ class TestWhetherASkillIsInstalled:
 
         assert LocalSkillLibrary().installed("deploy-watch") == skill
 
-    def test_a_skill_installed_as_a_symlink_is_found_too_because_that_is_how_make_install_lays_it_down(
+    def test_a_skill_installed_as_a_symlink_resolves_to_its_real_destination_not_the_link_path(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         checkout = tmp_path / "checkout" / "skills" / "deploy-watch"
@@ -112,7 +112,10 @@ class TestWhetherASkillIsInstalled:
         symlink.symlink_to(checkout)
         monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
 
-        assert LocalSkillLibrary().installed("deploy-watch") == symlink
+        installed = LocalSkillLibrary().installed("deploy-watch")
+
+        assert installed == checkout
+        assert installed != symlink
 
     def test_a_skill_not_installed_reads_as_none(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         (tmp_path / "skills").mkdir()
@@ -154,3 +157,40 @@ class TestWhetherAnAbsolutePathHelperIsReachable:
         monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
 
         assert LocalSkillLibrary().file("skills/slice-runner/scripts/discover_conventions.py") is None
+
+    def test_a_helper_reached_through_a_symlinked_skill_resolves_to_its_real_destination_not_the_link_path(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        checkout = tmp_path / "checkout" / "skills" / "slice-runner" / "scripts" / "discover_conventions.py"
+        checkout.parent.mkdir(parents=True)
+        checkout.write_text("x", encoding="utf-8")
+        (tmp_path / "skills").mkdir()
+        symlink = tmp_path / "skills" / "slice-runner"
+        symlink.symlink_to(checkout.parent.parent)
+        monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
+
+        found = LocalSkillLibrary().file("skills/slice-runner/scripts/discover_conventions.py")
+
+        assert found == checkout
+        assert found != symlink / "scripts" / "discover_conventions.py"
+
+
+class TestTheCheckoutASkillPointsTo:
+    def test_it_is_the_grandparent_of_the_resolved_skill_directory(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        repo = tmp_path / "repos" / "agentic-skills"
+        skill = repo / "skills" / "deploy-watch"
+        skill.mkdir(parents=True)
+        (tmp_path / "skills").mkdir()
+        symlink = tmp_path / "skills" / "deploy-watch"
+        symlink.symlink_to(skill)
+        monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
+
+        assert LocalSkillLibrary().checkout("deploy-watch") == repo
+
+    def test_a_skill_not_installed_has_no_checkout(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        (tmp_path / "skills").mkdir()
+        monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
+
+        assert LocalSkillLibrary().checkout("deploy-watch") is None

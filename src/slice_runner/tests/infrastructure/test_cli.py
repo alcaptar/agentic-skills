@@ -29,6 +29,7 @@ from slice_runner.infrastructure.local_metrics_log import LocalMetricsLog
 from slice_runner.infrastructure.reset_comment import ResetComment
 from slice_runner.infrastructure.system_clock import SystemClock
 from slice_runner.infrastructure.understanding_invocation import UnderstandingInvocation
+from slice_runner.infrastructure.uv_program_origin import UvProgramOrigin
 from slice_runner.tests.argv import Argv
 from slice_runner.tests.doubles import Answer, AnsweringByArgv, RealExceptTheJudge, TimingOutProcess, UnrunnableJudge
 from slice_runner.tests.git_repo import Git
@@ -1708,6 +1709,20 @@ class TestTheCommandThatChecksReadiness:
         (tmp_path / "settings.json").write_text(
             json.dumps({"enabledPlugins": {"superpowers@claude-plugins-official": True}}), encoding="utf-8"
         )
+        monkeypatch.setenv(UvProgramOrigin.VARIABLE, str(tmp_path / "uv-tools"))
+        dist_info = (
+            tmp_path
+            / "uv-tools"
+            / UvProgramOrigin.TOOL
+            / "lib"
+            / "python3.11"
+            / "site-packages"
+            / "agentic_skills-0.0.0.dist-info"
+        )
+        dist_info.mkdir(parents=True)
+        (dist_info / "direct_url.json").write_text(
+            json.dumps({"url": f"file://{tmp_path}", "dir_info": {}}), encoding="utf-8"
+        )
 
     @staticmethod
     def _process(
@@ -1756,6 +1771,7 @@ class TestTheCommandThatChecksReadiness:
             "plugin superpowers",
             "helper discover_conventions.py",
             "helper discover_controles.py",
+            "provenance",
         ):
             assert name in printed
 

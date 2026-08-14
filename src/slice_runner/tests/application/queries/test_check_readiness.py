@@ -6,12 +6,13 @@ from unittest.mock import Mock, create_autospec
 
 import pytest
 
-from slice_runner.application.queries.check_readiness import CheckReadiness, CheckReadinessParams
+from slice_runner.application.queries.check_readiness import CheckReadiness, CheckReadinessParams, CheckReadinessPorts
 from slice_runner.domain.branches import Branches
 from slice_runner.domain.check_verdict import CheckVerdict
-from slice_runner.domain.exceptions import UnresolvableBaseError
+from slice_runner.domain.exceptions import UnreadableProvenanceError, UnresolvableBaseError
 from slice_runner.domain.forum import Forum
 from slice_runner.domain.plugin_registry import PluginRegistry
+from slice_runner.domain.provenance import Provenance
 from slice_runner.domain.skill_library import SkillLibrary
 from slice_runner.domain.toolbox import Toolbox
 
@@ -22,6 +23,7 @@ if TYPE_CHECKING:
 _SLICE_SPEC = Path("/home/someone/.claude/skills/slice-spec")
 _DEPLOY_WATCH = Path("/home/someone/.claude/skills/deploy-watch")
 _HELPER_PATHS = {relative: Path(f"/home/someone/.claude/{relative}") for relative in CheckReadiness.HELPERS}
+_CHECKOUT = Path("/home/someone/repos/agentic-skills")
 
 
 class TestCheckReadiness:
@@ -49,6 +51,7 @@ class TestCheckReadiness:
         skills.root.return_value = Path("/home/someone/.claude")
         skills.installed.side_effect = lambda name: {"slice-spec": _SLICE_SPEC, "deploy-watch": _DEPLOY_WATCH}[name]
         skills.file.side_effect = lambda relative: _HELPER_PATHS[relative]
+        skills.checkout.return_value = _CHECKOUT
         return skills
 
     @pytest.fixture
@@ -58,8 +61,20 @@ class TestCheckReadiness:
         return plugins
 
     @pytest.fixture
-    def query(self, toolbox: Mock, forum: Mock, branches: Mock, skills: Mock, plugins: Mock) -> CheckReadiness:
-        return CheckReadiness(toolbox=toolbox, forum=forum, branches=branches, skills=skills, plugins=plugins)
+    def provenance(self) -> Mock:
+        provenance: Mock = create_autospec(Provenance, spec_set=True, instance=True)
+        provenance.checkout.return_value = _CHECKOUT
+        return provenance
+
+    @pytest.fixture
+    def query(
+        self, *, toolbox: Mock, forum: Mock, branches: Mock, skills: Mock, plugins: Mock, provenance: Mock
+    ) -> CheckReadiness:
+        return CheckReadiness(
+            ports=CheckReadinessPorts(
+                toolbox=toolbox, forum=forum, branches=branches, skills=skills, plugins=plugins, provenance=provenance
+            )
+        )
 
     @staticmethod
     def _check(readiness: Readiness, name: str) -> ReadinessCheck:
@@ -234,6 +249,7 @@ class TestCheckReadiness:
             "plugin superpowers",
             "helper discover_conventions.py",
             "helper discover_controles.py",
+            "provenance",
         }
         forum.can_read.assert_not_called()
         branches.commits_behind_remote.assert_not_called()
@@ -306,3 +322,61 @@ class TestCheckReadiness:
 
         assert not any(check.name == "base" for check in readiness.checks)
         branches.commits_behind_remote.assert_not_called()
+
+    def test_the_provenance_check_is_ready_naming_the_shared_checkout_when_both_sides_agree(
+        self, query: CheckReadiness
+    ) -> None:
+        readiness = query.execute(CheckReadinessParams())
+
+        provenance = self._check(readiness, "provenance")
+        assert provenance.verdict is CheckVerdict.READY
+        assert str(_CHECKOUT) in provenance.detail
+        assert readiness.ready
+
+    def test_the_provenance_check_is_not_ready_with_both_paths_when_the_program_and_the_skills_disagree(
+        self, query: CheckReadiness, skills: Mock
+    ) -> None:
+        skills.checkout.return_value = Path("/repos/agentic-skills-worktree")
+
+        readiness = query.execute(CheckReadinessParams())
+
+        provenance = self._check(readiness, "provenance")
+        assert provenance.verdict is CheckVerdict.MISSING
+        assert str(_CHECKOUT) in provenance.detail
+        assert "/repos/agentic-skills-worktree" in provenance.detail
+        assert not readiness.ready
+
+    def test_the_provenance_check_is_not_ready_when_the_two_skills_it_names_disagree_with_each_other(
+        self, query: CheckReadiness, skills: Mock
+    ) -> None:
+        elsewhere = Path("/repos/agentic-skills-worktree")
+        skills.checkout.side_effect = lambda name: _CHECKOUT if name == "slice-spec" else elsewhere
+
+        readiness = query.execute(CheckReadinessParams())
+
+        provenance = self._check(readiness, "provenance")
+        assert provenance.verdict is CheckVerdict.MISSING
+        assert "deploy-watch" in provenance.detail
+        assert str(elsewhere) in provenance.detail
+
+    def test_the_provenance_check_is_not_ready_saying_it_could_not_check_when_the_program_origin_cannot_be_read(
+        self, query: CheckReadiness, provenance: Mock
+    ) -> None:
+        provenance.checkout.side_effect = UnreadableProvenanceError("no direct_url.json found")
+
+        readiness = query.execute(CheckReadinessParams())
+
+        check = self._check(readiness, "provenance")
+        assert check.verdict is CheckVerdict.MISSING
+        assert "could not" in check.detail
+
+    def test_the_provenance_check_is_not_ready_when_a_named_skill_is_not_installed(
+        self, query: CheckReadiness, skills: Mock
+    ) -> None:
+        skills.checkout.side_effect = lambda name: None if name == "deploy-watch" else _CHECKOUT
+
+        readiness = query.execute(CheckReadinessParams())
+
+        provenance = self._check(readiness, "provenance")
+        assert provenance.verdict is CheckVerdict.MISSING
+        assert "deploy-watch" in provenance.detail
