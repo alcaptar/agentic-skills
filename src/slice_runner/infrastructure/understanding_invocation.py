@@ -89,7 +89,7 @@ class UnderstandingInvocation:
                 "## Datos de la slice",
                 "",
                 f"- issue: #{subissue.number}",
-                f"- slice: {subissue.slice_id}",
+                f"- slice: {subissue.slice_id.canonical}",
                 f"- repo: {self.repo}",
                 f"- rama: {subissue.branch}",
                 f"- ruta del repo: {self.worktree}",

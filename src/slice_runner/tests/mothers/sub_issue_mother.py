@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, ClassVar
 from slice_runner.domain.issue_label import IssueLabel
 from slice_runner.domain.issue_state import IssueState
 from slice_runner.domain.run import Run
+from slice_runner.domain.slice_identity import SliceIdentity
 from slice_runner.domain.step import Step
 from slice_runner.domain.sub_issue import SubIssue
 from slice_runner.tests.mothers.run_mother import RunMother
@@ -21,8 +22,7 @@ class SubIssueMother:
     def pending() -> SubIssue:
         return SubIssue(
             number=45,
-            slice_id="slice-05",
-            name="prechecks-deterministas",
+            slice_id=SliceIdentity(ordinal=5, name="prechecks-deterministas"),
             summary="comprobar antes de tocar codigo",
             title="slice-05 (prechecks-deterministas): comprobar antes de tocar codigo",
             state=IssueState.OPEN,
@@ -94,8 +94,7 @@ class SubIssueMother:
         return replace(
             SubIssueMother.pending(),
             number=46,
-            slice_id="slice-06",
-            name="pausa-de-alineacion",
+            slice_id=SliceIdentity(ordinal=6, name="pausa-de-alineacion"),
             summary="el entendimiento se escribe siempre",
             title="slice-06 (pausa-de-alineacion): el entendimiento se escribe siempre",
         )
@@ -107,3 +106,11 @@ class SubIssueMother:
     @staticmethod
     def declaring_a_signal() -> SubIssue:
         return replace(SubIssueMother.pending(), signal="tasa de error 5xx de shop-web en produccion")
+
+    @staticmethod
+    def carrying_a_user_story() -> SubIssue:
+        return replace(
+            SubIssueMother.pending(),
+            slice_id=SliceIdentity(ordinal=5, name="prechecks-deterministas", user_story="PROJ-1234"),
+            title="PROJ-1234 slice-05 (prechecks-deterministas): comprobar antes de tocar codigo",
+        )

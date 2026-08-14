@@ -218,7 +218,7 @@ def test_the_subissue_slice_spec_documents_is_read_by_the_program_as_the_slice_i
     )
 
     assert _KEBAB_TITLE.match(title), f"the documented title {title!r} does not carry `slice-NN (name-kebab):`"
-    assert children[0].slice_id == title.split(" ", 1)[0]
+    assert children[0].slice_id.canonical == title.split(" ", 1)[0]
     assert children[0].repo, "the documented subissue carries no target repo the program can read"
     assert children[0].intention, "the documented subissue carries no `INTENCION:` the program can read"
     assert children[0].criteria, "the documented subissue carries no `ACEPTACION:` the program can read"
@@ -660,6 +660,7 @@ def test_every_slice_title_slice_spec_documents_yields_a_name_git_accepts_as_a_b
     for title in titles:
         parsed = GhRunRepository.SLICE_HEADING.match(title)
         assert parsed, f"the program cannot read the title slice-spec documents: {title}"
-        assert re.fullmatch(r"[a-z0-9]+(-[a-z0-9]+)*", parsed.group(2)), (
-            f"the title `{title}` yields the name `{parsed.group(2)}`, which git will not take as a branch"
+        name = parsed["name"]
+        assert re.fullmatch(r"[a-z0-9]+(-[a-z0-9]+)*", name), (
+            f"the title `{title}` yields the name `{name}`, which git will not take as a branch"
         )

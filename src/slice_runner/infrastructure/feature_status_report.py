@@ -15,7 +15,7 @@ class FeatureStatusReport:
         return "\n".join(self._line(status) for status in self.statuses)
 
     def _line(self, status: SliceStatus) -> str:
-        parts = [f"{status.sub_issue.slice_id:<10}", f"{self._label(status):<28}"]
+        parts = [f"{status.sub_issue.slice_id.canonical:<10}", f"{self._label(status):<28}"]
         run = status.sub_issue.run
         if run is not None:
             parts.append(run.step.value)

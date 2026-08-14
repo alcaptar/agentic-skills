@@ -212,7 +212,11 @@ class TestWhereTheConversationCanBeFound:
         Writing.understood(Writing.carrying(UnderstandingReportMother.valid()), trace=trace)
 
         assert [(call.slice_id, call.step, call.session) for call in trace.calls] == [
-            (SubIssueMother.pending().slice_id, Step.UNDERSTAND, HarnessEnvelopeMother.SESSION_OF_THE_IMPLEMENTER)
+            (
+                SubIssueMother.pending().slice_id.canonical,
+                Step.UNDERSTAND,
+                HarnessEnvelopeMother.SESSION_OF_THE_IMPLEMENTER,
+            )
         ]
 
     def test_a_call_whose_report_is_rejected_is_traced_too_because_that_conversation_is_the_one_to_read(self) -> None:
@@ -251,7 +255,7 @@ class TestTheToolUseRecordingOfTheCall:
 
         assert [(call.slice_id, call.step, call.session, call.repo) for call in tool_uses.calls] == [
             (
-                SubIssueMother.pending().slice_id,
+                SubIssueMother.pending().slice_id.canonical,
                 Step.UNDERSTAND,
                 HarnessEnvelopeMother.SESSION_OF_THE_IMPLEMENTER,
                 UnderstandingInvocationMother.REPO,
@@ -279,6 +283,6 @@ class TestTheTurnsObservedWhileTheCallIsInFlight:
             Writing.understood(process, turns=turns)
 
         assert [(turn.slice_id, turn.step, turn.number, turn.tool) for turn in turns.turns] == [
-            (SubIssueMother.pending().slice_id, Step.UNDERSTAND, 1, "Write"),
-            (SubIssueMother.pending().slice_id, Step.UNDERSTAND, 2, "StructuredOutput"),
+            (SubIssueMother.pending().slice_id.canonical, Step.UNDERSTAND, 1, "Write"),
+            (SubIssueMother.pending().slice_id.canonical, Step.UNDERSTAND, 2, "StructuredOutput"),
         ]

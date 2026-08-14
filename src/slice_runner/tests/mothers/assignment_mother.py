@@ -35,7 +35,7 @@ class AssignmentMother:
 
         return Assignment(
             issue=subissue.number,
-            slice_id=subissue.slice_id,
+            slice_id=subissue.slice_id.canonical,
             repo=cls.REPO,
             worktree=cls.WORKTREE,
             intention=subissue.intention,

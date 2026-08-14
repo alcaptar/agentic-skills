@@ -271,8 +271,8 @@ class ConductSlice:
     @staticmethod
     def _missing_branch(progress: ConductSliceProgress) -> NoReturn:
         raise MissingBranchError(
-            f"the run of {progress.subissue.slice_id} stands on `{progress.run.step}` and resumes expecting "
-            f"the branch `{progress.subissue.branch}` to exist: the worktree has no such branch"
+            f"the run of {progress.subissue.slice_id.canonical} stands on `{progress.run.step}` and resumes "
+            f"expecting the branch `{progress.subissue.branch}` to exist: the worktree has no such branch"
         )
 
     def _aligning(self, progress: ConductSliceProgress) -> ConductSliceResult:
@@ -501,7 +501,11 @@ class ConductSlice:
         if controls.exemption_reason is not None:
             return ()
 
-        out = progress.params.logs / progress.subissue.slice_id / f"round-{progress.run.control_rounds_logged + 1}"
+        out = (
+            progress.params.logs
+            / progress.subissue.slice_id.canonical
+            / f"round-{progress.run.control_rounds_logged + 1}"
+        )
 
         return tuple(
             self._controls.run(command, repo=progress.params.worktree, out=out) for command in controls.commands
@@ -518,7 +522,7 @@ class ConductSlice:
                     issue=progress.subissue.number,
                     worktree=progress.params.worktree,
                     base=f"origin/{progress.params.base}",
-                    slice_id=progress.subissue.slice_id,
+                    slice_id=progress.subissue.slice_id.canonical,
                     prior_art=progress.parent.prior_art,
                     signal=progress.subissue.signal,
                     criteria=progress.subissue.criteria,
@@ -614,8 +618,8 @@ class ConductSlice:
         opened = self._forum.any_pull_request(repo=progress.params.repo, branch=progress.subissue.branch)
         if opened is None:
             raise NoPullRequestError(
-                f"the run of {progress.subissue.slice_id} stands on `{progress.run.step}` and no pull request "
-                f"of any state was found for {progress.subissue.branch}"
+                f"the run of {progress.subissue.slice_id.canonical} stands on `{progress.run.step}` and no pull "
+                f"request of any state was found for {progress.subissue.branch}"
             )
 
         return opened
@@ -625,7 +629,7 @@ class ConductSlice:
             RecordStepParams(
                 repo=progress.params.repo,
                 issue=progress.subissue.number,
-                slice_id=progress.subissue.slice_id,
+                slice_id=progress.subissue.slice_id.canonical,
                 current=progress.run,
                 label=progress.label,
                 transition=transition,
@@ -663,8 +667,8 @@ class ConductSlice:
             RecordClosureParams(
                 repo=params.repo,
                 issue=subissue.number,
-                slice_id=subissue.slice_id,
-                name=subissue.name,
+                slice_id=subissue.slice_id.canonical,
+                name=subissue.slice_id.name,
                 state=RunState.MERGED,
                 run=run,
                 budgets=self._budgets,
@@ -690,8 +694,8 @@ class ConductSlice:
             RecordClosureParams(
                 repo=progress.params.repo,
                 issue=progress.subissue.number,
-                slice_id=progress.subissue.slice_id,
-                name=progress.subissue.name,
+                slice_id=progress.subissue.slice_id.canonical,
+                name=progress.subissue.slice_id.name,
                 state=state,
                 run=progress.run,
                 budgets=self._budgets,

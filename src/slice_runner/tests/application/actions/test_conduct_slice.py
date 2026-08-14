@@ -578,8 +578,8 @@ class TestConductSliceClosingAMergeMissedBetweenInvocations:
         recorded = conductor.metrics.record.call_args_list[0].args[0]
         assert (recorded.repo, recorded.slice_id, recorded.name, recorded.state, recorded.run) == (
             Conductor.REPO,
-            dangling.slice_id,
-            dangling.name,
+            dangling.slice_id.canonical,
+            dangling.slice_id.name,
             RunState.MERGED,
             dangling.run,
         )
@@ -679,7 +679,7 @@ class TestConductSliceWhenTheNamedSliceCannotBeSelected:
             conductor.conduct()
 
         recorded = conductor.metrics.record.call_args_list[0].args[0]
-        assert (recorded.slice_id, recorded.state) == (dangling.slice_id, RunState.MERGED)
+        assert (recorded.slice_id, recorded.state) == (dangling.slice_id.canonical, RunState.MERGED)
 
     def test_the_slice_that_cannot_be_selected_still_fails_the_invocation_once_the_dangling_run_is_closed(
         self,
@@ -790,7 +790,7 @@ class TestConductSliceReopeningABlockedRun:
 
         conductor.conduct()
 
-        slice_dir = Conductor.LOGS / SubIssueMother.pending().slice_id
+        slice_dir = Conductor.LOGS / SubIssueMother.pending().slice_id.canonical
         assert conductor.controls.run.call_args.kwargs["out"] == slice_dir / "round-4"
 
     def test_a_fresh_invocation_resuming_a_run_reopened_by_an_earlier_one_still_names_the_round_after_the_ones_logged(
@@ -801,7 +801,7 @@ class TestConductSliceReopeningABlockedRun:
 
         conductor.conduct()
 
-        slice_dir = Conductor.LOGS / SubIssueMother.pending().slice_id
+        slice_dir = Conductor.LOGS / SubIssueMother.pending().slice_id.canonical
         assert conductor.controls.run.call_args_list[0].kwargs["out"] == slice_dir / "round-4"
 
 
@@ -1255,7 +1255,7 @@ class TestConductSliceWhenTheControlsComeBackRed:
 
         assert conductor.controls.run.call_args.kwargs == {
             "repo": Conductor.WORKTREE,
-            "out": Conductor.LOGS / SubIssueMother.pending().slice_id / "round-1",
+            "out": Conductor.LOGS / SubIssueMother.pending().slice_id.canonical / "round-1",
         }
 
     def test_each_retried_round_of_controls_writes_under_a_directory_of_its_own(self) -> None:
@@ -1265,7 +1265,7 @@ class TestConductSliceWhenTheControlsComeBackRed:
         conductor.conduct()
 
         outs = [call.kwargs["out"] for call in conductor.controls.run.call_args_list]
-        slice_dir = Conductor.LOGS / SubIssueMother.pending().slice_id
+        slice_dir = Conductor.LOGS / SubIssueMother.pending().slice_id.canonical
         assert outs == [slice_dir / "round-1", slice_dir / "round-2"]
 
     def test_two_slices_with_the_same_logs_base_write_their_controls_under_different_directories(self) -> None:
@@ -1280,11 +1280,12 @@ class TestConductSliceWhenTheControlsComeBackRed:
         second.conduct()
 
         assert (
-            first.controls.run.call_args.kwargs["out"] == Conductor.LOGS / SubIssueMother.pending().slice_id / "round-1"
+            first.controls.run.call_args.kwargs["out"]
+            == Conductor.LOGS / SubIssueMother.pending().slice_id.canonical / "round-1"
         )
         assert (
             second.controls.run.call_args.kwargs["out"]
-            == Conductor.LOGS / SubIssueMother.of_a_second_slice().slice_id / "round-1"
+            == Conductor.LOGS / SubIssueMother.of_a_second_slice().slice_id.canonical / "round-1"
         )
 
     def test_resuming_a_run_with_rounds_already_logged_names_the_next_round_not_round_one(self) -> None:
@@ -1295,7 +1296,7 @@ class TestConductSliceWhenTheControlsComeBackRed:
         conductor.conduct()
 
         assert conductor.controls.run.call_args_list[0].kwargs["out"] == (
-            Conductor.LOGS / SubIssueMother.pending().slice_id / "round-2"
+            Conductor.LOGS / SubIssueMother.pending().slice_id.canonical / "round-2"
         )
 
     def test_the_exhausted_control_budget_closes_the_run_writes_its_label_and_records_the_row(self) -> None:
