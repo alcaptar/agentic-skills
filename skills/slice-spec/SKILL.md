@@ -410,9 +410,17 @@ SENAL: prometheus min_over_time(application_stock_actual[10m]) < 0 dispara la al
    ```
 
    Cada run **en background**, nunca encadenados en una shell que bloquee: son procesos largos y el
-   principio de este flujo es que ninguna espera congele una sesion. Y avisa de lo que viene despues,
-   porque es lo que sorprende: **cada run se para en su pausa de alineacion**, asi que N runs en
-   paralelo son N entendimientos que revisar y N `-GO` que dar, no uno.
+   principio de este flujo es que ninguna espera congele una sesion.
+
+   **Y con la salida a la vista: no la redirijas a un fichero ni la pases por una tuberia.** Quien lanza
+   el run no es quien lo mira. Desviada, la persona se queda sin ver que esta pasando en un proceso que
+   dura tres cuartos de hora y cuesta decenas de dolares, y la unica forma que le queda de enterarse es
+   pedirtelo a ti, turno a turno. Una tuberia ademas puede dejarla en nada: el proceso escribe a bloques
+   cuando el otro extremo no es un terminal, asi que matar el run se lleva lo que aun no habia salido.
+   Si solo te interesa el final, **recorta al leer, no al escribir**.
+
+   Y avisa de lo que viene despues, porque es lo que sorprende: **cada run se para en su pausa de
+   alineacion**, asi que N runs en paralelo son N entendimientos que revisar y N `-GO` que dar, no uno.
 
 ## Steps — modo `validate`
 
