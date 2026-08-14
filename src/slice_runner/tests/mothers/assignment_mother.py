@@ -21,10 +21,7 @@ class AssignmentMother:
         "## Resumen\n"
         "El precheck de subissue cerrada se llama `SUBISSUE_ALREADY_CLOSED` y corta antes de tocar la rama.\n"
         "\n"
-        "## Pasos\n"
-        "- domain/precheck.py (motivo: la regla es del dominio)\n"
-        "\n"
-        f"## Esbozo\n```\n{SKETCH}\n```"
+        f"## Plan\n```\n{SKETCH}\n    motivo: la regla es del dominio\n```"
     )
     RETRY_INSTRUCTION: ClassVar[str] = "el control ya esta arreglado a mano"
 

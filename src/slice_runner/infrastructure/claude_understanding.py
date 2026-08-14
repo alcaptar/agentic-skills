@@ -67,21 +67,14 @@ class ClaudeUnderstanding(UnderstandingWriter):
     def _usable_text(cls, envelope: HarnessOutput) -> str:
         report = UnderstandingReportPayload.from_dict(envelope.structured_output)
         summary = report.summary.strip()
-        steps = [(step.description.strip(), step.reason.strip()) for step in report.steps]
-        pieces = [(piece.signature.strip(), piece.does.strip()) for piece in report.sketch]
-        if not summary or any(not left or not right for left, right in [*steps, *pieces]):
+        pieces = [(piece.signature.strip(), piece.does.strip(), piece.reason.strip()) for piece in report.plan]
+        if not summary or any(not signature or not does or not reason for signature, does, reason in pieces):
             raise InvalidUnderstandingReportError("the harness returned only blank text as its understanding")
 
-        return "\n\n".join(
-            [
-                f"## Resumen\n{summary}",
-                "## Pasos\n" + "\n".join(f"- {description} (motivo: {reason})" for description, reason in steps),
-                f"## Esbozo\n{cls._fenced(pieces)}",
-            ]
-        )
+        return "\n\n".join([f"## Resumen\n{summary}", f"## Plan\n{cls._fenced(pieces)}"])
 
     @staticmethod
-    def _fenced(pieces: list[tuple[str, str]]) -> str:
-        drawn = "\n\n".join(f"{signature}\n    {does}" for signature, does in pieces)
+    def _fenced(pieces: list[tuple[str, str, str]]) -> str:
+        drawn = "\n\n".join(f"{signature}\n    {does}\n    motivo: {reason}" for signature, does, reason in pieces)
 
         return f"```\n{drawn}\n```"

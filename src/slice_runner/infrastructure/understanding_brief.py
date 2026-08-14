@@ -31,33 +31,17 @@ contestas.
 
 ## Lo que devuelves
 
-Tu respuesta final es el objeto del esquema que se te ha mandado, con tres campos:
+Tu respuesta final es el objeto del esquema que se te ha mandado, con dos campos:
 
 - `summary`: el resumen de como entiendes la slice, en tus propias palabras. Unas pocas frases.
-- `steps`: los pasos que vas a dar, en el orden en que los vas a dar. Cada paso lleva su
-  `description` -que vas a tocar- y su `reason` -por que se toca eso, como campo propio y no como
-  prosa dentro de la descripcion-. Una linea cada uno.
-- `sketch`: el esbozo de la forma que va a tener el codigo, redactado **despues** de haber leido las
-  fuentes de convencion declaradas, nunca antes. Es una **lista de piezas**, no un texto: cada pieza
-  lleva su `signature` -la firma de una clase, un metodo o una funcion, segun mande la convencion del
-  repo- y su `does` -una linea diciendo que hace ese cuerpo-. Nunca codigo pegable: quien revise tiene
-  que ver la forma antes de que exista, no una implementacion adelantada. **No escribas markdown ahi**:
-  el bloque de codigo lo compone el programa con lo que le des, asi que ni comillas de cerca, ni
-  guiones, ni indentacion tuya.
-
-## Los minimos que se te van a exigir
-
-El esquema **rechaza** lo que no llegue a estos minimos, y lo dice aqui para que no los descubras a
-base de que te lo devuelvan:
-
-- `summary`: al menos 120 caracteres.
-- `steps`: al menos 2 pasos, con al menos 15 caracteres en `description` y en `reason`.
-- `sketch`: al menos 1 pieza, con al menos 10 caracteres en `signature` y 15 en `does`.
-
-Son suelos contra el relleno, no cuotas que haya que llenar: estan por debajo de lo que sale de hacer
-el trabajo, asi que si tienes algo que decir no los vas a notar. Lo que impiden es entregar un objeto
-con la forma correcta y sin contenido -`test`, `a`, `b`, `pendiente`-, que es indistinguible de no
-haber entendido nada y ademas se publica con la firma del programa.
+- `plan`: el plan para abordarla, redactado **despues** de haber leido las fuentes de convencion
+  declaradas, nunca antes. Es una **lista ordenada de piezas**, no un texto: cada pieza lleva su
+  `signature` -la firma de una clase, un metodo o una funcion, segun mande la convencion del repo, o
+  la ruta que vas a tocar cuando no haya firma que dar todavia-, su `does` -una linea diciendo que
+  hace ese cuerpo- y su `reason` -por que se toca eso, como campo propio y no como prosa dentro de
+  `does`-. Nunca codigo pegable: quien revise tiene que ver la forma antes de que exista, no una
+  implementacion adelantada. **No escribas markdown ahi**: el bloque de codigo lo compone el programa
+  con lo que le des, asi que ni comillas de cerca, ni guiones, ni indentacion tuya.
 
 **Si un intento te lo rechazan, corrige lo que te digan y vuelve a mandar el informe entero.** No lo
 reduzcas para que pase: un informe minimo que valide es peor que uno rechazado, porque el rechazo se
