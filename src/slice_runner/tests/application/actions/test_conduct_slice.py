@@ -19,7 +19,6 @@ from slice_runner.domain.event_status import EventStatus
 from slice_runner.domain.exceptions import (
     CiCommandFailedError,
     DirtyIndexError,
-    InvalidUnderstandingReportError,
     MissingBranchError,
     NoPullRequestError,
     NoSliceLeftError,
@@ -47,6 +46,7 @@ from slice_runner.tests.mothers.rejection_mother import RejectionMother
 from slice_runner.tests.mothers.run_mother import RunMother
 from slice_runner.tests.mothers.select_slice_result_mother import SelectSliceResultMother
 from slice_runner.tests.mothers.sub_issue_mother import SubIssueMother
+from slice_runner.tests.mothers.understanding_mother import UnderstandingMother
 from slice_runner.tests.mothers.verdict_mother import FindingMother, VerdictMother
 from slice_runner.tests.mothers.verification_mother import SliceDiffMother, VerificationMother
 
@@ -88,17 +88,38 @@ class TestConductSliceStartingANewRun:
             alignment=Alignment(),
         )
 
-    def test_a_call_that_leaves_no_usable_understanding_stops_before_anything_is_written_or_branched(self) -> None:
+    def test_a_call_that_leaves_no_usable_understanding_is_discarded_and_retried_within_budget(self) -> None:
         conductor = self._conductor()
-        conductor.understanding.write.side_effect = InvalidUnderstandingReportError("blank text")
+        conductor.understanding.write.side_effect = [
+            RejectionMother.invalid_understanding_report(),
+            UnderstandingMother.of_the_chosen_slice(),
+        ]
+        conductor.repository.read_alignment_response.return_value = AlignmentResponse(kind=AlignmentResponseKind.GO)
 
-        with pytest.raises(InvalidUnderstandingReportError):
-            conductor.conduct()
+        conductor.conduct()
 
-        assert conductor.repository.write_understanding.call_count == 0
+        assert conductor.understanding.write.call_count == 2
+        assert (conductor.repository.pause_for_alignment.call_count, conductor.branches.create.call_count) == (1, 1)
+        recorded = conductor.closed
+        assert (recorded.run.understand_discards, recorded.discard_cause) == (1, DiscardCause.FAILED_CALL)
+        assert recorded.spends[:2] == (HarnessSpendMother.of_the_understanding_call(),) * 2
+
+    def test_discard_after_discard_of_the_understanding_closes_the_run_and_writes_its_label(self) -> None:
+        conductor = Conductor(chosen=SelectSliceResultMother.about_to_start(), budgets=Budgets(slice_cost_usd=0.03))
+        conductor.understanding.write.side_effect = [
+            RejectionMother.invalid_understanding_report(),
+            RejectionMother.invalid_understanding_report(),
+        ]
+
+        result = conductor.conduct()
+
+        assert conductor.understanding.write.call_count == 2
+        assert result.state is RunState.ABORTED_BUDGET
+        conductor.repository.write_label.assert_any_call(
+            repo=Conductor.REPO, issue=_SUBISSUE, remove=IssueLabel.AWAITING_ALIGNMENT, add=IssueLabel.ABORTED_BUDGET
+        )
+        assert conductor.metrics.record.call_args.args[0].state is RunState.ABORTED_BUDGET
         assert conductor.repository.pause_for_alignment.call_count == 0
-        assert conductor.branches.create.call_count == 0
-        assert conductor.repository.write_run.call_count == 0
 
     def test_the_invocation_that_asks_for_alignment_ticks_instead_of_writing_any_code(self) -> None:
         conductor = Conductor(chosen=SelectSliceResultMother.about_to_start(), budgets=Budgets(person_wait_seconds=0))
@@ -807,6 +828,22 @@ class TestConductSliceResumingAnInterruptedRun:
         assert conductor.verify.execute.call_count == 0
         assert conductor.repository.write_run.call_count == 0
 
+    def test_a_run_persisted_at_understand_whose_pause_never_landed_cuts_the_branch_instead_of_raising(self) -> None:
+        conductor = Conductor(
+            chosen=SelectSliceResultMother.resumed_at(
+                RunMother.understanding_after_a_discard(HarnessSpendMother.of_the_understanding_call())
+            )
+        )
+        conductor.branches.exists.return_value = False
+        conductor.repository.read_alignment_response.return_value = AlignmentResponse(kind=AlignmentResponseKind.GO)
+
+        conductor.conduct()
+
+        assert conductor.prechecks.execute.call_count == 1
+        assert conductor.branches.create.call_count == 1
+        assert conductor.understanding.write.call_count == 1
+        assert conductor.implement.execute.call_count == 1
+
 
 class TestConductSliceResumingWithSpendAlreadyPersisted:
     def test_reinvoking_does_not_reset_the_budget_because_the_prior_spend_travels_with_the_run(self) -> None:
@@ -952,7 +989,7 @@ class TestConductSliceOnTheHappyPath:
 
         conductor.conduct()
 
-        recorded = self._recorded(conductor.metrics)
+        recorded = conductor.closed
         assert (recorded.repo, recorded.slice_id, recorded.name) == (
             Conductor.REPO,
             "slice-05",
@@ -974,7 +1011,7 @@ class TestConductSliceOnTheHappyPath:
 
         conductor.conduct()
 
-        recorded = self._recorded(conductor.metrics)
+        recorded = conductor.closed
         assert (recorded.budgets, recorded.models) == (conductor.budgets, models)
 
     def test_the_durable_row_carries_how_much_the_verified_diff_changed(self) -> None:
@@ -982,7 +1019,7 @@ class TestConductSliceOnTheHappyPath:
 
         conductor.conduct()
 
-        recorded = self._recorded(conductor.metrics)
+        recorded = conductor.closed
         assert recorded.diff_stats == SliceDiffMother.STATS
 
     def test_the_durable_row_carries_what_the_implementer_declared_left_out_as_debt(self) -> None:
@@ -991,7 +1028,7 @@ class TestConductSliceOnTheHappyPath:
 
         conductor.conduct()
 
-        recorded = self._recorded(conductor.metrics)
+        recorded = conductor.closed
         assert recorded.debt == ImplementationMother.with_debt().left_out
 
     def test_the_verification_asked_for_carries_the_subissue_number_and_not_the_parent_issue(self) -> None:
@@ -1016,15 +1053,9 @@ class TestConductSliceOnTheHappyPath:
 
         conductor.conduct()
 
-        recorded = self._recorded(conductor.metrics)
+        recorded = conductor.closed
         assert recorded.issue == _SUBISSUE
         assert recorded.issue != Conductor.ISSUE
-
-    @staticmethod
-    def _recorded(metrics: Mock) -> ClosedSlice:
-        closed: ClosedSlice = metrics.record.call_args.args[0]
-
-        return closed
 
 
 class TestConductSliceReportingEvents:
@@ -1145,6 +1176,26 @@ class TestConductSliceClosingTheParentAfterAMerge:
 
         assert result.state is RunState.BLOCKED_HYGIENE
         assert conductor.close.execute.call_count == 0
+
+
+class TestConductSliceImplementing:
+    @staticmethod
+    def _conductor(*, budgets: Budgets | None = None) -> Conductor:
+        return Conductor(chosen=SelectSliceResultMother.resumed_at(RunMother.implementing()), budgets=budgets)
+
+    def test_a_broken_implementation_call_is_discarded_and_retried_within_budget(self) -> None:
+        conductor = self._conductor()
+        conductor.implement.execute.side_effect = [
+            RejectionMother.invalid_implementation_report(),
+            ImplementationMother.of_two_paths(),
+        ]
+
+        conductor.conduct()
+
+        assert conductor.implement.execute.call_count == 2
+        recorded = conductor.closed
+        assert (recorded.run.implement_discards, recorded.discard_cause) == (1, DiscardCause.FAILED_CALL)
+        assert recorded.spends[:2] == (HarnessSpendMother.of_the_implementer_call(),) * 2
 
 
 class TestConductSliceWhenTheControlsComeBackRed:
@@ -1457,6 +1508,24 @@ class TestConductSliceWhenTheCostOfTheSliceRunsOut:
         )
         assert conductor.metrics.record.call_args.args[0].state is RunState.ABORTED_BUDGET
 
+    def test_discard_after_discard_of_the_implementation_closes_the_run_and_writes_its_label(self) -> None:
+        conductor = Conductor(
+            chosen=SelectSliceResultMother.resumed_at(RunMother.implementing()), budgets=Budgets(slice_cost_usd=0.5)
+        )
+        conductor.implement.execute.side_effect = [
+            RejectionMother.invalid_implementation_report(),
+            RejectionMother.invalid_implementation_report(),
+        ]
+
+        result = conductor.conduct()
+
+        assert conductor.implement.execute.call_count == 2
+        assert result.state is RunState.ABORTED_BUDGET
+        conductor.repository.write_label.assert_called_once_with(
+            repo=Conductor.REPO, issue=_SUBISSUE, remove=IssueLabel.IN_PROGRESS, add=IssueLabel.ABORTED_BUDGET
+        )
+        assert conductor.metrics.record.call_args.args[0].state is RunState.ABORTED_BUDGET
+
     def test_a_discard_with_cost_left_asks_the_judge_again_instead_of_closing(self) -> None:
         conductor = self._judging(budgets=Budgets(slice_cost_usd=0.2))
         conductor.verify.execute.side_effect = [RejectionMother.incoherent_verdict(), VerificationMother.passing()]
@@ -1493,6 +1562,20 @@ class TestConductSliceWhenTheCostOfTheSliceRunsOut:
 
         assert conductor.implement.execute.call_count == 1
         assert conductor.verify.execute.call_count == 1
+        assert result.state is RunState.ABORTED_BUDGET
+
+    def test_an_unmeasured_implementation_call_closes_the_run_instead_of_spinning_for_a_cost_nobody_can_add_up(
+        self,
+    ) -> None:
+        conductor = Conductor(chosen=SelectSliceResultMother.resumed_at(RunMother.implementing()), budgets=Budgets())
+        conductor.implement.execute.side_effect = [
+            RejectionMother.envelope_nobody_could_parse(),
+            ImplementationMother.of_two_paths(),
+        ]
+
+        result = conductor.conduct()
+
+        assert conductor.implement.execute.call_count == 1
         assert result.state is RunState.ABORTED_BUDGET
 
     def test_an_implementation_that_spent_the_whole_cost_closes_before_running_a_single_control(self) -> None:

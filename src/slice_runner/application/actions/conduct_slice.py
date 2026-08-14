@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Literal, NoReturn
 
 from slice_runner.application.actions.close_parent import CloseParentParams
 from slice_runner.application.actions.deliver_slice import DeliverSliceParams
@@ -243,13 +243,19 @@ class ConductSlice:
         if of_the_subissue is not PrecheckOutcome.CLEAR:
             return self._ending(progress, Halt.PRECHECKS_BLOCKED, precheck=PrecheckResult(outcome=of_the_subissue))
         if chosen.subissue.run is not None:
-            self._branch_still_standing(progress)
-
-            return self._conducting(progress)
+            return self._resuming(progress)
         if chosen.subissue.label is IssueLabel.AWAITING_ALIGNMENT:
             return self._conducting(replace(progress, run=replace(progress.run, step=Step.UNDERSTAND)))
 
         return self._aligning(progress)
+
+    def _resuming(self, progress: ConductSliceProgress) -> ConductSliceResult:
+        if self._branch_still_standing(progress):
+            return self._conducting(progress)
+        if progress.run.step is Step.UNDERSTAND:
+            return self._aligning(progress)
+
+        self._missing_branch(progress)
 
     def _reopened(
         self, params: ConductSliceParams, chosen: SelectSliceResult, *, retry: RetryResponse
@@ -260,14 +266,14 @@ class ConductSlice:
 
         return replace(chosen, subissue=reopened.subissue)
 
-    def _branch_still_standing(self, progress: ConductSliceProgress) -> None:
-        branch = progress.subissue.branch
-        if self._branches.exists(worktree=progress.params.worktree, name=branch):
-            return
+    def _branch_still_standing(self, progress: ConductSliceProgress) -> bool:
+        return self._branches.exists(worktree=progress.params.worktree, name=progress.subissue.branch)
 
+    @staticmethod
+    def _missing_branch(progress: ConductSliceProgress) -> NoReturn:
         raise MissingBranchError(
             f"the run of {progress.subissue.slice_id} stands on `{progress.run.step}` and resumes expecting "
-            f"the branch `{branch}` to exist: the worktree has no such branch"
+            f"the branch `{progress.subissue.branch}` to exist: the worktree has no such branch"
         )
 
     def _aligning(self, progress: ConductSliceProgress) -> ConductSliceResult:
@@ -293,15 +299,10 @@ class ConductSlice:
             return self._ending(progress, Halt.PRECHECKS_BLOCKED, precheck=precheck)
 
         marked = self._marked_in_progress(progress)
-        published = self._publishing_the_understanding(marked, correction="")
-        self._repository.pause_for_alignment(
-            repo=progress.params.repo, issue=progress.subissue.number, remove=published.label
-        )
-        self._branches.create(
-            worktree=progress.params.worktree, name=progress.subissue.branch, base=progress.params.base
-        )
 
-        return self._conducting(replace(published, label=IssueLabel.AWAITING_ALIGNMENT))
+        return self._conducting(
+            replace(marked, run=replace(marked.run, step=Step.UNDERSTAND, understanding_pending=True))
+        )
 
     def _marked_in_progress(self, progress: ConductSliceProgress) -> ConductSliceProgress:
         if progress.label is IssueLabel.IN_PROGRESS:
@@ -314,9 +315,19 @@ class ConductSlice:
         return replace(progress, label=IssueLabel.IN_PROGRESS)
 
     def _awaiting_alignment(self, progress: ConductSliceProgress) -> SteppedSlice:
+        if progress.run.understanding_pending:
+            stepped = self._publishing_the_understanding(progress, correction="")
+            if stepped.outcome is not Outcome.PENDING:
+                return stepped
+
+            return self._paused_for_alignment(stepped.progress)
+
         response = self._repository.read_alignment_response(repo=progress.params.repo, issue=progress.subissue.number)
         if response.kind is AlignmentResponseKind.REVIEW and response.correction != progress.run.corrected:
-            progress = self._publishing_the_understanding(self._seeded(progress), correction=response.correction)
+            stepped = self._publishing_the_understanding(self._seeded(progress), correction=response.correction)
+            if stepped.outcome is not Outcome.PENDING:
+                return stepped
+            progress = stepped.progress
         elif response.kind is AlignmentResponseKind.MALFORMED and response.reason is not None:
             self._repository.write_malformed_response(
                 repo=progress.params.repo, issue=progress.subissue.number, reason=response.reason
@@ -324,22 +335,49 @@ class ConductSlice:
 
         return SteppedSlice(progress=progress, outcome=Outcome.of_the_alignment(response.kind))
 
-    def _publishing_the_understanding(self, progress: ConductSliceProgress, *, correction: str) -> ConductSliceProgress:
-        understanding = self._understanding.write(
-            subissue=progress.subissue,
-            parent=progress.parent,
-            repo=progress.params.repo,
-            worktree=progress.params.worktree,
-            alignment=Alignment(agreed=progress.understanding, correction=correction),
+    def _paused_for_alignment(self, progress: ConductSliceProgress) -> SteppedSlice:
+        self._repository.pause_for_alignment(
+            repo=progress.params.repo, issue=progress.subissue.number, remove=progress.label
         )
+        self._branches.create(
+            worktree=progress.params.worktree, name=progress.subissue.branch, base=progress.params.base
+        )
+
+        return SteppedSlice(
+            progress=replace(progress, label=IssueLabel.AWAITING_ALIGNMENT),
+            outcome=Outcome.PENDING,
+        )
+
+    def _publishing_the_understanding(self, progress: ConductSliceProgress, *, correction: str) -> SteppedSlice:
+        try:
+            understanding = self._understanding.write(
+                subissue=progress.subissue,
+                parent=progress.parent,
+                repo=progress.params.repo,
+                worktree=progress.params.worktree,
+                alignment=Alignment(agreed=progress.understanding, correction=correction),
+            )
+        except MeasuredCallError as rejection:
+            discarded = self._discarding(progress, rejection)
+
+            return self._within_budget(
+                SteppedSlice(progress=discarded, outcome=Outcome.DISCARDED), call=rejection.spend
+            )
+
         published = replace(progress, spends=(*progress.spends, understanding.spend), understanding=understanding.text)
-        run = replace(published.run, step=Step.UNDERSTAND, spend=published.spend, corrected=correction)
+        run = replace(
+            published.run,
+            step=Step.UNDERSTAND,
+            spend=published.spend,
+            corrected=correction,
+            understanding_pending=False,
+        )
         self._writing(published, run=run)
         self._repository.write_understanding(
             repo=progress.params.repo, issue=progress.subissue.number, understanding=understanding.text
         )
 
-        return replace(published, run=run)
+        return SteppedSlice(progress=replace(published, run=run), outcome=Outcome.PENDING)
 
     def _seeded(self, progress: ConductSliceProgress) -> ConductSliceProgress:
         if progress.understanding:
@@ -410,19 +448,26 @@ class ConductSlice:
 
         progress = self._seeded(progress)
 
-        implementation = self._implement.execute(
-            ImplementSliceParams(
-                repo=progress.params.repo,
-                worktree=progress.params.worktree,
-                subissue=progress.subissue,
-                parent=progress.parent,
-                findings=progress.findings_of_the_last_round,
-                control_logs=progress.control_logs,
-                hygiene_refusal=progress.hygiene_refusal,
-                understanding=progress.understanding,
-                retry_instruction=progress.retry_instruction,
+        try:
+            implementation = self._implement.execute(
+                ImplementSliceParams(
+                    repo=progress.params.repo,
+                    worktree=progress.params.worktree,
+                    subissue=progress.subissue,
+                    parent=progress.parent,
+                    findings=progress.findings_of_the_last_round,
+                    control_logs=progress.control_logs,
+                    hygiene_refusal=progress.hygiene_refusal,
+                    understanding=progress.understanding,
+                    retry_instruction=progress.retry_instruction,
+                )
             )
-        )
+        except MeasuredCallError as rejection:
+            discarded = self._discarding(progress, rejection)
+
+            return self._within_budget(
+                SteppedSlice(progress=discarded, outcome=Outcome.DISCARDED), call=rejection.spend
+            )
 
         implemented = replace(
             progress,

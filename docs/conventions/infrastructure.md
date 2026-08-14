@@ -260,9 +260,10 @@ importar**: un smoke que solo importe el modulo lo da por bueno. Lo evita
   `duracion_ms`, `tokens_cache`), `descartes_verify_causa`, `ci_indeterminada_causa`, `modelos` y
   `variante` son contrato del flujo viejo -sus alias se quedan como estaban, y tocarlos rompe
   `test_metrics_bridge_contract.py`-. `findings`, `findings_of_the_last_round`, `correction_retries`,
-  `debt`, el grupo `diff` (`files_changed`/`lines_added`/`lines_deleted`), `budgets` y `models_by_role`
-  no los lee ese script, asi que ya no llevan `alias`: el campo se sirve con su propio nombre, que ya es
-  ingles. `MetricsLedgerRowPayload` -el lado que **relee** el log, en `metrics_ledger_entry.py`- tolera las
+  `debt`, el grupo `diff` (`files_changed`/`lines_added`/`lines_deleted`), `budgets`, `models_by_role`,
+  `understand_discards` e `implement_discards` no los lee ese script, asi que ya no llevan `alias`: el
+  campo se sirve con su propio nombre, que ya es ingles. `MetricsLedgerRowPayload` -el lado que **relee**
+  el log, en `metrics_ledger_entry.py`- tolera las
   dos formas con `validation_alias=AliasChoices(nombre_ingles, alias_castellano_viejo)`, para que una fila
   ya escrita con la forma vieja se siga agregando: `test_metrics_ledger_entry.py::TestToleratingHistory` lo
   mide fila a fila. `SeverityCountPayload` (`infrastructure/corpus_verdict_payload.py`, compartida por

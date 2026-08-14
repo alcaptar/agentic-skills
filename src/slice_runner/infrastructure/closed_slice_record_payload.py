@@ -65,6 +65,8 @@ class ClosedSliceRecordPayload(ContractModel):
     verify_retries: int
     correction_retries: int
     verify_discards: int
+    understand_discards: int
+    implement_discards: int
     discard_cause: DiscardCause | None = None
     ci_indeterminate_cause: CiIndeterminateCause | None = None
     spend: RecordedSpendPayload | None = None
@@ -93,6 +95,8 @@ class ClosedSliceRecordPayload(ContractModel):
                 "verify_retries": record.verify_retries,
                 "correction_retries": record.correction_retries,
                 "verify_discards": record.verify_discards,
+                "understand_discards": record.understand_discards,
+                "implement_discards": record.implement_discards,
                 "discard_cause": record.discard_cause,
                 "ci_indeterminate_cause": record.ci_indeterminate_cause,
                 "spend": RecordedSpendPayload.from_domain(record.spend) if record.spend is not None else None,

@@ -6,7 +6,12 @@ and that the smoke fixture is linted with the same yardstick as the root. `CLAUD
 cap on every external call one of the principles the pipeline does not break, and
 `docs/conventions/como-se-escribe.md` cites this file as the contract of cited paths. The fourth
 test pins what counts as "launching a process" for the cap check, so a scan that only knows
-`subprocess.run` cannot pass silently as the whole rule.
+`subprocess.run` cannot pass silently as the whole rule. The fifth scans `conduct_slice.py` for the
+same reason: it pins that every call which writes with the harness discards and retries a
+`MeasuredCallError`, instead of trusting prose to keep a fourth such call from being added bare.
+The sixth pins the fifth's own mechanism: a `self._x.y(...)` the scan has never seen counts as
+harness-writing by default, so a step added later on a brand new port turns the suite red instead
+of passing by omission the way naming only the three known calls would have.
 """
 
 from __future__ import annotations
@@ -235,3 +240,143 @@ def test_the_scan_counts_as_uncapped_every_way_of_launching_a_process_not_only_s
     )
 
     assert _uncapped_calls(source) == [4, 5, 6, 7]
+
+
+_CONDUCT_SLICE = "src/slice_runner/application/actions/conduct_slice.py"
+
+_KNOWN_NOT_HARNESS_WRITING = {
+    ("_branches", "create"),
+    ("_branches", "exists"),
+    ("_budgets", "cost_exhausted"),
+    ("_budgets", "exhausted"),
+    ("_budgets", "wait_exhausted"),
+    ("_ci", "status"),
+    ("_clock", "sleep"),
+    ("_close", "execute"),
+    ("_controls", "run"),
+    ("_deliver", "execute"),
+    ("_deploy_watch", "watch"),
+    ("_forum", "any_pull_request"),
+    ("_forum", "pull_request_state"),
+    ("_machine", "after"),
+    ("_prechecks", "execute"),
+    ("_pull_request", "body"),
+    ("_pull_request", "commit_message"),
+    ("_pull_request", "title"),
+    ("_record_closure", "execute"),
+    ("_record_step", "execute"),
+    ("_reopen", "execute"),
+    ("_repository", "flag_unmerged_pull_request"),
+    ("_repository", "pause_for_alignment"),
+    ("_repository", "read_alignment_response"),
+    ("_repository", "read_understanding"),
+    ("_repository", "remove_label"),
+    ("_repository", "write_label"),
+    ("_repository", "write_malformed_response"),
+    ("_repository", "write_run"),
+    ("_repository", "write_understanding"),
+    ("_select", "execute"),
+    ("_stage", "execute"),
+}
+"""Every other `self._x.y(...)` call in `conduct_slice.py`, named instead of guessed.
+
+The scan cannot know from the syntax alone whether a brand new `self._x.y(...)` writes with the
+harness: that is a fact about the type of `_x`, not about the call site. Naming what does NOT
+write with it, instead of what does, is what makes a step added later without this treatment fall
+on the unsafe side by default -- the opposite of the allowlist this replaced, which stayed silent
+about anything it had never heard of. The cost is this list: a call that is genuinely not
+harness-writing but is missing from it is misclassified as one, which only means it must be added
+here, not that anything breaks.
+"""
+
+
+def _as_a_harness_writing_call(node: ast.AST) -> tuple[str, str] | None:
+    if not (
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and isinstance(node.func.value, ast.Attribute)
+        and isinstance(node.func.value.value, ast.Name)
+        and node.func.value.value.id == "self"
+    ):
+        return None
+    pair = (node.func.value.attr, node.func.attr)
+
+    return None if pair in _KNOWN_NOT_HARNESS_WRITING else pair
+
+
+def _catches_a_measured_call_error(handler: ast.ExceptHandler) -> bool:
+    caught = handler.type
+    if caught is None:
+        return False
+    names = caught.elts if isinstance(caught, ast.Tuple) else [caught]
+
+    return any(isinstance(name, ast.Name) and name.id == "MeasuredCallError" for name in names)
+
+
+def _harness_writing_calls(source: str) -> tuple[int, list[int]]:
+    """Every call that writes with the harness, and the lines among them not guarded by a `try`."""
+    total = 0
+    unguarded: list[int] = []
+
+    def _walk(node: ast.AST, *, guarded: bool) -> None:
+        nonlocal total
+        if isinstance(node, ast.Call) and _as_a_harness_writing_call(node) is not None:
+            total += 1
+            if not guarded:
+                unguarded.append(node.lineno)
+        if isinstance(node, ast.Try):
+            body_guarded = guarded or any(_catches_a_measured_call_error(handler) for handler in node.handlers)
+            for statement in node.body:
+                _walk(statement, guarded=body_guarded)
+            for other in (*node.handlers, *node.orelse, *node.finalbody):
+                _walk(other, guarded=guarded)
+            return
+        for descendant in ast.iter_child_nodes(node):
+            _walk(descendant, guarded=guarded)
+
+    _walk(ast.parse(source), guarded=False)
+
+    return total, unguarded
+
+
+def test_no_call_that_writes_with_the_harness_in_conduct_slice_escapes_the_discard_and_retry_treatment() -> None:
+    """Understanding a call is discarded the same way implementing and verifying already are.
+
+    A rejection nobody catches does not stop at one call: it kills the whole run before anything is
+    written or branched, which is the bug the slice-02 worktree-recovery mechanism exists to undo. The
+    total pins the call count too, so a fourth harness-writing call added later without this treatment
+    turns the suite red instead of slipping through unnoticed.
+    """
+    total, unguarded = _harness_writing_calls(_read(_ROOT / _CONDUCT_SLICE))
+
+    assert not unguarded, (
+        f"{_CONDUCT_SLICE} calls the harness at line(s) {', '.join(str(line) for line in unguarded)} "
+        f"without discarding and retrying a MeasuredCallError, unlike every other harness-writing call"
+    )
+    assert total == 3, (
+        f"{_CONDUCT_SLICE} calls the harness {total} time(s) to write with it, expected exactly 3 "
+        f"(understand, implement, verify): a call added or removed here changes what this pins"
+    )
+
+
+def test_a_self_call_not_named_safe_is_treated_as_harness_writing_even_if_the_scan_has_never_seen_it() -> None:
+    """The scan cannot tell a new harness-writing step from a new safe one by syntax alone.
+
+    So it does not try: anything on `self` that is not on `_KNOWN_NOT_HARNESS_WRITING` counts as
+    harness-writing by default, which is the only way a fourth call added bare -- to a brand new
+    port this file has never heard of -- turns the suite red instead of passing by omission, the
+    way the three-item allowlist this replaced would have.
+    """
+    source = "\n".join(
+        [
+            "class ConductSlice:",
+            "    def _implementing(self, progress):",
+            "        try:",
+            "            self._implement.execute(progress)",
+            "        except MeasuredCallError:",
+            "            pass",
+            "        self._summarize.publish(progress)",
+        ]
+    )
+
+    assert _harness_writing_calls(source) == (2, [7])

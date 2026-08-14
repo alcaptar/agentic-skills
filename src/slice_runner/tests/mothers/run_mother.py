@@ -47,6 +47,10 @@ class RunMother:
         return Run(step=Step.UNDERSTAND, corrected=correction)
 
     @staticmethod
+    def understanding_after_a_discard(spend: HarnessSpend) -> Run:
+        return Run(step=Step.UNDERSTAND, understand_discards=1, spend=spend)
+
+    @staticmethod
     def blocked_on_controls() -> Run:
         return Run(step=Step.RUN_CONTROLS, control_retries=2)
 

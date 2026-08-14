@@ -17,6 +17,7 @@ Spent = Annotated[int, Field(strict=True, ge=0)]
 class RunPayload(ContractModel):
     step: Step
     corrected: str = ""
+    understanding_pending: bool = False
     control_retries: Spent = 0
     hygiene_retries: Spent = 0
     verify_retries: Spent = 0
@@ -24,6 +25,8 @@ class RunPayload(ContractModel):
     ci_retries: Spent = 0
     indeterminate_ticks: Spent = 0
     verify_discards: Spent = 0
+    understand_discards: Spent = 0
+    implement_discards: Spent = 0
     spend: SpendPayload | None = None
 
     @classmethod
@@ -35,6 +38,7 @@ class RunPayload(ContractModel):
         return cls(
             step=run.step,
             corrected=run.corrected,
+            understanding_pending=run.understanding_pending,
             control_retries=run.control_retries,
             hygiene_retries=run.hygiene_retries,
             verify_retries=run.verify_retries,
@@ -42,6 +46,8 @@ class RunPayload(ContractModel):
             ci_retries=run.ci_retries,
             indeterminate_ticks=run.indeterminate_ticks,
             verify_discards=run.verify_discards,
+            understand_discards=run.understand_discards,
+            implement_discards=run.implement_discards,
             spend=SpendPayload.from_domain(run.spend) if run.spend.measured else None,
         )
 
@@ -49,6 +55,7 @@ class RunPayload(ContractModel):
         return Run(
             step=self.step,
             corrected=self.corrected,
+            understanding_pending=self.understanding_pending,
             control_retries=self.control_retries,
             hygiene_retries=self.hygiene_retries,
             verify_retries=self.verify_retries,
@@ -56,5 +63,7 @@ class RunPayload(ContractModel):
             ci_retries=self.ci_retries,
             indeterminate_ticks=self.indeterminate_ticks,
             verify_discards=self.verify_discards,
+            understand_discards=self.understand_discards,
+            implement_discards=self.implement_discards,
             spend=self.spend.to_domain() if self.spend is not None else HarnessSpend.nothing(),
         )

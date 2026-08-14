@@ -145,11 +145,14 @@ uno esta en `docs/design-notes.md`**: aqui va la regla que los gobierna, no la m
 - **El tope por llamada vive en `Budgets` aunque quien lo aplique sea un adaptador**, porque es el mismo
   tipo de dato que los demas: un numero medido con el que se acota una espera. Tenerlo aqui es lo que
   evita que cada adaptador se invente el suyo.
-- **El descarte del juez -devolver algo que no es su veredicto- no tiene presupuesto propio.** No gasta
-  reintento porque **no se ha tocado el codigo**, asi que no es un intento de la fase. Quien lo acota es el
-  presupuesto de coste, que **si** cierra. Darle un contador propio seria inventar una politica que
-  ninguna medicion sostiene; dejarlo sin ningun cierre seria un bucle que paga una llamada al harness por
-  vuelta y no termina nunca.
+- **El descarte de una llamada al arnes -entender, implementar o verificar- no tiene presupuesto propio en
+  ninguno de los tres pasos.** Ninguno gasta reintento: en el que entiende y en el juez porque **no se ha
+  tocado el codigo**, y en el que implementa porque, aunque la llamada rota pudo dejar cambios sin
+  comitear en el worktree, nada de eso llega a stagearse -el paso que staggea es `RUN_CONTROLS`, y un
+  informe que no se puede leer nunca llega hasta ahi-, asi que tampoco es un intento de la fase que un
+  control o un juez lleguen a medir. Quien lo acota en los tres es el presupuesto de coste, que **si**
+  cierra. Darle un contador propio seria inventar una politica que ninguna medicion sostiene; dejarlo sin
+  ningun cierre seria un bucle que paga una llamada al harness por vuelta y no termina nunca.
 - **El presupuesto de coste impide la siguiente llamada; no tira la que ya se pago.** Un veredicto que
   aprueba nunca se convierte en `over-budget` -entregar no cuesta harness-, y la llamada siguiente se corta
   **antes** de invocar, no despues de pagarla. Las dos comprobaciones conviven a proposito: la de despues

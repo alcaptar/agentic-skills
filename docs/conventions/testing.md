@@ -165,7 +165,7 @@ condenado se retira sin tocar los demas-:
   `metrics.py`, y la fila que construye el programa pasada por el lector real del script
   (`Fila.from_row`)-.
 
-- **`test_pipeline_invariants.py`**: cuatro invariantes que escanean el arbol en vez de comparar dos
+- **`test_pipeline_invariants.py`**: seis invariantes que escanean el arbol en vez de comparar dos
   copias de la misma prosa:
 
   **Que ninguna llamada a un proceso externo se lanza sin tope**
@@ -204,6 +204,25 @@ condenado se retira sin tocar los demas-:
   (`test_the_smoke_fixture_is_linted_with_the_same_yardstick_as_the_repo`): el mismo `select` de
   `[tool.ruff.lint]`, porque la fixture es el arbol que el runner slicea de verdad en el smoke, y una
   vara mas laja ahi le daria un pase que no vale nada.
+
+  Y que **ninguna llamada que escribe con el arnes en `conduct_slice.py` escapa al descarte-y-reintento**
+  (`test_no_call_that_writes_with_the_harness_in_conduct_slice_escapes_the_discard_and_retry_treatment`).
+  Recorre el arbol sintactico de ese fichero y falla si algun `self._x.y(...)` no anidado en un `try`
+  cuyo `except` capture `MeasuredCallError` no esta en `_KNOWN_NOT_HARNESS_WRITING`, y si el total de
+  llamadas que si cuentan no es exactamente tres: la prosa de `docs/conventions/domain.md` sobre el
+  descarte del juez no podia impedir que las otras dos llamadas siguieran matando el run entero, igual
+  que le paso al tope por llamada antes de que existiera su propio escaneo.
+
+  **La lista nombra lo que NO escribe con el arnes, no lo que si.** Una allowlist de las tres llamadas
+  conocidas no puede fallar ante una cuarta anadida sin tratamiento -sale un `total` que sigue en 3-, asi
+  que el escaneo invierte el criterio: nombra cada `self._x.y(...)` de hoy que **no** es el arnes, y
+  cualquier llamada que el escaneo no reconoce cuenta como si lo fuera. El coste es la propia lista -unas
+  treinta entradas que hay que ampliar si aparece un `self._x.y(...)` legitimamente no relacionado con el
+  arnes-, y lo fija
+  `test_a_self_call_not_named_safe_is_treated_as_harness_writing_even_if_the_scan_has_never_seen_it` sobre
+  una fuente sintetica, igual que el meta-test del tope por llamada: una llamada a un puerto que el
+  escaneo nunca ha visto cuenta como sin tratar por defecto, en vez de pasar en silencio como le pasaba a
+  la allowlist que sustituye.
 
 ## Antipatrones
 
