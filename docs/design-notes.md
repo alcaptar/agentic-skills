@@ -255,6 +255,35 @@ necesita para publicar el entendimiento, leer la respuesta y pausar.
 nombrar ningun tipo de telemetria. Y de paso unifico una regla que estaba escrita en uno de los dos cierres
 y no en el otro: un gasto que nunca se midio no entra en la fila, en vez de contar como cero.
 
+### El agrupamiento de dependencias no era del conductor, era de lo que se recorre (2026-08-14)
+
+La desviacion se escribio con un ancla equivocada: decia que agrupar los puertos era **del conductor**,
+por ser "la unica pieza que compone casi todos los puertos del programa". Eso no es una regla, es un
+censo de un dia, y el propio `docs/conventions/como-se-escribe.md` lo prohibe -una lista cerrada de lo que
+hay hoy, presentada como si fuese la regla-.
+
+**Lo destapo un veto.** La slice-01 de #247 necesitaba un sexto puerto en `CheckReadiness` para que el
+`doctor` pudiese contrastar de que arbol salieron el programa y las skills. Seis parametros disparan
+`PLR0913`, el implementador agrupo, y el juez lo bloqueo con severidad alta citando textualmente la linea
+de la desviacion. El veto era correcto: la convencion decia lo que decia. Lo que no era correcto era la
+convencion.
+
+Las dos salidas que el juez ofrecio -partir la query, o enmendar la convencion- **las declaro el mismo
+como decision del repo y no del implementador**, asi que el run no podia salir de ahi: cualquier cosa que
+eligiera era o un veto nuevo o mover la vara con la que se le mide, que es un antipatron escrito. Se paro
+el run y se decidio fuera.
+
+**El criterio que sustituye al censo es de que es proporcional la lista de puertos.** Un caso de uso que
+gana puertos porque hace mas cosas tiene una firma larga como sintoma, y se parte. Uno que los gana porque
+su trabajo *es* recorrerlos -conducir un run entero, contestar si todas las piezas estan en su sitio- no
+se arregla partiendolo: la misma lista queda repartida en dos piezas y aparece una tercera que las
+compone. El criterio se puede aplicar a un caso de uso que todavia no existe, que es justo lo que el censo
+no permitia: con la redaccion vieja, cada pieza nueva que cayera de este lado obligaba a editar la
+convencion para dejarla veraz.
+
+Coste medido del fallo: el run de la slice-01 de #247 se paro a los 36 minutos y 9,76 $, con una llamada
+al juez tirada a mitad.
+
 ### La forma de una lista, extraida al tercer consumidor
 
 `CountedLines` vivio duplicada a proposito mientras solo la compartian dos prompts: cada uno es un
