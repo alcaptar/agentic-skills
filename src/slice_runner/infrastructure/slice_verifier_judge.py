@@ -179,7 +179,7 @@ Recorrela **entera** y reporta item a item. No la amplies con criterios propios 
    uno, cumple el codigo su intencion?); este juzga la **senal viva**. Si la slice declaro la emision
    como criterio *y* como senal, y
    el defecto es uno solo, reportalo **una vez** bajo la regla mas especifica y menciona la otra en
-   `detalle`: la regla "un defecto, un hallazgo" manda, porque el recuento por severidad alimenta las
+   `detail`: la regla "un defecto, un hallazgo" manda, porque el recuento por severidad alimenta las
    metricas del loop.
 
 ## Veredicto
