@@ -195,9 +195,20 @@ class TestSelectingTheSliceNamedByTheCaller:
         return SelectSlice(repository=repository)
 
     def test_naming_a_slice_picks_it_instead_of_the_first_one_that_is_runnable(self, query: SelectSlice) -> None:
-        params = SelectSliceParams(repo=_REPO, issue=_ISSUE, slice_id=SubIssueMother.of_another_repo().slice_id)
+        params = SelectSliceParams(
+            repo=_REPO, issue=_ISSUE, slice_id=SubIssueMother.of_another_repo().slice_id.canonical
+        )
 
         assert query.execute(params).subissue == SubIssueMother.of_another_repo()
+
+    def test_naming_a_slice_by_the_canonical_identifier_that_carries_a_user_story_key_finds_it_too(
+        self, query: SelectSlice, repository: Mock
+    ) -> None:
+        keyed = SubIssueMother.carrying_a_user_story()
+        repository.read_children.return_value = (SubIssueMother.pending(), keyed)
+        params = SelectSliceParams(repo=_REPO, issue=_ISSUE, slice_id=keyed.slice_id.canonical)
+
+        assert query.execute(params).subissue == keyed
 
     def test_a_slice_id_absent_from_every_child_raises_instead_of_falling_back_to_the_next_in_line(
         self, query: SelectSlice
@@ -211,16 +222,16 @@ class TestSelectingTheSliceNamedByTheCaller:
         self, query: SelectSlice, repository: Mock
     ) -> None:
         repository.read_children.return_value = (SubIssueMother.closed(), SubIssueMother.of_another_repo())
-        params = SelectSliceParams(repo=_REPO, issue=_ISSUE, slice_id=SubIssueMother.closed().slice_id)
+        params = SelectSliceParams(repo=_REPO, issue=_ISSUE, slice_id=SubIssueMother.closed().slice_id.canonical)
 
-        with pytest.raises(NoSliceLeftError, match=SubIssueMother.closed().slice_id):
+        with pytest.raises(NoSliceLeftError, match=SubIssueMother.closed().slice_id.canonical):
             query.execute(params)
 
     def test_a_slice_id_closed_by_github_while_its_own_run_was_open_still_closes_that_run_instead_of_only_raising(
         self, query: SelectSlice, repository: Mock
     ) -> None:
         repository.read_children.return_value = (SubIssueMother.dangling(), SubIssueMother.of_another_repo())
-        params = SelectSliceParams(repo=_REPO, issue=_ISSUE, slice_id=SubIssueMother.dangling().slice_id)
+        params = SelectSliceParams(repo=_REPO, issue=_ISSUE, slice_id=SubIssueMother.dangling().slice_id.canonical)
 
         with pytest.raises(NoSliceLeftError) as raised:
             query.execute(params)
@@ -318,7 +329,7 @@ class TestSelectSliceReopeningTheSliceNamedByTheCaller:
         repository.read_retry_instruction.return_value = RetryResponse(
             kind=RetryResponseKind.RETRY, instruction=_INSTRUCTION
         )
-        params = SelectSliceParams(repo=_REPO, issue=_ISSUE, slice_id=blocked.slice_id)
+        params = SelectSliceParams(repo=_REPO, issue=_ISSUE, slice_id=blocked.slice_id.canonical)
 
         result = query.execute(params)
 
@@ -331,7 +342,7 @@ class TestSelectSliceReopeningTheSliceNamedByTheCaller:
         blocked = SubIssueMother.blocked(IssueLabel.BLOCKED_VERIFY, RunMother.blocked_on_verify())
         repository.read_children.return_value = (blocked,)
         repository.read_retry_instruction.return_value = RetryResponse(kind=RetryResponseKind.NOT_YET)
-        params = SelectSliceParams(repo=_REPO, issue=_ISSUE, slice_id=blocked.slice_id)
+        params = SelectSliceParams(repo=_REPO, issue=_ISSUE, slice_id=blocked.slice_id.canonical)
 
         with pytest.raises(NoSliceLeftError, match="retry instruction"):
             query.execute(params)
@@ -343,7 +354,7 @@ class TestSelectSliceReopeningTheSliceNamedByTheCaller:
         repository.read_children.return_value = (blocked,)
         malformed = RetryResponse(kind=RetryResponseKind.MALFORMED, reason=_REASON)
         repository.read_retry_instruction.return_value = malformed
-        params = SelectSliceParams(repo=_REPO, issue=_ISSUE, slice_id=blocked.slice_id)
+        params = SelectSliceParams(repo=_REPO, issue=_ISSUE, slice_id=blocked.slice_id.canonical)
 
         with pytest.raises(NoSliceLeftError) as raised:
             query.execute(params)

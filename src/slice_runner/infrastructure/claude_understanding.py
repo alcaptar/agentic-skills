@@ -39,14 +39,16 @@ class ClaudeUnderstanding(UnderstandingWriter):
             alignment=alignment,
             reader=self._reader,
         )
-        watch = HarnessTurnWatch(turns=self._telemetry.turns, slice_id=subissue.slice_id, step=Step.UNDERSTAND)
+        watch = HarnessTurnWatch(
+            turns=self._telemetry.turns, slice_id=subissue.slice_id.canonical, step=Step.UNDERSTAND
+        )
         output = self._process.run(invocation.argv, stdin=invocation.text, cwd=invocation.cwd, on_line=watch)
         envelope = HarnessOutput.from_process(output)
         self._telemetry.trace.record(
             HarnessCall(
                 repo=repo,
                 issue=subissue.number,
-                slice_id=subissue.slice_id,
+                slice_id=subissue.slice_id.canonical,
                 step=Step.UNDERSTAND,
                 session=envelope.session_id,
             )
@@ -56,7 +58,7 @@ class ClaudeUnderstanding(UnderstandingWriter):
             HarnessCallSpend(repo=repo, issue=subissue.number, session=envelope.session_id, spend=spend)
         )
         self._telemetry.tool_uses.record_after(
-            slice_id=subissue.slice_id, step=Step.UNDERSTAND, session=envelope.session_id, repo=repo
+            slice_id=subissue.slice_id.canonical, step=Step.UNDERSTAND, session=envelope.session_id, repo=repo
         )
         with envelope.measuring():
             text = self._usable_text(envelope)

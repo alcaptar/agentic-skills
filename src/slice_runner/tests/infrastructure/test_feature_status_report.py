@@ -20,7 +20,7 @@ class TestFeatureStatusReport:
         rendered = FeatureStatusReport(statuses=statuses).rendered()
 
         assert len(rendered.splitlines()) == 2
-        assert SubIssueMother.pending().slice_id in rendered
+        assert SubIssueMother.pending().slice_id.canonical in rendered
         assert IssueLabel.PENDING.value in rendered
 
     def test_a_slice_that_carries_no_label_prints_the_state_of_the_issue_instead(self) -> None:

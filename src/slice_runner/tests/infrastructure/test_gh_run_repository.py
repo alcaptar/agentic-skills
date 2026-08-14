@@ -23,6 +23,7 @@ from slice_runner.domain.issue_state import IssueState
 from slice_runner.domain.malformed_reason import MalformedReason
 from slice_runner.domain.precheck_outcome import PrecheckOutcome
 from slice_runner.domain.retry_response_kind import RetryResponseKind
+from slice_runner.domain.slice_identity import SliceIdentity
 from slice_runner.domain.source import Source, SourceKind
 from slice_runner.infrastructure.automation_mark import AutomationMark
 from slice_runner.infrastructure.gh_run_repository import GhCommandFailedError, GhRunRepository
@@ -243,14 +244,14 @@ class TestReadingTheChildren:
             repo=_REPO, parent=43, expected=2
         )
 
-        assert [child.slice_id for child in children] == ["slice-01", "slice-02"]
+        assert [child.slice_id.canonical for child in children] == ["slice-01", "slice-02"]
 
     def test_the_repo_line_of_the_body_becomes_the_subissue_repo(self) -> None:
         children = GhRunRepository(call=GhCallDoubles.wired(self._process())).read_children(
             repo=_REPO, parent=43, expected=2
         )
 
-        by_slice = {child.slice_id: child for child in children}
+        by_slice = {child.slice_id.canonical: child for child in children}
         assert by_slice["slice-01"].repo is None
         assert by_slice["slice-02"].repo == _OTHER_REPO
 
@@ -259,7 +260,7 @@ class TestReadingTheChildren:
             repo=_REPO, parent=43, expected=2
         )
 
-        by_slice = {child.slice_id: child for child in children}
+        by_slice = {child.slice_id.canonical: child for child in children}
         assert by_slice["slice-01"].criteria == (
             "el cuerpo se lee entero; los criterios llegan como lineas",
             "el bloque de estado se puede reescribir sin tocar lo de arriba",
@@ -270,7 +271,7 @@ class TestReadingTheChildren:
             repo=_REPO, parent=43, expected=2
         )
 
-        by_slice = {child.slice_id: child for child in children}
+        by_slice = {child.slice_id.canonical: child for child in children}
         assert by_slice["slice-01"].intention == "hoy no hay forma de medir el formato nuevo sin crearlo"
         assert by_slice["slice-01"].signal == "exenta - spike de medicion"
 
@@ -288,7 +289,7 @@ class TestReadingTheChildren:
             repo=_REPO, parent=43, expected=2
         )
 
-        by_slice = {child.slice_id: child for child in children}
+        by_slice = {child.slice_id.canonical: child for child in children}
         assert by_slice["slice-02"].run is None
 
     def test_a_body_with_a_state_block_reads_the_run_it_holds(self) -> None:
@@ -296,7 +297,7 @@ class TestReadingTheChildren:
             repo=_REPO, parent=43, expected=2
         )
 
-        by_slice = {child.slice_id: child for child in children}
+        by_slice = {child.slice_id.canonical: child for child in children}
         assert by_slice["slice-01"].run == RunMother.awaiting_ci()
 
     def test_a_state_block_with_a_spend_reads_it_back_so_a_reinvocation_sees_the_prior_cost(self) -> None:
@@ -331,7 +332,7 @@ class TestReadingTheChildren:
             repo=_REPO, parent=43, expected=2
         )
 
-        by_slice = {child.slice_id: child for child in children}
+        by_slice = {child.slice_id.canonical: child for child in children}
         assert by_slice["slice-01"].label is IssueLabel.IN_PROGRESS
         assert by_slice["slice-02"].label is IssueLabel.PENDING
 
@@ -340,7 +341,7 @@ class TestReadingTheChildren:
             repo=_REPO, parent=43, expected=2
         )
 
-        by_slice = {child.slice_id: child for child in children}
+        by_slice = {child.slice_id.canonical: child for child in children}
         assert by_slice["slice-01"].state is IssueState.CLOSED
         assert by_slice["slice-02"].state is IssueState.OPEN
 
@@ -401,7 +402,7 @@ class TestReadingASingleSubissue:
     def test_the_subissue_it_returns_carries_the_same_fields_a_search_result_would(self) -> None:
         subissue = GhRunRepository(call=GhCallDoubles.wired(self._process())).read_subissue(repo=_REPO, issue=49)
 
-        assert subissue.slice_id == "slice-02"
+        assert subissue.slice_id.canonical == "slice-02"
         assert subissue.repo == _OTHER_REPO
         assert subissue.label is IssueLabel.PENDING
         assert subissue.state is IssueState.OPEN
@@ -1446,21 +1447,25 @@ class TestReadingTheHeadingOfEachSubissue:
 
         return ScriptedProcess(ProcessOutput(code=0, stdout=json.dumps(payload), stderr=""))
 
+    @staticmethod
+    def _single_child(title: str) -> list[dict[str, object]]:
+        return [{"number": 1, "title": title, "body": "", "labels": [], "state": "OPEN"}]
+
     def test_the_name_in_parentheses_of_the_title_becomes_the_name_of_the_slice(self) -> None:
         children = GhRunRepository(call=GhCallDoubles.wired(self._process())).read_children(
             repo=_REPO, parent=43, expected=2
         )
 
-        by_slice = {child.slice_id: child for child in children}
-        assert by_slice["slice-01"].name == "primera-de-prueba"
-        assert by_slice["slice-02"].name == "segunda-de-prueba"
+        by_slice = {child.slice_id.canonical: child for child in children}
+        assert by_slice["slice-01"].slice_id.name == "primera-de-prueba"
+        assert by_slice["slice-02"].slice_id.name == "segunda-de-prueba"
 
     def test_what_the_title_says_after_the_name_becomes_the_summary_of_the_slice(self) -> None:
         children = GhRunRepository(call=GhCallDoubles.wired(self._process())).read_children(
             repo=_REPO, parent=43, expected=2
         )
 
-        by_slice = {child.slice_id: child for child in children}
+        by_slice = {child.slice_id.canonical: child for child in children}
         assert by_slice["slice-01"].summary == "la que se creo despues"
 
     def test_the_name_and_the_number_of_the_slice_are_the_branch_the_run_will_stand_on(self) -> None:
@@ -1477,3 +1482,72 @@ class TestReadingTheHeadingOfEachSubissue:
             GhRunRepository(call=GhCallDoubles.wired(self._process(children=nameless))).read_children(
                 repo=_REPO, parent=43, expected=1
             )
+
+    def test_a_title_carrying_a_user_story_key_composes_the_canonical_identifier_with_it(self) -> None:
+        keyed = self._single_child("PROJ-1234 slice-01 (name): resumen")
+
+        children = GhRunRepository(call=GhCallDoubles.wired(self._process(children=keyed))).read_children(
+            repo=_REPO, parent=43, expected=1
+        )
+
+        assert children[0].slice_id == SliceIdentity(ordinal=1, name="name", user_story="PROJ-1234")
+        assert children[0].slice_id.canonical == "PROJ-1234-01"
+
+    def test_a_title_with_no_key_composes_the_canonical_identifier_as_slice_nn(self) -> None:
+        unkeyed = self._single_child("slice-01 (name): resumen")
+
+        children = GhRunRepository(call=GhCallDoubles.wired(self._process(children=unkeyed))).read_children(
+            repo=_REPO, parent=43, expected=1
+        )
+
+        assert children[0].slice_id == SliceIdentity(ordinal=1, name="name", user_story=None)
+        assert children[0].slice_id.canonical == "slice-01"
+
+    def test_the_branch_of_a_keyed_slice_carries_the_key_before_the_ordinal(self) -> None:
+        keyed = self._single_child("PROJ-1234 slice-01 (name): resumen")
+
+        children = GhRunRepository(call=GhCallDoubles.wired(self._process(children=keyed))).read_children(
+            repo=_REPO, parent=43, expected=1
+        )
+
+        assert children[0].branch == "slice/PROJ-1234-01-name"
+
+    def test_a_prefix_that_is_not_a_recognizable_key_is_rejected_instead_of_folded_into_the_name(self) -> None:
+        malformed = self._single_child("proj-1234 slice-01 (name): resumen")
+
+        with pytest.raises(UnreadableIssueError, match="slice-NN"):
+            GhRunRepository(call=GhCallDoubles.wired(self._process(children=malformed))).read_children(
+                repo=_REPO, parent=43, expected=1
+            )
+
+    def test_a_single_digit_ordinal_is_rejected_instead_of_silently_zero_padded(self) -> None:
+        single_digit = self._single_child("slice-1 (name): resumen")
+
+        with pytest.raises(UnreadableIssueError, match="slice-NN"):
+            GhRunRepository(call=GhCallDoubles.wired(self._process(children=single_digit))).read_children(
+                repo=_REPO, parent=43, expected=1
+            )
+
+    def test_ordering_is_by_the_ordinal_and_not_by_the_composed_canonical_string(self) -> None:
+        out_of_order = [
+            {
+                "number": 1,
+                "title": "KEY-9 slice-02 (b): later slice, keyed but sorts first alphabetically",
+                "body": "",
+                "labels": [],
+                "state": "OPEN",
+            },
+            {
+                "number": 2,
+                "title": "slice-01 (a): earlier slice, unkeyed but sorts last alphabetically",
+                "body": "",
+                "labels": [],
+                "state": "OPEN",
+            },
+        ]
+
+        children = GhRunRepository(call=GhCallDoubles.wired(self._process(children=out_of_order))).read_children(
+            repo=_REPO, parent=43, expected=2
+        )
+
+        assert [child.slice_id.canonical for child in children] == ["slice-01", "KEY-9-02"]

@@ -10,6 +10,7 @@ from slice_runner.domain.issue_label import IssueLabel
 from slice_runner.domain.parent_issue import ParentIssue
 from slice_runner.domain.retry_response import RetryResponse
 from slice_runner.domain.run_repository import RunRepository
+from slice_runner.domain.slice_identity import SliceIdentity
 from slice_runner.domain.sub_issue import SubIssue
 from slice_runner.infrastructure.automation_mark import AutomationMark
 from slice_runner.infrastructure.gh_body_payload import GhBodyPayload
@@ -45,7 +46,9 @@ class GhCommandFailedError(OSError):
 
 
 class GhRunRepository(RunRepository):
-    SLICE_HEADING: ClassVar[re.Pattern[str]] = re.compile(r"^(slice-\d+)\s*\(([^)]+)\)\s*:\s*(.+?)\s*$")
+    SLICE_HEADING: ClassVar[re.Pattern[str]] = re.compile(
+        r"^(?:(?P<key>[A-Z][A-Z0-9]*-\d+)\s+)?slice-(?P<ordinal>\d{2,})\s*\((?P<name>[^)]+)\)\s*:\s*(?P<summary>.+?)\s*$"
+    )
 
     def __init__(self, *, call: GhCall) -> None:
         self._call = call
@@ -361,9 +364,8 @@ class GhRunRepository(RunRepository):
 
         return SubIssue(
             number=payload.number,
-            slice_id=heading.group(1),
-            name=heading.group(2),
-            summary=heading.group(3),
+            slice_id=SliceIdentity(ordinal=int(heading["ordinal"]), name=heading["name"], user_story=heading["key"]),
+            summary=heading["summary"],
             title=payload.title,
             state=payload.state,
             repo=parsed.repo,
@@ -393,4 +395,4 @@ class GhRunRepository(RunRepository):
 
     @staticmethod
     def _slice_number(child: SubIssue) -> int:
-        return int(child.slice_id.removeprefix("slice-"))
+        return child.slice_id.ordinal

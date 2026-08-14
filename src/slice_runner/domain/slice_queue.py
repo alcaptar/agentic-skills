@@ -21,7 +21,7 @@ class SliceQueue:
     @classmethod
     def find(cls, children: tuple[SubIssue, ...], slice_id: str) -> SubIssue | None:
         for child in children:
-            if child.slice_id == slice_id:
+            if child.slice_id.canonical == slice_id:
                 return child
 
         return None

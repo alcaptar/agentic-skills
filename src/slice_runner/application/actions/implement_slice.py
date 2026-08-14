@@ -39,7 +39,7 @@ class ImplementSlice:
     def _assignment(params: ImplementSliceParams) -> Assignment:
         return Assignment(
             issue=params.subissue.number,
-            slice_id=params.subissue.slice_id,
+            slice_id=params.subissue.slice_id.canonical,
             repo=params.repo,
             worktree=params.worktree,
             intention=params.subissue.intention,

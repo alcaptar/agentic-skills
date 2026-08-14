@@ -22,7 +22,7 @@ class SlicePullRequest(PullRequestWriter):
     )
 
     def title(self, subissue: SubIssue) -> str:
-        return f"{self.COMMIT_TYPE}({subissue.name}): {subissue.summary}"
+        return f"{self.COMMIT_TYPE}({subissue.slice_id.name}): {subissue.summary}"
 
     def commit_message(self, subissue: SubIssue) -> str:
         return SliceCommitMessage(subject=self.title(subissue)).rendered()
