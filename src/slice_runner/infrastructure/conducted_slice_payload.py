@@ -17,6 +17,7 @@ class ConductedSlicePayload(ContractModel):
     state: RunState
     step: Step
     precheck: PrecheckOutcome | None = None
+    precheck_reason: str | None = None
     pull_request: int | None = None
 
     @classmethod
@@ -25,6 +26,7 @@ class ConductedSlicePayload(ContractModel):
             halt=conducted.halt,
             state=conducted.state,
             step=conducted.step,
-            precheck=conducted.precheck,
+            precheck=conducted.precheck.outcome if conducted.precheck is not None else None,
+            precheck_reason=conducted.precheck.reason if conducted.precheck is not None else None,
             pull_request=conducted.pull_request,
         )

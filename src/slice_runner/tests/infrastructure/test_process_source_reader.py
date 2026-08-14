@@ -67,3 +67,12 @@ class TestTheSizeCapOnDeclaredSources:
 
         with pytest.raises(SourcesBudgetExceededError):
             reader.read_all(worktree=str(tmp_path), sources=(source,))
+
+    def test_the_message_names_every_source_and_how_much_it_weighs_against_the_cap(self, tmp_path: Path) -> None:
+        (tmp_path / "a.md").write_text("a" * 7, encoding="utf-8")
+        (tmp_path / "b.md").write_text("b" * 4, encoding="utf-8")
+        reader = ProcessSourceReader(process=Real.process(), budgets=Budgets(sources_max_chars=10))
+        a, b = Source(kind=SourceKind.DOC, path="a.md"), Source(kind=SourceKind.DOC, path="b.md")
+
+        with pytest.raises(SourcesBudgetExceededError, match=r"a\.md: 7 characters.*b\.md: 4 characters"):
+            reader.read_all(worktree=str(tmp_path), sources=(a, b))

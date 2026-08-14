@@ -21,6 +21,7 @@ from slice_runner.domain.exceptions import (
 from slice_runner.domain.issue_label import IssueLabel
 from slice_runner.domain.issue_state import IssueState
 from slice_runner.domain.malformed_reason import MalformedReason
+from slice_runner.domain.precheck_outcome import PrecheckOutcome
 from slice_runner.domain.retry_response_kind import RetryResponseKind
 from slice_runner.domain.source import Source, SourceKind
 from slice_runner.infrastructure.automation_mark import AutomationMark
@@ -1220,6 +1221,39 @@ class TestFlaggingAPullRequestLeftUnmerged:
         with pytest.raises(GhCommandFailedError, match="HTTP 422"):
             GhRunRepository(call=GhCallDoubles.wired(process)).flag_unmerged_pull_request(
                 repo=_REPO, issue=45, pull_request=61
+            )
+
+
+class TestWritingWhyAPrecheckStoppedTheRun:
+    def test_the_call_is_a_comment_naming_the_outcome_and_carrying_its_reason(self) -> None:
+        process = ScriptedProcess(ProcessOutput(code=0, stdout="", stderr=""))
+
+        GhRunRepository(call=GhCallDoubles.wired(process)).write_precheck_reason(
+            repo=_REPO,
+            issue=45,
+            outcome=PrecheckOutcome.UNREADABLE_SOURCE,
+            reason="CLAUDE.md does not exist under the worktree",
+        )
+
+        assert process.calls[0].argv == ["gh", "issue", "comment", "45", "--repo", _REPO, "--body-file", "-"]
+        assert PrecheckOutcome.UNREADABLE_SOURCE.value in process.calls[0].stdin
+        assert "CLAUDE.md does not exist under the worktree" in process.calls[0].stdin
+
+    def test_the_comment_carries_the_visible_automation_mark(self) -> None:
+        process = ScriptedProcess(ProcessOutput(code=0, stdout="", stderr=""))
+
+        GhRunRepository(call=GhCallDoubles.wired(process)).write_precheck_reason(
+            repo=_REPO, issue=45, outcome=PrecheckOutcome.SOURCES_OVER_BUDGET, reason="over the budget"
+        )
+
+        assert AutomationMark.TEXT in process.calls[0].stdin
+
+    def test_a_non_zero_exit_raises_with_the_stderr_it_carried(self) -> None:
+        process = ScriptedProcess(ProcessOutput(code=1, stdout="", stderr="HTTP 422: Unprocessable Entity"))
+
+        with pytest.raises(GhCommandFailedError, match="HTTP 422"):
+            GhRunRepository(call=GhCallDoubles.wired(process)).write_precheck_reason(
+                repo=_REPO, issue=45, outcome=PrecheckOutcome.UNREADABLE_SOURCE, reason="CLAUDE.md missing"
             )
 
 

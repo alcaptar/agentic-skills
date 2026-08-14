@@ -34,6 +34,7 @@ from slice_runner.domain.event_log import EventLog
 from slice_runner.domain.forum import Forum
 from slice_runner.domain.metrics_log import MetricsLog
 from slice_runner.domain.precheck_outcome import PrecheckOutcome
+from slice_runner.domain.precheck_result import PrecheckResult
 from slice_runner.domain.pull_request_writer import PullRequestWriter
 from slice_runner.domain.role_models import RoleModels
 from slice_runner.domain.run_repository import RunRepository
@@ -72,7 +73,7 @@ class Conductor:
         self.models = models or self.MODELS
         self.select = self._doubling(SelectSlice, execute=chosen)
         self.reopen = self._doubling(ReopenSlice, execute=None)
-        self.prechecks = self._doubling(RunPrechecks, execute=PrecheckOutcome.CLEAR)
+        self.prechecks = self._doubling(RunPrechecks, execute=PrecheckResult(outcome=PrecheckOutcome.CLEAR))
         self.implement = self._doubling(ImplementSlice, execute=ImplementationMother.of_two_paths())
         self.stage = self._doubling(StageSlice, execute=None)
         self.verify = self._doubling(VerifySlice, execute=VerificationMother.passing())

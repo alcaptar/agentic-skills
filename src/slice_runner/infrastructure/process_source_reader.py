@@ -23,9 +23,10 @@ class ProcessSourceReader(SourceReader):
         )
         total_chars = sum(len(one.content) for one in cited)
         if self._budgets.sources_exceed(total_chars):
+            weights = ", ".join(f"{one.source.path}: {len(one.content)} characters" for one in cited)
             raise SourcesBudgetExceededError(
                 f"the {len(cited)} declared source(s) add up to {total_chars} characters, over the "
-                f"{self._budgets.sources_max_chars} the budget allows"
+                f"{self._budgets.sources_max_chars} the budget allows: {weights}"
             )
 
         return cited

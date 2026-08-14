@@ -11,6 +11,7 @@ if TYPE_CHECKING:
     from slice_runner.domain.issue_label import IssueLabel
     from slice_runner.domain.malformed_reason import MalformedReason
     from slice_runner.domain.parent_issue import ParentIssue
+    from slice_runner.domain.precheck_outcome import PrecheckOutcome
     from slice_runner.domain.retry_response import RetryResponse
     from slice_runner.domain.run import Run
     from slice_runner.domain.sub_issue import SubIssue
@@ -64,6 +65,9 @@ class RunRepository(ABC):
 
     @abstractmethod
     def flag_unmerged_pull_request(self, *, repo: str, issue: int, pull_request: int) -> None: ...
+
+    @abstractmethod
+    def write_precheck_reason(self, *, repo: str, issue: int, outcome: PrecheckOutcome, reason: str) -> None: ...
 
     @abstractmethod
     def close_parent(self, *, repo: str, issue: int, subissue_count: int) -> None: ...
