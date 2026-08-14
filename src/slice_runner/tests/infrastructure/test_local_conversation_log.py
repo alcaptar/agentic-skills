@@ -68,6 +68,26 @@ class TestTheTurnsOfARecordedConversation(WithARecordedConversation):
         assert conversation.turns[2].tool_calls == ()
 
 
+class TestWhetherACallWasRefused(WithARecordedConversation):
+    def test_a_call_the_harness_answered_without_an_error_is_not_marked_as_failed(self) -> None:
+        conversation = LocalConversationLog().read(session=ConversationTranscriptMother.SESSION, repo=_REPO)
+
+        assert [call.failed for turn in conversation.turns for call in turn.tool_calls] == [False, False]
+
+    def test_a_call_the_harness_refused_is_marked_so_the_durable_record_shows_the_fight(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
+        ConversationTranscriptMother.written_under(
+            tmp_path, repo=_REPO, recorded=ConversationTranscriptMother.REJECTED_STRUCTURED_OUTPUT
+        )
+
+        conversation = LocalConversationLog().read(session=ConversationTranscriptMother.SESSION, repo=_REPO)
+
+        refused = [call for turn in conversation.turns for call in turn.tool_calls if call.failed]
+        assert [call.name for call in refused] == ["StructuredOutput"]
+
+
 class TestTheSpendOfARecordedConversation(WithARecordedConversation):
     def test_the_usage_of_every_distinct_message_is_summed_only_once_even_if_it_is_split_across_lines(self) -> None:
         conversation = LocalConversationLog().read(session=ConversationTranscriptMother.SESSION, repo=_REPO)

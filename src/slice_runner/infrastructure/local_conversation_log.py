@@ -65,8 +65,8 @@ class LocalConversationLog(ConversationLog):
         return [line for line in lines if line.get("type") == "assistant"]
 
     @classmethod
-    def _tool_results_of(cls, lines: list[dict[str, object]]) -> dict[str, str]:
-        results: dict[str, str] = {}
+    def _tool_results_of(cls, lines: list[dict[str, object]]) -> dict[str, TranscriptToolResultBlock]:
+        results: dict[str, TranscriptToolResultBlock] = {}
         for line in lines:
             if line.get("type") != "user":
                 continue
@@ -75,7 +75,7 @@ class LocalConversationLog(ConversationLog):
                     continue
                 result = TranscriptToolResultBlock.from_dict(block)
                 if result.tool_use_id:
-                    results[result.tool_use_id] = cls._excerpt(result.content)
+                    results[result.tool_use_id] = result
 
         return results
 
@@ -103,7 +103,9 @@ class LocalConversationLog(ConversationLog):
         return str(content)
 
     @classmethod
-    def _turn_of(cls, number: int, line: dict[str, object], results: dict[str, str]) -> ConversationTurn:
+    def _turn_of(
+        cls, number: int, line: dict[str, object], results: dict[str, TranscriptToolResultBlock]
+    ) -> ConversationTurn:
         content = cls._content_of(line)
         text = " ".join(
             TranscriptTextBlock.from_dict(block).text for block in content if block.get("type") == "text"
@@ -113,15 +115,17 @@ class LocalConversationLog(ConversationLog):
         return ConversationTurn(number=number, text=text, tool_calls=tool_calls)
 
     @classmethod
-    def _tool_call_of(cls, block: dict[str, object], results: dict[str, str]) -> ToolCall:
+    def _tool_call_of(cls, block: dict[str, object], results: dict[str, TranscriptToolResultBlock]) -> ToolCall:
         tool_use = TranscriptToolUseBlock.from_dict(block)
         summary = json.dumps(tool_use.input, ensure_ascii=False)
+        answered = results.get(tool_use.id) if tool_use.id else None
 
         return ToolCall(
             name=tool_use.name,
             summary=summary,
-            result=results.get(tool_use.id) if tool_use.id else None,
+            result=cls._excerpt(answered.content) if answered is not None else None,
             path=cls._path_of(tool_use.input),
+            failed=answered.is_error if answered is not None else False,
         )
 
     @staticmethod

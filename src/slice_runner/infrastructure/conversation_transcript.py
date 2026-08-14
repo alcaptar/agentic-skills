@@ -66,11 +66,14 @@ class TranscriptToolUseBlock(ContractModel):
 class TranscriptToolResultBlock(ContractModel):
     tool_use_id: str = ""
     content: object = None
+    is_error: bool = Field(default=False, strict=True)
 
     @classmethod
     def from_dict(cls, data: dict[str, object]) -> Self:
         return cls._validated(
-            cls._present(tool_use_id=data.get("tool_use_id"), content=data.get("content")),
+            cls._present(
+                tool_use_id=data.get("tool_use_id"), content=data.get("content"), is_error=data.get("is_error")
+            ),
             "a tool_result content block is not one this program can read",
             UnreadableConversationError,
         )

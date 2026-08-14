@@ -38,6 +38,7 @@ class ToolCall:
     summary: str
     result: str | None
     path: str | None
+    failed: bool = False
 
 
 @dataclass(frozen=True, kw_only=True, slots=True)

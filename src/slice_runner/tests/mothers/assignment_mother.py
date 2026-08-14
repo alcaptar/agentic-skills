@@ -24,7 +24,7 @@ class AssignmentMother:
         "## Pasos\n"
         "- domain/precheck.py (motivo: la regla es del dominio)\n"
         "\n"
-        f"## Esbozo\n{SKETCH}"
+        f"## Esbozo\n```\n{SKETCH}\n```"
     )
     RETRY_INSTRUCTION: ClassVar[str] = "el control ya esta arreglado a mano"
 
