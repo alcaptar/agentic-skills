@@ -210,11 +210,25 @@ medicion no anade nada a la suma, bastaba **una** medicion previa en la invocaci
 quedase medido para siempre, y a partir de ahi cada llamada que muriera sin sobre parseable dejaba el
 total congelado por debajo del limite.
 
-### Por que el implementador fija modelo y el juez no
+### Por que el juez tambien fija modelo, y por que el mismo que el implementador
 
-Los 25-28 $ se pagaron con Opus porque ninguna invocacion declaraba modelo. El que produce se puede
-permitir el barato porque su trabajo lo revisa otro; el que juzga es el ultimo control antes de una pull
-request, y ahi ahorrar es ahorrar en la garantia. Hay test de las dos cosas.
+Los 25-28 $ se pagaron con Opus porque ninguna invocacion declaraba modelo. La primera correccion fue
+asimetrica: el implementador fija el barato porque su trabajo lo revisa otro, y el juez se dejaba heredar
+el de quien lanza el run porque es el ultimo control antes de una pull request, y ahi ahorrar pareceria
+ahorrar en la garantia. El problema de esa asimetria no era el argumento: era que "heredar" no es una
+politica declarada, es la ausencia de una. `RoleModels` no tenia campo `verify`, asi que ni el conductor
+podia decir con que modelo corria el juez ni la fila durable lo escribia -no se podia saber con que se
+juzgo una slice ya cerrada, ni separar su coste del de la sesion que lanzo el run (issue #259)-.
+
+Declararlo no exigio subir de gama: `JudgeInvocation.MODEL` es `"sonnet"`, el mismo que ya fijan
+`ImplementerInvocation` y `UnderstandingInvocation`. El argumento de que ahorrar en el ultimo control es
+ahorrar en la garantia seguia sin corpus que lo sostenga -nada de las 60 verificaciones registradas (mas
+arriba) compara el mismo diff juzgado por dos modelos distintos-, asi que fijarlo en Opus habria sido la
+misma eleccion sin medir que disparo el coste antes de que el implementador fijara Sonnet. Lo que cambia
+con esta slice no es cuanto cuesta verificar: es que ahora se sabe. `models_by_role.verify` viaja en la
+fila durable, y ese dato es lo que hace falta para decidir con medicion delante si el juez necesita algun
+dia un modelo mas caro. Hay test de las tres cosas: que `RoleModels` no se construye sin `verify`, que
+`JudgeInvocation.argv` emite `--model`, y que la fila durable lo trae.
 
 ### La duplicacion con `skills/`: por que se acepta
 

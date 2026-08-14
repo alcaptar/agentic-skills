@@ -81,6 +81,7 @@ from slice_runner.infrastructure.git_diff_reader import GitDiffReader
 from slice_runner.infrastructure.git_workspace import GitWorkspace
 from slice_runner.infrastructure.harness_telemetry import HarnessTelemetry
 from slice_runner.infrastructure.implementer_invocation import ImplementerInvocation
+from slice_runner.infrastructure.judge_invocation import JudgeInvocation
 from slice_runner.infrastructure.local_call_spend_log import LocalCallSpendLog
 from slice_runner.infrastructure.local_call_trace import LocalCallTrace
 from slice_runner.infrastructure.local_control_runner import LocalControlRunner
@@ -583,7 +584,11 @@ class Cli:
             ),
             machine=machine,
             budgets=self._budgets,
-            models=RoleModels(understand=UnderstandingInvocation.MODEL, implement=ImplementerInvocation.MODEL),
+            models=RoleModels(
+                understand=UnderstandingInvocation.MODEL,
+                implement=ImplementerInvocation.MODEL,
+                verify=JudgeInvocation.MODEL,
+            ),
         )
 
     def _gh_call(self, *, clock: Clock) -> GhCall:

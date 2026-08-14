@@ -232,20 +232,20 @@ class TestWhatConfigurationTheRunWasConductedWith(WithTheLedgerOutOfTheRealHome)
         assert WrittenMetricsLog.row_under(tmp_path)["budgets"] == asdict(budgets)
 
     def test_the_model_assigned_to_each_role_travels_whole_and_not_one_field_at_a_time(self, tmp_path: Path) -> None:
-        models = RoleModels(understand="haiku", implement="opus")
+        models = RoleModels(understand="haiku", implement="opus", verify="sonnet")
 
         LocalMetricsLog(clock=self.frozen_at()).record(ClosedSliceMother.merged_with_config(models=models))
 
         row = WrittenMetricsLog.row_under(tmp_path)
-        assert row["models_by_role"] == {"understand": "haiku", "implement": "opus"}
+        assert row["models_by_role"] == {"understand": "haiku", "implement": "opus", "verify": "sonnet"}
 
     def test_two_runs_with_different_configurations_write_rows_that_differ_on_that_configuration_and_not_only_on_cost(
         self, tmp_path: Path
     ) -> None:
         log = LocalMetricsLog(clock=self.frozen_at())
         same_budgets = Budgets(slice_cost_usd=10.0)
-        first_models = RoleModels(understand="sonnet", implement="sonnet")
-        second_models = RoleModels(understand="haiku", implement="opus")
+        first_models = RoleModels(understand="sonnet", implement="sonnet", verify="sonnet")
+        second_models = RoleModels(understand="haiku", implement="opus", verify="haiku")
 
         log.record(ClosedSliceMother.merged_with_config(budgets=same_budgets, models=first_models))
         log.record(ClosedSliceMother.merged_with_config(budgets=same_budgets, models=second_models))
