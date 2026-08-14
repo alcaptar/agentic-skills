@@ -33,23 +33,26 @@ class VerifySlice:
 indireccion: lo que se gana con el objeto es que la rubrica, las herramientas y los directorios legibles
 del juez **viajen juntos** y su coherencia se pueda comprobar en un sitio.
 
-## Desviacion declarada: el conductor agrupa sus dependencias
+## Desviacion declarada: agrupar dependencias cuando la lista de puertos es el trabajo
 
-`ConductSlice` (`application/actions/conduct_slice.py`) **no** lista sus dependencias sueltas: las recibe
-agrupadas por rol en dataclasses frozen del propio modulo -los casos de uso por un lado, los puertos por
-otro-, mas la maquina de estados y los presupuestos sueltos. Sigue entrando todo por constructor y todo
-por nombre; lo que cambia es que llegan empaquetadas.
+Un caso de uso puede recibir sus dependencias **agrupadas por rol** en dataclasses frozen de su propio
+modulo -lo que orquesta por un lado, lo que hace entrada/salida por otro-, en vez de listarlas sueltas
+como el ejemplo de arriba. Sigue entrando todo por constructor y todo por nombre; lo que cambia es que
+llegan empaquetadas.
 
 El motivo es que una firma con esa cantidad de parametros dispara `PLR0913` de `ruff`, y las dos salidas
 que **no** valen son relajar la configuracion del linter -mover la vara para que pase el codigo- y partir
-el conductor en piezas que no existen por diseno sino por contar argumentos. Agrupar por rol -lo que
-orquesta y lo que hace entrada/salida- deja la firma legible y no esconde ninguna dependencia: siguen
-siendo tipos del dominio y de aplicacion, y la costura de test sigue siendo el constructor.
+la pieza en trozos que no existen por diseno sino por contar argumentos. Agrupar por rol deja la firma
+legible y no esconde ninguna dependencia: siguen siendo tipos del dominio y de aplicacion, y la costura
+de test sigue siendo el constructor.
 
-**La linea, para que no se amplie por precedente:** esto es del **conductor**, que es la unica pieza que
-compone casi todos los puertos del programa. Una action normal sigue listando sus dependencias sueltas
-como el ejemplo de arriba, y un caso de uso que llegue a necesitar el agrupamiento esta diciendo que hace
-demasiado: la respuesta por defecto ahi es partirlo, no empaquetarle los argumentos.
+**La linea, para que no se amplie por precedente: lo que autoriza el agrupamiento es de que es
+proporcional la lista de puertos, no cuanto mide la firma.** Cuando la lista crece con el numero de
+responsabilidades, la firma larga es el sintoma y la respuesta sigue siendo partir el caso de uso. Cuando
+crece con **lo que ese caso de uso existe para recorrer** -dirigir un flujo de punta a punta, contestar si
+todas las piezas de un sistema estan en su sitio-, partirlo no quita ni un puerto: reparte la misma lista
+entre dos piezas y anade una tercera que las componga. Quien agrupe tiene que poder nombrar que recorre;
+si no puede nombrarlo, esta agrupando para callar al linter.
 
 ## Dejar constancia no es conducir
 
