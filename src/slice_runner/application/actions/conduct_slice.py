@@ -32,6 +32,7 @@ from slice_runner.domain.harness_spend import HarnessSpend
 from slice_runner.domain.issue_label import IssueLabel
 from slice_runner.domain.outcome import Outcome
 from slice_runner.domain.precheck_outcome import PrecheckOutcome
+from slice_runner.domain.precheck_result import PrecheckResult
 from slice_runner.domain.prechecks import Prechecks
 from slice_runner.domain.pull_request_mergeability import PullRequestMergeability
 from slice_runner.domain.pull_request_state import PullRequestState
@@ -91,7 +92,7 @@ class ConductSliceResult:
     halt: Halt
     state: RunState
     step: Step
-    precheck: PrecheckOutcome | None = None
+    precheck: PrecheckResult | None = None
     pull_request: int | None = None
 
 
@@ -240,7 +241,7 @@ class ConductSlice:
         )
         of_the_subissue = Prechecks.of_the_subissue(chosen.subissue)
         if of_the_subissue is not PrecheckOutcome.CLEAR:
-            return self._ending(progress, Halt.PRECHECKS_BLOCKED, precheck=of_the_subissue)
+            return self._ending(progress, Halt.PRECHECKS_BLOCKED, precheck=PrecheckResult(outcome=of_the_subissue))
         if chosen.subissue.run is not None:
             self._branch_still_standing(progress)
 
@@ -280,7 +281,15 @@ class ConductSlice:
                 parent=progress.parent,
             )
         )
-        if precheck is not PrecheckOutcome.CLEAR:
+        if precheck.outcome is not PrecheckOutcome.CLEAR:
+            if precheck.reason is not None:
+                self._repository.write_precheck_reason(
+                    repo=progress.params.repo,
+                    issue=progress.subissue.number,
+                    outcome=precheck.outcome,
+                    reason=precheck.reason,
+                )
+
             return self._ending(progress, Halt.PRECHECKS_BLOCKED, precheck=precheck)
 
         marked = self._marked_in_progress(progress)
@@ -667,7 +676,7 @@ class ConductSlice:
         halt: Halt,
         *,
         state: RunState = RunState.OPEN,
-        precheck: PrecheckOutcome | None = None,
+        precheck: PrecheckResult | None = None,
     ) -> ConductSliceResult:
         return ConductSliceResult(
             halt=halt,

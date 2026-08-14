@@ -30,6 +30,7 @@ from slice_runner.domain.harness_spend import HarnessSpend
 from slice_runner.domain.issue_label import IssueLabel
 from slice_runner.domain.malformed_reason import MalformedReason
 from slice_runner.domain.precheck_outcome import PrecheckOutcome
+from slice_runner.domain.precheck_result import PrecheckResult
 from slice_runner.domain.retry_response import RetryResponse
 from slice_runner.domain.retry_response_kind import RetryResponseKind
 from slice_runner.domain.role_models import RoleModels
@@ -215,14 +216,42 @@ class TestConductSliceStartingANewRun:
 
     def test_a_precheck_that_is_not_clear_ends_the_invocation_without_branching_or_writing_anything(self) -> None:
         conductor = self._conductor()
-        conductor.prechecks.execute.return_value = PrecheckOutcome.BRANCH_ALREADY_EXISTS
+        conductor.prechecks.execute.return_value = PrecheckResult(outcome=PrecheckOutcome.BRANCH_ALREADY_EXISTS)
 
         result = conductor.conduct()
 
-        assert (result.halt, result.precheck) == (Halt.PRECHECKS_BLOCKED, PrecheckOutcome.BRANCH_ALREADY_EXISTS)
+        assert (result.halt, result.precheck) == (
+            Halt.PRECHECKS_BLOCKED,
+            PrecheckResult(outcome=PrecheckOutcome.BRANCH_ALREADY_EXISTS),
+        )
         assert conductor.branches.create.call_count == 0
         assert conductor.repository.write_understanding.call_count == 0
         assert conductor.repository.write_run.call_count == 0
+
+    def test_a_precheck_with_no_reason_writes_nothing_to_the_subissue_beyond_the_halt_itself(self) -> None:
+        conductor = self._conductor()
+        conductor.prechecks.execute.return_value = PrecheckResult(outcome=PrecheckOutcome.BRANCH_ALREADY_EXISTS)
+
+        conductor.conduct()
+
+        assert conductor.repository.write_precheck_reason.call_count == 0
+
+    def test_a_precheck_stopped_by_an_unreadable_source_writes_the_outcome_and_the_reason_on_the_subissue(
+        self,
+    ) -> None:
+        conductor = self._conductor()
+        conductor.prechecks.execute.return_value = PrecheckResult(
+            outcome=PrecheckOutcome.UNREADABLE_SOURCE, reason="CLAUDE.md does not exist under the worktree"
+        )
+
+        conductor.conduct()
+
+        conductor.repository.write_precheck_reason.assert_called_once_with(
+            repo=Conductor.REPO,
+            issue=_SUBISSUE,
+            outcome=PrecheckOutcome.UNREADABLE_SOURCE,
+            reason="CLAUDE.md does not exist under the worktree",
+        )
 
 
 class TestConductSliceRespondingToAlignment:
@@ -760,8 +789,12 @@ class TestConductSliceResumingAnInterruptedRun:
 
         result = conductor.conduct()
 
-        assert (result.halt, result.precheck) == (Halt.PRECHECKS_BLOCKED, PrecheckOutcome.SLICE_IN_ANOTHER_REPO)
+        assert (result.halt, result.precheck) == (
+            Halt.PRECHECKS_BLOCKED,
+            PrecheckResult(outcome=PrecheckOutcome.SLICE_IN_ANOTHER_REPO),
+        )
         assert conductor.verify.execute.call_count == 0
+        assert conductor.repository.write_precheck_reason.call_count == 0
 
     def test_a_run_that_resumes_stops_before_implementing_when_its_declared_branch_no_longer_exists(self) -> None:
         conductor = self._conductor()

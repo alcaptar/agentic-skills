@@ -29,6 +29,7 @@ if TYPE_CHECKING:
 
     from slice_runner.domain.finding import Finding
     from slice_runner.domain.malformed_reason import MalformedReason
+    from slice_runner.domain.precheck_outcome import PrecheckOutcome
     from slice_runner.domain.run import Run
     from slice_runner.infrastructure.gh_call import GhCall
     from slice_runner.infrastructure.gh_sub_issue_payload import GhLabelPayload
@@ -233,6 +234,13 @@ class GhRunRepository(RunRepository):
                 f"La espera del merge se agoto con la pull request #{pull_request} sin fusionar. Si esta en "
                 "borrador, sacala: en borrador el merge no puede ocurrir."
             ),
+            safe_to_repeat=False,
+        )
+
+    def write_precheck_reason(self, *, repo: str, issue: int, outcome: PrecheckOutcome, reason: str) -> None:
+        self._run(
+            ["gh", "issue", "comment", str(issue), "--repo", repo, "--body-file", "-"],
+            stdin=AutomationMark.appended_to(f"El precheck `{outcome.value}` paro el run: {reason}"),
             safe_to_repeat=False,
         )
 

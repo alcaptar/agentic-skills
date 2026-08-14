@@ -1472,6 +1472,54 @@ class TestWhenTheRunStaysOpen:
         assert not invocation.process.invoked("gh", "issue", "edit")
         assert not invocation.process.invoked("git", "switch")
 
+    def test_an_unreadable_declared_source_exits_naming_the_path_and_the_motive_and_leaves_them_on_the_subissue(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        invocation = RunInvocation(
+            children=GhConversationMother.the_slice_never_run(),
+            answers=(
+                Answer(to=("git", "rev-parse"), code=1),
+                Answer(to=("git", "fetch", "origin")),
+                Answer(to=("git", "rev-list", "--count"), stdout="0\n"),
+                Answer(to=("gh", "pr", "list"), stdout=GhConversationMother.no_open_pull_request()),
+                Answer(to=("cat", "CLAUDE.md"), code=1, stderr="cat: CLAUDE.md: No such file or directory"),
+            ),
+        )
+
+        code = invocation.conduct(logs=tmp_path / "logs")
+
+        assert code == ExitCode.PRECHECKS_BLOCKED
+        reported = json.loads(capsys.readouterr().out)
+        assert reported["precheck"] == "unreadable-source"
+        assert "CLAUDE.md" in reported["precheck_reason"]
+        comment = next(call for call in invocation.process.calls if call.argv[:3] == ["gh", "issue", "comment"])
+        assert "unreadable-source" in comment.stdin
+        assert "CLAUDE.md" in comment.stdin
+
+    def test_declared_sources_over_the_size_budget_exit_naming_each_one_and_its_weight_and_leave_it_on_the_subissue(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        invocation = RunInvocation(
+            children=GhConversationMother.the_slice_never_run(),
+            answers=(
+                Answer(to=("git", "rev-parse"), code=1),
+                Answer(to=("git", "fetch", "origin")),
+                Answer(to=("git", "rev-list", "--count"), stdout="0\n"),
+                Answer(to=("gh", "pr", "list"), stdout=GhConversationMother.no_open_pull_request()),
+                Answer(to=("cat", "CLAUDE.md"), stdout="a" * 11),
+            ),
+        )
+
+        code = invocation.conduct(logs=tmp_path / "logs", budgets=Budgets(sources_max_chars=10))
+
+        assert code == ExitCode.PRECHECKS_BLOCKED
+        reported = json.loads(capsys.readouterr().out)
+        assert reported["precheck"] == "sources-over-budget"
+        assert "CLAUDE.md: 11 characters" in reported["precheck_reason"]
+        comment = next(call for call in invocation.process.calls if call.argv[:3] == ["gh", "issue", "comment"])
+        assert "sources-over-budget" in comment.stdin
+        assert "CLAUDE.md: 11 characters" in comment.stdin
+
     def test_a_merge_that_never_arrives_spends_the_whole_wait_and_says_the_pull_request_is_still_draft(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
     ) -> None:
