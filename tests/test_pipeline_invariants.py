@@ -273,6 +273,7 @@ _KNOWN_NOT_HARNESS_WRITING = {
     ("_repository", "remove_label"),
     ("_repository", "write_label"),
     ("_repository", "write_malformed_response"),
+    ("_repository", "write_precheck_reason"),
     ("_repository", "write_run"),
     ("_repository", "write_understanding"),
     ("_select", "execute"),
