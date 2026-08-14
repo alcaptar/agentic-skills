@@ -15,6 +15,10 @@ class RunMother:
         return Run(step=Step.IMPLEMENT)
 
     @staticmethod
+    def implementing_with_one_round_already_logged() -> Run:
+        return Run(step=Step.IMPLEMENT, control_rounds_logged=1)
+
+    @staticmethod
     def judging_after_spending(spend: HarnessSpend) -> Run:
         return Run(step=Step.VERIFY, spend=spend)
 
