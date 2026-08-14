@@ -825,6 +825,7 @@ class TestTheTransitionOfEveryPair:
                 "verify_discards": 1,
                 "understand_discards": 0,
                 "implement_discards": 0,
+                "control_rounds_logged": 1,
             },
             "state": "open",
             "wait_seconds": 0,
@@ -1376,6 +1377,34 @@ class TestTheRoundTripAfterARedCiThatStillHasARetryLeft(BlindToTheToolboxOfThisM
 
         assert invocation.process.invoked("gh", "pr", "list", "--state", "open")
         assert not invocation.process.invoked("gh", "pr", "create")
+
+
+class TestTheControlLogsOfARetriedRound(BlindToTheToolboxOfThisMachine):
+    @staticmethod
+    def _invocation() -> RunInvocation:
+        return RunInvocation(
+            children=GhConversationMother.the_slice_resumed_at(RunMother.implementing()),
+            answers=(
+                Answer(to=("git", "rev-parse"), code=0),
+                Answer(to=("gh", "issue", "view", "--json", "comments"), stdout=json.dumps({"comments": []})),
+                Answer(
+                    to=(ImplementerInvocation.EXECUTABLE, "bypassPermissions"),
+                    stdout=json.dumps(HarnessEnvelopeMother.recorded(_IMPLEMENTER_PAYLOAD)),
+                ),
+                Answer(to=("git", "add")),
+                Answer(to=("git", "diff", "--cached", "--name-only"), stdout="hello.py\ntest_hello.py\n"),
+                Answer(to=("sh", "-c", GhConversationMother.CONTROL), code=1, stdout="lint failed"),
+            ),
+        )
+
+    def test_two_retried_rounds_of_the_same_slice_both_keep_their_log_on_disk(self, tmp_path: Path) -> None:
+        invocation = self._invocation()
+
+        invocation.conduct(logs=tmp_path / "logs", budgets=Budgets(control_retries=1))
+
+        slice_dir = tmp_path / "logs" / GhConversationMother.SLICE
+        assert (slice_dir / "round-1" / "lint.log").exists()
+        assert (slice_dir / "round-2" / "lint.log").exists()
 
 
 class TestWhenTheRunStaysOpen:

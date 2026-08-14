@@ -100,15 +100,19 @@ class StateMachine:
     def _after_the_controls(self, run: Run, outcome: Outcome) -> Transition:
         match outcome:
             case Outcome.DONE:
-                return self._moving_to(run, Step.VERIFY)
+                return self._moving_to(self._logged_a_round(run), Step.VERIFY)
             case Outcome.FAILED:
-                return self._retrying_a_mechanical_failure(run)
+                return self._retrying_a_mechanical_failure(self._logged_a_round(run))
             case Outcome.HYGIENE_REJECTED:
                 return self._retrying_a_hygiene_rejection(run)
             case Outcome.INDETERMINATE:
-                return self._ticking(run)
+                return self._ticking(self._logged_a_round(run))
             case _:
                 self._impossible(run, outcome)
+
+    @staticmethod
+    def _logged_a_round(run: Run) -> Run:
+        return replace(run, control_rounds_logged=run.control_rounds_logged + 1)
 
     def _retrying_a_mechanical_failure(self, run: Run) -> Transition:
         if run.control_retries < self.budgets.control_retries:

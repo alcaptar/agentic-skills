@@ -23,6 +23,10 @@ class RunMother:
         return Run(step=Step.RUN_CONTROLS)
 
     @staticmethod
+    def running_the_controls_with_one_round_already_logged() -> Run:
+        return Run(step=Step.RUN_CONTROLS, control_rounds_logged=1)
+
+    @staticmethod
     def judging() -> Run:
         return Run(step=Step.VERIFY)
 
@@ -52,7 +56,7 @@ class RunMother:
 
     @staticmethod
     def blocked_on_controls() -> Run:
-        return Run(step=Step.RUN_CONTROLS, control_retries=2)
+        return Run(step=Step.RUN_CONTROLS, control_retries=2, control_rounds_logged=3)
 
     @staticmethod
     def blocked_on_hygiene() -> Run:

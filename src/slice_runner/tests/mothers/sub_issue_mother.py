@@ -90,7 +90,7 @@ class SubIssueMother:
         )
 
     @staticmethod
-    def of_another_repo() -> SubIssue:
+    def of_a_second_slice() -> SubIssue:
         return replace(
             SubIssueMother.pending(),
             number=46,
@@ -98,8 +98,11 @@ class SubIssueMother:
             name="pausa-de-alineacion",
             summary="el entendimiento se escribe siempre",
             title="slice-06 (pausa-de-alineacion): el entendimiento se escribe siempre",
-            repo=SubIssueMother.OTHER_REPO,
         )
+
+    @staticmethod
+    def of_another_repo() -> SubIssue:
+        return replace(SubIssueMother.of_a_second_slice(), repo=SubIssueMother.OTHER_REPO)
 
     @staticmethod
     def declaring_a_signal() -> SubIssue:

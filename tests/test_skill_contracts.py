@@ -30,6 +30,7 @@ from slice_runner.domain.budgets import Budgets
 from slice_runner.domain.issue_label import IssueLabel
 from slice_runner.domain.ruling import Ruling
 from slice_runner.domain.severity import Severity
+from slice_runner.domain.state_machine import StateMachine
 from slice_runner.infrastructure.exit_code import ExitCode
 from slice_runner.infrastructure.gh_run_repository import GhRunRepository
 from slice_runner.infrastructure.local_skill_library import LocalSkillLibrary
@@ -37,6 +38,8 @@ from slice_runner.infrastructure.parent_body import ParentBody
 from slice_runner.infrastructure.process import ProcessOutput
 from slice_runner.infrastructure.slice_verifier_judge import SliceVerifierJudge
 from slice_runner.infrastructure.subissue_body import SubissueBody
+from slice_runner.infrastructure.transition_payload import TransitionPayload
+from slice_runner.infrastructure.transition_request_payload import TransitionRequestPayload
 from slice_runner.infrastructure.verdict_payload import FindingPayload
 from slice_runner.tests.doubles import GhCallDoubles, ScriptedProcess
 
@@ -356,6 +359,32 @@ def test_the_grace_window_is_the_same_number_wherever_it_is_written() -> None:
     assert set(written.values()) == {(budgets.indeterminate_ticks, budgets.seconds_between_ticks)}, (
         f"the grace window of {type(budgets).__name__} is "
         f"{(budgets.indeterminate_ticks, budgets.seconds_between_ticks)} and the prose writes {written}"
+    )
+
+
+_EXPLAIN_EXAMPLE = re.compile(
+    r"```bash\n(echo '.*?' \\\n\s*\| uv run [\w.-]+ explain\n)```\n\n```json\n(.*?)```", re.DOTALL
+)
+_EXPLAIN_REQUEST = re.compile(r"echo '(.+?)' \\")
+
+
+def test_the_explain_example_the_readme_shows_is_the_transition_the_program_actually_returns() -> None:
+    """`docs/conventions/infrastructure.md` says a contract written more than once needs a test.
+
+    The request and the response of this example are typed by hand in the README, and nothing ran
+    them through `StateMachine` until now: the response drifted the moment `Run` grew
+    `control_rounds_logged` and the README kept the shape it had before that field existed.
+    """
+    example = _EXPLAIN_EXAMPLE.search(_read(_README))
+    assert example, "README.md no longer shows the paired bash/json example of `explain`"
+    request = _EXPLAIN_REQUEST.search(example.group(1))
+    assert request, "the bash block of the `explain` example carries no `echo` request to replay"
+
+    asked = TransitionRequestPayload.read(request.group(1))
+    transition = StateMachine(budgets=Budgets()).after(asked.run.to_domain(), asked.outcome)
+
+    assert TransitionPayload.from_domain(transition).to_contract() == json.loads(example.group(2)), (
+        "the README's `explain` example no longer matches what the program returns for that same request"
     )
 
 
