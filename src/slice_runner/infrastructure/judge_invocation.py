@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 @dataclass(frozen=True, kw_only=True, slots=True)
 class JudgeInvocation:
     EXECUTABLE: ClassVar[str] = "claude"
-    MODEL: ClassVar[str] = "sonnet"
+    MODEL: ClassVar[str] = "opus"
 
     judge: Judge
     review: SliceUnderReview

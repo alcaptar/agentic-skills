@@ -210,24 +210,26 @@ medicion no anade nada a la suma, bastaba **una** medicion previa en la invocaci
 quedase medido para siempre, y a partir de ahi cada llamada que muriera sin sobre parseable dejaba el
 total congelado por debajo del limite.
 
-### Por que el juez tambien fija modelo, y por que el mismo que el implementador
+### Por que el juez tambien fija modelo, y por que uno mas caro que el implementador
 
 Los 25-28 $ se pagaron con Opus porque ninguna invocacion declaraba modelo. La primera correccion fue
 asimetrica: el implementador fija el barato porque su trabajo lo revisa otro, y el juez se dejaba heredar
-el de quien lanza el run porque es el ultimo control antes de una pull request, y ahi ahorrar pareceria
-ahorrar en la garantia. El problema de esa asimetria no era el argumento: era que "heredar" no es una
+el de quien lanza el run. El problema de esa asimetria no era el argumento: era que "heredar" no es una
 politica declarada, es la ausencia de una. `RoleModels` no tenia campo `verify`, asi que ni el conductor
 podia decir con que modelo corria el juez ni la fila durable lo escribia -no se podia saber con que se
 juzgo una slice ya cerrada, ni separar su coste del de la sesion que lanzo el run (issue #259)-.
 
-Declararlo no exigio subir de gama: `JudgeInvocation.MODEL` es `"sonnet"`, el mismo que ya fijan
-`ImplementerInvocation` y `UnderstandingInvocation`. El argumento de que ahorrar en el ultimo control es
-ahorrar en la garantia seguia sin corpus que lo sostenga -nada de las 60 verificaciones registradas (mas
-arriba) compara el mismo diff juzgado por dos modelos distintos-, asi que fijarlo en Opus habria sido la
-misma eleccion sin medir que disparo el coste antes de que el implementador fijara Sonnet. Lo que cambia
-con esta slice no es cuanto cuesta verificar: es que ahora se sabe. `models_by_role.verify` viaja en la
-fila durable, y ese dato es lo que hace falta para decidir con medicion delante si el juez necesita algun
-dia un modelo mas caro. Hay test de las tres cosas: que `RoleModels` no se construye sin `verify`, que
+Declarado hay que elegir, y la eleccion es `"opus"`, frente al `"sonnet"` que fijan `ImplementerInvocation`
+y `UnderstandingInvocation`. **No la sostiene ningun corpus**: nada de las 60 verificaciones registradas
+(mas arriba) compara el mismo diff juzgado por dos modelos distintos. Lo que la sostiene es la asimetria
+del coste del error. Un implementador flojo cuesta una ronda de correccion mas, que se ve en el momento y
+se paga una vez; un juez flojo aprueba una pull request mala, que no se ve y la paga quien venga detras.
+Mientras no haya medicion, se prefiere pagar de mas en el ultimo control antes que de menos.
+
+Lo que hace que esto sea una decision reversible y no una preferencia enterrada es la otra mitad de la
+slice: `models_by_role.verify` viaja en la fila durable, asi que en cuanto haya runs del mismo diff
+juzgados por modelos distintos se podran comparar, y bajarlo sera cambiar una constante con los datos
+delante. Hay test de las tres cosas: que `RoleModels` no se construye sin `verify`, que
 `JudgeInvocation.argv` emite `--model`, y que la fila durable lo trae.
 
 ### La duplicacion con `skills/`: por que se acepta
