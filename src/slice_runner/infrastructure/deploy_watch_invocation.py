@@ -27,6 +27,8 @@ class DeployWatchInvocation:
             "--tools",
             ",".join(self.TOOLS),
             "--strict-mcp-config",
+            "--setting-sources",
+            "user",
         ]
 
     @property

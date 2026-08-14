@@ -30,6 +30,9 @@ class TestWhatDeployWatchIsGranted:
     def test_the_mcp_servers_are_bounded(self, argv: Argv) -> None:
         assert argv.contains("--strict-mcp-config")
 
+    def test_only_user_settings_load_so_the_destination_repo_does_not_pay_its_own_claude_md(self, argv: Argv) -> None:
+        assert argv.value_of("--setting-sources") == "user"
+
     def test_no_value_follows_another_value_because_each_hangs_from_its_own_flag(self, argv: Argv) -> None:
         assert argv.executable == "claude"
         assert argv.values_that_follow_another_value() == []

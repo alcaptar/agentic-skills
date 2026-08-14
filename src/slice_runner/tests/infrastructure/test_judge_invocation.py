@@ -44,6 +44,9 @@ class TestWhatTheJudgeIsGranted:
     def test_the_mcp_servers_are_bounded(self, argv: Argv) -> None:
         assert argv.contains("--strict-mcp-config")
 
+    def test_only_user_settings_load_so_the_destination_repo_does_not_pay_its_own_claude_md(self, argv: Argv) -> None:
+        assert argv.value_of("--setting-sources") == "user"
+
     def test_the_streamed_envelope_of_the_harness_is_asked_for_so_its_turns_can_be_watched_as_they_happen(
         self, argv: Argv
     ) -> None:
