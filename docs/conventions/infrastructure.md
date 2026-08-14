@@ -49,17 +49,44 @@ Si la respuesta es "ninguna que importe", laxo vale.
 medida de verdad** contra un `claude -p` real, y los `title` solo gastan tokens del prompt. Hay un test
 que falla si vuelve a colarse una referencia.
 
+### Un esquema que viaja en un prompt declara **un solo campo**
+
+El harness pierde la frontera entre parametros cuando el modelo emite la llamada a `StructuredOutput`:
+el primero se traga su propio cierre y todo lo que venga detras, asi que el segundo llega como texto
+dentro del primero y el validador lo reporta como **campo requerido que falta**. Medido sobre 749
+transcripciones: de los 31 rechazos por ese motivo, **20 traian el campo ausente pegado dentro de otro**,
+con su etiqueta `<parameter name="...">` incluida -15 veces `steps` dentro de `summary`, 5 veces `plan`
+dentro de `summary`-. El corte historico dice lo mismo desde el otro lado: el esquema de **un** campo de
+texto no fallo ninguna de sus 25 sesiones, y el de tres fallo 5 de 6.
+
+Y el dano no acaba en el rechazo. Tras dos o tres, el modelo minimiza para aislar el fallo -que es lo que
+hace cualquiera-, el informe minimo si valida, y **se publica relleno con la firma del programa**. Por eso
+la regla es la forma del esquema y no una instruccion mas en el prompt: un brief que pida el campo que
+falta no puede arreglar una frontera que se pierde en el transporte, y ya se intento.
+
+Consecuencia: `UnderstandingReportPayload` declara un unico `report`, y `ClaudeUnderstanding` **publica lo
+que llega en vez de componerlo**. Se pierde que el programa garantice las secciones del comentario; se gana
+que no haya forma de fallar la forma. La contrapartida se acepta porque el fallo que evita se pagaba en
+llamadas enteras descartadas y en entendimientos falsos aprobados por una persona.
+
+**Deuda declarada:** `verdict_payload.py` (`ruling` + `findings`) y `report_payload.py` (`paths` +
+`left_out`) siguen con dos campos y tienen el mismo fallo medido -5 y 3 rechazos-. No se migran aqui
+porque cada uno arrastra su rubrica o su brief, y media migracion se lee peor que ninguna.
+
 **El `description` no es un `title` y por eso se queda.** Un `title` repite el nombre del campo, asi que
 solo gasta; un `description` dice **que se pone ahi**, y es lo unico que el agente tiene delante en el
 momento de emitir -el brief queda cientos de lineas mas arriba, y `--json-schema` no restringe la
-generacion, solo valida despues, asi que un campo que el agente no entiende sale mal o no sale-. Medido:
-de 442 llamadas con salida estructurada, 29 se rechazaron por un campo requerido que faltaba, en los tres
-papeles. **Consecuencia: donde el esquema describe un campo, el prompt no lo vuelve a describir** -es la
-misma regla de "cada una tiene un solo sitio donde vive" de la seccion de adaptadores-, y lo mide
-`test_understanding_brief.py::TestWhereTheFieldsAreSpecified`. Solo lo llevan los payloads cuyo esquema
-viaja en un prompt (`understanding_report_payload.py`, y son candidatos `verdict_payload.py` y
-`report_payload.py`); los que declaran esquema para un almacen durable no lo necesitan, porque ahi nadie
-emite contra el esquema.
+generacion, solo valida despues-. **Consecuencia: donde el esquema describe un campo, el prompt no lo
+vuelve a describir** -es la misma regla de "cada una tiene un solo sitio donde vive" de la seccion de
+adaptadores-, y lo mide `test_understanding_brief.py::TestWhereTheFieldsAreSpecified`. Solo lo llevan los
+payloads cuyo esquema viaja en un prompt (`understanding_report_payload.py`, y son candidatos
+`verdict_payload.py` y `report_payload.py`); los que declaran esquema para un almacen durable no lo
+necesitan, porque ahi nadie emite contra el esquema.
+
+**Lo que la descripcion no arregla, y conviene no volver a creerselo:** los rechazos por campo que falta
+**no** los causaba que el agente no entendiera el campo -esa fue la primera lectura, y la refuto la
+medicion del apartado anterior-. Se describe el campo porque un esquema mudo es peor que uno que habla,
+no porque eso evite perder un parametro.
 
 ### El `alias` traduce; cuando no hay nada que traducir, no se escribe
 

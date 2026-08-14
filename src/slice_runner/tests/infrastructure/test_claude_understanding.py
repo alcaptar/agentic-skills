@@ -90,65 +90,22 @@ class TestWhereTheProcessRuns:
 
 
 class TestTheUnderstandingOfARecordedCall:
-    def test_the_summary_and_the_plan_arrive_composed_into_one_text_with_fixed_sections(self) -> None:
+    def test_the_report_is_published_exactly_as_the_harness_wrote_it_instead_of_being_recomposed(self) -> None:
         understanding = Writing.understood(Writing.carrying(UnderstandingReportMother.valid()))
 
-        assert understanding.text == (
-            "## Resumen\n"
-            f"{UnderstandingReportMother.SUMMARY}\n"
-            "\n"
-            "## Plan\n"
-            "```\n"
-            f"{UnderstandingReportMother.SIGNATURE}\n"
-            f"    {UnderstandingReportMother.DOES}\n"
-            f"    motivo: {UnderstandingReportMother.REASON}\n"
-            "\n"
-            f"{UnderstandingReportMother.SECOND_SIGNATURE}\n"
-            f"    {UnderstandingReportMother.SECOND_DOES}\n"
-            f"    motivo: {UnderstandingReportMother.SECOND_REASON}\n"
-            "```"
-        )
+        assert understanding.text == UnderstandingReportMother.REPORT
 
-    def test_the_plan_is_fenced_by_the_program_so_markdown_cannot_eat_the_indentation_of_the_shape(self) -> None:
-        understanding = Writing.understood(Writing.carrying(UnderstandingReportMother.with_pieces(3)))
+    def test_the_markdown_of_the_report_survives_because_the_program_never_takes_it_apart(self) -> None:
+        understanding = Writing.understood(Writing.carrying(UnderstandingReportMother.valid()))
 
-        fenced = understanding.text.split("## Plan\n", maxsplit=1)[1]
+        assert "\n- infrastructure/understanding_report_payload.py:" in understanding.text
 
-        assert fenced.startswith("```\n")
-        assert fenced.endswith("\n```")
-        assert fenced.count(f"    {UnderstandingReportMother.DOES}") == 3
-
-    def test_two_understandings_with_different_content_still_produce_the_same_section_structure(self) -> None:
-        first = Writing.understood(Writing.carrying(UnderstandingReportMother.valid()))
-        second = Writing.understood(
-            Writing.carrying(
-                UnderstandingReportMother.valid() | {"summary": f"otro resumen: {UnderstandingReportMother.SUMMARY}"}
-            )
-        )
-
-        headings = ("## Resumen", "## Plan")
-        assert [heading for heading in headings if heading in first.text] == list(headings)
-        assert [heading for heading in headings if heading in second.text] == list(headings)
-        assert first.text != second.text
-
-    def test_surrounding_blank_space_in_each_field_is_trimmed_because_it_is_not_part_of_what_was_understood(
-        self,
-    ) -> None:
-        padded = UnderstandingReportMother.valid() | {
-            "summary": f"  {UnderstandingReportMother.SUMMARY}  \n",
-            "plan": [
-                {
-                    "signature": f"  {UnderstandingReportMother.SIGNATURE}  \n",
-                    "does": f"  {UnderstandingReportMother.DOES}  \n",
-                    "reason": f"  {UnderstandingReportMother.REASON}  \n",
-                }
-            ],
-        }
+    def test_surrounding_blank_space_is_trimmed_because_it_is_not_part_of_what_was_understood(self) -> None:
+        padded: dict[str, object] = {"report": f"  \n{UnderstandingReportMother.REPORT}  \n\n"}
 
         understanding = Writing.understood(Writing.carrying(padded))
 
-        assert UnderstandingReportMother.SUMMARY in understanding.text
-        assert understanding.text.endswith(f"motivo: {UnderstandingReportMother.REASON}\n```")
+        assert understanding.text == UnderstandingReportMother.REPORT
 
     def test_what_the_harness_spent_on_the_call_travels_with_the_understanding(self) -> None:
         understanding = Writing.understood(Writing.carrying(UnderstandingReportMother.valid()))
@@ -157,50 +114,18 @@ class TestTheUnderstandingOfARecordedCall:
 
 
 class TestWhatTheCallIsAllowedToReturn:
-    def test_a_report_missing_the_plan_is_rejected_instead_of_passing_through_as_free_text(self) -> None:
-        process = Writing.carrying(UnderstandingReportMother.without("plan"))
+    def test_a_report_missing_its_only_field_is_rejected_instead_of_passing_through_as_free_text(self) -> None:
+        process = Writing.carrying(UnderstandingReportMother.without("report"))
 
-        with pytest.raises(InvalidUnderstandingReportError, match="plan"):
+        with pytest.raises(InvalidUnderstandingReportError, match="report"):
             Writing.understood(process)
 
-    def test_a_piece_missing_its_reason_is_rejected_instead_of_passing_through_as_prose_in_does(
-        self,
-    ) -> None:
-        process = Writing.carrying(UnderstandingReportMother.with_a_piece_missing_its_reason())
-
-        with pytest.raises(InvalidUnderstandingReportError, match="reason"):
-            Writing.understood(process)
-
-    def test_blank_summary_is_rejected_because_it_is_not_usable_as_a_gate(self) -> None:
-        blank = UnderstandingReportMother.valid() | {"summary": " " * 200}
-
+    def test_a_blank_report_is_rejected_because_it_is_not_usable_as_a_gate(self) -> None:
         with pytest.raises(InvalidUnderstandingReportError):
-            Writing.understood(Writing.carrying(blank))
-
-    def test_a_piece_with_a_blank_does_is_rejected_because_it_is_not_usable_as_a_gate(self) -> None:
-        blank = UnderstandingReportMother.valid() | {
-            "plan": [{"signature": " " * 40, "does": " " * 40, "reason": " " * 40}]
-        }
-
-        with pytest.raises(InvalidUnderstandingReportError):
-            Writing.understood(Writing.carrying(blank))
-
-    def test_a_piece_with_a_blank_reason_is_rejected_because_it_is_not_usable_as_a_gate(self) -> None:
-        blank = UnderstandingReportMother.valid() | {
-            "plan": [
-                {
-                    "signature": UnderstandingReportMother.SIGNATURE,
-                    "does": UnderstandingReportMother.DOES,
-                    "reason": " " * 40,
-                }
-            ]
-        }
-
-        with pytest.raises(InvalidUnderstandingReportError):
-            Writing.understood(Writing.carrying(blank))
+            Writing.understood(Writing.carrying(UnderstandingReportMother.blank()))
 
     def test_a_rejected_call_still_reports_what_it_spent_so_the_budget_still_sees_it(self) -> None:
-        blank = UnderstandingReportMother.valid() | {"summary": "   "}
+        blank = UnderstandingReportMother.blank()
 
         with pytest.raises(InvalidUnderstandingReportError) as rejection:
             Writing.understood(Writing.carrying(blank))

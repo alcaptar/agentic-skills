@@ -8,31 +8,17 @@ from slice_runner.domain.exceptions import InvalidUnderstandingReportError
 from slice_runner.infrastructure.contract_model import ContractModel
 from slice_runner.infrastructure.json_schema import JsonSchema
 
-_SUMMARY = (
-    "Como entiendes la slice, en tus propias palabras. Dos o tres frases y por debajo de 1000 caracteres: "
-    "es el entendimiento, no el plan, que va entero en `plan` y no aqui."
+_REPORT = (
+    "El informe entero, en markdown y en un solo campo. Abre con dos o tres frases de como entiendes la "
+    "slice, en tus propias palabras. Sigue con el plan, una linea por pieza y en el orden en que las vas "
+    "a tocar: la firma de la clase, el metodo o la funcion -o la ruta, cuando todavia no haya firma que "
+    "dar-, que hace ese cuerpo, y por que se toca. Nunca codigo pegable: quien revise tiene que ver la "
+    "forma antes de que exista."
 )
-_PLAN = (
-    "El plan, pieza a pieza y en el orden en que las vas a tocar. Obligatorio y nunca vacio: un informe "
-    "sin plan no es un informe, aunque el resumen sea largo."
-)
-_SIGNATURE = (
-    "La firma de la clase, el metodo o la funcion, segun mande la convencion del repo, o la ruta que vas a "
-    "tocar cuando todavia no haya firma que dar. Texto plano: nada de markdown, comillas ni indentacion."
-)
-_DOES = "Una linea con lo que hace ese cuerpo. Nunca codigo pegable: la forma antes de que exista."
-_REASON = "Por que se toca eso, como campo propio y no como prosa dentro de `does`."
-
-
-class UnderstandingPlanPieceReportPayload(ContractModel):
-    signature: str = Field(description=_SIGNATURE)
-    does: str = Field(description=_DOES)
-    reason: str = Field(description=_REASON)
 
 
 class UnderstandingReportPayload(ContractModel):
-    summary: str = Field(description=_SUMMARY)
-    plan: list[UnderstandingPlanPieceReportPayload] = Field(description=_PLAN)
+    report: str = Field(description=_REPORT)
 
     @classmethod
     def json_schema(cls) -> dict[str, object]:
