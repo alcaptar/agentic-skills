@@ -16,6 +16,20 @@ class TestSlicePullRequest:
 
         assert message.splitlines()[0] == SlicePullRequest().title(SubIssueMother.pending())
 
+    def test_a_subissue_carrying_a_user_story_opens_the_pull_request_title_with_its_key(self) -> None:
+        title = SlicePullRequest().title(SubIssueMother.carrying_a_user_story())
+
+        assert title == "PROJ-1234-05 feat(prechecks-deterministas): comprobar antes de tocar codigo"
+
+    def test_a_subissue_carrying_a_user_story_keeps_the_commit_subject_without_the_key(self) -> None:
+        subissue = SubIssueMother.carrying_a_user_story()
+
+        title = SlicePullRequest().title(subissue)
+        commit_subject = SlicePullRequest().commit_message(subissue).splitlines()[0]
+
+        assert commit_subject == "feat(prechecks-deterministas): comprobar antes de tocar codigo"
+        assert title != commit_subject
+
     def test_the_commit_message_credits_claude_as_co_author_because_a_harness_wrote_the_code(self) -> None:
         message = SlicePullRequest().commit_message(SubIssueMother.pending())
 
