@@ -30,10 +30,9 @@ leyendo cuando el fichero ya se ha reescrito tres veces.
 Lo que era una funcion privada de modulo mas un punado de constantes sueltas es casi siempre una
 clase esperando a nacer, y ponerle nombre es lo que dice **de quien** es esa logica.
 
-Ejemplo real: `verifier_argv` + `_prompt` + `_readable_dirs` + dos constantes de modulo se leian como
-cinco cosas independientes, y eran una sola (`JudgeInvocation`). No es cosmetica -mientras fueron
-funciones sueltas nadie noto que a la invocacion le faltaba el `--add-dir` sin el que el juez no ve
-el diff-.
+No es cosmetica: un punado de funciones sueltas que en realidad eran una sola pieza escondio durante un
+tiempo que a esa pieza le faltaba un argumento sin el que no hacia su trabajo. Con nombre, la ausencia se
+ve.
 
 ## Imports
 

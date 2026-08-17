@@ -13,63 +13,32 @@ Pydantic.
 
 ## Vocabulario cerrado
 
-**`StrEnum`**, no tuplas de `str` (`Estado`, `MotivoBloqueada`, `EstadoCI`, `Severidad`, `Veredicto`,
-`Modo`, `Ruling`, `Severity`, `HygieneBreach`, `ProtectedBranch`...). Los miembros se serializan como su
-cadena, asi que ni el formato del issue ni el JSON de salida cambian, pero las comparaciones y los
-`choices` de cada interfaz de linea de comandos salen de un solo sitio.
+**`StrEnum`**, no tuplas de `str`. Los miembros se serializan como su cadena, asi que ni el formato del
+issue ni el JSON de salida cambian, pero las comparaciones y los `choices` de cada interfaz de linea de
+comandos salen de un solo sitio.
 
-- Nombre del miembro en mayusculas; valor en minusculas, **salvo que el valor sea dato de un
-  contrato** que lo fije de otra forma (`Ruling.PASS = "PASS"`).
+- Nombre del miembro en mayusculas; valor en minusculas, **salvo que el valor sea dato de un contrato**
+  que lo fije de otra forma.
 - En `argparse`, `choices=[str(x) for x in Enum]`: con `list(Enum)` el mensaje de error muestra el
   `repr` del miembro.
 - Codigos de salida de un ejecutable: `IntEnum`, y el mapeo desde el vocabulario del dominio con un
   `match` exhaustivo, para que anadir un miembro rompa en `mypy` en vez de caer en silencio en la
   rama generica.
-- **Un puerto contesta con el vocabulario, no con un `bool` derivado de el.** `Forum.pull_request_state`
-  devuelve `PullRequestStatus` (`domain/pull_request_status.py`), que junta el `PullRequestState`
-  (`merged`, `open`, `closed`) con el `PullRequestMergeability` (`mergeable`, `conflicting`, `unknown`)
-  porque `gh pr view --json state,mergeable` ya distingue las dos cosas **en la misma llamada**: no es un
-  segundo puerto ni una segunda llamada, es un campo mas de una respuesta que ya se estaba leyendo. El
-  `merged: bool` que hubo antes colapsaba "cerrada sin mergear" con "todavia abierta", que es el mismo
-  fallo que el `Optional[Enum]` del apartado de antipatrones: quien conducia el run tickeaba el tope
-  entero esperando un merge que ya no podia llegar, y cada reinvocacion repetia la espera. La traduccion
-  desde las cadenas de `gh` vive en la frontera (`docs/conventions/infrastructure.md`).
-- **La pertenencia se pregunta contra los valores, no con `in`.** `ProtectedBranch.protects(name)`
-  compara contra el `value` de cada miembro: en Python 3.11 -el minimo que declara
-  `docs/conventions/architecture.md`- un `name in cls` con una cadena que no es miembro lanza
-  `TypeError`, y la guarda que impide commitear en `master` no puede romper por la forma de preguntar
-  justo cuando la rama es una cualquiera.
-
-## Lo que una persona pide sobre la pull request se lee del gesto, no de un marcador
-
-En la subissue el canal es un token al principio del comentario -`-GO` y `-REVIEW` en la pausa de
-alineacion, `-RETRY` para reabrir una slice bloqueada-, porque el hilo de un issue no tiene semantica
-propia: un comentario es un comentario. **En la pull request si la hay**, y es la que se usa: enviar una
-review es el gesto, y `PullRequestReview.asks_for_a_change` no lee ningun marcador.
-
-Lo que decide es el estado, con un `match` exhaustivo y sin rama generica, y cada exclusion tiene su
-motivo medido:
-
-- **`PENDING` no pide nada**: es un lote a medio escribir, y la interfaz de programacion **te lo devuelve
-  cuando es tuyo**, asi que sin esta exclusion el run arrancaria con lo que estas tecleando. Medido: un
-  borrador sale como `PENDING` y sus comentarios de linea no aparecen siquiera en
-  `/pulls/{n}/comments` hasta que se envia.
-- **`APPROVED` no pide nada**: aprobar significa "adelante", no "arreglame esto".
-- **`DISMISSED` no pide nada**: lo que se descarto no se atiende.
-- **`COMMENTED` y `CHANGES_REQUESTED` piden**. Las dos, y no solo la segunda, porque
-  `gh pr review --request-changes` sobre una pull request propia contesta `Can not request changes on
-  your own pull request`: el run abre la pull request con el token de quien lo lanza, asi que el gesto
-  nativo esta vedado justo a esa persona y solo le queda `COMMENTED`.
-
-**Consecuencia aceptada, y se acepta a proposito: cualquier review enviada dispara una vuelta**, tambien
-si solo querias preguntar algo. Lo que se gana es que no hay nada que aprender ni que recordar escribir;
-lo que se paga es que conversar dentro de una review cuesta una llamada al implementador. El sitio para
-conversar sin gastar es la caja de comentarios del issue de la pull request, que **no** se lee -y por eso
-mismo pedir un cambio desde ahi tampoco funciona-.
-
-Hubo una version con marcador (`-CHANGE` en el cuerpo o en un comentario de linea) que resolvia las dos
-cosas a la vez, y se retiro por simplicidad antes de entregar: **si la conversacion dentro de reviews
-resulta caer caro, ese es el cambio que hay que rehacer**, no un caso especial por autor.
+- **Un puerto contesta con el vocabulario, no con un `bool` derivado de el.** Un booleano colapsa
+  estados que se arreglan distinto, y quien lo consume no puede separarlos: el que decia si algo estaba
+  fusionado fundia "cerrado sin fusionar" con "todavia abierto", y quien conducia el run tickeaba el tope
+  entero esperando algo que ya no podia llegar. **Y si la misma llamada ya distingue las dos cosas, eso no
+  es un segundo puerto ni una segunda llamada: es un campo mas de una respuesta que ya se estaba
+  leyendo.** La traduccion desde las cadenas de la herramienta vive en la frontera.
+- **La pertenencia se pregunta contra los valores, no con `in`.** En la version minima de Python que
+  declara `docs/conventions/architecture.md`, un `nombre in cls` con una cadena que no es miembro lanza
+  `TypeError`, asi que una guarda no puede romper por la forma de preguntar justo cuando el valor es uno
+  cualquiera.
+- **Un vocabulario que tambien exista en codigo que no es referencia se declara y se mide con un
+  contrato, nunca se comparte por import** (ver `docs/conventions/infrastructure.md`). Su traductor vive
+  **del lado del destino**, con `match` exhaustivo y sin rama generica, para que la regla no acabe siendo
+  un `if` de quien orquesta, y para que anadir un miembro sin proyectarlo ponga `make check` en rojo en
+  vez de caer en una rama por omision.
 
 ## Puertos
 
@@ -80,86 +49,43 @@ resulta caer caro, ese es el cambio que hay que rehacer**, no un caso especial p
 
 Lo que es **regla exacta** -que paso viene despues de un resultado, cuando se agota un presupuesto- es
 un objeto del dominio, no prosa de una skill ni un `if` en un caso de uso. Forma: dataclass frozen con
-**su configuracion inyectada** (`StateMachine(budgets=Budgets())`), sin entrada/salida y sin conocer a
-nadie. `Budgets` es un value object de configuracion normal: lo construye el entrypoint y entra como
-dato, igual que el `Judge` (ver `docs/conventions/application.md`).
+**su configuracion inyectada**, sin entrada/salida y sin conocer a nadie. La configuracion es un value
+object normal: lo construye el entrypoint y entra como dato (ver `docs/conventions/application.md`).
 
 - **Total o explicita**: un par de entrada que la politica no describe **lanza** su excepcion, no cae en
-  una rama generica. `ImpossibleTransitionError` existe para que un `(paso, resultado)` sin regla se vea
-  en el momento y no se confunda con "no pasa nada".
-- **Devuelve un value object con el efecto entero**, no un booleano ni un `dict`: `Transition` lleva el
-  paso siguiente, el estado en que queda el run y cuantos segundos hay que esperar. Un consumidor que
-  tuviera que recomponer eso volveria a tener politica repartida.
-- **Se cubre desde fuera**, como todo el dominio: la tabla de `(paso, resultado)` entra por el
-  subcomando que la expone. No hay tests unitarios de dominio (`docs/conventions/testing.md`).
+  una rama generica, para que se vea en el momento y no se confunda con "no pasa nada".
+- **Devuelve un value object con el efecto entero**, no un booleano ni un `dict`: el paso siguiente, el
+  estado en que queda y cuanto hay que esperar viajan juntos. Un consumidor que tuviera que recomponer eso
+  volveria a tener politica repartida.
+- **Se cubre desde fuera**, como todo el dominio: la tabla de entradas y salidas entra por el subcomando
+  que la expone. No hay tests unitarios de dominio (`docs/conventions/testing.md`).
 
-**El vocabulario de cierres duplica uno durable, y esta declarado.** `RunState` es una copia declarada
--en ingles- de `Veredicto` en `skills/slice-runner/scripts/metrics.py`. Es la misma decision que el
-resto del programa -**no importa nada de
-`skills/`**, ver `docs/conventions/infrastructure.md`- y el mismo motivo: sus scripts son stdlib puro
-con otra vara, y acoplarse a ellos para ahorrar la duplicacion sale mas caro que la duplicacion. El
-traductor es `IssueLabel.of(state, step)`
-(`domain/issue_label.py`): un `match` exhaustivo sobre el par que proyecta cada cierre de `RunState` a la
-etiqueta de GitHub que escribe la frontera (`infrastructure/gh_run_repository.py`), total o explicito -un
-par sin regla no cae en una rama generica, rompe en `mypy` en cuanto se anade un cierre o un paso sin
-proyectarlo-. El contrato ya esta medido, no pendiente: `test_domain_vocabulary_contracts.py` comprueba que
-todo cierre de `RunState` distinto de `MERGED` (que no lleva etiqueta porque cierra GitHub el issue solo,
-via `Closes` de la pull request) proyecta a una etiqueta del vocabulario, y que ninguna etiqueta del
-vocabulario carece de fuente -sale de una proyeccion del traductor, o es de fuente manual-. **De fuente
-manual es la que se escribe fuera de cualquier `(state, step)` que `IssueLabel.of` pueda conocer**, que
-es lo que pasa antes de que exista ningun `Run`. Una etiqueta nueva sin proyeccion ni fuente manual
-declarada pone `make check` en rojo.
+**Cuando ningun tick arregla algo, cero ticks es la cuenta correcta**: se cierra directo en vez de gastar
+la ventana de gracia de una espera que no puede terminar bien. Y **la pregunta de mas solo se paga cuando
+la primera lectura salio ambigua**: quien produce esa distincion es quien orquesta, no la politica, porque
+una lectura que no separa dos casos no sabe cual tiene delante.
 
-**`CiStatus` nombra en ingles el vocabulario con el que se clasifica la integracion continua.** Es el
-unico sitio donde vive: el programa **no importa nada de `skills/`**, asi que un vocabulario suyo que
-tambien exista alli se declara y se mide con un contrato, nunca se comparte por import. Los dos
-traductores al vocabulario con el que se interroga a `StateMachine` viven del lado del destino, como
-`IssueLabel.of`: `Outcome.of_the_ci(status)` y `Outcome.of_the_verdict(verdict)`, los dos con `match`
-exhaustivo y sin rama generica, para que la regla no acabe siendo un `if` de quien conduce el run.
+**La higiene del indice es politica.** Compara lo que hay en el indice con lo que el implementador
+declaro y devuelve las ofensas; la tupla vacia es el indice limpio. Las decisiones que no son deriva:
 
-**Un conflicto con la base no se resuelve tickeando, asi que no gasta la ventana de gracia de la CI
-indeterminada.** `Outcome.CONFLICTING` cierra directo a `RunState.BLOCKED_CI_CONFLICT` desde
-`StateMachine._after_asking_the_ci`, sin pasar por `_counting_a_tick_with_no_answer`: es la misma
-politica de "un numero por concepto" de mas abajo aplicada al reves -aqui la regla es que **cero** ticks
-son la cuenta correcta, porque ningun tick arregla un conflicto y esperarlo es tiempo tirado-. Quien
-produce ese `Outcome` es `ConductSlice`, no esta politica: la CI indeterminada por si sola no distingue
-"todavia no hay checks" de "esta pull request no se puede mergear", asi que **solo** cuando la
-integracion continua ya salio indeterminada -por excepcion o por `CiStatus.NO_CHECKS`/`UNKNOWN`- se le
-pregunta a `Forum.pull_request_state` por la `mergeability`; una integracion continua que contesta verde,
-roja o pendiente no paga esa llamada de mas. Si la pull request es mergeable, nada cambia: la ventana de
-gracia se gasta entera como hoy y el cierre sigue siendo `bloqueada:ci-indeterminada`.
+- **Un artefacto prohibido lo es aunque este declarado.** La lista de prefijos prohibidos es un backstop,
+  no una regla mas del allow-list: si lo pudiera levantar quien declara las rutas, no protegeria de nada.
+- **Dos causas que no se arreglan igual no comparten contador.** Un control rojo es codigo que falla y lo
+  puede arreglar otra vuelta del implementador; un rechazo de higiene es un informe incompleto -toco
+  ficheros que no declaro- y no dice nada sobre si el codigo esta bien. Por eso lleva resultado propio,
+  contador propio y presupuesto propio, y agotarlo cierra el run con un estado que nombra la higiene.
+- **Fail-closed sin rama especial.** Sin nada declarado, todo lo que este en el indice cae en la ofensa
+  general, que es lo que sale solo de la regla. Y **"nada staged" no es asunto de esta politica**: eso ya
+  lo dice quien va a leer el diff, y reimplementarlo aqui seria un segundo sitio donde decidir lo mismo.
 
-**La higiene del indice es politica, y sus prefijos prohibidos son una duplicacion declarada mas.**
-`StagedHygiene.of(staged=..., declared=...)` (`domain/staged_hygiene.py`) devuelve las ofensas
--`HygieneOffence`, con el path y su `HygieneBreach`- de lo que hay en el indice frente a lo que el
-implementador declaro, y la tupla vacia es el indice limpio. Las decisiones que no son deriva:
+Las decisiones sobre los presupuestos tampoco son deriva, y estan aqui para que no se "arreglen" hacia el
+lado facil. **Los valores concretos viven en el value object de configuracion, y de donde sale cada uno
+esta en `docs/design-notes.md`**: aqui va la regla que los gobierna, no la medicion que los fijo.
 
-- **Un artefacto prohibido lo es aunque este declarado.** `StagedHygiene.FORBIDDEN_PREFIXES` es un
-  backstop, no una regla mas del allow-list: si lo pudiera levantar quien declara las rutas, no
-  protegeria de nada.
-- **Un rechazo de higiene no gasta presupuesto de controles.** **Son cosas distintas**: un control rojo
-  es codigo que falla y lo puede arreglar otra vuelta del implementador; un rechazo de higiene es un
-  informe incompleto -toco ficheros que no declaro- y no dice nada sobre si el codigo esta bien. Por eso
-  tiene resultado propio (`Outcome.HYGIENE_REJECTED`), contador propio y presupuesto propio, y agotarlo
-  cierra el run con un estado que nombra la higiene y no los controles. **Dos causas que no se arreglan
-  igual no comparten contador**, aqui y en los descartes del juez.
-- **Fail-closed sin rama especial.** Con `declared` vacio todo lo staged sale `NOT_DECLARED`, que es lo
-  que cae solo de la regla general. Y **"nada staged" no es asunto de esta politica**: eso ya lo dice
-  `EmptyIndexError` cuando se va a leer el diff, y reimplementarlo aqui seria un segundo sitio donde
-  decidir lo mismo.
-- **`StagedHygiene.FORBIDDEN_PREFIXES` es el unico sitio donde viven estos prefijos.** Si un script de
-  `skills/` volviera a necesitarlos, se duplican y se miden con un contrato en vez de importarse: el
-  programa no importa nada de `skills/` (ver `docs/conventions/infrastructure.md`).
-
-Las decisiones de `StateMachine` y de los `Budgets` que le entran tampoco son deriva, y estan aqui para
-que no se "arreglen" hacia el lado facil. **Los valores concretos viven en `Budgets`, y de donde sale cada
-uno esta en `docs/design-notes.md`**: aqui va la regla que los gobierna, no la medicion que los fijo.
-
-- **Un numero por concepto, no uno por caso.** Hay una sola separacion minima entre ticks para todas las
-  esperas y un solo tope para todas las clases de llamada a un proceso externo. Partirlos por caso serian
+- **Un numero por concepto, no uno por caso.** Una sola separacion minima entre ticks para todas las
+  esperas, un solo tope para todas las clases de llamada a un proceso externo. Partirlos por caso serian
   numeros que nadie ha medido, y un numero sin medicion no es una regla: es una preferencia. Consecuencia
-  aceptada, y se acepta a proposito: mover el de la ventana mueve tambien la cadencia del sondeo del
-  merge, y un `gh` colgado tarda en morir lo mismo que una suite entera.
+  aceptada a proposito: mover uno mueve todo lo que lo comparte.
 - **El tope de espera acota la invocacion, no el run.** Agotarlo **no cierra** nada: deja el run abierto y
   persistido en su paso, diciendo que reinvocar es justo lo que toca.
 - **La espera tiene un tope por clase de espera, y eso no rompe el bullet de arriba: lo aplica.** Esperar
@@ -173,58 +99,44 @@ uno esta en `docs/design-notes.md`**: aqui va la regla que los gobierna, no la m
   unico para todo el run, **el ultimo que espera paga lo que gastaron los demas**, y cuanto le queda
   depende de lo que una persona haya tardado antes: el tope dice una cosa y entrega otra. Un tope que solo
   se cumple si nadie se entretiene aguas arriba no acota nada.
-- **El tope por llamada vive en `Budgets` aunque quien lo aplique sea un adaptador**, porque es el mismo
-  tipo de dato que los demas: un numero medido con el que se acota una espera. Tenerlo aqui es lo que
-  evita que cada adaptador se invente el suyo.
-- **El descarte de una llamada al arnes -entender, implementar o verificar- no tiene presupuesto propio en
-  ninguno de los tres pasos.** Ninguno gasta reintento: en el que entiende y en el juez porque **no se ha
-  tocado el codigo**, y en el que implementa porque, aunque la llamada rota pudo dejar cambios sin
-  comitear en el worktree, nada de eso llega a stagearse -el paso que staggea es `RUN_CONTROLS`, y un
-  informe que no se puede leer nunca llega hasta ahi-, asi que tampoco es un intento de la fase que un
-  control o un juez lleguen a medir. Quien lo acota en los tres es el presupuesto de coste, que **si**
-  cierra. Darle un contador propio seria inventar una politica que ninguna medicion sostiene; dejarlo sin
-  ningun cierre seria un bucle que paga una llamada al harness por vuelta y no termina nunca.
+- **El tope por llamada vive con los demas numeros aunque quien lo aplique sea un adaptador**, porque es
+  el mismo tipo de dato: un numero medido con el que se acota una espera. Tenerlo aqui es lo que evita que
+  cada adaptador se invente el suyo.
+- **El descarte de una llamada al arnes no gasta reintento en ninguno de los pasos que la hacen.** Donde
+  no se ha tocado el codigo es evidente; donde si, la llamada rota pudo dejar cambios sin comitear pero
+  nada de eso llega al indice -un informe que no se puede leer nunca llega al paso que staggea-, asi que
+  tampoco es un intento de la fase que un control o un juez lleguen a medir. Quien lo acota es el
+  presupuesto de coste, que **si** cierra. Darle contador propio seria inventar una politica que ninguna
+  medicion sostiene; dejarlo sin ningun cierre seria un bucle que paga una llamada por vuelta y no termina.
 - **El presupuesto de coste impide la siguiente llamada; no tira la que ya se pago.** Un veredicto que
-  aprueba nunca se convierte en `over-budget` -entregar no cuesta harness-, y la llamada siguiente se corta
+  aprueba nunca se convierte en agotado -entregar no cuesta harness-, y la llamada siguiente se corta
   **antes** de invocar, no despues de pagarla. Las dos comprobaciones conviven a proposito: la de despues
-  cierra el bucle de descartes del bullet anterior, la de antes es la que impide tirar una aprobacion.
+  cierra el bucle de descartes, la de antes es la que impide tirar una aprobacion.
 - **La pregunta del coste se hace por llamada, no por el agregado**, y esa firma es load-bearing: se mira
   primero si **esa** llamada dejo medicion y solo despues se suma. Al agregado se le puede preguntar
   eternamente sin que conteste que no, porque lo que no se mide no suma.
 - **Un gasto no medido cuenta como agotado**, no como cero: lo que no se puede sumar no se puede acotar.
-  Es la misma eleccion fail-closed que el indeterminado de la integracion continua: el precio del falso
-  positivo es una reinvocacion, y el del falso negativo es el bucle que el tope existe para cortar.
-- **Lo que se cuenta son todas las llamadas del run.** Contar solo al implementador abarataria el numero a
-  costa de dejar sin cierre el bucle del descarte.
+  Es la misma eleccion fail-closed que una lectura indeterminada: el precio del falso positivo es una
+  reinvocacion, y el del falso negativo es el bucle que el tope existe para cortar.
+- **Lo que se cuenta son todas las llamadas del run.** Contar solo una parte abarataria el numero a costa
+  de dejar sin cierre el bucle del descarte.
 
 ## Excepciones
 
-- Nombradas por lo que pasa, no por donde: `InvalidVerdictError`, `EmptyIndexError`,
-  `UnresolvableRepoOrBaseError`.
+- Nombradas por lo que pasa, no por donde.
 - El catalogo es el de las excepciones **del dominio**. Un puerto que solo consume la infraestructura
-  lleva la suya con el (`ProcessNotRunnableError`, en `infrastructure/process.py`): esta declarado con su
-  motivo en `docs/conventions/architecture.md`.
-- Jerarquia cuando el consumidor necesita distinguir: `EmptyIndexError` y
-  `UnresolvableRepoOrBaseError` heredan de `DiffNotReadableError` porque la interfaz de linea de
-  comandos les da codigos de salida distintos, y quien no distingue captura la de arriba.
+  lleva la suya con el, declarado con su motivo en `docs/conventions/architecture.md`.
+- Jerarquia cuando el consumidor necesita distinguir: se hereda de una comun cuando la interfaz de linea
+  de comandos les da codigos de salida distintos, y quien no distingue captura la de arriba.
 - Heredan del tipo que corresponde (`ValueError`, `OSError`), no de `Exception` a secas.
 
 ## Nada de `dict` crudo como valor de retorno de logica
 
 Un `dict` que cruza dos funciones propias se lee con `.get()` en el consumidor, y ahi una clave mal
-escrita y una ausente dan lo mismo -era el fallo de `build_scorecard` y de `_slice_info`, que ademas
-obligaba a tres `assert isinstance(...)` en produccion solo para `mypy`-.
-
-Los `dict[str, object]` que quedan son todos frontera de serializacion, con una excepcion declarada:
-`ClosedSliceRecord.budgets`/`models_by_role` (`domain/closed_slice_record.py`) tambien llegan como
-`dict[str, object]`, sin tipar contra `Budgets`/`RoleModels`. Es la relectura del mismo campo que
-`docs/conventions/infrastructure.md` ya declara para `MetricsEntryPayload` en la escritura, y el motivo
-es el mismo: la fila viene de un registro durable historico que pudo escribirse con una forma distinta
-de esos dos value objects, y reconstruirlos aqui romperia con cualquier clave anadida, renombrada o
-ausente entre versiones. Ninguna logica de dominio ni de aplicacion los destructura -
-`ListClosedSlices.execute` los reenvia enteros y la vista solo los menciona como hueco declarado-; el
-unico consumidor es la frontera de serializacion de salida (`ClosedSliceRecordPayload`), que es donde
-de verdad viven.
+escrita y una ausente dan lo mismo. Los `dict[str, object]` que quedan son todos frontera de
+serializacion, con la excepcion declarada de un registro durable que debe tolerar que un value object
+crezca (`docs/conventions/infrastructure.md`): reconstruirlo aqui romperia con cualquier clave anadida,
+renombrada o ausente entre versiones, y ninguna logica lo destructura.
 
 ## Antipatrones
 
