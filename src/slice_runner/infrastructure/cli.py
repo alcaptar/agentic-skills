@@ -25,7 +25,9 @@ from slice_runner.application.actions.stage_slice import StageSlice
 from slice_runner.application.actions.verify_slice import VerifySlice, VerifySliceParams
 from slice_runner.application.queries.check_readiness import CheckReadiness, CheckReadinessParams, CheckReadinessPorts
 from slice_runner.application.queries.list_closed_slices import ListClosedSlices, ListClosedSlicesParams
+from slice_runner.application.queries.read_ci_status import ReadCiStatus
 from slice_runner.application.queries.read_conversation import ReadConversation, ReadConversationParams
+from slice_runner.application.queries.read_pull_request_status import ReadPullRequestStatus
 from slice_runner.application.queries.run_prechecks import RunPrechecks
 from slice_runner.application.queries.select_slice import SelectSlice
 from slice_runner.application.queries.show_feature_status import ShowFeatureStatus, ShowFeatureStatusParams
@@ -565,12 +567,13 @@ class Cli:
                 close=CloseParent(repository=repository),
                 record_step=RecordStep(repository=repository, events=StderrEventLog(), clock=clock),
                 record_closure=RecordClosure(metrics=LocalMetricsLog(clock=clock), repository=repository),
+                read_ci=ReadCiStatus(ci=GhCi(call=gh_call), forum=forum),
+                read_pull_request=ReadPullRequestStatus(forum=forum),
             ),
             ports=ConductSlicePorts(
                 repository=repository,
                 branches=branches,
                 controls=LocalControlRunner(process=self._process),
-                ci=GhCi(call=gh_call),
                 forum=forum,
                 clock=clock,
                 understanding=ClaudeUnderstanding(

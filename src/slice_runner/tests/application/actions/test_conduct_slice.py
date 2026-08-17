@@ -1740,20 +1740,6 @@ class TestConductSliceWhenAReviewAsksForAChangeOnThePullRequest:
 
         assert conductor.implement.execute.call_count == 1
 
-    def test_a_review_that_only_carries_line_comments_asks_for_the_change_just_like_one_with_a_body(self) -> None:
-        conductor = self._conductor()
-        conductor.forum.reviews.return_value = (
-            PullRequestReviewMother.asking_for_a_change_in_a_line_comment(asked="esta linea sobra"),
-        )
-
-        conductor.conduct()
-
-        assert conductor.implement.execute.call_args.args[0].requested_changes == (
-            RequestedChange(
-                body="", comments=(PullRequestReviewCommentMother.anchored_to_a_line(body="esta linea sobra"),)
-            ),
-        )
-
     def test_the_body_and_every_line_comment_of_the_review_travel_together_in_the_order_they_were_written(self) -> None:
         conductor = self._conductor()
         conductor.forum.reviews.return_value = (
@@ -1854,20 +1840,6 @@ class TestConductSliceWhenAReviewAsksForAChangeOnThePullRequest:
         conductor.conduct()
 
         assert conductor.implement.execute.call_count == 0
-
-    def test_a_review_sent_after_the_last_one_attended_still_triggers_a_new_round(self) -> None:
-        conductor = self._conductor(run=RunMother.awaiting_merge_after_reviewing(101))
-        conductor.forum.reviews.return_value = (
-            PullRequestReviewMother.asking_for_a_change(review_id=101),
-            PullRequestReviewMother.asking_for_a_change(review_id=150, asked="una segunda vuelta"),
-        )
-
-        conductor.conduct()
-
-        assert conductor.implement.execute.call_count == 1
-        assert conductor.implement.execute.call_args.args[0].requested_changes == (
-            RequestedChange(body="una segunda vuelta"),
-        )
 
     def test_the_marker_is_remembered_across_invocations_so_a_later_invocation_does_not_repeat_it(self) -> None:
         conductor = self._conductor()
@@ -2100,26 +2072,10 @@ class TestConductSliceWaitingForTheCi:
         assert conductor.metrics.record.call_args.args[0].state is RunState.BLOCKED_CI_RED
 
 
-class TestConductSliceAsksAboutTheConflictOnlyWhenTheCiIsIndeterminate:
+class TestConductSliceReusesTheSamePullRequestStatusReadForTheCiAndTheMerge:
     @staticmethod
     def _conductor(*, budgets: Budgets | None = None) -> Conductor:
         return Conductor(chosen=SelectSliceResultMother.resumed_at(RunMother.about_to_ask_the_ci()), budgets=budgets)
-
-    def test_a_pending_ci_never_asks_about_mergeability(self) -> None:
-        conductor = self._conductor(budgets=Budgets(ci_wait_seconds=30))
-        conductor.ci.status.return_value = CiStatus.PENDING
-
-        conductor.conduct()
-
-        assert conductor.forum.pull_request_state.call_count == 0
-
-    def test_a_red_ci_with_no_retry_left_never_asks_about_mergeability(self) -> None:
-        conductor = self._conductor(budgets=Budgets(ci_retries=0))
-        conductor.ci.status.return_value = CiStatus.RED
-
-        conductor.conduct()
-
-        assert conductor.forum.pull_request_state.call_count == 0
 
     def test_a_green_ci_asks_about_the_pull_request_only_once_to_poll_the_merge_and_not_to_check_a_conflict(
         self,
@@ -2177,17 +2133,6 @@ class TestConductSliceWhenTheCiCannotBeRead:
         recorded = conductor.metrics.record.call_args.args[0]
         assert recorded.ci_indeterminate_cause is None
 
-    def test_a_failed_command_against_a_conflicting_pull_request_closes_as_conflict_and_not_as_indeterminate(
-        self,
-    ) -> None:
-        conductor = self._conductor()
-        conductor.ci.status.side_effect = CiCommandFailedError("gh pr checks failed for owner/repo#61: rate limited")
-        conductor.forum.pull_request_state.return_value = PullRequestStatusMother.open_and_conflicting()
-
-        result = conductor.conduct()
-
-        assert result.state is RunState.BLOCKED_CI_CONFLICT
-
     def test_a_failed_command_against_a_conflicting_pull_request_records_no_indeterminate_cause(self) -> None:
         conductor = self._conductor()
         conductor.ci.status.side_effect = CiCommandFailedError("gh pr checks failed for owner/repo#61: rate limited")
@@ -2197,3 +2142,16 @@ class TestConductSliceWhenTheCiCannotBeRead:
 
         recorded = conductor.metrics.record.call_args.args[0]
         assert recorded.ci_indeterminate_cause is None
+
+    def test_a_cause_recorded_on_an_earlier_tick_survives_a_later_tick_that_reads_the_ci_cleanly(self) -> None:
+        conductor = Conductor(chosen=SelectSliceResultMother.resumed_at(RunMother.about_to_ask_the_ci()))
+        conductor.ci.status.side_effect = [
+            CiCommandFailedError("gh pr checks failed for owner/repo#61: rate limited"),
+            CiStatus.GREEN,
+        ]
+
+        result = conductor.conduct()
+
+        assert result.state is RunState.MERGED
+        recorded = conductor.metrics.record.call_args.args[0]
+        assert recorded.ci_indeterminate_cause is CiIndeterminateCause.COMMAND_FAILED

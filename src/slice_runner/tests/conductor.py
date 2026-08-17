@@ -19,6 +19,8 @@ from slice_runner.application.actions.record_step import RecordStep
 from slice_runner.application.actions.reopen_slice import ReopenSlice
 from slice_runner.application.actions.stage_slice import StageSlice
 from slice_runner.application.actions.verify_slice import VerifySlice
+from slice_runner.application.queries.read_ci_status import ReadCiStatus
+from slice_runner.application.queries.read_pull_request_status import ReadPullRequestStatus
 from slice_runner.application.queries.run_prechecks import RunPrechecks
 from slice_runner.application.queries.select_slice import SelectSlice
 from slice_runner.domain.alignment_response import AlignmentResponse
@@ -132,12 +134,13 @@ class Conductor:
                 close=self.close,
                 record_step=RecordStep(repository=self.repository, events=self.events, clock=self.clock),
                 record_closure=RecordClosure(metrics=self.metrics, repository=self.repository),
+                read_ci=ReadCiStatus(ci=self.ci, forum=self.forum),
+                read_pull_request=ReadPullRequestStatus(forum=self.forum),
             ),
             ports=ConductSlicePorts(
                 repository=self.repository,
                 branches=self.branches,
                 controls=self.controls,
-                ci=self.ci,
                 forum=self.forum,
                 clock=self.clock,
                 understanding=self.understanding,

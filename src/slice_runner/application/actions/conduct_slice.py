@@ -11,21 +11,20 @@ from slice_runner.application.actions.record_step import RecordStepParams
 from slice_runner.application.actions.reopen_slice import ReopenSliceParams
 from slice_runner.application.actions.stage_slice import StageSliceParams
 from slice_runner.application.actions.verify_slice import VerifySliceParams
+from slice_runner.application.queries.read_ci_status import ReadCiStatusParams
+from slice_runner.application.queries.read_pull_request_status import ReadPullRequestStatusParams
 from slice_runner.application.queries.run_prechecks import RunPrechecksParams
 from slice_runner.application.queries.select_slice import SelectSliceParams
 from slice_runner.domain.alignment import Alignment
 from slice_runner.domain.alignment_response_kind import AlignmentResponseKind
-from slice_runner.domain.ci_indeterminate_cause import CiIndeterminateCause
 from slice_runner.domain.control_status import ControlStatus
 from slice_runner.domain.discard_cause import DiscardCause
 from slice_runner.domain.exceptions import (
-    CiCommandFailedError,
     DirtyIndexError,
     MeasuredCallError,
     MissingBranchError,
     NoPullRequestError,
     NoSliceLeftError,
-    UnreadableCiError,
 )
 from slice_runner.domain.halt import Halt
 from slice_runner.domain.harness_spend import HarnessSpend
@@ -34,9 +33,7 @@ from slice_runner.domain.outcome import Outcome
 from slice_runner.domain.precheck_outcome import PrecheckOutcome
 from slice_runner.domain.precheck_result import PrecheckResult
 from slice_runner.domain.prechecks import Prechecks
-from slice_runner.domain.pull_request_mergeability import PullRequestMergeability
 from slice_runner.domain.pull_request_state import PullRequestState
-from slice_runner.domain.requested_change import RequestedChange
 from slice_runner.domain.ruling import Ruling
 from slice_runner.domain.run import Run
 from slice_runner.domain.run_state import RunState
@@ -53,11 +50,13 @@ if TYPE_CHECKING:
     from slice_runner.application.actions.reopen_slice import ReopenSlice
     from slice_runner.application.actions.stage_slice import StageSlice
     from slice_runner.application.actions.verify_slice import VerifySlice
+    from slice_runner.application.queries.read_ci_status import ReadCiStatus
+    from slice_runner.application.queries.read_pull_request_status import ReadPullRequestStatus
     from slice_runner.application.queries.run_prechecks import RunPrechecks
     from slice_runner.application.queries.select_slice import SelectSlice, SelectSliceResult
     from slice_runner.domain.branches import Branches
     from slice_runner.domain.budgets import Budgets
-    from slice_runner.domain.ci import Ci
+    from slice_runner.domain.ci_indeterminate_cause import CiIndeterminateCause
     from slice_runner.domain.clock import Clock
     from slice_runner.domain.control_outcome import ControlOutcome
     from slice_runner.domain.control_runner import ControlRunner
@@ -66,7 +65,6 @@ if TYPE_CHECKING:
     from slice_runner.domain.finding import Finding
     from slice_runner.domain.forum import Forum
     from slice_runner.domain.parent_issue import ParentIssue
-    from slice_runner.domain.pull_request_review import PullRequestReview
     from slice_runner.domain.pull_request_writer import PullRequestWriter
     from slice_runner.domain.reported_path import ReportedPath
     from slice_runner.domain.retry_response import RetryResponse
@@ -163,6 +161,8 @@ class ConductSliceUseCases:
     close: CloseParent
     record_step: RecordStep
     record_closure: RecordClosure
+    read_ci: ReadCiStatus
+    read_pull_request: ReadPullRequestStatus
 
 
 @dataclass(frozen=True, kw_only=True, slots=True)
@@ -170,7 +170,6 @@ class ConductSlicePorts:
     repository: RunRepository
     branches: Branches
     controls: ControlRunner
-    ci: Ci
     forum: Forum
     clock: Clock
     understanding: UnderstandingWriter
@@ -198,10 +197,11 @@ class ConductSlice:
         self._close = use_cases.close
         self._record_step = use_cases.record_step
         self._record_closure = use_cases.record_closure
+        self._read_ci = use_cases.read_ci
+        self._read_pull_request = use_cases.read_pull_request
         self._repository = ports.repository
         self._branches = ports.branches
         self._controls = ports.controls
-        self._ci = ports.ci
         self._forum = ports.forum
         self._clock = ports.clock
         self._understanding = ports.understanding
@@ -583,56 +583,38 @@ class ConductSlice:
 
     def _asking_the_ci(self, progress: ConductSliceProgress) -> SteppedSlice:
         opened = self._pull_request_of(progress)
+        result = self._read_ci.execute(ReadCiStatusParams(repo=progress.params.repo, pull_request=opened))
         asked = replace(progress, pull_request=opened)
-        try:
-            status = self._ci.status(repo=progress.params.repo, pull_request=opened)
-        except (CiCommandFailedError, UnreadableCiError) as unreadable:
-            return self._indeterminate(asked, cause=CiIndeterminateCause.of_the_failure(unreadable))
+        if result.outcome is not Outcome.INDETERMINATE:
+            return SteppedSlice(progress=asked, outcome=result.outcome)
 
-        outcome = Outcome.of_the_ci(status)
-        if outcome is Outcome.INDETERMINATE:
-            return self._indeterminate(asked, cause=None)
-
-        return SteppedSlice(progress=asked, outcome=outcome)
-
-    def _indeterminate(self, progress: ConductSliceProgress, *, cause: CiIndeterminateCause | None) -> SteppedSlice:
-        status = self._forum.pull_request_state(repo=progress.params.repo, number=self._pull_request_of(progress))
-        if status.mergeability is PullRequestMergeability.CONFLICTING:
-            return SteppedSlice(progress=progress, outcome=Outcome.CONFLICTING)
-
-        return SteppedSlice(progress=replace(progress, ci_indeterminate_cause=cause), outcome=Outcome.INDETERMINATE)
+        return SteppedSlice(
+            progress=replace(asked, ci_indeterminate_cause=result.indeterminate_cause), outcome=result.outcome
+        )
 
     def _asking_for_the_merge(self, progress: ConductSliceProgress) -> SteppedSlice | HaltedSlice:
         opened = self._pull_request_of(progress)
         asked = replace(progress, pull_request=opened)
+        result = self._read_pull_request.execute(
+            ReadPullRequestStatusParams(
+                repo=progress.params.repo, pull_request=opened, last_reviewed_id=progress.run.last_reviewed_id
+            )
+        )
 
-        match self._forum.pull_request_state(repo=progress.params.repo, number=opened).state:
+        match result.state:
             case PullRequestState.MERGED:
                 return SteppedSlice(progress=asked, outcome=Outcome.DONE)
             case PullRequestState.OPEN:
-                return self._checking_for_changes_requested(asked, pull_request=opened)
+                if not result.requested_changes:
+                    return SteppedSlice(progress=asked, outcome=Outcome.PENDING)
+
+                run = replace(
+                    asked.run, last_reviewed_id=result.last_reviewed_id, requested_changes=result.requested_changes
+                )
+
+                return SteppedSlice(progress=replace(asked, run=run), outcome=Outcome.CHANGES_REQUESTED)
             case PullRequestState.CLOSED:
                 return HaltedSlice(progress=asked, halt=Halt.PULL_REQUEST_CLOSED)
-
-    def _checking_for_changes_requested(self, progress: ConductSliceProgress, *, pull_request: int) -> SteppedSlice:
-        reviews = self._forum.reviews(repo=progress.params.repo, pull_request=pull_request)
-        pending = self._changes_asked_since(reviews, after=progress.run.last_reviewed_id)
-        if not pending:
-            return SteppedSlice(progress=progress, outcome=Outcome.PENDING)
-
-        asked = replace(
-            progress.run,
-            last_reviewed_id=pending[-1].id,
-            requested_changes=tuple(RequestedChange(body=review.body, comments=review.comments) for review in pending),
-        )
-
-        return SteppedSlice(progress=replace(progress, run=asked), outcome=Outcome.CHANGES_REQUESTED)
-
-    @staticmethod
-    def _changes_asked_since(reviews: tuple[PullRequestReview, ...], *, after: int) -> tuple[PullRequestReview, ...]:
-        pending = [review for review in reviews if review.asks_for_a_change and review.id > after]
-
-        return tuple(sorted(pending, key=lambda review: review.id))
 
     def _pull_request_of(self, progress: ConductSliceProgress) -> int:
         if progress.pull_request is not None:
