@@ -8,6 +8,5 @@ class Colours:
             "rojo",
             "verde",
             "azul",
-            "amarillo",
             "negro",
         )
