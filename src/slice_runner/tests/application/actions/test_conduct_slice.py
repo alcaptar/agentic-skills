@@ -1230,19 +1230,6 @@ class TestConductSliceWhenTheControlsComeBackRed:
     def _conductor(*, budgets: Budgets | None = None) -> Conductor:
         return Conductor(chosen=SelectSliceResultMother.resumed_at(RunMother.implementing()), budgets=budgets)
 
-    def test_every_declared_control_runs_even_after_one_of_them_has_already_failed(self) -> None:
-        conductor = Conductor(
-            chosen=SelectSliceResultMother.resumed_at(
-                RunMother.implementing(), parent=ParentIssueMother.with_two_controls()
-            ),
-            budgets=Budgets(control_retries=0),
-        )
-        conductor.controls.run.side_effect = [ControlOutcomeMother.red(), ControlOutcomeMother.green()]
-
-        conductor.conduct()
-
-        assert [call.args[0].name for call in conductor.controls.run.call_args_list] == ["lint", "tests"]
-
     def test_the_log_of_the_red_control_reaches_the_next_implementation_as_a_path(self) -> None:
         conductor = self._conductor(budgets=Budgets(control_retries=1))
         conductor.controls.run.return_value = ControlOutcomeMother.red()
@@ -1251,46 +1238,6 @@ class TestConductSliceWhenTheControlsComeBackRed:
 
         retried = conductor.implement.execute.call_args_list[-1].args[0]
         assert retried.control_logs == (ControlOutcomeMother.LOG,)
-
-    def test_the_controls_are_run_in_the_worktree_and_leave_their_log_under_a_round_specific_directory(self) -> None:
-        conductor = self._conductor()
-
-        conductor.conduct()
-
-        assert conductor.controls.run.call_args.kwargs == {
-            "repo": Conductor.WORKTREE,
-            "out": Conductor.LOGS / SubIssueMother.pending().slice_id.canonical / "round-1",
-        }
-
-    def test_each_retried_round_of_controls_writes_under_a_directory_of_its_own(self) -> None:
-        conductor = self._conductor(budgets=Budgets(control_retries=1))
-        conductor.controls.run.return_value = ControlOutcomeMother.red()
-
-        conductor.conduct()
-
-        outs = [call.kwargs["out"] for call in conductor.controls.run.call_args_list]
-        slice_dir = Conductor.LOGS / SubIssueMother.pending().slice_id.canonical
-        assert outs == [slice_dir / "round-1", slice_dir / "round-2"]
-
-    def test_two_slices_with_the_same_logs_base_write_their_controls_under_different_directories(self) -> None:
-        first = self._conductor()
-        second = Conductor(
-            chosen=SelectSliceResultMother.resumed_at(
-                RunMother.implementing(), subissue=SubIssueMother.of_a_second_slice()
-            )
-        )
-
-        first.conduct()
-        second.conduct()
-
-        assert (
-            first.controls.run.call_args.kwargs["out"]
-            == Conductor.LOGS / SubIssueMother.pending().slice_id.canonical / "round-1"
-        )
-        assert (
-            second.controls.run.call_args.kwargs["out"]
-            == Conductor.LOGS / SubIssueMother.of_a_second_slice().slice_id.canonical / "round-1"
-        )
 
     def test_resuming_a_run_with_rounds_already_logged_names_the_next_round_not_round_one(self) -> None:
         conductor = Conductor(
@@ -1314,18 +1261,6 @@ class TestConductSliceWhenTheControlsComeBackRed:
             repo=Conductor.REPO, issue=_SUBISSUE, remove=IssueLabel.IN_PROGRESS, add=IssueLabel.BLOCKED_CONTROLS
         )
         assert conductor.metrics.record.call_args.args[0].state is RunState.BLOCKED_CONTROLS
-
-    def test_a_repo_exempt_from_controls_runs_none_of_them_and_goes_straight_to_the_judge(self) -> None:
-        conductor = Conductor(
-            chosen=SelectSliceResultMother.resumed_at(
-                RunMother.running_the_controls(), parent=ParentIssueMother.with_exempt_controls()
-            )
-        )
-
-        conductor.conduct()
-
-        assert conductor.controls.run.call_count == 0
-        assert conductor.verify.execute.call_count == 1
 
 
 class TestConductSliceWhenTheStagedIndexIsRejected:
@@ -1387,19 +1322,6 @@ class TestConductSliceWhenAControlCannotBeMeasured:
     @staticmethod
     def _conductor(*, budgets: Budgets | None = None) -> Conductor:
         return Conductor(chosen=SelectSliceResultMother.resumed_at(RunMother.implementing()), budgets=budgets)
-
-    def test_a_control_that_could_not_run_is_retried_on_the_same_step_instead_of_being_read_as_red(self) -> None:
-        conductor = self._conductor()
-        conductor.controls.run.side_effect = [ControlOutcomeMother.unknown(), ControlOutcomeMother.green()]
-
-        result = conductor.conduct()
-
-        assert conductor.controls.run.call_count == 2
-        assert conductor.implement.execute.call_count == 1
-        assert IssueLabel.BLOCKED_CONTROLS not in [
-            call.kwargs["add"] for call in conductor.repository.write_label.call_args_list
-        ]
-        assert result.state is RunState.MERGED
 
     def test_a_control_that_never_settles_waits_out_the_invocation_instead_of_blocking_the_slice(self) -> None:
         conductor = self._conductor(budgets=Budgets(control_retries=0))

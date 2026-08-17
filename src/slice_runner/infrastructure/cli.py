@@ -21,6 +21,7 @@ from slice_runner.application.actions.record_closure import RecordClosure
 from slice_runner.application.actions.record_step import RecordStep
 from slice_runner.application.actions.reopen_slice import ReopenSlice
 from slice_runner.application.actions.reset_slice import ResetSlice, ResetSliceParams
+from slice_runner.application.actions.run_controls import RunControls
 from slice_runner.application.actions.stage_slice import StageSlice
 from slice_runner.application.actions.verify_slice import VerifySlice, VerifySliceParams
 from slice_runner.application.queries.check_readiness import CheckReadiness, CheckReadinessParams, CheckReadinessPorts
@@ -562,6 +563,7 @@ class Cli:
                     )
                 ),
                 stage=StageSlice(workspace=workspace),
+                run_controls=RunControls(controls=LocalControlRunner(process=self._process)),
                 verify=self._action(clock=clock),
                 deliver=DeliverSlice(workspace=workspace, forum=forum),
                 close=CloseParent(repository=repository),
@@ -573,7 +575,6 @@ class Cli:
             ports=ConductSlicePorts(
                 repository=repository,
                 branches=branches,
-                controls=LocalControlRunner(process=self._process),
                 forum=forum,
                 clock=clock,
                 understanding=ClaudeUnderstanding(

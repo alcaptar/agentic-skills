@@ -249,7 +249,6 @@ _KNOWN_NOT_HARNESS_WRITING = {
     ("_budgets", "wait_exhausted"),
     ("_clock", "sleep"),
     ("_close", "execute"),
-    ("_controls", "run"),
     ("_deliver", "execute"),
     ("_deploy_watch", "watch"),
     ("_forum", "any_pull_request"),
@@ -275,6 +274,7 @@ _KNOWN_NOT_HARNESS_WRITING = {
     ("_repository", "write_precheck_reason"),
     ("_repository", "write_run"),
     ("_repository", "write_understanding"),
+    ("_run_controls", "execute"),
     ("_select", "execute"),
     ("_stage", "execute"),
 }

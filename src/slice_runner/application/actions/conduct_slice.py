@@ -9,6 +9,7 @@ from slice_runner.application.actions.implement_slice import ImplementSliceParam
 from slice_runner.application.actions.record_closure import RecordClosureParams
 from slice_runner.application.actions.record_step import RecordStepParams
 from slice_runner.application.actions.reopen_slice import ReopenSliceParams
+from slice_runner.application.actions.run_controls import RunControlsParams
 from slice_runner.application.actions.stage_slice import StageSliceParams
 from slice_runner.application.actions.verify_slice import VerifySliceParams
 from slice_runner.application.queries.read_ci_status import ReadCiStatusParams
@@ -17,7 +18,6 @@ from slice_runner.application.queries.run_prechecks import RunPrechecksParams
 from slice_runner.application.queries.select_slice import SelectSliceParams
 from slice_runner.domain.alignment import Alignment
 from slice_runner.domain.alignment_response_kind import AlignmentResponseKind
-from slice_runner.domain.control_status import ControlStatus
 from slice_runner.domain.discard_cause import DiscardCause
 from slice_runner.domain.exceptions import (
     DirtyIndexError,
@@ -48,6 +48,7 @@ if TYPE_CHECKING:
     from slice_runner.application.actions.record_closure import RecordClosure
     from slice_runner.application.actions.record_step import RecordStep
     from slice_runner.application.actions.reopen_slice import ReopenSlice
+    from slice_runner.application.actions.run_controls import RunControls
     from slice_runner.application.actions.stage_slice import StageSlice
     from slice_runner.application.actions.verify_slice import VerifySlice
     from slice_runner.application.queries.read_ci_status import ReadCiStatus
@@ -58,8 +59,6 @@ if TYPE_CHECKING:
     from slice_runner.domain.budgets import Budgets
     from slice_runner.domain.ci_indeterminate_cause import CiIndeterminateCause
     from slice_runner.domain.clock import Clock
-    from slice_runner.domain.control_outcome import ControlOutcome
-    from slice_runner.domain.control_runner import ControlRunner
     from slice_runner.domain.deploy_watch import DeployWatch
     from slice_runner.domain.diff_stats import DiffStats
     from slice_runner.domain.finding import Finding
@@ -156,6 +155,7 @@ class ConductSliceUseCases:
     prechecks: RunPrechecks
     implement: ImplementSlice
     stage: StageSlice
+    run_controls: RunControls
     verify: VerifySlice
     deliver: DeliverSlice
     close: CloseParent
@@ -169,7 +169,6 @@ class ConductSliceUseCases:
 class ConductSlicePorts:
     repository: RunRepository
     branches: Branches
-    controls: ControlRunner
     forum: Forum
     clock: Clock
     understanding: UnderstandingWriter
@@ -192,6 +191,7 @@ class ConductSlice:
         self._prechecks = use_cases.prechecks
         self._implement = use_cases.implement
         self._stage = use_cases.stage
+        self._run_controls = use_cases.run_controls
         self._verify = use_cases.verify
         self._deliver = use_cases.deliver
         self._close = use_cases.close
@@ -201,7 +201,6 @@ class ConductSlice:
         self._read_pull_request = use_cases.read_pull_request
         self._repository = ports.repository
         self._branches = ports.branches
-        self._controls = ports.controls
         self._forum = ports.forum
         self._clock = ports.clock
         self._understanding = ports.understanding
@@ -490,29 +489,17 @@ class ConductSlice:
             )
 
         round_progress = replace(progress, hygiene_refusal="")
-        outcomes = self._ran_controls(round_progress)
-        red = tuple(
-            outcome.log for outcome in outcomes if outcome.status is ControlStatus.RED and outcome.log is not None
+        ran = self._run_controls.execute(
+            RunControlsParams(
+                worktree=round_progress.params.worktree,
+                controls=round_progress.parent.controls,
+                logs=round_progress.params.logs,
+                slice_id=round_progress.subissue.slice_id,
+                control_rounds_logged=round_progress.run.control_rounds_logged,
+            )
         )
 
-        return SteppedSlice(
-            progress=replace(round_progress, control_logs=red), outcome=Outcome.of_the_controls(outcomes)
-        )
-
-    def _ran_controls(self, progress: ConductSliceProgress) -> tuple[ControlOutcome, ...]:
-        controls = progress.parent.controls
-        if controls.exemption_reason is not None:
-            return ()
-
-        out = (
-            progress.params.logs
-            / progress.subissue.slice_id.canonical
-            / f"round-{progress.run.control_rounds_logged + 1}"
-        )
-
-        return tuple(
-            self._controls.run(command, repo=progress.params.worktree, out=out) for command in controls.commands
-        )
+        return SteppedSlice(progress=replace(round_progress, control_logs=ran.red_logs), outcome=ran.outcome)
 
     def _judging(self, progress: ConductSliceProgress) -> SteppedSlice:
         if self._budgets.exhausted(progress.spend):
