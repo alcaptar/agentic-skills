@@ -22,9 +22,12 @@ from slice_runner.domain.issue_label import IssueLabel
 from slice_runner.domain.issue_state import IssueState
 from slice_runner.domain.malformed_reason import MalformedReason
 from slice_runner.domain.precheck_outcome import PrecheckOutcome
+from slice_runner.domain.requested_change import RequestedChange
 from slice_runner.domain.retry_response_kind import RetryResponseKind
+from slice_runner.domain.run import Run
 from slice_runner.domain.slice_identity import SliceIdentity
 from slice_runner.domain.source import Source, SourceKind
+from slice_runner.domain.step import Step
 from slice_runner.infrastructure.automation_mark import AutomationMark
 from slice_runner.infrastructure.gh_run_repository import GhCommandFailedError, GhRunRepository
 from slice_runner.infrastructure.malformed_response_comment import MalformedResponseComment
@@ -37,6 +40,7 @@ from slice_runner.tests.argv import Argv
 from slice_runner.tests.doubles import GhCallDoubles, ScriptedProcess
 from slice_runner.tests.mothers.gh_response_mother import GhResponseMother
 from slice_runner.tests.mothers.harness_spend_mother import HarnessSpendMother
+from slice_runner.tests.mothers.pull_request_review_comment_mother import PullRequestReviewCommentMother
 from slice_runner.tests.mothers.run_mother import RunMother
 from slice_runner.tests.mothers.verdict_mother import FindingMother
 
@@ -328,6 +332,43 @@ class TestReadingTheChildren:
 
         assert children[0].run == RunMother.judging_after_spending(HarnessSpendMother.of_the_implementer_call())
 
+    def test_a_state_block_with_a_requested_change_reads_back_its_anchored_comments_with_file_and_line(self) -> None:
+        with_requested_changes = [
+            {
+                "number": 1,
+                "title": "slice-01 (x): y",
+                "body": (
+                    "INTENCION: z\n\n"
+                    "<!-- slice-runner:estado\n"
+                    '{"step": "implement", "last_reviewed_id": 101, '
+                    '"requested_changes": [{"body": "", "comments": ['
+                    '{"body": "esta linea sobra", "path": "src/slice_runner/domain/run.py", "line": 42}, '
+                    '{"body": "esto ya no aplica", "path": "src/slice_runner/domain/run.py", "line": null}]}]}\n'
+                    "-->\n"
+                ),
+                "labels": [],
+                "state": "OPEN",
+            }
+        ]
+
+        children = GhRunRepository(
+            call=GhCallDoubles.wired(self._process(children=with_requested_changes))
+        ).read_children(repo=_REPO, parent=43, expected=1)
+
+        assert children[0].run == Run(
+            step=Step.IMPLEMENT,
+            last_reviewed_id=101,
+            requested_changes=(
+                RequestedChange(
+                    body="",
+                    comments=(
+                        PullRequestReviewCommentMother.anchored_to_a_line(),
+                        PullRequestReviewCommentMother.without_a_line_because_it_went_stale(),
+                    ),
+                ),
+            ),
+        )
+
     def test_the_macro_state_label_present_on_the_issue_is_read_as_the_issue_label(self) -> None:
         children = GhRunRepository(call=GhCallDoubles.wired(self._process())).read_children(
             repo=_REPO, parent=43, expected=2
@@ -467,6 +508,37 @@ class TestWritingTheExecutionStateBlock:
             '"last_reviewed_id": 0, "requested_changes": []}\n'
             "-->\n\n"
         )
+
+    def test_a_run_with_a_requested_change_writes_its_anchored_comments_with_file_and_line(self) -> None:
+        process = self._process(body=_SUB2_BODY)
+        run = Run(
+            step=Step.IMPLEMENT,
+            last_reviewed_id=101,
+            requested_changes=(
+                RequestedChange(
+                    body="",
+                    comments=(
+                        PullRequestReviewCommentMother.anchored_to_a_line(),
+                        PullRequestReviewCommentMother.without_a_line_because_it_went_stale(),
+                    ),
+                ),
+            ),
+        )
+
+        GhRunRepository(call=GhCallDoubles.wired(process)).write_run(repo=_OTHER_REPO, issue=44, run=run)
+
+        block = re.search(r"<!-- slice-runner:estado\n(.*?)\n-->", process.calls[1].stdin, re.DOTALL)
+        assert block is not None
+        written = json.loads(block.group(1))
+        assert written["requested_changes"] == [
+            {
+                "body": "",
+                "comments": [
+                    {"body": "esta linea sobra", "path": "src/slice_runner/domain/run.py", "line": 42},
+                    {"body": "esto ya no aplica", "path": "src/slice_runner/domain/run.py"},
+                ],
+            }
+        ]
 
     def test_a_run_with_a_measured_spend_writes_it_nested_under_its_own_key_so_reinvoking_keeps_the_budget(
         self,

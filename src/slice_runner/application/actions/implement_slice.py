@@ -12,6 +12,7 @@ if TYPE_CHECKING:
     from slice_runner.domain.implementation import Implementation
     from slice_runner.domain.implementer import Implementer
     from slice_runner.domain.parent_issue import ParentIssue
+    from slice_runner.domain.requested_change import RequestedChange
     from slice_runner.domain.sub_issue import SubIssue
 
 
@@ -26,7 +27,7 @@ class ImplementSliceParams:
     hygiene_refusal: str = ""
     understanding: str = ""
     retry_instruction: str = ""
-    requested_changes: tuple[str, ...] = ()
+    requested_changes: tuple[RequestedChange, ...] = ()
 
 
 class ImplementSlice:

@@ -1,7 +1,13 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from slice_runner.domain.pull_request_review import PullRequestReview
 from slice_runner.domain.pull_request_review_state import PullRequestReviewState
+from slice_runner.tests.mothers.pull_request_review_comment_mother import PullRequestReviewCommentMother
+
+if TYPE_CHECKING:
+    from slice_runner.domain.pull_request_review_comment import PullRequestReviewComment
 
 
 class PullRequestReviewMother:
@@ -15,13 +21,27 @@ class PullRequestReviewMother:
     def asking_for_a_change_in_a_line_comment(
         cls, *, review_id: int = 101, asked: str = "esta linea sobra"
     ) -> PullRequestReview:
-        return cls._commented(review_id=review_id, body="", comments=(asked,))
+        return cls._commented(
+            review_id=review_id, body="", comments=(PullRequestReviewCommentMother.anchored_to_a_line(body=asked),)
+        )
 
     @classmethod
-    def asking_for_a_change_with_several_comments(
-        cls, *, review_id: int = 101, asked: str = "esta linea sobra", also: str = "y de paso mira el nombre"
+    def asking_for_a_change_with_a_body_and_several_comments(
+        cls,
+        *,
+        review_id: int = 101,
+        body: str = "corrige el manejo de errores",
+        asked: str = "esta linea sobra",
+        also: str = "y de paso mira el nombre",
     ) -> PullRequestReview:
-        return cls._commented(review_id=review_id, body="", comments=(asked, also))
+        return cls._commented(
+            review_id=review_id,
+            body=body,
+            comments=(
+                PullRequestReviewCommentMother.anchored_to_a_line(body=asked),
+                PullRequestReviewCommentMother.anchored_to_a_line(body=also, line=43),
+            ),
+        )
 
     @classmethod
     def requesting_changes(cls, *, review_id: int = 104, asked: str = "usa el value object") -> PullRequestReview:
@@ -42,5 +62,7 @@ class PullRequestReviewMother:
         return PullRequestReview(id=review_id, state=PullRequestReviewState.DISMISSED, body="esto ya se descarto")
 
     @staticmethod
-    def _commented(*, review_id: int, body: str, comments: tuple[str, ...] = ()) -> PullRequestReview:
+    def _commented(
+        *, review_id: int, body: str, comments: tuple[PullRequestReviewComment, ...] = ()
+    ) -> PullRequestReview:
         return PullRequestReview(id=review_id, state=PullRequestReviewState.COMMENTED, body=body, comments=comments)

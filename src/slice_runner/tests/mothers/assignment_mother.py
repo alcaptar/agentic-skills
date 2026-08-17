@@ -4,8 +4,10 @@ from dataclasses import replace
 from typing import ClassVar
 
 from slice_runner.domain.assignment import Assignment
+from slice_runner.domain.requested_change import RequestedChange
 from slice_runner.tests.mothers.control_outcome_mother import ControlOutcomeMother
 from slice_runner.tests.mothers.parent_issue_mother import ParentIssueMother
+from slice_runner.tests.mothers.pull_request_review_comment_mother import PullRequestReviewCommentMother
 from slice_runner.tests.mothers.sub_issue_mother import SubIssueMother
 from slice_runner.tests.mothers.verdict_mother import FindingMother
 
@@ -73,4 +75,33 @@ class AssignmentMother:
 
     @classmethod
     def of_a_round_after_a_review(cls) -> Assignment:
-        return replace(cls.of_the_first_round(), requested_changes=(cls.REVIEW,))
+        return replace(cls.of_the_first_round(), requested_changes=(RequestedChange(body=cls.REVIEW),))
+
+    @classmethod
+    def of_a_round_after_a_review_with_an_anchored_comment(cls) -> Assignment:
+        return replace(
+            cls.of_the_first_round(),
+            requested_changes=(
+                RequestedChange(body="", comments=(PullRequestReviewCommentMother.anchored_to_a_line(),)),
+            ),
+        )
+
+    @classmethod
+    def of_a_round_after_a_review_with_a_body_and_an_anchored_comment(cls) -> Assignment:
+        return replace(
+            cls.of_the_first_round(),
+            requested_changes=(
+                RequestedChange(body=cls.REVIEW, comments=(PullRequestReviewCommentMother.anchored_to_a_line(),)),
+            ),
+        )
+
+    @classmethod
+    def of_a_round_after_a_stale_review_comment(cls) -> Assignment:
+        return replace(
+            cls.of_the_first_round(),
+            requested_changes=(
+                RequestedChange(
+                    body="", comments=(PullRequestReviewCommentMother.without_a_line_because_it_went_stale(),)
+                ),
+            ),
+        )

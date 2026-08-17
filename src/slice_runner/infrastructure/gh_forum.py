@@ -20,6 +20,7 @@ from slice_runner.infrastructure.gh_run_repository import GhCommandFailedError
 if TYPE_CHECKING:
     from slice_runner.domain.branch_pull_request import BranchPullRequest
     from slice_runner.domain.pull_request_review import PullRequestReview
+    from slice_runner.domain.pull_request_review_comment import PullRequestReviewComment
     from slice_runner.domain.pull_request_status import PullRequestStatus
     from slice_runner.infrastructure.gh_call import GhCall
 
@@ -100,9 +101,9 @@ class GhForum(Forum):
             GhPullRequestReviewCommentPayload.from_dict(item)
             for item in self._decoded_array(self._gh_api(f"repos/{repo}/pulls/{pull_request}/comments"))
         )
-        by_review: dict[int, list[str]] = defaultdict(list)
+        by_review: dict[int, list[PullRequestReviewComment]] = defaultdict(list)
         for comment in comments:
-            by_review[comment.pull_request_review_id].append(comment.body)
+            by_review[comment.pull_request_review_id].append(comment.to_domain())
 
         return tuple(review.to_domain(comments=tuple(by_review[review.id])) for review in reviews)
 

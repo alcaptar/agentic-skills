@@ -13,6 +13,8 @@ from slice_runner.infrastructure.slice_implementer_brief import SliceImplementer
 if TYPE_CHECKING:
     from slice_runner.domain.assignment import Assignment
     from slice_runner.domain.finding import Finding
+    from slice_runner.domain.pull_request_review_comment import PullRequestReviewComment
+    from slice_runner.domain.requested_change import RequestedChange
     from slice_runner.domain.source_reader import SourceReader
 
 
@@ -87,8 +89,8 @@ class ImplementerInvocation:
 
     @property
     def _requested_changes(self) -> list[str]:
-        reviews = self.assignment.requested_changes
-        if not reviews:
+        changes = self.assignment.requested_changes
+        if not changes:
             return []
 
         return [
@@ -98,8 +100,19 @@ class ImplementerInvocation:
             "Ya se habia abierto la pull request de esta slice cuando alguien pidio estos cambios en la review;",
             "atiendelos antes de nada mas:",
             "",
-            "\n\n".join(reviews),
+            "\n\n".join(self._change_block(change) for change in changes),
         ]
+
+    @classmethod
+    def _change_block(cls, change: RequestedChange) -> str:
+        parts = [change.body] if change.body.strip() else []
+        parts.extend(cls._anchored(comment) for comment in change.comments)
+
+        return "\n\n".join(parts)
+
+    @classmethod
+    def _anchored(cls, comment: PullRequestReviewComment) -> str:
+        return f"{cls._location(path=comment.path, line=comment.line)}: {comment.body}"
 
     @property
     def _retry_instruction(self) -> list[str]:
@@ -171,8 +184,12 @@ class ImplementerInvocation:
             "  - declara en tu informe TODO fichero que toques, o no lo toques",
         ]
 
-    @staticmethod
-    def _raised(finding: Finding) -> str:
-        where = f"{finding.path}:{finding.line}" if finding.line is not None else finding.path
+    @classmethod
+    def _raised(cls, finding: Finding) -> str:
+        where = cls._location(path=finding.path, line=finding.line)
 
         return f"[{finding.severity}] {finding.rule} en {where}: {finding.evidence} (detalle: {finding.detail})"
+
+    @staticmethod
+    def _location(*, path: str, line: int | None) -> str:
+        return f"{path}:{line}" if line is not None else path

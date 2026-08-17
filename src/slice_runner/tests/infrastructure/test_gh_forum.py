@@ -7,6 +7,7 @@ import pytest
 from slice_runner.domain.branch_pull_request import BranchPullRequest
 from slice_runner.domain.exceptions import UnreadableForumError
 from slice_runner.domain.pull_request_mergeability import PullRequestMergeability
+from slice_runner.domain.pull_request_review_comment import PullRequestReviewComment
 from slice_runner.domain.pull_request_review_state import PullRequestReviewState
 from slice_runner.domain.pull_request_state import PullRequestState
 from slice_runner.infrastructure.gh_forum import GhForum
@@ -15,6 +16,7 @@ from slice_runner.infrastructure.process import ProcessOutput
 from slice_runner.tests.argv import Argv
 from slice_runner.tests.doubles import GhCallDoubles, ScriptedProcess
 from slice_runner.tests.mothers.gh_response_mother import GhResponseMother
+from slice_runner.tests.mothers.pull_request_review_comment_mother import PullRequestReviewCommentMother
 
 _REPO = "alcaptar/agentic-skills"
 _BRANCH = "slice/05-prechecks-deterministas"
@@ -418,9 +420,19 @@ class TestGhForumReadingTheReviewsOfAPullRequest:
                 {"id": 102, "state": "CHANGES_REQUESTED", "body": ""},
             ],
             [
-                {"body": "esto rompe si la lista viene vacia", "pull_request_review_id": 101},
-                {"body": "aqui falta un test", "pull_request_review_id": 102},
-                {"body": "y aqui otro mas sobre lo mismo", "pull_request_review_id": 101},
+                {
+                    "body": "esto rompe si la lista viene vacia",
+                    "path": "src/a.py",
+                    "line": 10,
+                    "pull_request_review_id": 101,
+                },
+                {"body": "aqui falta un test", "path": "src/b.py", "line": 3, "pull_request_review_id": 102},
+                {
+                    "body": "y aqui otro mas sobre lo mismo",
+                    "path": "src/a.py",
+                    "line": 12,
+                    "pull_request_review_id": 101,
+                },
             ],
         )
 
@@ -428,9 +440,46 @@ class TestGhForumReadingTheReviewsOfAPullRequest:
 
         by_id = {review.id: review.comments for review in reviews}
         assert by_id == {
-            101: ("esto rompe si la lista viene vacia", "y aqui otro mas sobre lo mismo"),
-            102: ("aqui falta un test",),
+            101: (
+                PullRequestReviewComment(body="esto rompe si la lista viene vacia", path="src/a.py", line=10),
+                PullRequestReviewComment(body="y aqui otro mas sobre lo mismo", path="src/a.py", line=12),
+            ),
+            102: (PullRequestReviewComment(body="aqui falta un test", path="src/b.py", line=3),),
         }
+
+    def test_an_inline_comment_carries_its_file_and_its_line(self) -> None:
+        process = self._answering(
+            [{"id": 101, "state": "CHANGES_REQUESTED", "body": ""}],
+            [
+                {
+                    "body": PullRequestReviewCommentMother.ANCHORED_BODY,
+                    "path": PullRequestReviewCommentMother.PATH,
+                    "line": PullRequestReviewCommentMother.LINE,
+                    "pull_request_review_id": 101,
+                }
+            ],
+        )
+
+        reviews = GhForum(call=GhCallDoubles.wired(process)).reviews(repo=_REPO, pull_request=60)
+
+        assert reviews[0].comments == (PullRequestReviewCommentMother.anchored_to_a_line(),)
+
+    def test_a_comment_that_went_stale_after_a_push_arrives_with_its_file_and_without_a_line(self) -> None:
+        process = self._answering(
+            [{"id": 101, "state": "CHANGES_REQUESTED", "body": ""}],
+            [
+                {
+                    "body": PullRequestReviewCommentMother.STALE_BODY,
+                    "path": PullRequestReviewCommentMother.PATH,
+                    "line": None,
+                    "pull_request_review_id": 101,
+                }
+            ],
+        )
+
+        reviews = GhForum(call=GhCallDoubles.wired(process)).reviews(repo=_REPO, pull_request=60)
+
+        assert reviews[0].comments == (PullRequestReviewCommentMother.without_a_line_because_it_went_stale(),)
 
     def test_a_non_zero_exit_listing_reviews_raises_with_the_stderr_it_carried(self) -> None:
         process = ScriptedProcess(ProcessOutput(code=1, stdout="", stderr="GraphQL: Could not resolve to a Repository"))

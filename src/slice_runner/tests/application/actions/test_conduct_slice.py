@@ -30,6 +30,7 @@ from slice_runner.domain.issue_label import IssueLabel
 from slice_runner.domain.malformed_reason import MalformedReason
 from slice_runner.domain.precheck_outcome import PrecheckOutcome
 from slice_runner.domain.precheck_result import PrecheckResult
+from slice_runner.domain.requested_change import RequestedChange
 from slice_runner.domain.retry_response import RetryResponse
 from slice_runner.domain.retry_response_kind import RetryResponseKind
 from slice_runner.domain.role_models import RoleModels
@@ -41,6 +42,7 @@ from slice_runner.tests.mothers.control_outcome_mother import ControlOutcomeMoth
 from slice_runner.tests.mothers.harness_spend_mother import HarnessSpendMother
 from slice_runner.tests.mothers.implementation_mother import ImplementationMother
 from slice_runner.tests.mothers.parent_issue_mother import ParentIssueMother
+from slice_runner.tests.mothers.pull_request_review_comment_mother import PullRequestReviewCommentMother
 from slice_runner.tests.mothers.pull_request_review_mother import PullRequestReviewMother
 from slice_runner.tests.mothers.pull_request_status_mother import PullRequestStatusMother
 from slice_runner.tests.mothers.rejection_mother import RejectionMother
@@ -1746,20 +1748,30 @@ class TestConductSliceWhenAReviewAsksForAChangeOnThePullRequest:
 
         conductor.conduct()
 
-        assert conductor.implement.execute.call_args.args[0].requested_changes == ("esta linea sobra",)
+        assert conductor.implement.execute.call_args.args[0].requested_changes == (
+            RequestedChange(
+                body="", comments=(PullRequestReviewCommentMother.anchored_to_a_line(body="esta linea sobra"),)
+            ),
+        )
 
     def test_the_body_and_every_line_comment_of_the_review_travel_together_in_the_order_they_were_written(self) -> None:
         conductor = self._conductor()
         conductor.forum.reviews.return_value = (
-            PullRequestReviewMother.asking_for_a_change_with_several_comments(
-                asked="esta linea sobra", also="y de paso mira el nombre"
+            PullRequestReviewMother.asking_for_a_change_with_a_body_and_several_comments(
+                body="corrige el manejo de errores", asked="esta linea sobra", also="y de paso mira el nombre"
             ),
         )
 
         conductor.conduct()
 
         assert conductor.implement.execute.call_args.args[0].requested_changes == (
-            "esta linea sobra\n\ny de paso mira el nombre",
+            RequestedChange(
+                body="corrige el manejo de errores",
+                comments=(
+                    PullRequestReviewCommentMother.anchored_to_a_line(body="esta linea sobra"),
+                    PullRequestReviewCommentMother.anchored_to_a_line(body="y de paso mira el nombre", line=43),
+                ),
+            ),
         )
 
     def test_the_native_request_changes_gesture_asks_for_a_change_too_when_a_teammate_can_use_it(self) -> None:
@@ -1770,7 +1782,9 @@ class TestConductSliceWhenAReviewAsksForAChangeOnThePullRequest:
 
         conductor.conduct()
 
-        assert conductor.implement.execute.call_args.args[0].requested_changes == ("usa el value object",)
+        assert conductor.implement.execute.call_args.args[0].requested_changes == (
+            RequestedChange(body="usa el value object"),
+        )
 
     @pytest.mark.parametrize(
         "review",
@@ -1819,7 +1833,10 @@ class TestConductSliceWhenAReviewAsksForAChangeOnThePullRequest:
         conductor.conduct()
 
         assert conductor.implement.execute.call_count == 1
-        assert conductor.implement.execute.call_args.args[0].requested_changes == ("arregla A", "arregla B")
+        assert conductor.implement.execute.call_args.args[0].requested_changes == (
+            RequestedChange(body="arregla A"),
+            RequestedChange(body="arregla B"),
+        )
 
     def test_the_body_of_the_review_reaches_the_implementer_in_the_round_it_triggers(self) -> None:
         asked = "usa el value object en vez del dict"
@@ -1828,7 +1845,7 @@ class TestConductSliceWhenAReviewAsksForAChangeOnThePullRequest:
 
         conductor.conduct()
 
-        assert conductor.implement.execute.call_args.args[0].requested_changes == (asked,)
+        assert conductor.implement.execute.call_args.args[0].requested_changes == (RequestedChange(body=asked),)
 
     def test_reinvoking_after_the_marker_advanced_does_not_reprocess_the_same_review(self) -> None:
         conductor = self._conductor(run=RunMother.awaiting_merge_after_reviewing(101))
@@ -1848,7 +1865,9 @@ class TestConductSliceWhenAReviewAsksForAChangeOnThePullRequest:
         conductor.conduct()
 
         assert conductor.implement.execute.call_count == 1
-        assert conductor.implement.execute.call_args.args[0].requested_changes == ("una segunda vuelta",)
+        assert conductor.implement.execute.call_args.args[0].requested_changes == (
+            RequestedChange(body="una segunda vuelta"),
+        )
 
     def test_the_marker_is_remembered_across_invocations_so_a_later_invocation_does_not_repeat_it(self) -> None:
         conductor = self._conductor()
@@ -1877,7 +1896,7 @@ class TestConductSliceWhenAReviewAsksForAChangeOnThePullRequest:
         conductor.conduct()
 
         written = [call.kwargs["run"] for call in conductor.repository.write_run.call_args_list]
-        assert ("arregla el borde",) in [run.requested_changes for run in written]
+        assert (RequestedChange(body="arregla el borde"),) in [run.requested_changes for run in written]
 
     def test_an_invocation_resumed_mid_correction_reaches_the_implementer_with_the_review_it_had_to_attend(
         self,
@@ -1886,7 +1905,18 @@ class TestConductSliceWhenAReviewAsksForAChangeOnThePullRequest:
 
         conductor.conduct()
 
-        assert conductor.implement.execute.call_args.args[0].requested_changes == ("arregla el borde",)
+        assert conductor.implement.execute.call_args.args[0].requested_changes == (
+            RequestedChange(body="arregla el borde"),
+        )
+
+    def test_an_invocation_resumed_mid_correction_still_carries_the_anchored_comments_file_and_line(self) -> None:
+        conductor = self._conductor(run=RunMother.correcting_a_review_with_an_anchored_comment())
+
+        conductor.conduct()
+
+        assert conductor.implement.execute.call_args.args[0].requested_changes == (
+            RequestedChange(body="", comments=(PullRequestReviewCommentMother.anchored_to_a_line(),)),
+        )
 
     def test_delivering_the_correction_clears_the_review_so_the_next_round_is_judged_again(self) -> None:
         conductor = self._conductor()
