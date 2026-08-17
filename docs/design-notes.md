@@ -570,3 +570,4 @@ Estado actual: **Nivel 1** — una slice por invocacion, todo bajo control manua
 
 - Respuestas y skills sin emojis (preferencia del usuario) -> el testigo de contexto es un marcador de texto `[skill-name]`, no un emoji.
 - Idioma: cuerpo de las skills y comunicacion en castellano; codigo/commits/PRs en ingles (convencion de los repos).
+
