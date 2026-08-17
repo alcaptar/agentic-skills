@@ -71,8 +71,7 @@ Dos modos:
   observable, y eso se arregla **en el slicing**, no en el incidente. Las exentas (refactor puro, VO
   interno, migracion sin efecto visible) lo declaran con motivo: `SENAL: exenta - <motivo>`;
   ausencia silenciosa no es exencion. El detalle vive en `references/observabilidad.md` (escalera
-  para decidir si hay que instrumentar o la senal ya existe, redaccion de la linea, y el overlay del
-  stack concreto si el repo lo tiene).
+  para decidir si hay que instrumentar o la senal ya existe, stack concreto, redaccion de la linea).
 - **Alertas y paneles son slices propias, en su repo.** Una alerta o un panel no van nunca en la PR de
   la metrica que consumen (repos distintos ⇒ PRs distintas), y el orden es forzoso: primero la slice
   que emite la serie, luego la alerta, luego el panel. Se declaran con `REPO:` en su linea.

@@ -28,10 +28,13 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 _UNSCANNED = {
+    "skills/slice-spec/references/observabilidad.md": "documenta rutas de otros repos",
     "playground/tasks": "entrada congelada de un experimento, no se actualiza",
 }
-"""What is not scanned at all, for a reason about what the file IS.
+"""What is not scanned at all, each for a reason about what the file IS.
 
+`observabilidad.md` is a reference doc about OTHER repos -- every path in it belongs to the tree of
+the monitoring library or of the infra repos it documents, not to this one.
 `playground/tasks` holds the frozen input of each experiment: the copies of the conventions a
 variant hands to the model are what that run was measured against, so updating them when the tree
 moves would destroy the only thing that makes the numbers comparable -- a rerun would no longer be

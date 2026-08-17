@@ -4,9 +4,9 @@ Reference-doc de `slice-spec`. Se carga **solo cuando el slicing detecta que hay
 disenar** (`reference-docs` + `context-management`), y tambien lo carga el **implementador** de
 `slice-runner` cuando la slice tiene que instrumentar algo.
 
-Dos partes: la **escalera** (universal, vale para cualquier repo) y el **stack concreto** -la
-libreria de instrumentacion, el repo de alertas y el de paneles-, que es un overlay por organizacion
-y no viaja aqui. Sin overlay la escalera sigue valiendo; lo que hay que averiguar es contra que.
+Dos partes: la **escalera** (universal, vale para cualquier repo) y el **stack concreto** (la
+libreria de monitoring, el repo de alertas y el de paneles). Si trabajas en un repo que no usa ese
+stack, la escalera sigue valiendo; la segunda parte se sustituye por lo que ese repo tenga.
 
 ## Filosofia
 
@@ -59,37 +59,130 @@ la mayoria de las slices ya tienen senal y solo hay que **apuntar** a ella.
    resuelve o se acota **ahi**. Nunca una instrumentacion ad-hoc paralela a la libreria: duplicar el
    mecanismo es peor que el gap, porque el gap se arregla una vez y la duplicacion se hereda.
 
-## El stack concreto: overlay por organizacion
+## Stack de Mercadona
 
-La escalera de arriba es universal; para bajarla hacen falta tres datos que **son de cada
-organizacion**: que emite ya la libreria de instrumentacion sin escribir una linea (escalon 1), como
-se enriquece lo que ya emite (escalon 2), y donde viven las alertas y los paneles -en que repo, con
-que ruta y con que se validan-.
+### La libreria: `mo.pypi.monitoring`
 
-Eso vive en un fichero aparte, `references/observabilidad.local.md`, que la skill **carga si existe**
-y que no viaja en este repo. Sin el la escalera sigue funcionando: lo que se pierde es el atajo de
-saber de antemano que serie sale gratis, y hay que ir a mirarlo al repo que se toca.
+Lo que ya emite **sin escribir una linea** (escalon 1):
 
-Lo que el overlay tiene que contestar:
-
-| Pregunta | Para que escalon |
+| Primitiva | Emite |
 |---|---|
-| Que primitivas de la libreria instrumentan solas, y que series emiten | 1 |
-| Como se anade un atributo, un label o un span a lo que ya emite | 2 |
-| Como se declara una metrica de negocio propia y como se testea su emision | 3 |
-| Donde se abre un gap de la libreria | 4 |
-| En que repo viven las alertas, con que ruta, que labels son obligatorias y con que se validan | slice de alerta |
-| En que repo viven los paneles y que control tienen | slice de panel |
+| `@instrumented_action` (clase con `execute`) | `application_action_executed_total{action_name,component,service}`, `application_action_duration_seconds`, span APM `application.action`, logs JSON de inicio/fin |
+| `@instrumented_command` (clase con `handle`, cronjobs) | `application_command_executed_total`, `application_command_duration_seconds`, transaccion APM, errores a Sentry (push gateway: requiere `MONITORING_METRICS_PUSH_GATEWAY`) |
+| middlewares Django / FastAPI | `application_http_requests_total{method,path,status}`, `application_http_request_duration_seconds`, `application_http_request_latency_seconds` (histograma **opt-in** via `MONITORING_HTTP_LATENCY_HISTOGRAM_ENABLED`, con buckets pensados para `histogram_quantile()` y **ratios de good-events para SLI**), tamanos, `application_http_queue_duration_seconds` |
+| `contrib/rele`, `contrib/kafka_connector` | metricas de consumers/producers |
+| `Instrumentation().logger` | logger JSON configurado; los `extra` van namespaced por `APPLICATION_NAME` |
 
-**Una slice de alerta es TDD-able de verdad**, la tenga quien la tenga: lint y validate contestan
-*"¿parsea el YAML y compila el PromQL?"*, y `promtool test rules` contesta la otra pregunta, *"cuando
-estas metricas se comportan asi, ¿dispara la alerta?"*. Se escribe el test con `input_series`
-primero, se mira que falla, y luego la regla. Criterios de aceptacion tipicos: dispara con la serie
-esperada, **no** dispara por debajo del umbral, y las labels que exija el repo de infra estan
-presentes con un `for:` no-cero.
+Escalon 2 — enriquecer sin metrica nueva:
 
-**Un panel normalmente es capa eximida**: si su unico control es "el JSON parsea", no se fuerza
-test-first, se comprueba renderizando despues del deploy, y su `SENAL` suele ser `exenta` con el
+```python
+@instrumented_action(log_attributes=["order_id", "center_code"])
+class AjustarStock:
+    def execute(self, params: AjustarStockParams) -> None: ...
+```
+
+```python
+with SpanContext(name="recalculo_stock", span_type="application.action.recalculo"):
+    ...
+```
+
+Escalon 3 — metrica de negocio propia. `MetricRepository` es un **puerto abstracto**: se inyecta, no
+se instancia dentro del dominio.
+
+```python
+AJUSTES = Counter(
+    "application_stock_ajustado_total",
+    "Ajustes de stock aplicados.",
+    ["motivo", "component", "service"],
+)
+
+class AjustarStock:
+    def __init__(self, metrics: MetricRepository) -> None:
+        self._metrics = metrics
+
+    def execute(self, params: AjustarStockParams) -> None:
+        ...
+        self._metrics.increment(AJUSTES, motivo=params.motivo)
+```
+
+Y su **test de emision** — el "observability test": no testea logica de negocio, testea que la
+telemetria cumple el contrato. Sin mocks: la libreria trae el doble in-memory.
+
+```python
+def test_registra_el_ajuste_en_la_metrica() -> None:
+    metrics = InMemoryMetricRepository()
+
+    AjustarStock(metrics=metrics).execute(un_ajuste(motivo="rotura"))
+
+    assert metrics.get_value("application_stock_ajustado_total", motivo="rotura") == 1
+```
+
+**Naming**: `application_*_total` para contadores, labels `component`/`service` como en el resto.
+**Nunca** `instance_name` derivado del nombre del pod: rompe en cada deploy (lo dice el propio
+`CLAUDE.md` de la libreria); usa las labels estables.
+
+**Gap de la libreria (escalon 4)**: si lo que necesitas no se puede expresar con la libreria (falta un
+tipo de metrica, un decorador no cubre tu tipo de proceso, no hay forma de anadir un label), abre issue
+en `mercadona/mo.pypi.monitoring` describiendo el caso y **dilo en la spec**. Un contador a mano en
+paralelo a la libreria no es una solucion: es el gap, heredado.
+
+### Alertas: `mercadona/mercadona.online.gke`
+
+Slice **propia**, siempre. Repo distinto ⇒ PR distinta por definicion, y mezclarla con la metrica
+romperia la higiene del diff.
+
+| | |
+|---|---|
+| Ruta | `templates/prometheus/prometheus-server/teams/<equipo>/<equipo>-alerting-rules-<env>.tpl` |
+| Equipos | `shop`, `checkout`, `in-store`, `supply`, `market`, `data`, `flota`, `ultima-milla`, `primera-milla`, `in-colmena`, `calidad`, `staff`, `ser-humano`, `vyp`, `sre`, `shared-infra` |
+| Envs | `prod`, `sta`, `mercanetes`, `training` (un `.tpl` por env) |
+| Forma | ConfigMap de k8s dentro de un Go template: **escaping embebido** (`{{"{{"}} $labels.deployment {{"}}"}}`). Se rompe facil; leer `templates/CLAUDE.md` antes de tocar |
+| Labels obligatorias | `severity`, `channel`, `mo_team`, `label_mercadona_es_team_owner` (legacy), y `for:` no-cero — lo fuerza `validate_alerting_rules.sh` |
+| Controles | `make run-manifestr-local` (render) + `make test_prometheus_rules` (**`promtool test rules`**) |
+| Tests | `tests/prometheus/rules/<env>/<equipo>/*.yml` |
+| CI en PR | `.github/workflows/prometheus-alerting-rules-validation.yml` |
+
+**Una alerta es TDD-able de verdad.** Su README separa las dos preguntas: lint/validate/check
+responden *"¿parsea el YAML y compila el PromQL?"*; `promtool test rules` responde *"cuando estas
+metricas se comportan asi, ¿dispara la alerta?"*. Escribe el test con `input_series` primero, mira que
+falla, y luego la regla:
+
+```yaml
+rule_files:
+  - rules.yml
+evaluation_interval: 1m
+tests:
+  - input_series:
+      - series: 'application_stock_ajustado_fallido_total{deployment="shop-api"}'
+        values: '0+1x10'
+    alert_rule_test:
+      - eval_time: 6m
+        alertname: ShopAjusteStockFallido
+        exp_alerts:
+          - exp_labels: {severity: warning, mo_team: shop, deployment: shop-api}
+```
+
+Criterios de aceptacion tipicos de una slice de alerta: el test `promtool` que dispara con la serie
+esperada, el que **no** dispara por debajo del umbral, labels obligatorias presentes y `for:`
+no-cero.
+
+`SENAL` tipica: `prometheus ALERTS{alertname="X"} presente y == 0 en 24h; advisory` — es decir, la
+regla **cargo** y **no genera falsos positivos**. Es advisory a proposito: una alerta recien puesta que
+dispara no tumba el deploy, te dice que el umbral esta mal calibrado.
+
+### Paneles: `mercadona/mo.sre.grafana-configs`
+
+Slice **propia**, la ultima de la cadena y la primera candidata a posponer.
+
+| | |
+|---|---|
+| Ruta | `settings/<env>/dashboards-files/<Equipo>/<panel>.json` (raiz de `dashboards-files/` = carpeta `General` de Grafana) |
+| Envs | `production`, `sta`, `mercanetes` |
+| CI | Jenkinsfile que **solo sube a GCS en `master`**: sin validacion en PR, sin tests |
+
+No hay control mas alla de "el JSON parsea", asi que es **capa eximida** (delta 1 de `slice-runner`,
+como los modelos ORM): no fuerces test-first. El control es "JSON valido + el panel renderiza y sus
+queries devuelven datos", y eso se comprueba tras el deploy. Su `SENAL` normalmente es `exenta`, con el
 motivo escrito.
 
 ## Orden forzoso
@@ -99,8 +192,8 @@ No se puede alertar ni pintar una serie que nadie emite. No es preferencia, es d
 ```
 slice-N    emite la senal (repo de app)        SENAL: la serie aparece con sus labels
     | deploy + deploy-watch confirma la serie viva
-slice-N+1  alerta (repo de infra)              SENAL: ALERTS{alertname="X"} presente y == 0
-slice-N+2  panel (repo de paneles)             SENAL: exenta - render manual
+slice-N+1  alerta (gke, carpeta del equipo)    SENAL: ALERTS{alertname="X"} presente y == 0
+slice-N+2  panel (grafana-configs)             SENAL: exenta - render manual
 ```
 
 Coherente con **"Aislamiento de infra"** de `slicing.md` (PRs distintas: despliega, observa, y luego el
@@ -117,7 +210,7 @@ construye la query concreta, asi que basta con ser inequivoco:
 ```
 SENAL: prometheus rate(application_stock_ajustado_total{motivo="rotura"}[5m]) > 0 en 10m post-deploy; critical
 SENAL: elasticsearch logs con ajuste_rechazado y campo motivo presentes tras el primer rechazo; advisory
-SENAL: prometheus ALERTS{alertname="AjusteStockFallido"} presente y == 0 en 24h; advisory
+SENAL: prometheus ALERTS{alertname="ShopAjusteStockFallido"} presente y == 0 en 24h; advisory
 SENAL: exenta - refactor puro, ningun comportamiento cambia
 ```
 
@@ -156,4 +249,8 @@ SENAL: revisar que funcione                       <- prosa
 - Splunk — *Observability-Driven Development Explained*. oneuptime — *ODD with OpenTelemetry*
   (observability contract: "estos tests no testean logica de negocio; testean que la telemetria que
   produce el codigo cumple el contrato").
-- Prometheus — *Unit Testing for Rules* (`promtool test rules`).
+- `mercadona/mo.pypi.monitoring` — `docs/docs/instrumentation.md`, `docs/docs/index.md`,
+  `monitoring/metrics.py`, `monitoring/test_utils/repositories.py`.
+- `mercadona/mercadona.online.gke` — `tests/prometheus/README.md`, `templates/CLAUDE.md`,
+  `templates/prometheus/prometheus-server/teams/`.
+- `mercadona/mo.sre.grafana-configs` — `README.md`.
