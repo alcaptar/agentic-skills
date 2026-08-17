@@ -254,6 +254,13 @@ importar**: un smoke que solo importe el modulo lo da por bueno. Lo evita
   `tuple[dict[str, object], ...]` sin tipar cada elemento contra un `BaseModel`, y
   `GhCommentPayload.from_dict` proyecta a mano solo `body` antes de validar, igual que
   `TranscriptMessage.content`.
+- **`GhPullRequestReviewPayload` y `GhPullRequestReviewCommentPayload` reciben el mismo tratamiento, por el
+  mismo motivo.** Los objetos que devuelven `gh api repos/{repo}/pulls/{n}/reviews` y
+  `gh api repos/{repo}/pulls/{n}/comments` tampoco son un contrato que fije este programa: traen mas campos
+  de los que `GhForum.reviews` consume (`user`, `html_url`, `submitted_at`, `commit_id`... en la review;
+  `path`, `line`, `diff_hunk`, `created_at`... en el comentario). `GhPullRequestReviewPayload.from_dict`
+  proyecta a mano `id`/`state`/`body`, y `GhPullRequestReviewCommentPayload.from_dict` proyecta
+  `body`/`pull_request_review_id`, los dos antes de validar, igual que `GhCommentPayload.from_dict`.
 - **Los cuatro almacenes durables viven bajo un mismo directorio y un mismo patron de nombre.**
   `LocalMetricsLog.LEDGER`, `LocalCallTrace.LEDGER`, `LocalCallSpendLog.LEDGER` y las dos rutas de
   `LocalCorpus` (`LEDGER` para los veredictos, `DIFF_LEDGER` para el diff que juzgo cada uno) resuelven
@@ -415,6 +422,17 @@ importar**: un smoke que solo importe el modulo lo da por bueno. Lo evita
   `stderr`- y vive donde lo necesito el primer adaptador de `git` que lo tuvo. La unica diferencia es que
   `GitWorkspace` cae al `stdout` cuando el `stderr` viene vacio, porque `git commit` sin nada staged
   explica el motivo por `stdout` y una excepcion sin motivo obliga a reproducirlo a mano.
+- **La revision `CHANGES_REQUESTED` que dispara una vuelta lleva su marcador en el `Run`, pero su cuerpo
+  no.** `Run.last_reviewed_id` y `Run.correcting_review` (`domain/run.py`, con su espejo en `RunPayload`)
+  sobreviven entre invocaciones porque son un entero y una bandera; el texto de la review que los puso ahi
+  vive solo en `ConductSliceProgress.pending_reviews` (`application/actions/conduct_slice.py`) y en el
+  `Assignment` que arma `ImplementSlice`, dato de la invocacion y no del `Run` persistido -la misma
+  frontera que ya declaran el gasto y la deuda de la pull request, mas abajo-. **Consecuencia que ese
+  precedente no cubre**: si la invocacion muere entre marcar la review como atendida y entregar la
+  correccion -presupuesto agotado, proceso matado, o al reabrir con `-RETRY`-, la siguiente reinvocacion
+  arranca en `IMPLEMENT` con `correcting_review=True` -asi que salta al juez y reabre la pull request- pero
+  sin ningun cuerpo de review que atender, y el marcador ya avanzado impide volver a leerla. Cerrarlo es la
+  misma cirugia que el gasto: llevar el texto de la review en el `Run`, no en la invocacion.
 - **El cuerpo de la pull request lo compone un modelo de frontera** (`PullRequestBody`), que fija sus
   encabezados y su orden. Se quedan en castellano: son **contenido del artefacto que lee una persona**,
   en el idioma del issue, no identificadores.

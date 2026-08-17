@@ -296,6 +296,31 @@ class TestTheRetryInstructionThatTravelsWithTheBrief:
         assert "\n## Instruccion de reintento\n" not in self._sent(AssignmentMother.of_the_first_round())
 
 
+class TestThePendingReviewsThatTravelWithTheBrief:
+    @staticmethod
+    def _sent(assignment: Assignment) -> str:
+        process = RecordedProcess(HarnessEnvelopeMother.recorded(_RECORDED))
+
+        ClaudeImplementer(
+            process=process,
+            telemetry=HarnessTelemetry(
+                trace=RecordedTrace(),
+                turns=RecordedTurnLog(),
+                spend_log=RecordedSpendLog(),
+                tool_uses=RecordedToolUseRecorder(),
+            ),
+            reader=RecordedSourceReader(),
+        ).implement(assignment)
+
+        return process.stdin
+
+    def test_the_body_of_the_review_that_ordered_the_correction_travels_and_closes_the_prompt(self) -> None:
+        assert self._sent(AssignmentMother.of_a_round_after_a_review()).endswith(AssignmentMother.REVIEW)
+
+    def test_a_round_with_no_pending_review_carries_no_section_instead_of_an_empty_one(self) -> None:
+        assert "\n## Peticion de cambio en la pull request\n" not in self._sent(AssignmentMother.of_the_first_round())
+
+
 class TestTheReportOfARecordedCall:
     def test_both_paths_of_the_recorded_call_arrive_labelled(self) -> None:
         process = RecordedProcess(HarnessEnvelopeMother.recorded(_RECORDED))

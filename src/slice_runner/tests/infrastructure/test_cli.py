@@ -120,6 +120,7 @@ _TABLE: list[tuple[Step, Outcome, dict[str, int], tuple[Step, RunState, int]]] =
     (Step.AWAIT_MERGE, Outcome.DONE, {}, (Step.AWAIT_MERGE, RunState.MERGED, 0)),
     (Step.AWAIT_MERGE, Outcome.PENDING, {}, (Step.AWAIT_MERGE, RunState.OPEN, 30)),
     (Step.AWAIT_MERGE, Outcome.OVER_BUDGET, {}, (Step.AWAIT_MERGE, RunState.ABORTED_BUDGET, 0)),
+    (Step.AWAIT_MERGE, Outcome.CHANGES_REQUESTED, {}, (Step.IMPLEMENT, RunState.OPEN, 0)),
 ]
 
 _IMPOSSIBLE: list[tuple[Step, Outcome]] = sorted(
@@ -828,6 +829,8 @@ class TestTheTransitionOfEveryPair:
                 "understand_discards": 0,
                 "implement_discards": 0,
                 "control_rounds_logged": 1,
+                "last_reviewed_id": 0,
+                "correcting_review": False,
             },
             "state": "open",
             "wait_seconds": 0,
@@ -1581,6 +1584,14 @@ class TestWhenTheRunStaysOpen:
                     stdout=GhConversationMother.the_pull_request_of_the_branch(),
                 ),
                 Answer(to=("gh", "pr", "view"), stdout=GhConversationMother.a_pull_request_still_open()),
+                Answer(
+                    to=(f"repos/{GhConversationMother.REPO}/pulls/{GhConversationMother.PULL_REQUEST}/reviews",),
+                    stdout="[]",
+                ),
+                Answer(
+                    to=(f"repos/{GhConversationMother.REPO}/pulls/{GhConversationMother.PULL_REQUEST}/comments",),
+                    stdout="[]",
+                ),
                 Answer(to=("gh", "issue", "comment")),
             ),
         )
@@ -1719,6 +1730,14 @@ class TestTheBudgetsTheEntrypointInjects:
                     stdout=GhConversationMother.the_pull_request_of_the_branch(),
                 ),
                 Answer(to=("gh", "pr", "view"), stdout=GhConversationMother.a_pull_request_still_open()),
+                Answer(
+                    to=(f"repos/{GhConversationMother.REPO}/pulls/{GhConversationMother.PULL_REQUEST}/reviews",),
+                    stdout="[]",
+                ),
+                Answer(
+                    to=(f"repos/{GhConversationMother.REPO}/pulls/{GhConversationMother.PULL_REQUEST}/comments",),
+                    stdout="[]",
+                ),
             ),
         )
 

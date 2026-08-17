@@ -81,8 +81,25 @@ class ImplementerInvocation:
                 *self._hygiene_refusal,
                 *self._understanding,
                 *self._retry_instruction,
+                *self._pending_reviews,
             ]
         )
+
+    @property
+    def _pending_reviews(self) -> list[str]:
+        reviews = self.assignment.pending_reviews
+        if not reviews:
+            return []
+
+        return [
+            "",
+            "## Peticion de cambio en la pull request",
+            "",
+            "Ya se habia abierto la pull request de esta slice cuando alguien pidio estos cambios en la review;",
+            "atiendelos antes de nada mas:",
+            "",
+            "\n\n".join(reviews),
+        ]
 
     @property
     def _retry_instruction(self) -> list[str]:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from collections import defaultdict
 from typing import TYPE_CHECKING
 
 from slice_runner.domain.exceptions import UnreadableForumError
@@ -10,10 +11,17 @@ from slice_runner.infrastructure.gh_pull_request_payload import (
     GhPullRequestPayload,
     GhPullRequestStatePayload,
 )
+from slice_runner.infrastructure.gh_pull_request_review_payload import (
+    GhPullRequestReviewCommentPayload,
+    GhPullRequestReviewPayload,
+)
 from slice_runner.infrastructure.gh_run_repository import GhCommandFailedError
+from slice_runner.infrastructure.malformed_response_comment import MalformedResponseComment
 
 if TYPE_CHECKING:
     from slice_runner.domain.branch_pull_request import BranchPullRequest
+    from slice_runner.domain.malformed_reason import MalformedReason
+    from slice_runner.domain.pull_request_review import PullRequestReview
     from slice_runner.domain.pull_request_status import PullRequestStatus
     from slice_runner.infrastructure.gh_call import GhCall
 
@@ -84,6 +92,35 @@ class GhForum(Forum):
             raise GhCommandFailedError(f"{' '.join(argv)}: {outcome.reason}")
 
         return GhPullRequestStatePayload.from_dict(self._decoded_object(outcome.output.stdout)).to_domain()
+
+    def reviews(self, *, repo: str, pull_request: int) -> tuple[PullRequestReview, ...]:
+        reviews = tuple(
+            GhPullRequestReviewPayload.from_dict(item)
+            for item in self._decoded_array(self._gh_api(f"repos/{repo}/pulls/{pull_request}/reviews"))
+        )
+        comments = tuple(
+            GhPullRequestReviewCommentPayload.from_dict(item)
+            for item in self._decoded_array(self._gh_api(f"repos/{repo}/pulls/{pull_request}/comments"))
+        )
+        by_review: dict[int, list[str]] = defaultdict(list)
+        for comment in comments:
+            by_review[comment.pull_request_review_id].append(comment.body)
+
+        return tuple(review.to_domain(comments=tuple(by_review[review.id])) for review in reviews)
+
+    def write_malformed_response(self, *, repo: str, pull_request: int, reason: MalformedReason) -> None:
+        argv = ["gh", "pr", "comment", str(pull_request), "--repo", repo, "--body-file", "-"]
+        stdin = MalformedResponseComment.rendered(reason)
+        outcome = self._call.run(argv, stdin=stdin, safe_to_repeat=False)
+        if outcome.output.code != 0:
+            raise GhCommandFailedError(f"{' '.join(argv)}: {outcome.reason}")
+
+    def _gh_api(self, resource: str) -> str:
+        outcome = self._call.run(["gh", "api", resource], stdin="", safe_to_repeat=True)
+        if outcome.output.code != 0:
+            raise GhCommandFailedError(f"gh api {resource}: {outcome.reason}")
+
+        return outcome.output.stdout
 
     def authenticated_as(self) -> str | None:
         outcome = self._call.run(["gh", "api", "user", "--jq", ".login"], stdin="", safe_to_repeat=True)

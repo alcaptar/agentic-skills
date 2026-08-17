@@ -24,6 +24,7 @@ class AssignmentMother:
         f"## Plan\n```\n{PLAN_PIECE}\n    motivo: la regla es del dominio\n```"
     )
     RETRY_INSTRUCTION: ClassVar[str] = "el control ya esta arreglado a mano"
+    REVIEW: ClassVar[str] = "falta manejar el caso donde la lista viene vacia"
 
     @classmethod
     def of_the_first_round(cls) -> Assignment:
@@ -69,3 +70,7 @@ class AssignmentMother:
     @classmethod
     def of_a_round_after_reopening(cls) -> Assignment:
         return replace(cls.of_the_first_round(), retry_instruction=cls.RETRY_INSTRUCTION)
+
+    @classmethod
+    def of_a_round_after_a_review(cls) -> Assignment:
+        return replace(cls.of_the_first_round(), pending_reviews=(cls.REVIEW,))

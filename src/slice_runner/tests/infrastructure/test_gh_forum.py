@@ -6,10 +6,13 @@ import pytest
 
 from slice_runner.domain.branch_pull_request import BranchPullRequest
 from slice_runner.domain.exceptions import UnreadableForumError
+from slice_runner.domain.malformed_reason import MalformedReason
 from slice_runner.domain.pull_request_mergeability import PullRequestMergeability
+from slice_runner.domain.pull_request_review_state import PullRequestReviewState
 from slice_runner.domain.pull_request_state import PullRequestState
 from slice_runner.infrastructure.gh_forum import GhForum
 from slice_runner.infrastructure.gh_run_repository import GhCommandFailedError
+from slice_runner.infrastructure.malformed_response_comment import MalformedResponseComment
 from slice_runner.infrastructure.process import ProcessOutput
 from slice_runner.tests.argv import Argv
 from slice_runner.tests.doubles import GhCallDoubles, ScriptedProcess
@@ -355,3 +358,128 @@ class TestGhForumRetryingTransientFailures:
             )
 
         assert len(process.calls) == 1
+
+
+class TestGhForumReadingTheReviewsOfAPullRequest:
+    @staticmethod
+    def _answering(reviews: list[dict[str, object]], comments: list[dict[str, object]]) -> ScriptedProcess:
+        return ScriptedProcess(
+            ProcessOutput(code=0, stdout=json.dumps(reviews), stderr=""),
+            ProcessOutput(code=0, stdout=json.dumps(comments), stderr=""),
+        )
+
+    def test_it_asks_gh_for_the_reviews_and_the_inline_comments_of_exactly_this_pull_request(self) -> None:
+        process = self._answering([], [])
+
+        GhForum(call=GhCallDoubles.wired(process)).reviews(repo=_REPO, pull_request=60)
+
+        assert process.calls[0].argv == ["gh", "api", f"repos/{_REPO}/pulls/60/reviews"]
+        assert process.calls[1].argv == ["gh", "api", f"repos/{_REPO}/pulls/60/comments"]
+
+    def test_a_review_comes_back_with_its_id_its_state_and_its_body(self) -> None:
+        process = self._answering(
+            [{"id": 101, "state": "CHANGES_REQUESTED", "body": "arregla el manejo de errores"}], []
+        )
+
+        reviews = GhForum(call=GhCallDoubles.wired(process)).reviews(repo=_REPO, pull_request=60)
+
+        assert len(reviews) == 1
+        assert (reviews[0].id, reviews[0].state, reviews[0].body) == (
+            101,
+            PullRequestReviewState.CHANGES_REQUESTED,
+            "arregla el manejo de errores",
+        )
+
+    def test_a_review_with_no_inline_comments_comes_back_with_none_instead_of_crashing(self) -> None:
+        process = self._answering([{"id": 101, "state": "APPROVED", "body": "se ve bien"}], [])
+
+        reviews = GhForum(call=GhCallDoubles.wired(process)).reviews(repo=_REPO, pull_request=60)
+
+        assert reviews[0].comments == ()
+
+    def test_every_review_state_gh_can_send_is_read_without_being_rejected(self) -> None:
+        process = self._answering(
+            [
+                {"id": 1, "state": "APPROVED", "body": ""},
+                {"id": 2, "state": "CHANGES_REQUESTED", "body": ""},
+                {"id": 3, "state": "COMMENTED", "body": ""},
+                {"id": 4, "state": "DISMISSED", "body": ""},
+                {"id": 5, "state": "PENDING", "body": ""},
+            ],
+            [],
+        )
+
+        reviews = GhForum(call=GhCallDoubles.wired(process)).reviews(repo=_REPO, pull_request=60)
+
+        assert [review.state for review in reviews] == list(PullRequestReviewState)
+
+    def test_an_inline_comment_is_matched_to_its_review_by_the_review_id_gh_reported(self) -> None:
+        process = self._answering(
+            [
+                {"id": 101, "state": "CHANGES_REQUESTED", "body": ""},
+                {"id": 102, "state": "CHANGES_REQUESTED", "body": ""},
+            ],
+            [
+                {"body": "esto rompe si la lista viene vacia", "pull_request_review_id": 101},
+                {"body": "aqui falta un test", "pull_request_review_id": 102},
+                {"body": "y aqui otro mas sobre lo mismo", "pull_request_review_id": 101},
+            ],
+        )
+
+        reviews = GhForum(call=GhCallDoubles.wired(process)).reviews(repo=_REPO, pull_request=60)
+
+        by_id = {review.id: review.comments for review in reviews}
+        assert by_id == {
+            101: ("esto rompe si la lista viene vacia", "y aqui otro mas sobre lo mismo"),
+            102: ("aqui falta un test",),
+        }
+
+    def test_a_non_zero_exit_listing_reviews_raises_with_the_stderr_it_carried(self) -> None:
+        process = ScriptedProcess(ProcessOutput(code=1, stdout="", stderr="GraphQL: Could not resolve to a Repository"))
+
+        with pytest.raises(GhCommandFailedError, match="Could not resolve"):
+            GhForum(call=GhCallDoubles.wired(process)).reviews(repo=_REPO, pull_request=60)
+
+    def test_a_non_zero_exit_listing_comments_raises_with_the_stderr_it_carried(self) -> None:
+        process = ScriptedProcess(
+            ProcessOutput(code=0, stdout="[]", stderr=""),
+            ProcessOutput(code=1, stdout="", stderr="GraphQL: Could not resolve to a Repository"),
+        )
+
+        with pytest.raises(GhCommandFailedError, match="Could not resolve"):
+            GhForum(call=GhCallDoubles.wired(process)).reviews(repo=_REPO, pull_request=60)
+
+    def test_a_review_that_is_not_one_of_the_five_states_gh_returns_is_rejected(self) -> None:
+        process = self._answering([{"id": 101, "state": "DRAFT", "body": ""}], [])
+
+        with pytest.raises(UnreadableForumError):
+            GhForum(call=GhCallDoubles.wired(process)).reviews(repo=_REPO, pull_request=60)
+
+
+class TestGhForumWritingAMalformedResponse:
+    def test_it_posts_the_malformed_response_comment_on_exactly_this_pull_request(self) -> None:
+        process = ScriptedProcess(ProcessOutput(code=0, stdout="", stderr=""))
+
+        GhForum(call=GhCallDoubles.wired(process)).write_malformed_response(
+            repo=_REPO, pull_request=60, reason=MalformedReason.EMPTY_REVIEW
+        )
+
+        assert process.calls[0].argv == ["gh", "pr", "comment", "60", "--repo", _REPO, "--body-file", "-"]
+        assert process.calls[0].stdin == MalformedResponseComment.rendered(MalformedReason.EMPTY_REVIEW)
+
+    def test_it_renders_the_reason_the_caller_chose_instead_of_a_fixed_one(self) -> None:
+        process = ScriptedProcess(ProcessOutput(code=0, stdout="", stderr=""))
+
+        GhForum(call=GhCallDoubles.wired(process)).write_malformed_response(
+            repo=_REPO, pull_request=60, reason=MalformedReason.MISSING_CORRECTION
+        )
+
+        assert process.calls[0].stdin == MalformedResponseComment.rendered(MalformedReason.MISSING_CORRECTION)
+
+    def test_a_non_zero_exit_raises_with_the_stderr_it_carried(self) -> None:
+        process = ScriptedProcess(ProcessOutput(code=1, stdout="", stderr="pull request is locked"))
+
+        with pytest.raises(GhCommandFailedError, match="pull request is locked"):
+            GhForum(call=GhCallDoubles.wired(process)).write_malformed_response(
+                repo=_REPO, pull_request=60, reason=MalformedReason.EMPTY_REVIEW
+            )

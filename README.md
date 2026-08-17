@@ -289,7 +289,8 @@ echo '{"run": {"step": "run-controls", "control_retries": 2}, "outcome": "failed
 {"run": {"step": "run-controls", "corrected": "", "understanding_pending": false, "control_retries": 2,
  "hygiene_retries": 0, "verify_retries": 0, "correction_retries": 0, "ci_retries": 0,
  "indeterminate_ticks": 0, "verify_discards": 0, "understand_discards": 0, "implement_discards": 0,
- "control_rounds_logged": 1}, "state": "blocked-controls", "wait_seconds": 0}
+ "control_rounds_logged": 1, "last_reviewed_id": 0, "correcting_review": false}, "state": "blocked-controls",
+ "wait_seconds": 0}
 ```
 
 La respuesta trae **el run entero** (con los contadores ya gastados), el estado en el que queda -`open`

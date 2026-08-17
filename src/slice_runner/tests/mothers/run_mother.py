@@ -51,6 +51,10 @@ class RunMother:
         return Run(step=Step.AWAIT_MERGE)
 
     @staticmethod
+    def awaiting_merge_after_reviewing(review_id: int) -> Run:
+        return Run(step=Step.AWAIT_MERGE, last_reviewed_id=review_id)
+
+    @staticmethod
     def awaiting_alignment_after_a_published_correction(correction: str) -> Run:
         return Run(step=Step.UNDERSTAND, corrected=correction)
 

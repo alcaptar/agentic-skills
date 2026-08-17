@@ -26,6 +26,7 @@ class ImplementSliceParams:
     hygiene_refusal: str = ""
     understanding: str = ""
     retry_instruction: str = ""
+    pending_reviews: tuple[str, ...] = ()
 
 
 class ImplementSlice:
@@ -53,4 +54,5 @@ class ImplementSlice:
             hygiene_refusal=params.hygiene_refusal,
             understanding=params.understanding,
             retry_instruction=params.retry_instruction,
+            pending_reviews=params.pending_reviews,
         )
