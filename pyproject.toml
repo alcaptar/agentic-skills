@@ -130,8 +130,7 @@ mypy_path = "src:skills/slice-runner/scripts"
 [tool.pytest.ini_options]
 # Dos arboles de test a proposito: los del programa van co-localizados dentro del paquete y
 # `tests/` se queda con lo que no tiene paquete donde vivir (los contratos entre los `.md`) y con
-# lo que sirve a las skills. El reparto lo razona
-# `docs/superpowers/specs/2026-07-31-orquestador-como-programa-design.md`.
+# lo que sirve a las skills. El reparto lo razona `docs/design-notes.md`.
 testpaths = ["tests", "src/slice_runner/tests"]
 # Un solo marcador, con un criterio que no se puede discutir en review: el test lanza un
 # subproceso de verdad (`git`, un comando declarado, un ejecutable). Es lo que cuesta tiempo y lo

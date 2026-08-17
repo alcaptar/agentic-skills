@@ -76,12 +76,11 @@ esta en `docs/conventions/infrastructure.md`.
 
 ### Desviacion declarada respecto a la vara secundaria
 
-`backend-engineering:backend-best-practices` -y las convenciones de `mo.arcen-pi`, que son la
-referencia de la casa- dicen **"dataclasses frozen, sin pydantic"** para dtos, params, value objects
-y events. Aqui se cumple en todo eso, y se diverge en un solo sitio: **el esquema de la frontera
+`backend-engineering:backend-best-practices` dice **"dataclasses frozen, sin pydantic"** para dtos,
+params, value objects y events. Aqui se cumple en todo eso, y se diverge en un solo sitio: **el esquema de la frontera
 externa**.
 
-El motivo es que esos proyectos son Django + Django REST Framework, donde los serializers ya validan
+El motivo es que esa vara asume Django + Django REST Framework, donde los serializers ya validan
 la entrada y generan el esquema OpenAPI. Aqui no hay capa de serializers: la frontera es el JSON de un
 subproceso, y el esquema **hay que generarlo** para mandarselo al juez. Sin Pydantic eso son tres
 copias del mismo contrato cosidas a mano, que es de donde se viene.
