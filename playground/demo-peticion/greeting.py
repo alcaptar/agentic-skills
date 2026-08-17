@@ -3,5 +3,5 @@ from __future__ import annotations
 
 class Greeting:
     @staticmethod
-    def spoken() -> str:
-        return "hola"
+    def greet(name: str) -> str:
+        return f"hola, {name}"
