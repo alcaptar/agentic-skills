@@ -377,10 +377,35 @@ Si algo se rompe, la etiqueta lo dice y el run para en vez de seguir: `bloqueada
 `bloqueada:verify`, `bloqueada:ci-roja`, `bloqueada:ci-indeterminada`, `bloqueada:conflicto` o
 `abortada:presupuesto`.
 
-**3. Mergear (tu)**
+**3. Mergear, o pedir un cambio (tu)**
 
 Revisas la pull request en GitHub y le das a merge. Eso es tuyo, no del pipeline. GitHub cierra la
 subissue `#43` sola, porque la pull request lleva `Closes #43`.
+
+Si al revisar el diff ves algo que corregir, **no hace falta salirse del flujo**: comenta en las lineas
+afectadas y **escribe `-CHANGE` delante de lo que hay que cambiar**. Al enviar la review, el run sale de
+esperar el merge, se lo pasa al implementador, deja los controles verdes y anade un commit a **la misma
+pull request**. Luego vuelve a esperarte.
+
+- **El marcador es lo que dispara, no el boton de GitHub.** Es asi porque GitHub **no deja pedir cambios
+  en tu propia pull request**, y el run la abre con tu token: el gesto nativo esta vedado justo a quien
+  mas lo necesita, que eres tu. Con el marcador el camino es el mismo lo abras tu o un compañero, y
+  pulsar *Request changes* sin escribirlo no dispara nada.
+- **Basta escribirlo una vez por review**: marca la review entera, asi que el resto de lo que digas en
+  ella viaja igual, con marcador o sin el.
+- **Sin marcador no pasa nada**, que es lo que deja conversar en la pull request sin gastar una llamada.
+- **Puedes pedir cambios tantas veces como quieras.** Cada review nueva dispara su vuelta; el run
+  recuerda cual fue la ultima que atendio, asi que ni repite ni se salta ninguna. Si dejaste varias
+  mientras el run no estaba vivo, se atienden **todas en una sola vuelta**, en el orden en que las
+  enviaste. Lo que **no** cuenta es editar una review ya atendida: envia una nueva.
+- **`-CHANGE` a secas** -sin nada detras y sin nada mas en la review- se te contesta como respuesta mal
+  escrita y no dispara la vuelta.
+- **Esta vuelta no pasa por el juez**: la miden los controles y la miras tu, que eres quien pidio el
+  cambio. Tampoco gasta los contadores de reintento del juez ni de la integracion continua, asi que
+  pedir varios cambios seguidos no bloquea la slice. Lo que si la acota es el presupuesto de coste.
+- **Si el run ya habia terminado**, reinvocalo igual que la primera vez -la slice en
+  `estado:esperando-merge` sigue siendo elegible- y **ponlo en su rama** antes: `git -C <worktree> switch
+  slice/NN-name`.
 
 **4. El despliegue: hoy no se vigila solo**
 

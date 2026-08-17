@@ -1719,7 +1719,7 @@ class TestConductSliceWhenThePullRequestWasClosedWithoutMerging:
         assert conductor.metrics.record.call_count == 0
 
 
-class TestConductSliceWhenAReviewRequestsChangesOnThePullRequest:
+class TestConductSliceWhenAReviewAsksForAChangeOnThePullRequest:
     @staticmethod
     def _conductor(*, budgets: Budgets | None = None, run: Run | None = None) -> Conductor:
         conductor = Conductor(
@@ -1730,25 +1730,59 @@ class TestConductSliceWhenAReviewRequestsChangesOnThePullRequest:
 
         return conductor
 
-    def test_a_changes_requested_review_sends_the_slice_back_to_implement_instead_of_waiting_for_the_merge(
+    def test_a_review_carrying_the_token_sends_the_slice_back_to_implement_instead_of_waiting_for_the_merge(
         self,
     ) -> None:
         conductor = self._conductor()
-        conductor.forum.reviews.return_value = (PullRequestReviewMother.requesting_changes(),)
+        conductor.forum.reviews.return_value = (PullRequestReviewMother.asking_for_a_change(),)
 
         conductor.conduct()
 
         assert conductor.implement.execute.call_count == 1
 
+    def test_the_token_written_on_a_line_comment_asks_for_the_change_just_like_one_written_on_the_body(self) -> None:
+        conductor = self._conductor()
+        conductor.forum.reviews.return_value = (
+            PullRequestReviewMother.asking_for_a_change_in_a_line_comment(asked="esta linea sobra"),
+        )
+
+        conductor.conduct()
+
+        assert conductor.implement.execute.call_args.args[0].requested_changes == ("esta linea sobra",)
+
+    def test_the_token_is_stripped_so_the_implementer_reads_what_was_asked_and_not_the_plumbing(self) -> None:
+        conductor = self._conductor()
+        conductor.forum.reviews.return_value = (PullRequestReviewMother.asking_for_a_change(asked="quita el dict"),)
+
+        conductor.conduct()
+
+        assert conductor.implement.execute.call_args.args[0].requested_changes == ("quita el dict",)
+
+    def test_one_token_marks_the_whole_review_so_what_it_says_without_it_travels_too(self) -> None:
+        conductor = self._conductor()
+        conductor.forum.reviews.return_value = (
+            PullRequestReviewMother.asking_for_a_change_and_saying_more_without_the_token(
+                asked="esta linea sobra", also="y de paso mira el nombre"
+            ),
+        )
+
+        conductor.conduct()
+
+        assert conductor.implement.execute.call_args.args[0].requested_changes == (
+            "esta linea sobra\n\ny de paso mira el nombre",
+        )
+
     @pytest.mark.parametrize(
         "review",
         [
             PullRequestReviewMother.approving(),
-            PullRequestReviewMother.commenting(),
-            PullRequestReviewMother.still_pending(),
+            PullRequestReviewMother.just_talking(),
+            PullRequestReviewMother.requesting_changes_without_the_token(),
+            PullRequestReviewMother.still_a_draft_carrying_the_token(),
+            PullRequestReviewMother.dismissed_carrying_the_token(),
         ],
     )
-    def test_a_review_that_is_not_a_request_for_changes_never_sends_the_slice_back_to_implement(
+    def test_a_review_that_does_not_ask_for_a_change_never_sends_the_slice_back_to_implement(
         self, review: PullRequestReview
     ) -> None:
         conductor = self._conductor()
@@ -1758,9 +1792,19 @@ class TestConductSliceWhenAReviewRequestsChangesOnThePullRequest:
 
         assert conductor.implement.execute.call_count == 0
 
+    def test_the_native_request_changes_gesture_still_needs_the_token_because_an_author_cannot_use_it(self) -> None:
+        conductor = self._conductor()
+        conductor.forum.reviews.return_value = (
+            PullRequestReviewMother.requesting_changes_with_the_token(asked="usa el value object"),
+        )
+
+        conductor.conduct()
+
+        assert conductor.implement.execute.call_args.args[0].requested_changes == ("usa el value object",)
+
     def test_the_judge_is_never_invoked_to_deliver_a_correction_that_only_answers_a_review(self) -> None:
         conductor = self._conductor()
-        conductor.forum.reviews.return_value = (PullRequestReviewMother.requesting_changes(),)
+        conductor.forum.reviews.return_value = (PullRequestReviewMother.asking_for_a_change(),)
 
         conductor.conduct()
 
@@ -1768,7 +1812,7 @@ class TestConductSliceWhenAReviewRequestsChangesOnThePullRequest:
 
     def test_the_correction_spends_neither_the_judge_nor_the_ci_retry_budget(self) -> None:
         conductor = self._conductor()
-        conductor.forum.reviews.return_value = (PullRequestReviewMother.requesting_changes(),)
+        conductor.forum.reviews.return_value = (PullRequestReviewMother.asking_for_a_change(),)
 
         conductor.conduct()
 
@@ -1779,8 +1823,8 @@ class TestConductSliceWhenAReviewRequestsChangesOnThePullRequest:
     def test_several_changes_requested_reviews_are_delivered_in_a_single_round_in_the_order_they_were_sent(
         self,
     ) -> None:
-        first = PullRequestReviewMother.requesting_changes(review_id=101, body="arregla A")
-        second = PullRequestReviewMother.requesting_changes(review_id=102, body="arregla B")
+        first = PullRequestReviewMother.asking_for_a_change(review_id=101, asked="arregla A")
+        second = PullRequestReviewMother.asking_for_a_change(review_id=102, asked="arregla B")
         conductor = self._conductor()
         conductor.forum.reviews.return_value = (first, second)
 
@@ -1792,7 +1836,7 @@ class TestConductSliceWhenAReviewRequestsChangesOnThePullRequest:
     def test_the_body_of_the_review_reaches_the_implementer_in_the_round_it_triggers(self) -> None:
         asked = "usa el value object en vez del dict"
         conductor = self._conductor()
-        conductor.forum.reviews.return_value = (PullRequestReviewMother.requesting_changes(body=asked),)
+        conductor.forum.reviews.return_value = (PullRequestReviewMother.asking_for_a_change(asked=asked),)
 
         conductor.conduct()
 
@@ -1800,7 +1844,7 @@ class TestConductSliceWhenAReviewRequestsChangesOnThePullRequest:
 
     def test_reinvoking_after_the_marker_advanced_does_not_reprocess_the_same_review(self) -> None:
         conductor = self._conductor(run=RunMother.awaiting_merge_after_reviewing(101))
-        conductor.forum.reviews.return_value = (PullRequestReviewMother.requesting_changes(review_id=101),)
+        conductor.forum.reviews.return_value = (PullRequestReviewMother.asking_for_a_change(review_id=101),)
 
         conductor.conduct()
 
@@ -1809,8 +1853,8 @@ class TestConductSliceWhenAReviewRequestsChangesOnThePullRequest:
     def test_a_review_sent_after_the_last_one_attended_still_triggers_a_new_round(self) -> None:
         conductor = self._conductor(run=RunMother.awaiting_merge_after_reviewing(101))
         conductor.forum.reviews.return_value = (
-            PullRequestReviewMother.requesting_changes(review_id=101),
-            PullRequestReviewMother.requesting_changes(review_id=150, body="una segunda vuelta"),
+            PullRequestReviewMother.asking_for_a_change(review_id=101),
+            PullRequestReviewMother.asking_for_a_change(review_id=150, asked="una segunda vuelta"),
         )
 
         conductor.conduct()
@@ -1820,7 +1864,7 @@ class TestConductSliceWhenAReviewRequestsChangesOnThePullRequest:
 
     def test_the_marker_is_remembered_across_invocations_so_a_later_invocation_does_not_repeat_it(self) -> None:
         conductor = self._conductor()
-        conductor.forum.reviews.return_value = (PullRequestReviewMother.requesting_changes(review_id=101),)
+        conductor.forum.reviews.return_value = (PullRequestReviewMother.asking_for_a_change(review_id=101),)
 
         conductor.conduct()
 
@@ -1831,32 +1875,34 @@ class TestConductSliceWhenAReviewRequestsChangesOnThePullRequest:
         self,
     ) -> None:
         conductor = self._conductor()
-        conductor.forum.reviews.return_value = (PullRequestReviewMother.requesting_changes_with_no_content(),)
+        conductor.forum.reviews.return_value = (
+            PullRequestReviewMother.asking_for_a_change_with_nothing_after_the_token(),
+        )
 
         conductor.conduct()
 
         conductor.forum.write_malformed_response.assert_called_once_with(
-            repo=Conductor.REPO, pull_request=Conductor.PULL_REQUEST, reason=MalformedReason.EMPTY_REVIEW
+            repo=Conductor.REPO, pull_request=Conductor.PULL_REQUEST, reason=MalformedReason.MISSING_CHANGE
         )
         assert conductor.implement.execute.call_count == 0
 
     def test_a_batch_mixing_an_empty_review_with_a_readable_one_still_flags_the_empty_one(self) -> None:
         conductor = self._conductor()
-        empty = PullRequestReviewMother.requesting_changes_with_no_content(review_id=101)
-        readable = PullRequestReviewMother.requesting_changes(review_id=102, body="arregla esto")
+        empty = PullRequestReviewMother.asking_for_a_change_with_nothing_after_the_token(review_id=101)
+        readable = PullRequestReviewMother.asking_for_a_change(review_id=102, asked="arregla esto")
         conductor.forum.reviews.return_value = (empty, readable)
 
         conductor.conduct()
 
         conductor.forum.write_malformed_response.assert_called_once_with(
-            repo=Conductor.REPO, pull_request=Conductor.PULL_REQUEST, reason=MalformedReason.EMPTY_REVIEW
+            repo=Conductor.REPO, pull_request=Conductor.PULL_REQUEST, reason=MalformedReason.MISSING_CHANGE
         )
         assert conductor.implement.execute.call_count == 1
         assert conductor.implement.execute.call_args.args[0].requested_changes == ("arregla esto",)
 
     def test_an_empty_review_still_advances_the_marker_so_the_flag_is_not_repeated_every_reinvocation(self) -> None:
         conductor = self._conductor()
-        empty = PullRequestReviewMother.requesting_changes_with_no_content(review_id=101)
+        empty = PullRequestReviewMother.asking_for_a_change_with_nothing_after_the_token(review_id=101)
         conductor.forum.reviews.return_value = (empty,)
 
         conductor.conduct()
@@ -1866,7 +1912,7 @@ class TestConductSliceWhenAReviewRequestsChangesOnThePullRequest:
 
     def test_the_correction_delivers_again_reusing_the_pull_request_already_open_for_the_slice(self) -> None:
         conductor = self._conductor()
-        conductor.forum.reviews.return_value = (PullRequestReviewMother.requesting_changes(),)
+        conductor.forum.reviews.return_value = (PullRequestReviewMother.asking_for_a_change(),)
 
         conductor.conduct()
 
@@ -1877,7 +1923,7 @@ class TestConductSliceWhenAReviewRequestsChangesOnThePullRequest:
         self,
     ) -> None:
         conductor = self._conductor()
-        conductor.forum.reviews.return_value = (PullRequestReviewMother.requesting_changes(body="arregla el borde"),)
+        conductor.forum.reviews.return_value = (PullRequestReviewMother.asking_for_a_change(asked="arregla el borde"),)
 
         conductor.conduct()
 
@@ -1895,7 +1941,7 @@ class TestConductSliceWhenAReviewRequestsChangesOnThePullRequest:
 
     def test_delivering_the_correction_clears_the_review_so_the_next_round_is_judged_again(self) -> None:
         conductor = self._conductor()
-        conductor.forum.reviews.return_value = (PullRequestReviewMother.requesting_changes(),)
+        conductor.forum.reviews.return_value = (PullRequestReviewMother.asking_for_a_change(),)
 
         conductor.conduct()
 

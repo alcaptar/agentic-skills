@@ -461,11 +461,11 @@ class TestGhForumWritingAMalformedResponse:
         process = ScriptedProcess(ProcessOutput(code=0, stdout="", stderr=""))
 
         GhForum(call=GhCallDoubles.wired(process)).write_malformed_response(
-            repo=_REPO, pull_request=60, reason=MalformedReason.EMPTY_REVIEW
+            repo=_REPO, pull_request=60, reason=MalformedReason.MISSING_CHANGE
         )
 
         assert process.calls[0].argv == ["gh", "pr", "comment", "60", "--repo", _REPO, "--body-file", "-"]
-        assert process.calls[0].stdin == MalformedResponseComment.rendered(MalformedReason.EMPTY_REVIEW)
+        assert process.calls[0].stdin == MalformedResponseComment.rendered(MalformedReason.MISSING_CHANGE)
 
     def test_it_renders_the_reason_the_caller_chose_instead_of_a_fixed_one(self) -> None:
         process = ScriptedProcess(ProcessOutput(code=0, stdout="", stderr=""))
@@ -481,5 +481,5 @@ class TestGhForumWritingAMalformedResponse:
 
         with pytest.raises(GhCommandFailedError, match="pull request is locked"):
             GhForum(call=GhCallDoubles.wired(process)).write_malformed_response(
-                repo=_REPO, pull_request=60, reason=MalformedReason.EMPTY_REVIEW
+                repo=_REPO, pull_request=60, reason=MalformedReason.MISSING_CHANGE
             )

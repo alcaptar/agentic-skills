@@ -40,6 +40,32 @@ cadena, asi que ni el formato del issue ni el JSON de salida cambian, pero las c
   `TypeError`, y la guarda que impide commitear en `master` no puede romper por la forma de preguntar
   justo cuando la rama es una cualquiera.
 
+## Lo que una persona le contesta al run se lee por un marcador, no por el gesto de la interfaz
+
+Los cuatro puntos donde el run escucha a una persona leen un token al principio del texto -`-GO` y
+`-REVIEW` en la pausa de alineacion, `-RETRY` para reabrir una slice bloqueada, `-CHANGE` para pedir un
+cambio sobre la pull request-, y el token vive como `ClassVar` del value object que lo interpreta
+(`AlignmentResponse`, `RetryResponse`, `PullRequestReview`).
+
+**En la pull request eso parece redundante y no lo es**, porque GitHub ya tiene un gesto nativo para
+pedir cambios. Se probo y se midio: `gh pr review --request-changes` sobre una pull request propia
+contesta `Can not request changes on your own pull request`. El run abre la pull request con el token de
+quien lo lanza, asi que **el autor es esa misma persona y el gesto nativo le esta vedado**: solo puede
+dejar reviews de tipo `COMMENTED`, que es justo lo que no debe disparar nada para poder conversar sin
+gastar una llamada. Un disparo por `CHANGES_REQUESTED` solo funciona cuando revisa **otra** persona, que
+no es el caso comun de esta herramienta.
+
+Consecuencias, para que no se "arregle" hacia el lado facil:
+
+- **El estado de la review sigue haciendo falta, pero solo para excluir.** `PullRequestReview.submitted`
+  descarta `PENDING` y `DISMISSED`: la primera es un borrador sin enviar que la interfaz de programacion
+  **te devuelve si es tuyo**, asi que sin ese filtro el run dispararia con lo que estas escribiendo a
+  medias. Ahi si es el gesto de enviar lo que separa una peticion de un borrador.
+- **Un token marca la review entera, no cada trozo.** Quien revisa comenta en varias lineas y no va a
+  prefijar todas; exigirlo por trozo convertiria un olvido en trabajo perdido en silencio.
+- **Lo que dispara no es lo que se transporta.** El token se quita antes de que el texto viaje al
+  implementador: es fontaneria del canal, no parte de lo que se pide.
+
 ## Puertos
 
 - Interfaces con `ABC` y `@abstractmethod`. Nada mas: sin implementacion por defecto, sin estado.
