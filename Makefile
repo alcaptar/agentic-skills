@@ -83,3 +83,4 @@ fix-linting:
 
 # Todo lo que debe estar verde antes de dar un cambio por terminado.
 check: linting check-types test
+	@echo "CHECK OK: linting, check-types y test en verde"
