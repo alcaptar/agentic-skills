@@ -138,7 +138,7 @@ ajuste negativo entra sin que nadie lo frene y deja el stock en negativo hasta q
 - doc: CLAUDE.md
 - skill: .claude/skills/duplicate-action
 
-### mercadona/mercadona.online.gke
+### tu-org/infra-alertas
 - doc: templates/CLAUDE.md
 
 ## Controles
@@ -146,8 +146,8 @@ ajuste negativo entra sin que nadie lo frene y deja el stock en negativo hasta q
 - types: make check-types
 - tests: make test
 
-### mercadona/mercadona.online.gke
-- ninguno: la integracion continua solo publica en master, no valida en PR
+### tu-org/infra-alertas
+- ninguno: la integracion continua de ese repo no valida en PR
 ```
 
 ### Una subissue por slice
@@ -166,7 +166,7 @@ El ejemplo es el caso cross-repo, que es el que mas cosas exige: una slice que s
 del padre no lleva primera linea.
 
 ```markdown
-REPO: mercadona/mercadona.online.gke
+REPO: tu-org/infra-alertas
 INTENCION: hoy el stock se queda en negativo y nadie se entera hasta que una tienda llama a soporte
 ACEPTACION: la alerta dispara con stock negativo sostenido 10m y no con un negativo aislado
 ACEPTACION: la alerta sale con severidad critical y apunta al runbook de stock

@@ -39,8 +39,8 @@ El cuello de botella se desplaza: atención (1) → revisar output (2) → **con
 
 Cherny lista productos oficiales por escalón: Auto mode, Agent view, `/loop` `/batch` `/goal`, Routines, **Claude Code Review**, **Claude Security Review**, worktree isolation, Agent SDK, sandboxing. Confirma la conclusión del research: **la mecánica del loop es commodity — usarla de fábrica**. El trabajo custom se justifica solo en el moat:
 
-1. **Verificador consciente de las convenciones del repo** (hexagonal/DDD Mercadona) — aporta sobre el Claude Code Review genérico.
-2. **`deploy-watch`** con vuestra observabilidad (Prometheus/ES/Sentry/GCloud + sre).
+1. **Verificador consciente de las convenciones del repo** (hexagonal/DDD, la vara de cada capa) — aporta sobre el Claude Code Review genérico.
+2. **`deploy-watch`** con la observabilidad que ya tenga el repo (Prometheus/Elasticsearch/Sentry/logs de Google Cloud + el agente `sre`).
 
 Todo lo demás (orquestación, worktrees, routines, review genérico, sandboxing) conviene apoyarlo en los primitivos oficiales en vez de re-implementarlo.
 

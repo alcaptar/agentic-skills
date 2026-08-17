@@ -195,10 +195,10 @@ condenado se retira sin tocar los demas-:
   (`test_every_repo_path_cited_in_the_docs_still_exists`). Aqui no se enlaza con markdown: se citan
   rutas en backticks, asi que lo que se valida es el token. Solo entran los que empiezan por un
   directorio de primer nivel del repo, lo que deja fuera por construccion los nombres sueltos
-  (`metrics.py`), las rutas de otros repos y los patrones de rama (`slice/NN-name`). Tres entradas no se
-  escanean, cada una por lo que **es**: `docs/superpowers/specs/` (registro fechado, describe el arbol
-  de su dia), `skills/slice-spec/references/observabilidad.md` (documenta rutas de repos ajenos) y
-  `playground/tasks/` (entrada congelada de un experimento, no se actualiza).
+  (`metrics.py`), las rutas de otros repos y los patrones de rama (`slice/NN-name`). Lo que queda fuera
+  del escaneo se declara con su motivo en el propio test, y el motivo es siempre algo sobre lo que el
+  fichero **es** -entrada congelada de un experimento, registro fechado de un dia-, nunca lo que cuesta
+  mantenerlo al dia: en un fichero asi una ruta que caduca es el punto, no un defecto.
 
   Y que **el fixture del smoke se lintea con la misma vara que la raiz**
   (`test_the_smoke_fixture_is_linted_with_the_same_yardstick_as_the_repo`): el mismo `select` de

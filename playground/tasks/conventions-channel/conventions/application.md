@@ -28,8 +28,7 @@ class VerifySlice:
 ```
 
 **Un value object de configuracion entra como dato, no detras de un puerto.** El `judge` de arriba es un
-`Judge` ya construido que inyecta el entrypoint, igual que el agente raiz en el chat de agentes de
-`mercadona/mo.staff.django-playground`. Un puerto cuyo unico metodo devuelve una constante es
+`Judge` ya construido que inyecta el entrypoint. Un puerto cuyo unico metodo devuelve una constante es
 indireccion: lo que se gana con el objeto es que la rubrica, las herramientas y los directorios legibles
 del juez **viajen juntos** y su coherencia se pueda comprobar en un sitio.
 

@@ -217,7 +217,7 @@ class Cli:
     def parser(cls) -> argparse.ArgumentParser:
         parser = argparse.ArgumentParser(
             prog=cls.PROGRAM,
-            description="Slice orchestrator. See `docs/superpowers/specs/` for the design.",
+            description="Slice orchestrator. See the README for the design.",
         )
         subcommands = parser.add_subparsers(dest="command", required=True)
 
