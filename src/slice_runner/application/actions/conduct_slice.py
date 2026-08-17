@@ -113,7 +113,6 @@ class ConductSliceProgress:
     hygiene_refusal: str = ""
     understanding: str = ""
     retry_instruction: str = ""
-    pending_reviews: tuple[str, ...] = field(default=())
     pull_request: int | None = None
     waited_seconds: int = 0
     discard_cause: DiscardCause | None = None
@@ -463,7 +462,7 @@ class ConductSlice:
                     hygiene_refusal=progress.hygiene_refusal,
                     understanding=progress.understanding,
                     retry_instruction=progress.retry_instruction,
-                    pending_reviews=progress.pending_reviews,
+                    requested_changes=progress.run.requested_changes,
                 )
             )
         except MeasuredCallError as rejection:
@@ -478,7 +477,6 @@ class ConductSlice:
             paths=implementation.paths,
             debt=implementation.left_out,
             spends=(*progress.spends, implementation.spend),
-            pending_reviews=(),
         )
 
         return self._within_budget(SteppedSlice(progress=implemented, outcome=Outcome.DONE), call=implementation.spend)
@@ -636,7 +634,7 @@ class ConductSlice:
             return SteppedSlice(progress=replace(progress, run=marked), outcome=Outcome.PENDING)
 
         return SteppedSlice(
-            progress=replace(progress, run=replace(marked, correcting_review=True), pending_reviews=readable),
+            progress=replace(progress, run=replace(marked, requested_changes=readable)),
             outcome=Outcome.CHANGES_REQUESTED,
         )
 

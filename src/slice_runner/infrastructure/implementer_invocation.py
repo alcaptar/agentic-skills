@@ -81,13 +81,13 @@ class ImplementerInvocation:
                 *self._hygiene_refusal,
                 *self._understanding,
                 *self._retry_instruction,
-                *self._pending_reviews,
+                *self._requested_changes,
             ]
         )
 
     @property
-    def _pending_reviews(self) -> list[str]:
-        reviews = self.assignment.pending_reviews
+    def _requested_changes(self) -> list[str]:
+        reviews = self.assignment.requested_changes
         if not reviews:
             return []
 

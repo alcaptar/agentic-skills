@@ -29,7 +29,7 @@ class RunPayload(ContractModel):
     implement_discards: Spent = 0
     control_rounds_logged: Spent = 0
     last_reviewed_id: Spent = 0
-    correcting_review: bool = False
+    requested_changes: tuple[str, ...] = ()
     spend: SpendPayload | None = None
 
     @classmethod
@@ -53,7 +53,7 @@ class RunPayload(ContractModel):
             implement_discards=run.implement_discards,
             control_rounds_logged=run.control_rounds_logged,
             last_reviewed_id=run.last_reviewed_id,
-            correcting_review=run.correcting_review,
+            requested_changes=run.requested_changes,
             spend=SpendPayload.from_domain(run.spend) if run.spend.measured else None,
         )
 
@@ -73,6 +73,6 @@ class RunPayload(ContractModel):
             implement_discards=self.implement_discards,
             control_rounds_logged=self.control_rounds_logged,
             last_reviewed_id=self.last_reviewed_id,
-            correcting_review=self.correcting_review,
+            requested_changes=self.requested_changes,
             spend=self.spend.to_domain() if self.spend is not None else HarnessSpend.nothing(),
         )

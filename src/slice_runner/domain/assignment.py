@@ -28,4 +28,4 @@ class Assignment:
     hygiene_refusal: str = ""
     understanding: str = ""
     retry_instruction: str = ""
-    pending_reviews: tuple[str, ...] = ()
+    requested_changes: tuple[str, ...] = ()

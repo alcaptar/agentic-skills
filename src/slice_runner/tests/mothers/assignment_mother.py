@@ -73,4 +73,4 @@ class AssignmentMother:
 
     @classmethod
     def of_a_round_after_a_review(cls) -> Assignment:
-        return replace(cls.of_the_first_round(), pending_reviews=(cls.REVIEW,))
+        return replace(cls.of_the_first_round(), requested_changes=(cls.REVIEW,))

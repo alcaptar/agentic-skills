@@ -830,7 +830,7 @@ class TestTheTransitionOfEveryPair:
                 "implement_discards": 0,
                 "control_rounds_logged": 1,
                 "last_reviewed_id": 0,
-                "correcting_review": False,
+                "requested_changes": [],
             },
             "state": "open",
             "wait_seconds": 0,

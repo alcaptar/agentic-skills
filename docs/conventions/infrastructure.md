@@ -422,17 +422,17 @@ importar**: un smoke que solo importe el modulo lo da por bueno. Lo evita
   `stderr`- y vive donde lo necesito el primer adaptador de `git` que lo tuvo. La unica diferencia es que
   `GitWorkspace` cae al `stdout` cuando el `stderr` viene vacio, porque `git commit` sin nada staged
   explica el motivo por `stdout` y una excepcion sin motivo obliga a reproducirlo a mano.
-- **La revision `CHANGES_REQUESTED` que dispara una vuelta lleva su marcador en el `Run`, pero su cuerpo
-  no.** `Run.last_reviewed_id` y `Run.correcting_review` (`domain/run.py`, con su espejo en `RunPayload`)
-  sobreviven entre invocaciones porque son un entero y una bandera; el texto de la review que los puso ahi
-  vive solo en `ConductSliceProgress.pending_reviews` (`application/actions/conduct_slice.py`) y en el
-  `Assignment` que arma `ImplementSlice`, dato de la invocacion y no del `Run` persistido -la misma
-  frontera que ya declaran el gasto y la deuda de la pull request, mas abajo-. **Consecuencia que ese
-  precedente no cubre**: si la invocacion muere entre marcar la review como atendida y entregar la
-  correccion -presupuesto agotado, proceso matado, o al reabrir con `-RETRY`-, la siguiente reinvocacion
-  arranca en `IMPLEMENT` con `correcting_review=True` -asi que salta al juez y reabre la pull request- pero
-  sin ningun cuerpo de review que atender, y el marcador ya avanzado impide volver a leerla. Cerrarlo es la
-  misma cirugia que el gasto: llevar el texto de la review en el `Run`, no en la invocacion.
+- **La revision `CHANGES_REQUESTED` que dispara una vuelta viaja entera en el `Run`, marcador y texto, y
+  ese texto es la unica bandera de que hay una correccion en curso.** `Run.last_reviewed_id` y
+  `Run.requested_changes` (`domain/run.py`, con su espejo en `RunPayload`) se persisten los dos, y
+  `Run.correcting_review` es una propiedad derivada de que el segundo no este vacio. **No sigue la
+  frontera del gasto y de la deuda de la pull request** -mas abajo-, que se quedan en la invocacion, y el
+  motivo es que aqui el dato perdido no es telemetria: es lo que una persona pidio. Con el texto en
+  `ConductSliceProgress` y una bandera aparte en el `Run`, una invocacion muerta entre marcar la review y
+  entregar la correccion -presupuesto agotado, proceso matado, o al reabrir con `-RETRY`- reanudaba en
+  `IMPLEMENT` con la bandera encendida y sin nada que atender, y como el marcador ya habia avanzado,
+  entregaba saltandose al juez sin haber corregido nada y sin decirlo. **Dos campos que tienen que
+  concordar dejan representable el estado que no debe existir**; uno solo lo hace imposible.
 - **El cuerpo de la pull request lo compone un modelo de frontera** (`PullRequestBody`), que fija sus
   encabezados y su orden. Se quedan en castellano: son **contenido del artefacto que lee una persona**,
   en el idioma del issue, no identificadores.

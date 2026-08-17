@@ -116,7 +116,7 @@ class StateMachine:
 
     def _after_controls_pass(self, run: Run) -> Transition:
         if run.correcting_review:
-            return self._moving_to(replace(run, correcting_review=False), Step.OPEN_PULL_REQUEST)
+            return self._moving_to(replace(run, requested_changes=()), Step.OPEN_PULL_REQUEST)
 
         return self._moving_to(run, Step.VERIFY)
 

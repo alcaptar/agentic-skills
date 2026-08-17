@@ -25,8 +25,12 @@ class Run:
     implement_discards: int = 0
     control_rounds_logged: int = 0
     last_reviewed_id: int = 0
-    correcting_review: bool = False
+    requested_changes: tuple[str, ...] = ()
     spend: HarnessSpend = field(default_factory=HarnessSpend.nothing)
+
+    @property
+    def correcting_review(self) -> bool:
+        return bool(self.requested_changes)
 
     @property
     def implement_retries(self) -> int:
