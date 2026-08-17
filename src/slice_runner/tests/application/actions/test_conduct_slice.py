@@ -2197,3 +2197,16 @@ class TestConductSliceWhenTheCiCannotBeRead:
 
         recorded = conductor.metrics.record.call_args.args[0]
         assert recorded.ci_indeterminate_cause is None
+
+    def test_a_cause_recorded_on_an_earlier_tick_survives_a_later_tick_that_reads_the_ci_cleanly(self) -> None:
+        conductor = Conductor(chosen=SelectSliceResultMother.resumed_at(RunMother.about_to_ask_the_ci()))
+        conductor.ci.status.side_effect = [
+            CiCommandFailedError("gh pr checks failed for owner/repo#61: rate limited"),
+            CiStatus.GREEN,
+        ]
+
+        result = conductor.conduct()
+
+        assert result.state is RunState.MERGED
+        recorded = conductor.metrics.record.call_args.args[0]
+        assert recorded.ci_indeterminate_cause is CiIndeterminateCause.COMMAND_FAILED
