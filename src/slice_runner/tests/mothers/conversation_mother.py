@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from slice_runner.domain.conversation import Conversation, ConversationSpend, ConversationTurn, ToolCall
+from slice_runner.domain.conversation import Conversation, ConversationTurn, ToolCall
+from slice_runner.domain.conversation_spend import ConversationSpend
 
 
 class ConversationMother:

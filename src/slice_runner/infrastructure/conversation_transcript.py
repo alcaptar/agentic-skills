@@ -4,7 +4,7 @@ from typing import Self
 
 from pydantic import Field
 
-from slice_runner.domain.conversation import ConversationSpend
+from slice_runner.domain.conversation_spend import ConversationSpend
 from slice_runner.domain.exceptions import UnreadableConversationError
 from slice_runner.infrastructure.contract_model import ContractModel
 
