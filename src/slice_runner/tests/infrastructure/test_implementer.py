@@ -200,6 +200,11 @@ class TestTheSliceDataThatTravelsWithTheBrief:
             "- hallazgos de la vuelta anterior: ninguno, esta es la primera"
         )
 
+    def test_a_slice_with_a_user_story_names_the_slice_by_its_canonical_identifier_not_the_bare_ordinal(self) -> None:
+        assert "- slice: PROJ-1234-05\n" in self._sent(
+            AssignmentMother.of_the_first_round_of_a_slice_with_a_user_story()
+        )
+
     def test_a_second_round_carries_every_finding_with_where_it_was_raised_and_why(self) -> None:
         assert self._sent(AssignmentMother.of_a_second_round()).endswith(
             "- hallazgos de la vuelta anterior (1):\n"

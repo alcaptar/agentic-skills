@@ -162,6 +162,53 @@ class TestFindingTheSessionOfAPastCall(WithTheTraceOutOfTheRealHome):
 
         assert found == ()
 
+    def test_a_call_recorded_with_a_slice_identifier_carrying_a_user_story_is_found_by_that_identifier(
+        self, tmp_path: Path
+    ) -> None:
+        trace = LocalCallTrace(clock=self.frozen_at())
+        trace.record(HarnessCallMother.of_the_implementer_of_a_slice_with_a_user_story())
+
+        found = trace.sessions_of(
+            repo=HarnessCallMother.REPO,
+            issue=HarnessCallMother.ISSUE,
+            slice_id=HarnessCallMother.SLICE_ID_WITH_A_USER_STORY,
+            step=Step.IMPLEMENT,
+        )
+
+        assert found == (HarnessCallMother.SESSION_OF_THE_IMPLEMENTER,)
+
+    def test_a_line_written_by_the_old_bare_identifier_does_not_match_the_new_prefixed_one(
+        self, tmp_path: Path
+    ) -> None:
+        ledger = tmp_path / "slice-runner" / "log" / "calls.jsonl"
+        ledger.parent.mkdir(parents=True)
+        ledger.write_text(
+            json.dumps(
+                {
+                    "repo": HarnessCallMother.REPO,
+                    "issue": HarnessCallMother.ISSUE,
+                    "slice_id": "slice-05",
+                    "step": "implement",
+                    "session": "old-session",
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+        found_by_the_old_bare_identifier = LocalCallTrace(clock=self.frozen_at()).sessions_of(
+            repo=HarnessCallMother.REPO, issue=HarnessCallMother.ISSUE, slice_id="slice-05", step=Step.IMPLEMENT
+        )
+        found_by_the_new_prefixed_identifier = LocalCallTrace(clock=self.frozen_at()).sessions_of(
+            repo=HarnessCallMother.REPO,
+            issue=HarnessCallMother.ISSUE,
+            slice_id="PROJ-1234-05",
+            step=Step.IMPLEMENT,
+        )
+
+        assert found_by_the_old_bare_identifier == ("old-session",)
+        assert found_by_the_new_prefixed_identifier == ()
+
     def test_a_line_that_is_not_json_is_refused_instead_of_being_skipped_in_silence(self, tmp_path: Path) -> None:
         ledger = tmp_path / "slice-runner" / "log" / "calls.jsonl"
         ledger.parent.mkdir(parents=True)
@@ -207,6 +254,20 @@ class TestFindingTheCallsOfAPastSlice(WithTheTraceOutOfTheRealHome):
             (Step.IMPLEMENT, HarnessCallMother.SESSION_OF_THE_IMPLEMENTER),
             (Step.VERIFY, HarnessCallMother.SESSION_OF_THE_JUDGE),
         ]
+
+    def test_a_call_recorded_with_a_slice_identifier_carrying_a_user_story_is_found_by_that_identifier(
+        self, tmp_path: Path
+    ) -> None:
+        trace = LocalCallTrace(clock=self.frozen_at())
+        trace.record(HarnessCallMother.of_the_implementer_of_a_slice_with_a_user_story())
+
+        found = trace.calls_of(
+            repo=HarnessCallMother.REPO,
+            issue=HarnessCallMother.ISSUE,
+            slice_id=HarnessCallMother.SLICE_ID_WITH_A_USER_STORY,
+        )
+
+        assert [call.session for call in found] == [HarnessCallMother.SESSION_OF_THE_IMPLEMENTER]
 
     def test_a_slice_never_recorded_returns_nothing_instead_of_guessing_a_call(self, tmp_path: Path) -> None:
         found = LocalCallTrace(clock=self.frozen_at()).calls_of(

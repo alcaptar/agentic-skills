@@ -986,6 +986,20 @@ class TestConductSliceOnTheHappyPath:
             Conductor.PULL_REQUEST,
         )
 
+    def test_a_slice_carrying_a_user_story_reaches_the_judge_and_the_durable_row_by_its_canonical_identifier(
+        self,
+    ) -> None:
+        conductor = Conductor(
+            chosen=SelectSliceResultMother.resumed_at(
+                RunMother.implementing(), subissue=SubIssueMother.carrying_a_user_story()
+            )
+        )
+
+        conductor.conduct()
+
+        assert conductor.verify.execute.call_args.args[0].slice_id == "PROJ-1234-05"
+        assert conductor.closed.slice_id == "PROJ-1234-05"
+
     def test_a_merged_run_writes_no_label_because_github_closes_the_subissue_on_the_merge(self) -> None:
         conductor = Conductor(chosen=SelectSliceResultMother.resumed_at(RunMother.awaiting_merge()))
 

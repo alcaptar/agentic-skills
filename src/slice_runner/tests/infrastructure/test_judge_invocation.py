@@ -125,6 +125,11 @@ class TestWhatTravelsOnStandardInput:
             "  - /toolbox/skills\n"
         ) in JudgeInvocation(judge=_JUDGE, review=review, reader=_READER).text
 
+    def test_a_slice_with_a_user_story_names_the_slice_by_its_canonical_identifier_not_the_bare_ordinal(self) -> None:
+        review = SliceUnderReviewMother.of_the_slice(slice_id=SliceUnderReviewMother.SLICE_ID_WITH_A_USER_STORY)
+
+        assert "- slice: PROJ-1234-05\n" in JudgeInvocation(judge=_JUDGE, review=review, reader=_READER).text
+
     def test_what_the_judge_may_read_is_labelled_apart_from_the_files_of_the_slice(self) -> None:
         review = SliceUnderReviewMother.of_the_slice(files=("src/a.py",))
 
