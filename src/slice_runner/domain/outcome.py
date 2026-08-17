@@ -24,6 +24,7 @@ class Outcome(StrEnum):
     DISCARDED = "discarded"
     OVER_BUDGET = "over-budget"
     CONFLICTING = "conflicting"
+    CHANGES_REQUESTED = "changes-requested"
 
     @classmethod
     def of_the_alignment(cls, kind: AlignmentResponseKind) -> Outcome:

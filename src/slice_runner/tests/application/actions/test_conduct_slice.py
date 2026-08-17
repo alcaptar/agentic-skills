@@ -41,6 +41,7 @@ from slice_runner.tests.mothers.control_outcome_mother import ControlOutcomeMoth
 from slice_runner.tests.mothers.harness_spend_mother import HarnessSpendMother
 from slice_runner.tests.mothers.implementation_mother import ImplementationMother
 from slice_runner.tests.mothers.parent_issue_mother import ParentIssueMother
+from slice_runner.tests.mothers.pull_request_review_mother import PullRequestReviewMother
 from slice_runner.tests.mothers.pull_request_status_mother import PullRequestStatusMother
 from slice_runner.tests.mothers.rejection_mother import RejectionMother
 from slice_runner.tests.mothers.run_mother import RunMother
@@ -54,6 +55,7 @@ _RETRY_INSTRUCTION = "el control ya esta arreglado a mano"
 
 if TYPE_CHECKING:
     from slice_runner.domain.closed_slice import ClosedSlice
+    from slice_runner.domain.pull_request_review import PullRequestReview
     from slice_runner.domain.sub_issue import SubIssue
 
 _SUBISSUE = SubIssueMother.pending().number
@@ -1715,6 +1717,195 @@ class TestConductSliceWhenThePullRequestWasClosedWithoutMerging:
             Conductor.PULL_REQUEST,
         )
         assert conductor.metrics.record.call_count == 0
+
+
+class TestConductSliceWhenAReviewRequestsChangesOnThePullRequest:
+    @staticmethod
+    def _conductor(*, budgets: Budgets | None = None, run: Run | None = None) -> Conductor:
+        conductor = Conductor(
+            chosen=SelectSliceResultMother.resumed_at(run or RunMother.awaiting_merge()),
+            budgets=budgets or Budgets(person_wait_seconds=30),
+        )
+        conductor.forum.pull_request_state.return_value = PullRequestStatusMother.open_and_mergeable()
+
+        return conductor
+
+    def test_a_changes_requested_review_sends_the_slice_back_to_implement_instead_of_waiting_for_the_merge(
+        self,
+    ) -> None:
+        conductor = self._conductor()
+        conductor.forum.reviews.return_value = (PullRequestReviewMother.requesting_changes(),)
+
+        conductor.conduct()
+
+        assert conductor.implement.execute.call_count == 1
+
+    @pytest.mark.parametrize(
+        "review",
+        [
+            PullRequestReviewMother.approving(),
+            PullRequestReviewMother.commenting(),
+            PullRequestReviewMother.still_pending(),
+        ],
+    )
+    def test_a_review_that_is_not_a_request_for_changes_never_sends_the_slice_back_to_implement(
+        self, review: PullRequestReview
+    ) -> None:
+        conductor = self._conductor()
+        conductor.forum.reviews.return_value = (review,)
+
+        conductor.conduct()
+
+        assert conductor.implement.execute.call_count == 0
+
+    def test_the_judge_is_never_invoked_to_deliver_a_correction_that_only_answers_a_review(self) -> None:
+        conductor = self._conductor()
+        conductor.forum.reviews.return_value = (PullRequestReviewMother.requesting_changes(),)
+
+        conductor.conduct()
+
+        assert conductor.verify.execute.call_count == 0
+
+    def test_the_correction_spends_neither_the_judge_nor_the_ci_retry_budget(self) -> None:
+        conductor = self._conductor()
+        conductor.forum.reviews.return_value = (PullRequestReviewMother.requesting_changes(),)
+
+        conductor.conduct()
+
+        written = [call.kwargs["run"] for call in conductor.repository.write_run.call_args_list]
+        assert written
+        assert all((run.verify_retries, run.ci_retries) == (0, 0) for run in written)
+
+    def test_several_changes_requested_reviews_are_delivered_in_a_single_round_in_the_order_they_were_sent(
+        self,
+    ) -> None:
+        first = PullRequestReviewMother.requesting_changes(review_id=101, body="arregla A")
+        second = PullRequestReviewMother.requesting_changes(review_id=102, body="arregla B")
+        conductor = self._conductor()
+        conductor.forum.reviews.return_value = (first, second)
+
+        conductor.conduct()
+
+        assert conductor.implement.execute.call_count == 1
+        assert conductor.implement.execute.call_args.args[0].requested_changes == ("arregla A", "arregla B")
+
+    def test_the_body_of_the_review_reaches_the_implementer_in_the_round_it_triggers(self) -> None:
+        asked = "usa el value object en vez del dict"
+        conductor = self._conductor()
+        conductor.forum.reviews.return_value = (PullRequestReviewMother.requesting_changes(body=asked),)
+
+        conductor.conduct()
+
+        assert conductor.implement.execute.call_args.args[0].requested_changes == (asked,)
+
+    def test_reinvoking_after_the_marker_advanced_does_not_reprocess_the_same_review(self) -> None:
+        conductor = self._conductor(run=RunMother.awaiting_merge_after_reviewing(101))
+        conductor.forum.reviews.return_value = (PullRequestReviewMother.requesting_changes(review_id=101),)
+
+        conductor.conduct()
+
+        assert conductor.implement.execute.call_count == 0
+
+    def test_a_review_sent_after_the_last_one_attended_still_triggers_a_new_round(self) -> None:
+        conductor = self._conductor(run=RunMother.awaiting_merge_after_reviewing(101))
+        conductor.forum.reviews.return_value = (
+            PullRequestReviewMother.requesting_changes(review_id=101),
+            PullRequestReviewMother.requesting_changes(review_id=150, body="una segunda vuelta"),
+        )
+
+        conductor.conduct()
+
+        assert conductor.implement.execute.call_count == 1
+        assert conductor.implement.execute.call_args.args[0].requested_changes == ("una segunda vuelta",)
+
+    def test_the_marker_is_remembered_across_invocations_so_a_later_invocation_does_not_repeat_it(self) -> None:
+        conductor = self._conductor()
+        conductor.forum.reviews.return_value = (PullRequestReviewMother.requesting_changes(review_id=101),)
+
+        conductor.conduct()
+
+        written = [call.kwargs["run"] for call in conductor.repository.write_run.call_args_list]
+        assert any(run.last_reviewed_id == 101 for run in written)
+
+    def test_an_empty_changes_requested_review_is_flagged_as_a_malformed_response_instead_of_triggering_a_round(
+        self,
+    ) -> None:
+        conductor = self._conductor()
+        conductor.forum.reviews.return_value = (PullRequestReviewMother.requesting_changes_with_no_content(),)
+
+        conductor.conduct()
+
+        conductor.forum.write_malformed_response.assert_called_once_with(
+            repo=Conductor.REPO, pull_request=Conductor.PULL_REQUEST, reason=MalformedReason.EMPTY_REVIEW
+        )
+        assert conductor.implement.execute.call_count == 0
+
+    def test_a_batch_mixing_an_empty_review_with_a_readable_one_still_flags_the_empty_one(self) -> None:
+        conductor = self._conductor()
+        empty = PullRequestReviewMother.requesting_changes_with_no_content(review_id=101)
+        readable = PullRequestReviewMother.requesting_changes(review_id=102, body="arregla esto")
+        conductor.forum.reviews.return_value = (empty, readable)
+
+        conductor.conduct()
+
+        conductor.forum.write_malformed_response.assert_called_once_with(
+            repo=Conductor.REPO, pull_request=Conductor.PULL_REQUEST, reason=MalformedReason.EMPTY_REVIEW
+        )
+        assert conductor.implement.execute.call_count == 1
+        assert conductor.implement.execute.call_args.args[0].requested_changes == ("arregla esto",)
+
+    def test_an_empty_review_still_advances_the_marker_so_the_flag_is_not_repeated_every_reinvocation(self) -> None:
+        conductor = self._conductor()
+        empty = PullRequestReviewMother.requesting_changes_with_no_content(review_id=101)
+        conductor.forum.reviews.return_value = (empty,)
+
+        conductor.conduct()
+
+        written = [call.kwargs["run"] for call in conductor.repository.write_run.call_args_list]
+        assert any(run.last_reviewed_id == 101 for run in written)
+
+    def test_the_correction_delivers_again_reusing_the_pull_request_already_open_for_the_slice(self) -> None:
+        conductor = self._conductor()
+        conductor.forum.reviews.return_value = (PullRequestReviewMother.requesting_changes(),)
+
+        conductor.conduct()
+
+        assert conductor.deliver.execute.call_count == 1
+        assert conductor.deliver.execute.call_args.args[0].branch == _BRANCH
+
+    def test_the_text_of_the_review_is_persisted_with_its_marker_so_a_dead_invocation_does_not_swallow_it(
+        self,
+    ) -> None:
+        conductor = self._conductor()
+        conductor.forum.reviews.return_value = (PullRequestReviewMother.requesting_changes(body="arregla el borde"),)
+
+        conductor.conduct()
+
+        written = [call.kwargs["run"] for call in conductor.repository.write_run.call_args_list]
+        assert ("arregla el borde",) in [run.requested_changes for run in written]
+
+    def test_an_invocation_resumed_mid_correction_reaches_the_implementer_with_the_review_it_had_to_attend(
+        self,
+    ) -> None:
+        conductor = self._conductor(run=RunMother.correcting_a_review("arregla el borde"))
+
+        conductor.conduct()
+
+        assert conductor.implement.execute.call_args.args[0].requested_changes == ("arregla el borde",)
+
+    def test_delivering_the_correction_clears_the_review_so_the_next_round_is_judged_again(self) -> None:
+        conductor = self._conductor()
+        conductor.forum.reviews.return_value = (PullRequestReviewMother.requesting_changes(),)
+
+        conductor.conduct()
+
+        delivered = [
+            call.kwargs["run"]
+            for call in conductor.repository.write_run.call_args_list
+            if call.kwargs["run"].step is Step.OPEN_PULL_REQUEST
+        ]
+        assert delivered
+        assert all(run.requested_changes == () for run in delivered)
 
 
 class TestConductSliceWaitingForTheMerge:

@@ -92,6 +92,7 @@ class Conductor:
         self.forum.pull_request_state.return_value = PullRequestStatusMother.merged()
         self.forum.open_pull_request.return_value = self.PULL_REQUEST
         self.forum.any_pull_request.return_value = self.PULL_REQUEST
+        self.forum.reviews.return_value = ()
         self.clock: Mock = create_autospec(Clock, spec_set=True, instance=True)
         self.clock.now.return_value = self.NOW
         self.metrics: Mock = create_autospec(MetricsLog, spec_set=True, instance=True)

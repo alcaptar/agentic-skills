@@ -28,3 +28,5 @@ class MalformedResponseComment:
                 return "a `-REVIEW` le falta la correccion detras."
             case MalformedReason.MISSING_INSTRUCTION:
                 return "a `-RETRY` le falta la instruccion detras."
+            case MalformedReason.EMPTY_REVIEW:
+                return "la review con cambios solicitados no trae nada legible: ni cuerpo ni comentarios en linea."

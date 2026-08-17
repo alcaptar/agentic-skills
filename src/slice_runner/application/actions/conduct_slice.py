@@ -30,11 +30,13 @@ from slice_runner.domain.exceptions import (
 from slice_runner.domain.halt import Halt
 from slice_runner.domain.harness_spend import HarnessSpend
 from slice_runner.domain.issue_label import IssueLabel
+from slice_runner.domain.malformed_reason import MalformedReason
 from slice_runner.domain.outcome import Outcome
 from slice_runner.domain.precheck_outcome import PrecheckOutcome
 from slice_runner.domain.precheck_result import PrecheckResult
 from slice_runner.domain.prechecks import Prechecks
 from slice_runner.domain.pull_request_mergeability import PullRequestMergeability
+from slice_runner.domain.pull_request_review_state import PullRequestReviewState
 from slice_runner.domain.pull_request_state import PullRequestState
 from slice_runner.domain.ruling import Ruling
 from slice_runner.domain.run import Run
@@ -65,6 +67,7 @@ if TYPE_CHECKING:
     from slice_runner.domain.finding import Finding
     from slice_runner.domain.forum import Forum
     from slice_runner.domain.parent_issue import ParentIssue
+    from slice_runner.domain.pull_request_review import PullRequestReview
     from slice_runner.domain.pull_request_writer import PullRequestWriter
     from slice_runner.domain.reported_path import ReportedPath
     from slice_runner.domain.retry_response import RetryResponse
@@ -459,6 +462,7 @@ class ConductSlice:
                     hygiene_refusal=progress.hygiene_refusal,
                     understanding=progress.understanding,
                     retry_instruction=progress.retry_instruction,
+                    requested_changes=progress.run.requested_changes,
                 )
             )
         except MeasuredCallError as rejection:
@@ -607,9 +611,44 @@ class ConductSlice:
             case PullRequestState.MERGED:
                 return SteppedSlice(progress=asked, outcome=Outcome.DONE)
             case PullRequestState.OPEN:
-                return SteppedSlice(progress=asked, outcome=Outcome.PENDING)
+                return self._checking_for_changes_requested(asked, pull_request=opened)
             case PullRequestState.CLOSED:
                 return HaltedSlice(progress=asked, halt=Halt.PULL_REQUEST_CLOSED)
+
+    def _checking_for_changes_requested(self, progress: ConductSliceProgress, *, pull_request: int) -> SteppedSlice:
+        reviews = self._forum.reviews(repo=progress.params.repo, pull_request=pull_request)
+        pending = self._changes_requested_since(reviews, after=progress.run.last_reviewed_id)
+        if not pending:
+            return SteppedSlice(progress=progress, outcome=Outcome.PENDING)
+
+        marked = replace(progress.run, last_reviewed_id=pending[-1].id)
+        readable = tuple(review.text for review in pending if review.has_content)
+        if any(not review.has_content for review in pending):
+            self._forum.write_malformed_response(
+                repo=progress.params.repo, pull_request=pull_request, reason=MalformedReason.EMPTY_REVIEW
+            )
+
+        if not readable:
+            self._writing(progress, run=marked)
+
+            return SteppedSlice(progress=replace(progress, run=marked), outcome=Outcome.PENDING)
+
+        return SteppedSlice(
+            progress=replace(progress, run=replace(marked, requested_changes=readable)),
+            outcome=Outcome.CHANGES_REQUESTED,
+        )
+
+    @staticmethod
+    def _changes_requested_since(
+        reviews: tuple[PullRequestReview, ...], *, after: int
+    ) -> tuple[PullRequestReview, ...]:
+        pending = [
+            review
+            for review in reviews
+            if review.state is PullRequestReviewState.CHANGES_REQUESTED and review.id > after
+        ]
+
+        return tuple(sorted(pending, key=lambda review: review.id))
 
     def _pull_request_of(self, progress: ConductSliceProgress) -> int:
         if progress.pull_request is not None:

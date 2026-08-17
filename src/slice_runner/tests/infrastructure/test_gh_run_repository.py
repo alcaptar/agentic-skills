@@ -60,7 +60,8 @@ _SUB1_BODY = (
     '{"step": "await-ci", "corrected": "", "understanding_pending": false, "control_retries": 1, '
     '"hygiene_retries": 0, "verify_retries": 0, '
     '"correction_retries": 0, "ci_retries": 0, "indeterminate_ticks": 2, "verify_discards": 0, '
-    '"understand_discards": 0, "implement_discards": 0, "control_rounds_logged": 0}\n'
+    '"understand_discards": 0, "implement_discards": 0, "control_rounds_logged": 0, '
+    '"last_reviewed_id": 0, "requested_changes": []}\n'
     "-->\n\n"
 )
 
@@ -440,7 +441,8 @@ class TestWritingTheExecutionStateBlock:
             '{"step": "implement", "corrected": "", "understanding_pending": false, '
             '"control_retries": 0, "hygiene_retries": 0, "verify_retries": 0, '
             '"correction_retries": 0, "ci_retries": 0, "indeterminate_ticks": 0, "verify_discards": 0, '
-            '"understand_discards": 0, "implement_discards": 0, "control_rounds_logged": 0}\n'
+            '"understand_discards": 0, "implement_discards": 0, "control_rounds_logged": 0, '
+            '"last_reviewed_id": 0, "requested_changes": []}\n'
             "-->\n"
         )
 
@@ -461,7 +463,8 @@ class TestWritingTheExecutionStateBlock:
             '{"step": "await-merge", "corrected": "", "understanding_pending": false, '
             '"control_retries": 0, "hygiene_retries": 0, "verify_retries": 0, '
             '"correction_retries": 0, "ci_retries": 0, "indeterminate_ticks": 0, "verify_discards": 0, '
-            '"understand_discards": 0, "implement_discards": 0, "control_rounds_logged": 0}\n'
+            '"understand_discards": 0, "implement_discards": 0, "control_rounds_logged": 0, '
+            '"last_reviewed_id": 0, "requested_changes": []}\n'
             "-->\n\n"
         )
 
@@ -487,6 +490,7 @@ class TestWritingTheExecutionStateBlock:
             '"control_retries": 0, "hygiene_retries": 0, "verify_retries": 0, '
             '"correction_retries": 0, "ci_retries": 0, "indeterminate_ticks": 0, "verify_discards": 0, '
             '"understand_discards": 0, "implement_discards": 0, "control_rounds_logged": 0, '
+            '"last_reviewed_id": 0, "requested_changes": [], '
             '"spend": {"cost_usd": 0.3433209, "turns": 9, "duration_ms": 36315, "calls": 1, '
             '"models": ["claude-sonnet-5"], "input_tokens": 13, "output_tokens": 1159, '
             '"cache_creation_tokens": 42251, "cache_read_tokens": 241303, "ttft_ms": 5588, '
