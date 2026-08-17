@@ -99,3 +99,23 @@ class TestFeatureStatusReport:
         rendered = FeatureStatusReport(statuses=(status,)).rendered()
 
         assert "#" not in rendered
+
+    def test_a_key_longer_than_the_fixed_width_still_lines_up_the_label_column_with_shorter_keys(self) -> None:
+        long_key = SliceStatus(sub_issue=SubIssueMother.carrying_a_user_story(), pull_request=None)
+        short_key = SliceStatus(sub_issue=SubIssueMother.of_a_second_slice(), pull_request=None)
+
+        lines = FeatureStatusReport(statuses=(long_key, short_key)).rendered().splitlines()
+
+        long_label_column = lines[0].index(IssueLabel.PENDING.value)
+        short_label_column = lines[1].index(IssueLabel.PENDING.value)
+        assert long_label_column == short_label_column
+        assert lines[0].startswith(SubIssueMother.carrying_a_user_story().slice_id.canonical)
+
+    def test_a_feature_with_no_user_story_keeps_the_label_column_where_it_was_before_wider_keys_existed(
+        self,
+    ) -> None:
+        status = SliceStatus(sub_issue=SubIssueMother.pending(), pull_request=None)
+
+        rendered = FeatureStatusReport(statuses=(status,)).rendered()
+
+        assert rendered.index(IssueLabel.PENDING.value) == 11

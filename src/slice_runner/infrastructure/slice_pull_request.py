@@ -22,10 +22,18 @@ class SlicePullRequest(PullRequestWriter):
     )
 
     def title(self, subissue: SubIssue) -> str:
-        return f"{self.COMMIT_TYPE}({subissue.slice_id.name}): {subissue.summary}"
+        conventional = self._conventional_title(subissue)
+        if subissue.slice_id.user_story is None:
+            return conventional
+
+        return f"{subissue.slice_id.canonical} {conventional}"
 
     def commit_message(self, subissue: SubIssue) -> str:
-        return SliceCommitMessage(subject=self.title(subissue)).rendered()
+        return SliceCommitMessage(subject=self._conventional_title(subissue)).rendered()
+
+    @classmethod
+    def _conventional_title(cls, subissue: SubIssue) -> str:
+        return f"{cls.COMMIT_TYPE}({subissue.slice_id.name}): {subissue.summary}"
 
     def body(self, subissue: SubIssue, *, debt: tuple[str, ...], findings: tuple[Finding, ...]) -> str:
         return PullRequestBody(

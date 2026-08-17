@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 if TYPE_CHECKING:
     from slice_runner.domain.slice_status import SliceStatus
@@ -9,13 +9,18 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True, kw_only=True, slots=True)
 class FeatureStatusReport:
+    MINIMUM_IDENTIFIER_WIDTH: ClassVar[int] = 10
+
     statuses: tuple[SliceStatus, ...]
 
     def rendered(self) -> str:
-        return "\n".join(self._line(status) for status in self.statuses)
+        longest = max((len(status.sub_issue.slice_id.canonical) for status in self.statuses), default=0)
+        identifier_width = max(longest, self.MINIMUM_IDENTIFIER_WIDTH)
 
-    def _line(self, status: SliceStatus) -> str:
-        parts = [f"{status.sub_issue.slice_id.canonical:<10}", f"{self._label(status):<28}"]
+        return "\n".join(self._line(status, identifier_width) for status in self.statuses)
+
+    def _line(self, status: SliceStatus, identifier_width: int) -> str:
+        parts = [f"{status.sub_issue.slice_id.canonical:<{identifier_width}}", f"{self._label(status):<28}"]
         run = status.sub_issue.run
         if run is not None:
             parts.append(run.step.value)
