@@ -716,10 +716,16 @@ def test_every_slice_title_slice_spec_documents_yields_a_name_git_accepts_as_a_b
 
     Parsing the documented titles with the program's own expression is what keeps the two sides honest:
     a title the skill teaches and the program cannot turn into a branch fails here instead of mid-run.
-    """
-    titles = re.findall(r"`(slice-\d+ \([^)]+\)[^`]*)`", _read(_SPEC))
 
-    assert titles, "slice-spec documents no slice title, so this contract has nothing to measure"
+    Covers both documented title shapes: the plain `slice-NN (name): title` and the one prefixed with a
+    user story key, `AS-255 slice-NN (name): title`.
+    """
+    titles = re.findall(r"`((?:[A-Z][A-Z0-9]*-\d+ )?slice-\d+ \([^)]+\)[^`]*)`", _read(_SPEC))
+
+    assert len(titles) > 1, (
+        "slice-spec documents fewer than two slice titles, so this contract cannot be telling the "
+        "plain shape and the user-story-keyed shape apart"
+    )
     for title in titles:
         parsed = GhRunRepository.SLICE_HEADING.match(title)
         assert parsed, f"the program cannot read the title slice-spec documents: {title}"
