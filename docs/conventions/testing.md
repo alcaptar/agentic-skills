@@ -54,6 +54,27 @@ fichero de tests: con varias copias de firmas distintas, leer cualquier test obl
   `test_a_finding_without_a_line_leaves_the_key_out_instead_of_emitting_null`.
 - Los helpers de un test son `@staticmethod` de su clase de test, o viven en un modulo compartido, pero
   **nunca sueltos a nivel de modulo**.
+- **Lo que comparten varias clases de test del mismo modulo vive en una clase de ese modulo que esas
+  clases heredan**, no en una funcion suelta ni en un modulo compartido que solo se importa desde un
+  sitio. Cubre tanto un helper como un `@pytest.fixture(autouse=True)` que solo protege a esas clases, y
+  es lo que hace que la regla de arriba no tenga hueco: un helper de dos clases del mismo fichero no
+  tiene por que salir del fichero.
+
+  ```python
+  # ejemplo/tests/test_{cosa}.py
+  class {LoQueComparten}:
+      @staticmethod
+      def _{helper}() -> None: ...
+
+
+  class Test{UnComportamiento}({LoQueComparten}): ...
+  ```
+- **En un fixture `autouse`, donde se declara es su alcance, y eso decide donde va.** Dentro de la clase
+  cuando protege a esa clase; en la clase que se hereda cuando protege a un grupo; **a nivel de modulo
+  cuando lo que protege es que ningun test del fichero toque algo de la maquina de quien lo corre**. Ese
+  ultimo caso es el unico en el que un `def` a nivel de modulo es correcto en el arbol de test: bajarlo a
+  una clase le recorta el alcance en silencio, y el mecanismo que lo sustituiria -que cada clase nueva se
+  acuerde de heredar- falla sin avisar justo en la que se olvide.
 
 ## Object Mothers
 

@@ -3,8 +3,9 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING, ClassVar
 
-from slice_runner.domain.conversation import Conversation, ConversationSpend, ConversationTurn, ToolCall
+from slice_runner.domain.conversation import Conversation, ConversationTurn, ToolCall
 from slice_runner.domain.conversation_log import ConversationLog
+from slice_runner.domain.conversation_spend import ConversationSpend
 from slice_runner.domain.exceptions import ConversationNotFoundError, UnreadableConversationError
 from slice_runner.infrastructure.claude_config import ClaudeConfig
 from slice_runner.infrastructure.conversation_transcript import (

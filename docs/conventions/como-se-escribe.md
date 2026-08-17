@@ -1,11 +1,18 @@
 # Como se escribe una convencion
 
-Esta es la vara de las varas. Rige para todo `.md` de `docs/conventions/` **y para cualquier otro que un
-contrato mida o que un agente lea como vara** -hoy, el `README.md`-. Lo que obliga a mantener un
-documento no es la carpeta en la que vive: es que algo se rompa cuando deje de ser verdad.
+Esta es la vara de las varas, y lo que rige es **la vara del codigo**: los ficheros de capa de
+`docs/conventions/` y cualquier otro `.md` que un contrato mida o que un agente lea como vara. Lo que
+obliga a mantener un documento no es la carpeta en la que vive: es que algo se rompa cuando deje de ser
+verdad, y lo que se rompe aqui es que un agente que no puede preguntar mida con una foto vieja.
 
-Quedan fuera los `.md` del flujo viejo (`skills/`), que son codigo que no es referencia (ver
-`CLAUDE.md`): estan congelados a proposito y reescribirlos no compra nada.
+**No rige para los documentos de como se trabaja aqui**, aunque vivan en esta carpeta. Los lee una
+persona en sesion, no viajan en el prompt de nadie y su valor es exactamente el que aqui se prohibe:
+nombrar el fichero que va a dar conflicto **es** el dato, y decir cuantas veces ya fallo un reparto es
+lo unico que impide repetirlo. Un documento que nadie usa para bloquear codigo no necesita seguir siendo
+verdad dentro de veinte slices: necesita ser util hoy, y se corrige el dia que engane.
+
+Quedan fuera, por lo mismo, los `.md` del flujo viejo (`skills/`), que son codigo que no es referencia
+(ver `CLAUDE.md`): estan congelados a proposito y reescribirlos no compra nada.
 
 Una convencion la leen dos agentes que no pueden preguntar -el implementador antes de escribir, el
 juez antes de bloquear- y una persona que llega nueva. Los tres necesitan lo mismo: **la regla con la

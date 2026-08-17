@@ -39,9 +39,19 @@ src/{paquete}/
   __main__.py
 ```
 
-- **Un concepto por modulo**: un value object, un enum, un puerto, una politica o un adaptador por
-  fichero. Las
-  excepciones del dominio son la excepcion a la regla y viven juntas en `domain/exceptions.py`, porque
+- **Un concepto por modulo, y con el lo que no existe sin el.** La regla no cuenta clases -contarlas es
+  un censo con otra cara, y obliga a partir en dos ficheros lo que solo se lee junto-: pregunta por la
+  dependencia. **La vara es dura a proposito: si borras el concepto principal, ¿el otro tipo se queda sin
+  ningun consumidor y sin sentido propio?** Solo entonces comparten fichero. El caso claro es el
+  vocabulario cerrado que solo clasifica un campo de ese value object, o la carga que un puerto recibe y
+  que nadie mas construye.
+
+  **Y al reves: un tipo con vida propia es un concepto y va a su modulo**, aunque hoy se use al lado del
+  otro. Tiene vida propia si lo construye otro sitio, si lo consume otra capa o si lleva su propia
+  algebra. Sin esa mitad, "no existe sin el" se estira hasta justificar cualquier agrupacion por
+  costumbre.
+
+  Las excepciones del dominio son la excepcion a la regla y viven juntas en `domain/exceptions.py`, porque
   se leen como un catalogo y quien las captura suele querer ver la jerarquia de una vez.
 - **Un puerto que solo consume la infraestructura vive con su adaptador**, no en `domain/`, junto a la
   excepcion que lanza. El caso tipico es el que lanza subprocesos: el dominio no los lanza ni sabe que

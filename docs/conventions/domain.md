@@ -30,6 +30,22 @@ comandos salen de un solo sitio.
   entero esperando algo que ya no podia llegar. **Y si la misma llamada ya distingue las dos cosas, eso no
   es un segundo puerto ni una segunda llamada: es un campo mas de una respuesta que ya se estaba
   leyendo.** La traduccion desde las cadenas de la herramienta vive en la frontera.
+- **Un estado ausente es un miembro del vocabulario, no un `| None`.** El caso "aqui no hay valor" se
+  declara dentro del enum, con valor `None`, y para poder llevarlo el enum deja de ser `StrEnum` y pasa a
+  `Enum` plano. Asi el dominio nunca ve `None`, y la frontera entra y sale con la construccion normal del
+  enum -`Enum(valor)` al entrar, `miembro.value` al salir- en vez de con una rama defensiva en cada sitio
+  que lo toca.
+
+  ```python
+  # ejemplo/domain/{vocabulario}.py
+  class {Vocabulario}(Enum):
+      EMPTY = None
+      {UN_CASO} = "{un-caso}"
+  ```
+
+  Un `| None` cuyo vacio solo es legal segun lo que valga otro campo no es un ausente: es un vocabulario
+  partido en dos, y lo gobierna la regla de los dos campos que tienen que concordar
+  (`docs/conventions/infrastructure.md`).
 - **La pertenencia se pregunta contra los valores, no con `in`.** En la version minima de Python que
   declara `docs/conventions/architecture.md`, un `nombre in cls` con una cadena que no es miembro lanza
   `TypeError`, asi que una guarda no puede romper por la forma de preguntar justo cuando el valor es uno
@@ -143,6 +159,8 @@ renombrada o ausente entre versiones, y ninguna logica lo destructura.
 - Un dataclass del dominio sin `frozen=True, kw_only=True, slots=True`.
 - Un `to_dict()` en el dominio. **La traduccion al contrato externo vive en la frontera.**
 - Una tupla de `str` como vocabulario cerrado.
-- `Optional[Enum]` cuando lo que se modela es un estado ausente: eso es un miembro mas del enum.
+- Un `Enum | None` -o `Optional[Enum]`- cuando lo que se modela es un estado ausente: eso es un miembro
+  mas del enum, con valor `None`.
+- Un `Enum | None` cuyo vacio depende de lo que valga otro campo: eso es un vocabulario partido en dos.
 - Un `dict` como valor de retorno de una funcion de logica.
 - Pydantic en cualquier fichero de `domain/`.
