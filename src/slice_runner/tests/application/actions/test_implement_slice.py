@@ -17,6 +17,7 @@ from slice_runner.tests.mothers.verdict_mother import FindingMother
 if TYPE_CHECKING:
     from slice_runner.domain.assignment import Assignment
     from slice_runner.domain.finding import Finding
+    from slice_runner.domain.sub_issue import SubIssue
 
 _REPO = "alcaptar/agentic-skills"
 _WORKTREE = "/repos/agentic-skills"
@@ -34,11 +35,11 @@ class TestImplementSlice:
         return ImplementSlice(implementer=implementer)
 
     @staticmethod
-    def _params(*findings: Finding) -> ImplementSliceParams:
+    def _params(*findings: Finding, subissue: SubIssue | None = None) -> ImplementSliceParams:
         return ImplementSliceParams(
             repo=_REPO,
             worktree=_WORKTREE,
-            subissue=SubIssueMother.pending(),
+            subissue=subissue or SubIssueMother.pending(),
             parent=ParentIssueMother.with_sources_and_controls(),
             findings=findings,
         )
@@ -55,6 +56,13 @@ class TestImplementSlice:
 
         assigned = self._assigned(implementer)
         assert (assigned.issue, assigned.slice_id) == (SubIssueMother.pending().number, "slice-05")
+
+    def test_a_slice_carrying_a_user_story_is_assigned_by_its_canonical_identifier_not_the_bare_ordinal(
+        self, action: ImplementSlice, implementer: Mock
+    ) -> None:
+        action.execute(self._params(subissue=SubIssueMother.carrying_a_user_story()))
+
+        assert self._assigned(implementer).slice_id == "PROJ-1234-05"
 
     def test_what_the_slice_asks_for_travels_from_the_body_of_its_own_subissue(
         self, action: ImplementSlice, implementer: Mock

@@ -47,6 +47,10 @@ class AssignmentMother:
         )
 
     @classmethod
+    def of_the_first_round_of_a_slice_with_a_user_story(cls) -> Assignment:
+        return replace(cls.of_the_first_round(), slice_id=SubIssueMother.carrying_a_user_story().slice_id.canonical)
+
+    @classmethod
     def of_a_second_round(cls) -> Assignment:
         return replace(cls.of_the_first_round(), findings=(FindingMother.with_line(),))
 

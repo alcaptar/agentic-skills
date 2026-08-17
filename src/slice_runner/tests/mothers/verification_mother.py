@@ -66,13 +66,19 @@ class SliceUnderReviewMother:
     ISSUE: ClassVar[int] = 45
     WORKTREE: ClassVar[str] = "/repos/project"
     SLICE_ID: ClassVar[str] = "slice-05"
+    SLICE_ID_WITH_A_USER_STORY: ClassVar[str] = "PROJ-1234-05"
 
     @classmethod
     def of_the_slice(
-        cls, *, worktree: str | None = None, files: tuple[str, ...] | None = None, text: str | None = None
+        cls,
+        *,
+        worktree: str | None = None,
+        files: tuple[str, ...] | None = None,
+        text: str | None = None,
+        slice_id: str | None = None,
     ) -> SliceUnderReview:
         return SliceUnderReview(
-            slice_id=cls.SLICE_ID,
+            slice_id=slice_id or cls.SLICE_ID,
             repo=cls.REPO,
             issue=cls.ISSUE,
             worktree=worktree or cls.WORKTREE,

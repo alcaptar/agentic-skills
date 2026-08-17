@@ -26,6 +26,10 @@ class UnderstandingInvocationMother:
         )
 
     @classmethod
+    def of_a_slice_carrying_a_user_story(cls) -> UnderstandingInvocation:
+        return replace(cls.of_the_chosen_slice(), subissue=SubIssueMother.carrying_a_user_story())
+
+    @classmethod
     def of_a_repo_exempt_from_controls(cls) -> UnderstandingInvocation:
         return replace(cls.of_the_chosen_slice(), parent=ParentIssueMother.with_exempt_controls())
 

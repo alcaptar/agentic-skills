@@ -82,6 +82,11 @@ class TestTheSliceDataThatTravelsWithTheBrief:
             "  - lint: make linting"
         )
 
+    def test_a_slice_with_a_user_story_names_the_slice_by_its_canonical_identifier_not_the_bare_ordinal(self) -> None:
+        text = UnderstandingInvocationMother.of_a_slice_carrying_a_user_story().text
+
+        assert "- slice: PROJ-1234-05\n" in text
+
     def test_the_brief_opens_the_prompt_so_the_data_of_the_slice_reads_as_an_appendix(self) -> None:
         assert UnderstandingInvocationMother.of_the_chosen_slice().text.startswith(UnderstandingBrief.TEXT)
 
