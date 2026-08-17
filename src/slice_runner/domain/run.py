@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 from slice_runner.domain.harness_spend import HarnessSpend
 
 if TYPE_CHECKING:
+    from slice_runner.domain.requested_change import RequestedChange
     from slice_runner.domain.step import Step
 
 
@@ -25,7 +26,7 @@ class Run:
     implement_discards: int = 0
     control_rounds_logged: int = 0
     last_reviewed_id: int = 0
-    requested_changes: tuple[str, ...] = ()
+    requested_changes: tuple[RequestedChange, ...] = ()
     spend: HarnessSpend = field(default_factory=HarnessSpend.nothing)
 
     @property

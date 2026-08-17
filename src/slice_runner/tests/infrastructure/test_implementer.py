@@ -26,6 +26,7 @@ from slice_runner.tests.mothers.assignment_mother import AssignmentMother
 from slice_runner.tests.mothers.harness_call_spend_mother import HarnessCallSpendMother
 from slice_runner.tests.mothers.harness_spend_mother import HarnessSpendMother
 from slice_runner.tests.mothers.judge_output_mother import HarnessEnvelopeMother
+from slice_runner.tests.mothers.pull_request_review_comment_mother import PullRequestReviewCommentMother
 
 if TYPE_CHECKING:
     from slice_runner.domain.assignment import Assignment
@@ -319,6 +320,30 @@ class TestThePendingReviewsThatTravelWithTheBrief:
 
     def test_a_round_with_no_pending_review_carries_no_section_instead_of_an_empty_one(self) -> None:
         assert "\n## Peticion de cambio en la pull request\n" not in self._sent(AssignmentMother.of_the_first_round())
+
+    def test_an_anchored_comment_reaches_the_implementer_with_its_file_and_its_line(self) -> None:
+        sent = self._sent(AssignmentMother.of_a_round_after_a_review_with_an_anchored_comment())
+
+        assert sent.endswith(
+            f"{PullRequestReviewCommentMother.PATH}:{PullRequestReviewCommentMother.LINE}: "
+            f"{PullRequestReviewCommentMother.ANCHORED_BODY}"
+        )
+
+    def test_a_stale_comment_with_no_line_reaches_the_implementer_with_only_its_file_instead_of_breaking(
+        self,
+    ) -> None:
+        sent = self._sent(AssignmentMother.of_a_round_after_a_stale_review_comment())
+
+        assert sent.endswith(f"{PullRequestReviewCommentMother.PATH}: {PullRequestReviewCommentMother.STALE_BODY}")
+
+    def test_the_body_and_the_anchored_comment_of_the_same_review_both_reach_the_implementer(self) -> None:
+        sent = self._sent(AssignmentMother.of_a_round_after_a_review_with_a_body_and_an_anchored_comment())
+
+        assert sent.endswith(
+            f"{AssignmentMother.REVIEW}\n\n"
+            f"{PullRequestReviewCommentMother.PATH}:{PullRequestReviewCommentMother.LINE}: "
+            f"{PullRequestReviewCommentMother.ANCHORED_BODY}"
+        )
 
 
 class TestTheReportOfARecordedCall:

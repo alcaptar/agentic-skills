@@ -258,9 +258,11 @@ importar**: un smoke que solo importe el modulo lo da por bueno. Lo evita
   mismo motivo.** Los objetos que devuelven `gh api repos/{repo}/pulls/{n}/reviews` y
   `gh api repos/{repo}/pulls/{n}/comments` tampoco son un contrato que fije este programa: traen mas campos
   de los que `GhForum.reviews` consume (`user`, `html_url`, `submitted_at`, `commit_id`... en la review;
-  `path`, `line`, `diff_hunk`, `created_at`... en el comentario). `GhPullRequestReviewPayload.from_dict`
-  proyecta a mano `id`/`state`/`body`, y `GhPullRequestReviewCommentPayload.from_dict` proyecta
-  `body`/`pull_request_review_id`, los dos antes de validar, igual que `GhCommentPayload.from_dict`.
+  `diff_hunk`, `created_at`... en el comentario). `GhPullRequestReviewPayload.from_dict` proyecta a mano
+  `id`/`state`/`body`, y `GhPullRequestReviewCommentPayload.from_dict` proyecta `body`/`path`/
+  `pull_request_review_id`/`line` -el `path` y el `line` si se consumen, porque son la ubicacion que una
+  peticion de cambio anclada necesita para viajar como un `Finding`-, los dos antes de validar, igual que
+  `GhCommentPayload.from_dict`.
 - **Los cuatro almacenes durables viven bajo un mismo directorio y un mismo patron de nombre.**
   `LocalMetricsLog.LEDGER`, `LocalCallTrace.LEDGER`, `LocalCallSpendLog.LEDGER` y las dos rutas de
   `LocalCorpus` (`LEDGER` para los veredictos, `DIFF_LEDGER` para el diff que juzgo cada uno) resuelven

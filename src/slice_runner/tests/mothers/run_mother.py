@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from slice_runner.domain.requested_change import RequestedChange
 from slice_runner.domain.run import Run
 from slice_runner.domain.step import Step
+from slice_runner.tests.mothers.pull_request_review_comment_mother import PullRequestReviewCommentMother
 
 if TYPE_CHECKING:
     from slice_runner.domain.harness_spend import HarnessSpend
@@ -56,7 +58,17 @@ class RunMother:
 
     @staticmethod
     def correcting_a_review(text: str) -> Run:
-        return Run(step=Step.IMPLEMENT, last_reviewed_id=101, requested_changes=(text,))
+        return Run(step=Step.IMPLEMENT, last_reviewed_id=101, requested_changes=(RequestedChange(body=text),))
+
+    @staticmethod
+    def correcting_a_review_with_an_anchored_comment() -> Run:
+        return Run(
+            step=Step.IMPLEMENT,
+            last_reviewed_id=101,
+            requested_changes=(
+                RequestedChange(body="", comments=(PullRequestReviewCommentMother.anchored_to_a_line(),)),
+            ),
+        )
 
     @staticmethod
     def awaiting_alignment_after_a_published_correction(correction: str) -> Run:

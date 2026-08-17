@@ -36,6 +36,7 @@ from slice_runner.domain.precheck_result import PrecheckResult
 from slice_runner.domain.prechecks import Prechecks
 from slice_runner.domain.pull_request_mergeability import PullRequestMergeability
 from slice_runner.domain.pull_request_state import PullRequestState
+from slice_runner.domain.requested_change import RequestedChange
 from slice_runner.domain.ruling import Ruling
 from slice_runner.domain.run import Run
 from slice_runner.domain.run_state import RunState
@@ -622,7 +623,7 @@ class ConductSlice:
         asked = replace(
             progress.run,
             last_reviewed_id=pending[-1].id,
-            requested_changes=tuple(review.text for review in pending),
+            requested_changes=tuple(RequestedChange(body=review.body, comments=review.comments) for review in pending),
         )
 
         return SteppedSlice(progress=replace(progress, run=asked), outcome=Outcome.CHANGES_REQUESTED)

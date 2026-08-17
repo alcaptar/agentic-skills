@@ -8,6 +8,7 @@ if TYPE_CHECKING:
 
     from slice_runner.domain.controls import Controls
     from slice_runner.domain.finding import Finding
+    from slice_runner.domain.requested_change import RequestedChange
     from slice_runner.domain.source import Source
 
 
@@ -28,4 +29,4 @@ class Assignment:
     hygiene_refusal: str = ""
     understanding: str = ""
     retry_instruction: str = ""
-    requested_changes: tuple[str, ...] = ()
+    requested_changes: tuple[RequestedChange, ...] = ()

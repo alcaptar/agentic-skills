@@ -9,6 +9,7 @@ from slice_runner.domain.harness_spend import HarnessSpend
 from slice_runner.domain.run import Run
 from slice_runner.domain.step import Step
 from slice_runner.infrastructure.contract_model import ContractModel
+from slice_runner.infrastructure.requested_change_payload import RequestedChangePayload
 from slice_runner.infrastructure.spend_payload import SpendPayload
 
 Spent = Annotated[int, Field(strict=True, ge=0)]
@@ -29,7 +30,7 @@ class RunPayload(ContractModel):
     implement_discards: Spent = 0
     control_rounds_logged: Spent = 0
     last_reviewed_id: Spent = 0
-    requested_changes: tuple[str, ...] = ()
+    requested_changes: list[RequestedChangePayload] = Field(default_factory=list)
     spend: SpendPayload | None = None
 
     @classmethod
@@ -53,7 +54,7 @@ class RunPayload(ContractModel):
             implement_discards=run.implement_discards,
             control_rounds_logged=run.control_rounds_logged,
             last_reviewed_id=run.last_reviewed_id,
-            requested_changes=run.requested_changes,
+            requested_changes=[RequestedChangePayload.from_domain(change) for change in run.requested_changes],
             spend=SpendPayload.from_domain(run.spend) if run.spend.measured else None,
         )
 
@@ -73,6 +74,6 @@ class RunPayload(ContractModel):
             implement_discards=self.implement_discards,
             control_rounds_logged=self.control_rounds_logged,
             last_reviewed_id=self.last_reviewed_id,
-            requested_changes=self.requested_changes,
+            requested_changes=tuple(payload.to_domain() for payload in self.requested_changes),
             spend=self.spend.to_domain() if self.spend is not None else HarnessSpend.nothing(),
         )
