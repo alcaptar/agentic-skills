@@ -30,7 +30,7 @@ porque nadie la cargaba antes de escribir. Una convencion que no se lee no mide 
 | Adaptadores, modelos de frontera, entrypoints | `docs/conventions/infrastructure.md` |
 | Tests, mothers, dobles, marcadores, contratos entre `.md` | `docs/conventions/testing.md` |
 | Ramas, commits, pull requests, merge | `docs/conventions/git-workflow.md` |
-| Una convencion de `docs/conventions/` | `docs/conventions/como-se-escribe.md` |
+| Una convencion de la vara del codigo | `docs/conventions/como-se-escribe.md` |
 | Una skill, un script de skill o un agente | las dos skills del apartado siguiente |
 
 ### Quien lee cada cosa

@@ -94,6 +94,37 @@ El origen: de 38 hallazgos bloqueantes o medios del dogfooding, **seis eran pros
 listas cerradas que la propia slice invalidaba-, y `infrastructure.md` concentraba 10 de los 18 de
 severidad alta.
 
+## Comparar la vara con la de otro repo (lo que se midio)
+
+2026-08-17, contra las convenciones de otro repo propio con la misma arquitectura hexagonal, pero Django
+y un contenedor de inyeccion. Lo que salio:
+
+- **La vara de aqui mide casi el doble.** Sumando los ficheros de capa comparables, 33.325 caracteres
+  alli frente a 61.870 aqui, ya recortados. `docs/conventions/infrastructure.md` **sola** es tres cuartos
+  de toda la vara del otro repo.
+- **Alli se ensena con ejemplo y aqui con prosa**: 29 bloques de codigo frente a 6 moldes. Cada forma paga
+  algo distinto -un ejemplo puede envejecer sin que nada avise; la prosa hace que el motivo compita con la
+  regla por la atencion-.
+- **El otro repo no tiene meta-vara y su vara esta igual de limpia de censo**: una sola ruta real citada,
+  cero conteos de miembros del codigo. Dato incomodo y util: alli la limpieza no vino de una regla
+  escrita, vino de que la vara nacio con moldes en vez de con inventario.
+- **La regla del estado ausente como miembro del vocabulario se trajo de alli.** Aqui el antipatron ya
+  prohibia `Optional[Enum]` pero no decia con que se sustituye, asi que prohibia sin ofrecer.
+
+Y la deriva del codigo contra la vara de aqui, medida a la vez:
+
+- **Un `| None` que carga dos significados**, pendiente de arreglar: en
+  `src/slice_runner/application/queries/read_ci_status.py`, el mismo vacio dice "esto no es indeterminado"
+  y "es indeterminado y la propia herramienta no sabia por que". Falta un miembro que diga que la
+  herramienta contesto que no sabe. Encima, ese campo y el resultado son dos que tienen que concordar, o
+  sea la regla de `docs/conventions/infrastructure.md` incumplida en el mismo sitio.
+- **De los puertos del programa, exactamente uno no compra nada**: una implementacion, un consumidor de su
+  misma capa, y cero sustituciones en todo el arbol de test -el test de su unico consumidor inyecta la
+  implementacion de verdad-. Los demas estan doblados o los consume aplicacion, asi que el reparto en
+  muchos ficheros **no** lo explican abstracciones muertas.
+- **Lo que si explica el numero de ficheros es la regla que contaba clases**, que es la que se reescribio
+  para preguntar por la dependencia en vez de contar tipos.
+
 ## Por donde se le entrega una convencion (lo que se midio)
 
 La pregunta era si las convenciones rinden mas como `.md` que el implementador tiene que leer, o
