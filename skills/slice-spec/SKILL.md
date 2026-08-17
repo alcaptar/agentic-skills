@@ -71,7 +71,8 @@ Dos modos:
   observable, y eso se arregla **en el slicing**, no en el incidente. Las exentas (refactor puro, VO
   interno, migracion sin efecto visible) lo declaran con motivo: `SENAL: exenta - <motivo>`;
   ausencia silenciosa no es exencion. El detalle vive en `references/observabilidad.md` (escalera
-  para decidir si hay que instrumentar o la senal ya existe, stack concreto, redaccion de la linea).
+  para decidir si hay que instrumentar o la senal ya existe, redaccion de la linea, y el overlay del
+  stack concreto si el repo lo tiene).
 - **Alertas y paneles son slices propias, en su repo.** Una alerta o un panel no van nunca en la PR de
   la metrica que consumen (repos distintos ⇒ PRs distintas), y el orden es forzoso: primero la slice
   que emite la serie, luego la alerta, luego el panel. Se declaran con `REPO:` en su linea.
@@ -138,7 +139,7 @@ ajuste negativo entra sin que nadie lo frene y deja el stock en negativo hasta q
 - doc: CLAUDE.md
 - skill: .claude/skills/duplicate-action
 
-### mercadona/mercadona.online.gke
+### tu-org/infra-alertas
 - doc: templates/CLAUDE.md
 
 ## Controles
@@ -146,8 +147,8 @@ ajuste negativo entra sin que nadie lo frene y deja el stock en negativo hasta q
 - types: make check-types
 - tests: make test
 
-### mercadona/mercadona.online.gke
-- ninguno: la integracion continua solo publica en master, no valida en PR
+### tu-org/infra-alertas
+- ninguno: la integracion continua de ese repo no valida en PR
 ```
 
 ### Una subissue por slice
@@ -166,7 +167,7 @@ El ejemplo es el caso cross-repo, que es el que mas cosas exige: una slice que s
 del padre no lleva primera linea.
 
 ```markdown
-REPO: mercadona/mercadona.online.gke
+REPO: tu-org/infra-alertas
 INTENCION: hoy el stock se queda en negativo y nadie se entera hasta que una tienda llama a soporte
 ACEPTACION: la alerta dispara con stock negativo sostenido 10m y no con un negativo aislado
 ACEPTACION: la alerta sale con severidad critical y apunta al runbook de stock

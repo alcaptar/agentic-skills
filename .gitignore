@@ -6,3 +6,6 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 .nwave/
+
+# Overlay privado del stack de observabilidad (no se publica)
+skills/slice-spec/references/observabilidad.local.md
