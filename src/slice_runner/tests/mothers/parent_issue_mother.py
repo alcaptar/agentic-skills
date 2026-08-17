@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from dataclasses import replace
 
-from slice_runner.domain.control_command import ControlCommand
 from slice_runner.domain.controls import Controls
 from slice_runner.domain.issue_state import IssueState
 from slice_runner.domain.parent_issue import ParentIssue
 from slice_runner.domain.source import Source, SourceKind
+from slice_runner.tests.mothers.control_command_mother import ControlCommandMother
 
 
 class ParentIssueMother:
@@ -16,7 +16,7 @@ class ParentIssueMother:
             intention="hoy nada evita reimplementar una slice ya entregada",
             prior_art="",
             sources=(Source(kind=SourceKind.DOC, path="CLAUDE.md"),),
-            controls=Controls(commands=(ControlCommand(name="lint", command="make linting"),), exemption_reason=None),
+            controls=Controls(commands=(ControlCommandMother.lint(),), exemption_reason=None),
             subissue_count=1,
             state=IssueState.OPEN,
         )
@@ -35,8 +35,8 @@ class ParentIssueMother:
             ParentIssueMother.with_sources_and_controls(),
             controls=Controls(
                 commands=(
-                    ControlCommand(name="lint", command="make linting"),
-                    ControlCommand(name="tests", command="make test"),
+                    ControlCommandMother.lint(),
+                    ControlCommandMother.tests(),
                 ),
                 exemption_reason=None,
             ),
