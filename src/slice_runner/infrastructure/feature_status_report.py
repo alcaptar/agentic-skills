@@ -9,18 +9,18 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True, kw_only=True, slots=True)
 class FeatureStatusReport:
-    MINIMUM_KEY_WIDTH: ClassVar[int] = 10
+    MINIMUM_IDENTIFIER_WIDTH: ClassVar[int] = 10
 
     statuses: tuple[SliceStatus, ...]
 
     def rendered(self) -> str:
-        longest_key = max((len(status.sub_issue.slice_id.canonical) for status in self.statuses), default=0)
-        key_width = max(longest_key, self.MINIMUM_KEY_WIDTH)
+        longest = max((len(status.sub_issue.slice_id.canonical) for status in self.statuses), default=0)
+        identifier_width = max(longest, self.MINIMUM_IDENTIFIER_WIDTH)
 
-        return "\n".join(self._line(status, key_width) for status in self.statuses)
+        return "\n".join(self._line(status, identifier_width) for status in self.statuses)
 
-    def _line(self, status: SliceStatus, key_width: int) -> str:
-        parts = [f"{status.sub_issue.slice_id.canonical:<{key_width}}", f"{self._label(status):<28}"]
+    def _line(self, status: SliceStatus, identifier_width: int) -> str:
+        parts = [f"{status.sub_issue.slice_id.canonical:<{identifier_width}}", f"{self._label(status):<28}"]
         run = status.sub_issue.run
         if run is not None:
             parts.append(run.step.value)

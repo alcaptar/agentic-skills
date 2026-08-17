@@ -31,8 +31,9 @@ class SlicePullRequest(PullRequestWriter):
     def commit_message(self, subissue: SubIssue) -> str:
         return SliceCommitMessage(subject=self._conventional_title(subissue)).rendered()
 
-    def _conventional_title(self, subissue: SubIssue) -> str:
-        return f"{self.COMMIT_TYPE}({subissue.slice_id.name}): {subissue.summary}"
+    @classmethod
+    def _conventional_title(cls, subissue: SubIssue) -> str:
+        return f"{cls.COMMIT_TYPE}({subissue.slice_id.name}): {subissue.summary}"
 
     def body(self, subissue: SubIssue, *, debt: tuple[str, ...], findings: tuple[Finding, ...]) -> str:
         return PullRequestBody(
