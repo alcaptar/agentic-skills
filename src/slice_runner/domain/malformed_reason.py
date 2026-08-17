@@ -7,4 +7,3 @@ class MalformedReason(StrEnum):
     GO_CARRIES_TEXT = "go-carries-text"
     MISSING_CORRECTION = "missing-correction"
     MISSING_INSTRUCTION = "missing-instruction"
-    MISSING_CHANGE = "missing-change"

@@ -40,31 +40,36 @@ cadena, asi que ni el formato del issue ni el JSON de salida cambian, pero las c
   `TypeError`, y la guarda que impide commitear en `master` no puede romper por la forma de preguntar
   justo cuando la rama es una cualquiera.
 
-## Lo que una persona le contesta al run se lee por un marcador, no por el gesto de la interfaz
+## Lo que una persona pide sobre la pull request se lee del gesto, no de un marcador
 
-Los cuatro puntos donde el run escucha a una persona leen un token al principio del texto -`-GO` y
-`-REVIEW` en la pausa de alineacion, `-RETRY` para reabrir una slice bloqueada, `-CHANGE` para pedir un
-cambio sobre la pull request-, y el token vive como `ClassVar` del value object que lo interpreta
-(`AlignmentResponse`, `RetryResponse`, `PullRequestReview`).
+En la subissue el canal es un token al principio del comentario -`-GO` y `-REVIEW` en la pausa de
+alineacion, `-RETRY` para reabrir una slice bloqueada-, porque el hilo de un issue no tiene semantica
+propia: un comentario es un comentario. **En la pull request si la hay**, y es la que se usa: enviar una
+review es el gesto, y `PullRequestReview.asks_for_a_change` no lee ningun marcador.
 
-**En la pull request eso parece redundante y no lo es**, porque GitHub ya tiene un gesto nativo para
-pedir cambios. Se probo y se midio: `gh pr review --request-changes` sobre una pull request propia
-contesta `Can not request changes on your own pull request`. El run abre la pull request con el token de
-quien lo lanza, asi que **el autor es esa misma persona y el gesto nativo le esta vedado**: solo puede
-dejar reviews de tipo `COMMENTED`, que es justo lo que no debe disparar nada para poder conversar sin
-gastar una llamada. Un disparo por `CHANGES_REQUESTED` solo funciona cuando revisa **otra** persona, que
-no es el caso comun de esta herramienta.
+Lo que decide es el estado, con un `match` exhaustivo y sin rama generica, y cada exclusion tiene su
+motivo medido:
 
-Consecuencias, para que no se "arregle" hacia el lado facil:
+- **`PENDING` no pide nada**: es un lote a medio escribir, y la interfaz de programacion **te lo devuelve
+  cuando es tuyo**, asi que sin esta exclusion el run arrancaria con lo que estas tecleando. Medido: un
+  borrador sale como `PENDING` y sus comentarios de linea no aparecen siquiera en
+  `/pulls/{n}/comments` hasta que se envia.
+- **`APPROVED` no pide nada**: aprobar significa "adelante", no "arreglame esto".
+- **`DISMISSED` no pide nada**: lo que se descarto no se atiende.
+- **`COMMENTED` y `CHANGES_REQUESTED` piden**. Las dos, y no solo la segunda, porque
+  `gh pr review --request-changes` sobre una pull request propia contesta `Can not request changes on
+  your own pull request`: el run abre la pull request con el token de quien lo lanza, asi que el gesto
+  nativo esta vedado justo a esa persona y solo le queda `COMMENTED`.
 
-- **El estado de la review sigue haciendo falta, pero solo para excluir.** `PullRequestReview.submitted`
-  descarta `PENDING` y `DISMISSED`: la primera es un borrador sin enviar que la interfaz de programacion
-  **te devuelve si es tuyo**, asi que sin ese filtro el run dispararia con lo que estas escribiendo a
-  medias. Ahi si es el gesto de enviar lo que separa una peticion de un borrador.
-- **Un token marca la review entera, no cada trozo.** Quien revisa comenta en varias lineas y no va a
-  prefijar todas; exigirlo por trozo convertiria un olvido en trabajo perdido en silencio.
-- **Lo que dispara no es lo que se transporta.** El token se quita antes de que el texto viaje al
-  implementador: es fontaneria del canal, no parte de lo que se pide.
+**Consecuencia aceptada, y se acepta a proposito: cualquier review enviada dispara una vuelta**, tambien
+si solo querias preguntar algo. Lo que se gana es que no hay nada que aprender ni que recordar escribir;
+lo que se paga es que conversar dentro de una review cuesta una llamada al implementador. El sitio para
+conversar sin gastar es la caja de comentarios del issue de la pull request, que **no** se lee -y por eso
+mismo pedir un cambio desde ahi tampoco funciona-.
+
+Hubo una version con marcador (`-CHANGE` en el cuerpo o en un comentario de linea) que resolvia las dos
+cosas a la vez, y se retiro por simplicidad antes de entregar: **si la conversacion dentro de reviews
+resulta caer caro, ese es el cambio que hay que rehacer**, no un caso especial por autor.
 
 ## Puertos
 

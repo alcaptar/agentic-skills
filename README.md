@@ -382,24 +382,36 @@ Si algo se rompe, la etiqueta lo dice y el run para en vez de seguir: `bloqueada
 Revisas la pull request en GitHub y le das a merge. Eso es tuyo, no del pipeline. GitHub cierra la
 subissue `#43` sola, porque la pull request lleva `Closes #43`.
 
-Si al revisar el diff ves algo que corregir, **no hace falta salirse del flujo**: comenta en las lineas
-afectadas y **escribe `-CHANGE` delante de lo que hay que cambiar**. Al enviar la review, el run sale de
-esperar el merge, se lo pasa al implementador, deja los controles verdes y anade un commit a **la misma
-pull request**. Luego vuelve a esperarte.
+Si al revisar el diff ves algo que corregir, **no hace falta salirse del flujo ni tocar la subissue**. El
+gesto es el de siempre en GitHub:
 
-- **El marcador es lo que dispara, no el boton de GitHub.** Es asi porque GitHub **no deja pedir cambios
-  en tu propia pull request**, y el run la abre con tu token: el gesto nativo esta vedado justo a quien
-  mas lo necesita, que eres tu. Con el marcador el camino es el mismo lo abras tu o un compañero, y
-  pulsar *Request changes* sin escribirlo no dispara nada.
-- **Basta escribirlo una vez por review**: marca la review entera, asi que el resto de lo que digas en
-  ella viaja igual, con marcador o sin el.
-- **Sin marcador no pasa nada**, que es lo que deja conversar en la pull request sin gastar una llamada.
+1. En **Files changed**, `+` en la linea, escribes, y **Start a review**.
+2. Los comentarios que quieras, en las lineas que quieras. Mientras el lote esta en borrador **no pasa
+   nada**: el programa descarta las reviews sin enviar, y GitHub ni siquiera expone sus comentarios.
+3. **Submit review**. En tu propia pull request GitHub solo te deja *Comment*, y vale: es lo que se
+   espera.
+
+En menos de medio minuto el run sale de esperar el merge, le pasa al implementador **todo** lo que
+comentaste en esa review, deja los controles verdes y anade un commit a **la misma pull request**. Luego
+vuelve a esperarte.
+
+- **Lo que dispara es enviar una review, no un marcador.** No hay nada que escribir aparte de lo que
+  quieres cambiar. Y el boton nativo de *Request changes* funciona igual cuando lo pulsa un compañero,
+  que es el unico que puede: GitHub **no deja pedir cambios en tu propia pull request**, y el run la abre
+  con tu token.
+- **Una aprobacion no dispara nada.** Aprobar significa "adelante", no "arreglame esto".
+- **Consecuencia que conviene saber: cualquier review enviada dispara una vuelta.** Preguntar algo en una
+  review cuesta una llamada al implementador y un commit, asi que para conversar sin gastar usa la caja de
+  comentarios de la pestana **Conversation**, que el run no lee.
+- **Ojo con eso mismo al reves**: pedir un cambio **desde la pestana Conversation no funciona**. Ese
+  comentario no es una review y el run no lo ve. Las peticiones van en **Files changed**.
 - **Puedes pedir cambios tantas veces como quieras.** Cada review nueva dispara su vuelta; el run
   recuerda cual fue la ultima que atendio, asi que ni repite ni se salta ninguna. Si dejaste varias
   mientras el run no estaba vivo, se atienden **todas en una sola vuelta**, en el orden en que las
   enviaste. Lo que **no** cuenta es editar una review ya atendida: envia una nueva.
-- **`-CHANGE` a secas** -sin nada detras y sin nada mas en la review- se te contesta como respuesta mal
-  escrita y no dispara la vuelta.
+- **Usa *Start a review* y no *Comment* si vas a dejar varios.** Con *Comment* cada comentario es su
+  propia review, asi que si el run sondea en medio pagas una llamada al implementador por comentario en
+  vez de una por lote.
 - **Esta vuelta no pasa por el juez**: la miden los controles y la miras tu, que eres quien pidio el
   cambio. Tampoco gasta los contadores de reintento del juez ni de la integracion continua, asi que
   pedir varios cambios seguidos no bloquea la slice. Lo que si la acota es el presupuesto de coste.

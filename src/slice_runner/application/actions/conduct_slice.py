@@ -30,7 +30,6 @@ from slice_runner.domain.exceptions import (
 from slice_runner.domain.halt import Halt
 from slice_runner.domain.harness_spend import HarnessSpend
 from slice_runner.domain.issue_label import IssueLabel
-from slice_runner.domain.malformed_reason import MalformedReason
 from slice_runner.domain.outcome import Outcome
 from slice_runner.domain.precheck_outcome import PrecheckOutcome
 from slice_runner.domain.precheck_result import PrecheckResult
@@ -620,22 +619,13 @@ class ConductSlice:
         if not pending:
             return SteppedSlice(progress=progress, outcome=Outcome.PENDING)
 
-        marked = replace(progress.run, last_reviewed_id=pending[-1].id)
-        readable = tuple(review.text for review in pending if review.has_content)
-        if any(not review.has_content for review in pending):
-            self._forum.write_malformed_response(
-                repo=progress.params.repo, pull_request=pull_request, reason=MalformedReason.MISSING_CHANGE
-            )
-
-        if not readable:
-            self._writing(progress, run=marked)
-
-            return SteppedSlice(progress=replace(progress, run=marked), outcome=Outcome.PENDING)
-
-        return SteppedSlice(
-            progress=replace(progress, run=replace(marked, requested_changes=readable)),
-            outcome=Outcome.CHANGES_REQUESTED,
+        asked = replace(
+            progress.run,
+            last_reviewed_id=pending[-1].id,
+            requested_changes=tuple(review.text for review in pending),
         )
+
+        return SteppedSlice(progress=replace(progress, run=asked), outcome=Outcome.CHANGES_REQUESTED)
 
     @staticmethod
     def _changes_asked_since(reviews: tuple[PullRequestReview, ...], *, after: int) -> tuple[PullRequestReview, ...]:

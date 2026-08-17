@@ -28,5 +28,3 @@ class MalformedResponseComment:
                 return "a `-REVIEW` le falta la correccion detras."
             case MalformedReason.MISSING_INSTRUCTION:
                 return "a `-RETRY` le falta la instruccion detras."
-            case MalformedReason.MISSING_CHANGE:
-                return "a `-CHANGE` le falta detras lo que hay que cambiar."

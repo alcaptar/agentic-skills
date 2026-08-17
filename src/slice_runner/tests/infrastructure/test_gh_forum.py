@@ -6,13 +6,11 @@ import pytest
 
 from slice_runner.domain.branch_pull_request import BranchPullRequest
 from slice_runner.domain.exceptions import UnreadableForumError
-from slice_runner.domain.malformed_reason import MalformedReason
 from slice_runner.domain.pull_request_mergeability import PullRequestMergeability
 from slice_runner.domain.pull_request_review_state import PullRequestReviewState
 from slice_runner.domain.pull_request_state import PullRequestState
 from slice_runner.infrastructure.gh_forum import GhForum
 from slice_runner.infrastructure.gh_run_repository import GhCommandFailedError
-from slice_runner.infrastructure.malformed_response_comment import MalformedResponseComment
 from slice_runner.infrastructure.process import ProcessOutput
 from slice_runner.tests.argv import Argv
 from slice_runner.tests.doubles import GhCallDoubles, ScriptedProcess
@@ -454,32 +452,3 @@ class TestGhForumReadingTheReviewsOfAPullRequest:
 
         with pytest.raises(UnreadableForumError):
             GhForum(call=GhCallDoubles.wired(process)).reviews(repo=_REPO, pull_request=60)
-
-
-class TestGhForumWritingAMalformedResponse:
-    def test_it_posts_the_malformed_response_comment_on_exactly_this_pull_request(self) -> None:
-        process = ScriptedProcess(ProcessOutput(code=0, stdout="", stderr=""))
-
-        GhForum(call=GhCallDoubles.wired(process)).write_malformed_response(
-            repo=_REPO, pull_request=60, reason=MalformedReason.MISSING_CHANGE
-        )
-
-        assert process.calls[0].argv == ["gh", "pr", "comment", "60", "--repo", _REPO, "--body-file", "-"]
-        assert process.calls[0].stdin == MalformedResponseComment.rendered(MalformedReason.MISSING_CHANGE)
-
-    def test_it_renders_the_reason_the_caller_chose_instead_of_a_fixed_one(self) -> None:
-        process = ScriptedProcess(ProcessOutput(code=0, stdout="", stderr=""))
-
-        GhForum(call=GhCallDoubles.wired(process)).write_malformed_response(
-            repo=_REPO, pull_request=60, reason=MalformedReason.MISSING_CORRECTION
-        )
-
-        assert process.calls[0].stdin == MalformedResponseComment.rendered(MalformedReason.MISSING_CORRECTION)
-
-    def test_a_non_zero_exit_raises_with_the_stderr_it_carried(self) -> None:
-        process = ScriptedProcess(ProcessOutput(code=1, stdout="", stderr="pull request is locked"))
-
-        with pytest.raises(GhCommandFailedError, match="pull request is locked"):
-            GhForum(call=GhCallDoubles.wired(process)).write_malformed_response(
-                repo=_REPO, pull_request=60, reason=MalformedReason.MISSING_CHANGE
-            )
