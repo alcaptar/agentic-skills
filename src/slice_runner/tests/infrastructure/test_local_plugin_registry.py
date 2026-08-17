@@ -13,22 +13,22 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 
-def _write_settings(root: Path, enabled_plugins: dict[str, bool]) -> None:
-    (root / "settings.json").write_text(json.dumps({"enabledPlugins": enabled_plugins}), encoding="utf-8")
-
-
 class TestWhetherAPluginIsEnabled:
+    @staticmethod
+    def _write_settings(root: Path, enabled_plugins: dict[str, bool]) -> None:
+        (root / "settings.json").write_text(json.dumps({"enabledPlugins": enabled_plugins}), encoding="utf-8")
+
     def test_a_plugin_enabled_under_any_marketplace_reads_as_enabled(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
-        _write_settings(tmp_path, {"superpowers@claude-plugins-official": True})
+        self._write_settings(tmp_path, {"superpowers@claude-plugins-official": True})
 
         assert LocalPluginRegistry().enabled("superpowers")
 
     def test_a_plugin_disabled_reads_as_not_enabled(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
-        _write_settings(tmp_path, {"superpowers@claude-plugins-official": False})
+        self._write_settings(tmp_path, {"superpowers@claude-plugins-official": False})
 
         assert not LocalPluginRegistry().enabled("superpowers")
 
@@ -36,7 +36,7 @@ class TestWhetherAPluginIsEnabled:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
-        _write_settings(tmp_path, {"backend-engineering@skills": True})
+        self._write_settings(tmp_path, {"backend-engineering@skills": True})
 
         assert not LocalPluginRegistry().enabled("superpowers")
 

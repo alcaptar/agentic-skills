@@ -22,23 +22,23 @@ _ROOT = Path(__file__).resolve().parents[4]
 _LITERAL_LINE_OF_CLAUDE_MD = "# agentic-skills — instrucciones del repo"
 
 
-def _real_reader() -> ProcessSourceReader:
-    return ProcessSourceReader(process=Real.process(), budgets=Budgets())
-
-
 @pytest.mark.integration
 class TestEachInvocationCarriesTheLiteralContentOfItsDeclaredSource:
+    @staticmethod
+    def _real_reader() -> ProcessSourceReader:
+        return ProcessSourceReader(process=Real.process(), budgets=Budgets())
+
     def test_the_implementer_carries_a_literal_line_of_the_declared_source(self) -> None:
         assignment = replace(AssignmentMother.of_the_first_round(), worktree=str(_ROOT))
 
-        text = ImplementerInvocation(assignment=assignment, reader=_real_reader()).text
+        text = ImplementerInvocation(assignment=assignment, reader=self._real_reader()).text
 
         assert _LITERAL_LINE_OF_CLAUDE_MD in text
 
     def test_the_judge_carries_a_literal_line_of_the_declared_source(self) -> None:
         review = replace(SliceUnderReviewMother.of_the_slice(), worktree=str(_ROOT))
 
-        text = JudgeInvocation(judge=JudgeMother.adversarial(), review=review, reader=_real_reader()).text
+        text = JudgeInvocation(judge=JudgeMother.adversarial(), review=review, reader=self._real_reader()).text
 
         assert _LITERAL_LINE_OF_CLAUDE_MD in text
 
@@ -49,7 +49,7 @@ class TestEachInvocationCarriesTheLiteralContentOfItsDeclaredSource:
             repo=AssignmentMother.REPO,
             worktree=str(_ROOT),
             alignment=Alignment(),
-            reader=_real_reader(),
+            reader=self._real_reader(),
         )
 
         assert _LITERAL_LINE_OF_CLAUDE_MD in invocation.text

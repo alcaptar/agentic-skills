@@ -8,7 +8,8 @@ de lo que no es referencia en `CLAUDE.md`.
 - **Cero prosa: ni comentarios ni docstrings.** Nada de `#`, y tampoco docstring de modulo, de
   clase, de funcion ni de atributo. La unica excepcion es el shebang.
 - **Ninguna funcion suelta a nivel de modulo: toda funcion cuelga de una clase.** Metodo,
-  `@classmethod` o `@staticmethod`, incluido el `main` de un ejecutable.
+  `@classmethod` o `@staticmethod`, incluido el `main` de un ejecutable. La unica excepcion la declara
+  `docs/conventions/testing.md`, y es un fixture cuyo alcance **es** el modulo entero.
 - **El codigo va en ingles.** Nombres de fichero y de modulo, clases, funciones, metodos, variables,
   parametros, constantes, miembros de enum, excepciones, nombres de test, nombres de subcomando, y
   los mensajes de error que ve una persona.
