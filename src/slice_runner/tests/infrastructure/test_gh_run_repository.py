@@ -337,6 +337,23 @@ class TestReadingTheChildren:
         assert by_slice["slice-01"].label is IssueLabel.IN_PROGRESS
         assert by_slice["slice-02"].label is IssueLabel.PENDING
 
+    def test_a_foreign_per_story_label_alongside_the_macro_label_does_not_change_which_state_read_children_resolves(
+        self,
+    ) -> None:
+        macro = {"id": "2", "name": IssueLabel.PENDING.value, "description": "", "color": "000000"}
+        foreign = {"id": "1", "name": "historia:AS-255", "description": "", "color": "000000"}
+
+        for labels in ([foreign, macro], [macro, foreign]):
+            child = [{"number": 1, "title": "slice-01 (name): resumen", "body": "", "labels": labels, "state": "OPEN"}]
+
+            children = GhRunRepository(call=GhCallDoubles.wired(self._process(children=child))).read_children(
+                repo=_REPO, parent=43, expected=1
+            )
+
+            assert children[0].label is IssueLabel.PENDING, (
+                f"a foreign `historia:` label placed {labels} confused which state label was resolved"
+            )
+
     def test_the_gh_issue_state_becomes_the_subissue_state(self) -> None:
         children = GhRunRepository(call=GhCallDoubles.wired(self._process())).read_children(
             repo=_REPO, parent=43, expected=2
@@ -673,6 +690,28 @@ class TestWritingTheMacroStateLabel:
             )
 
         assert len(process.calls) == 1
+
+    def test_a_transition_write_names_only_the_two_macro_labels_involved_so_a_foreign_label_survives(
+        self,
+    ) -> None:
+        process = ScriptedProcess(ProcessOutput(code=0, stdout="", stderr=""))
+
+        GhRunRepository(call=GhCallDoubles.wired(process)).write_label(
+            repo=_REPO, issue=45, remove=IssueLabel.PENDING, add=IssueLabel.IN_PROGRESS
+        )
+
+        assert process.calls[0].argv == [
+            "gh",
+            "issue",
+            "edit",
+            "45",
+            "--repo",
+            _REPO,
+            "--add-label",
+            IssueLabel.IN_PROGRESS.value,
+            "--remove-label",
+            IssueLabel.PENDING.value,
+        ], "the argv carries more than the two macro labels involved, which a foreign label would not survive"
 
 
 class TestRemovingTheMacroStateLabel:

@@ -258,6 +258,69 @@ def test_the_labelled_lines_of_a_subissue_are_the_same_in_the_example_the_rules_
     )
 
 
+_USER_STORY_KEY_LINE = re.compile(r"## Historia de usuario\s*\n\s*([A-Z][A-Z0-9]*-\d+)")
+_USER_STORY_TITLE = re.compile(r"`([A-Z][A-Z0-9]*-\d+ slice-\d+ \([^`)]+\): [^`]+)`")
+
+
+def test_the_user_story_key_the_parent_documents_is_the_one_the_program_reads_from_the_subissue_title() -> None:
+    """The key the parent declares has to be the same one `GhRunRepository` parses out of the title.
+
+    `SLICE_HEADING` already carries an optional `key` group that `read_children` composes into the
+    canonical identifier, but nothing writes it yet: this is the contract between what `slice-spec`
+    documents as the parent's declared key and what the program's own expression reads back out of the
+    documented subissue title, parsed with that expression rather than restated by hand.
+    """
+    text = _read(_SPEC)
+    key_match = _USER_STORY_KEY_LINE.search(text)
+    assert key_match, f"{_rel(_SPEC)} does not document a `## Historia de usuario` example carrying a key"
+    declared_key = key_match.group(1)
+
+    title_match = _USER_STORY_TITLE.search(text)
+    assert title_match, f"{_rel(_SPEC)} does not document a subissue title carrying a user story key"
+    title = title_match.group(1)
+
+    parsed = GhRunRepository.SLICE_HEADING.match(title)
+    assert parsed, f"the documented keyed title {title!r} is not parseable by `GhRunRepository.SLICE_HEADING`"
+    assert parsed.group("key") == declared_key, (
+        f"the parent documents the key {declared_key!r} but the documented subissue title parses as "
+        f"{parsed.group('key')!r}: the two halves of the contract disagree"
+    )
+
+
+_USER_STORY_VALIDATE_ANCHORS = (
+    "declara `## Historia de usuario` pero alguna subissue no lleva la clave en el titulo",
+    "no empieza por esa clave seguida de `slice-NN`",
+    "reportala como `slice-NN (#numero)`, en el titulo",
+    "la clave va delante del `slice-NN`",
+)
+"""Anchors for the checklist item that catches a parent/subissue mismatch on the user story key.
+
+Same kind of claim as `_VALIDATE_ANCHORS`: there is no second surface to compare this rule against, since
+the key travels only through the title and the parent's own section, so this pins the sentence that
+reports the deviation with its rule and its location.
+
+Each anchor is a phrase from the new bullet only, not a bare substring: `validate`'s intro paragraph
+already contains `slice-NN (#numero)` and `en el titulo` on their own (for the location of any
+subissue deviation), so anchoring on those alone would stay green even if the bullet itself were
+deleted. Anchoring on the longer phrases pins the bullet, not the paragraph that precedes it.
+"""
+
+
+def test_validate_reports_the_missing_user_story_key_with_its_rule_and_location() -> None:
+    """`validate` has to catch a parent declaring a user story whose subissues do not carry it.
+
+    Same shape as `test_the_validate_mode_reports_every_deviation_with_its_rule_and_where_it_lives`: the
+    checklist item is prose with no second surface, so this pins the sentence rather than a vocabulary.
+    """
+    prose = " ".join(_spec_prose(_VALIDATE).split())
+
+    missing = [anchor for anchor in _USER_STORY_VALIDATE_ANCHORS if anchor not in prose]
+    assert not missing, (
+        f"the `validate` mode of {_rel(_SPEC)} no longer states {missing}: a parent declaring a user "
+        f"story whose subissue titles do not carry it needs to be caught and reported with its location"
+    )
+
+
 def test_the_macro_state_slice_spec_writes_is_a_label_of_the_vocabulary_and_never_a_marker_in_the_text() -> None:
     """The state moved out of the prose and into a GitHub label, and both halves need measuring.
 
