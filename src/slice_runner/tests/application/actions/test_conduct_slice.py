@@ -1262,6 +1262,17 @@ class TestConductSliceWhenTheControlsComeBackRed:
         )
         assert conductor.metrics.record.call_args.args[0].state is RunState.BLOCKED_CONTROLS
 
+    def test_a_repo_exempt_from_controls_goes_straight_to_the_judge(self) -> None:
+        conductor = Conductor(
+            chosen=SelectSliceResultMother.resumed_at(
+                RunMother.running_the_controls(), parent=ParentIssueMother.with_exempt_controls()
+            )
+        )
+
+        conductor.conduct()
+
+        assert conductor.verify.execute.call_count == 1
+
 
 class TestConductSliceWhenTheStagedIndexIsRejected:
     @staticmethod
