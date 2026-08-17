@@ -82,4 +82,11 @@ fix-linting:
 	uv run ruff check --fix .
 
 # Todo lo que debe estar verde antes de dar un cambio por terminado.
+#
+# Cierra con un veredicto propio porque su resultado se lee por una tuberia mas veces que por su codigo
+# de salida -`make check 2>&1 | tail -80` deja `$$?` en el de `tail`, o sea 0 aunque `check-types` o
+# `test` hayan fallado-, y un chequeo que contesta 0 cuando fallo es peor que ninguno: da fundamento
+# falso al paso siguiente. Si algun target falla, `make` para y este `echo` no llega, asi que su
+# presencia en la ultima linea es lo unico que significa "paso entero".
 check: linting check-types test
+	@echo "CHECK OK: linting, check-types y test en verde"

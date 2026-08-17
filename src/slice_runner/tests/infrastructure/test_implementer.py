@@ -297,6 +297,25 @@ class TestTheRetryInstructionThatTravelsWithTheBrief:
         assert "\n## Instruccion de reintento\n" not in self._sent(AssignmentMother.of_the_first_round())
 
 
+class TestWhatTheBriefSaysAboutWhoRunsTheControls:
+    @staticmethod
+    def _said() -> str:
+        return " ".join(SliceImplementerBrief.TEXT.split())
+
+    def test_it_says_the_program_runs_them_so_repeating_the_whole_suite_adds_no_guarantee(self) -> None:
+        assert "Quien ejecuta esos comandos y decide con ellos es el programa, no tu" in self._said()
+
+    def test_it_does_not_claim_running_the_controls_is_what_bash_is_granted_for(self) -> None:
+        assert "correr el ciclo TDD sobre lo que estas tocando" in self._said()
+        assert "correr el ciclo TDD y los controles del repo" not in self._said()
+
+    def test_it_warns_that_a_pipe_answers_with_the_exit_code_of_the_last_stage_and_not_of_the_command(self) -> None:
+        assert "el codigo de salida que ves es el del ultimo tramo, no el del comando" in self._said()
+
+    def test_it_still_forbids_tuning_the_control_commands_now_that_it_says_who_runs_them(self) -> None:
+        assert "no se cambian ni se afinan para que pasen" in self._said()
+
+
 class TestThePendingReviewsThatTravelWithTheBrief:
     @staticmethod
     def _sent(assignment: Assignment) -> str:
