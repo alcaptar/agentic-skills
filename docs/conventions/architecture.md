@@ -17,12 +17,12 @@ dependencia ahi es un fallo en la maquina de otra persona.
 ## Estructura del programa
 
 ```
-src/slice_runner/
+src/{paquete}/
   domain/
-    {value_object}.py     un value object por modulo (finding, verdict, judge, slice_diff...)
-    {enum}.py             un vocabulario cerrado por modulo (ruling, severity, step, outcome)
-    {puerto}.py           un puerto por fichero (diff_reader, verifier, skill_library)
-    {politica}.py         logica pura con su configuracion inyectada (state_machine)
+    {value_object}.py     un value object por modulo
+    {enum}.py             un vocabulario cerrado por modulo
+    {puerto}.py           un puerto por fichero
+    {politica}.py         logica pura con su configuracion inyectada
     exceptions.py         las excepciones del dominio
   application/
     actions/{name}.py     casos de uso que mutan estado
@@ -30,7 +30,7 @@ src/slice_runner/
   infrastructure/
     {impl}_{puerto}.py    el adaptador se llama como su implementacion
     {payload}.py          un modelo de frontera por concepto
-    slice_verifier_judge.py   el juez de este repo: su rubrica, sus herramientas, lo que puede leer
+    {agente}_{rol}.py     lo que define un agente invocado: su rubrica, sus herramientas, lo que lee
     cli.py                entrypoint
   tests/                  co-localizados, espejando las capas de arriba
     mothers/              Object Mothers
@@ -43,24 +43,18 @@ src/slice_runner/
   fichero. Las
   excepciones del dominio son la excepcion a la regla y viven juntas en `domain/exceptions.py`, porque
   se leen como un catalogo y quien las captura suele querer ver la jerarquia de una vez.
-- **Un puerto que solo consume la infraestructura vive con su adaptador**, no en `domain/`. Es el caso
-  de `infrastructure/process.py`, que declara el puerto `Process` junto a su `ProcessNotRunnableError`:
-  el dominio no lanza procesos ni sabe que existen -lo necesitan `GitDiffReader` y `ClaudeVerifier`-, y
-  subirlo a `domain/` metería ahí el vocabulario de subproceso, que es exactamente lo que esa capa se
-  define por no tener. Consecuencia: `domain/exceptions.py` es el catalogo de las excepciones **del
-  dominio**, no de todas las del programa.
+- **Un puerto que solo consume la infraestructura vive con su adaptador**, no en `domain/`, junto a la
+  excepcion que lanza. El caso tipico es el que lanza subprocesos: el dominio no los lanza ni sabe que
+  existen, y subirlo metería ahí ese vocabulario, que es exactamente lo que esa capa se define por no
+  tener. Consecuencia: `domain/exceptions.py` es el catalogo de las excepciones **del dominio**, no de
+  todas las del programa.
 
-  `CallTrace` y su `HarnessCall` (`domain/call_trace.py`) vivieron un tiempo en `infrastructure/` por
-  este mismo argumento -sus unicos consumidores eran `ClaudeImplementer` y `ClaudeVerifier`-, pero la
-  premisa dejo de ser cierta en cuanto `ReadConversation` (`application/queries/read_conversation.py`)
-  paso a necesitar el rastro para resolver que sesion abrir: con un consumidor en `application/`, el
-  puerto volvio a `domain/`, que es donde vive por defecto todo lo que el dominio necesita. Lo mismo le
-  paso a `ConversationLog` (`domain/conversation_log.py`), consumido por el mismo caso de uso.
+  **Y la premisa se comprueba cada vez, porque caduca**: en cuanto un caso de uso necesita ese puerto,
+  vuelve a `domain/`, que es donde vive por defecto todo lo que el dominio necesita.
 - **Los tests del programa viven dentro del paquete**, no en `tests/`, y espejan la estructura de las
-  capas **que se testean**: `src/slice_runner/tests/application/` y
-  `src/slice_runner/tests/infrastructure/`. No hay un arbol de tests de dominio, y no es un olvido -la
-  estrategia es outside-in y lo de dentro del dominio se cubre por ese camino-. El
-  reparto de los dos arboles y el porque estan en `docs/conventions/testing.md`.
+  capas **que se testean**. No hay un arbol de tests de dominio, y no es un olvido -la estrategia es
+  outside-in y lo de dentro del dominio se cubre por ese camino-. El reparto de los dos arboles y el
+  porque estan en `docs/conventions/testing.md`.
 - El flujo de dependencias va hacia dentro: `infrastructure` conoce `application` y `domain`,
   `application` conoce `domain`, y `domain` no conoce a nadie.
 
