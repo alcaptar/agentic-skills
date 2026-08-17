@@ -1,20 +1,3 @@
-# Este repo es la fuente de verdad de las skills, y ademas empaqueta **un solo** proyecto Python: el
-# programa orquestador de `src/slice_runner/`. Los `.py` de `skills/` NO se empaquetan -son scripts
-# deterministas que la skill invoca con el `python3` de la maquina (`deploy_core.py`, `metrics.py`,
-# `discover_conventions.py`, `discover_controles.py`)-, asi que `packages` nombra solo
-# `src/slice_runner` y nada mas entra en la rueda.
-#
-# El proyecto se instala, y de ahi sale el ejecutable que conduce una slice de punta a punta:
-#
-#     uv run slice-runner run 38 --repo alcaptar/agentic-skills --base master
-#     uv run slice-runner verify --repo . --base master --slice slice-01
-#
-# `uv run` sincroniza e instala el proyecto en el entorno antes de lanzarlo, asi que la ruta de
-# importacion ya no se pone a mano: el `PYTHONPATH=src` que hacia falta cuando esto no se construia
-# dejo de ser necesario. El `__main__.py` del paquete sigue existiendo y llama al mismo entrypoint.
-#
-# La config replica la que el repo ya exige a su propia fixture de smoke
-# (`smoke/fixture/pyproject.toml`): misma vara para el harness que para lo que valida.
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
@@ -23,11 +6,8 @@ build-backend = "hatchling.build"
 name = "agentic-skills"
 version = "0.0.0"
 requires-python = ">=3.11"
-# Unica dependencia de ejecucion, y solo del programa de `src/`: los `.py` de `skills/` siguen
-# siendo stdlib puro porque los invoca la skill con el `python3` que haya en la maquina, sin `uv`.
 dependencies = ["pydantic>=2.7"]
 
-# El nombre del ejecutable es el del programa, no el del repo: quien lo invoca conduce slices.
 [project.scripts]
 slice-runner = "slice_runner.infrastructure.cli:Cli.main"
 
@@ -39,70 +19,46 @@ dev = ["ruff>=0.6", "mypy>=1.10", "pytest>=8"]
 
 [tool.ruff]
 line-length = 120
-# Ruff formatea tambien los bloques de codigo Python dentro de los `.md`, y aqui los `.md`
-# SON el producto (las skills y sus reference-docs): sus ejemplos se escriben para leerse,
-# no para pasar un formateador. El codigo real vive en `skills/*/scripts` y `tests`.
 extend-exclude = ["*.md"]
 
 [tool.ruff.lint]
-# El ruleset que `backend-best-practices` prescribe para todo codigo nuevo. Antes no habia
-# `select` y ruff corria con su default (`E4`, `E7`, `E9`, `F`), asi que la mitad de esta lista
-# no medias nada -incluido `I`, que es lo que hace cumplir el bloque `isort` de mas abajo-.
 select = [
-    "E",    # pycodestyle errors
-    "W",    # pycodestyle warnings
-    "F",    # Pyflakes
-    "I",    # isort
-    "N",    # pep8-naming
-    "B",    # flake8-bugbear
-    "C4",   # flake8-comprehensions
-    "C90",  # mccabe (complejidad ciclomatica)
-    "UP",   # pyupgrade
-    "RUF",  # reglas propias de ruff
-    "PERF", # perflint
-    "TC",   # flake8-type-checking
-    "PL",   # Pylint (PLC, PLE, PLR, PLW)
-    "PGH",  # pygrep-hooks
-    "FURB", # refurb
-    "PT",   # flake8-pytest-style
-    "TID",  # flake8-tidy-imports
+    "E",
+    "W",
+    "F",
+    "I",
+    "N",
+    "B",
+    "C4",
+    "C90",
+    "UP",
+    "RUF",
+    "PERF",
+    "TC",
+    "PL",
+    "PGH",
+    "FURB",
+    "PT",
+    "TID",
 ]
 fixable = ["ALL"]
 future-annotations = true
 extend-safe-fixes = ["TC001", "TC002", "TC003", "TC004", "UP037"]
 
 [tool.ruff.lint.per-file-ignores]
-# Los mismos que el boilerplate exime en tests, y por el mismo motivo: un `== 50.0` en un
-# assert no es una constante magica sin nombrar, es el valor esperado, y ponerle nombre lo
-# unico que hace es esconder de que va el test.
 "tests/*" = ["PLR0913", "PLR2004"]
-# Los del programa viven dentro del paquete (`src/slice_runner/tests/`), asi que el patron de
-# arriba -relativo a la raiz- no los alcanza y necesitan su propia linea.
 "src/slice_runner/tests/*" = ["PLR0913", "PLR2004"]
 
 [tool.ruff.lint.flake8-tidy-imports]
-# `docs/conventions/code-style.md` dice "sin imports relativos" y dice que lo mide `TID`. Con el
-# default (`parents`) solo marcaba `from ..x import y` y dejaba pasar el relativo de hermano, o sea que
-# la frase era mas estricta que lo que medía: la mitad de la regla no medía nada.
 ban-relative-imports = "all"
 
 [tool.ruff.lint.flake8-type-checking]
-# Pydantic resuelve las anotaciones de campo **en runtime** al crear el modelo, asi que un tipo que
-# `TC002` mueva a `if TYPE_CHECKING:` deja el modelo "not fully defined" y revienta en la primera
-# validacion, no al importar. Declarar las bases evaluadas en runtime es lo que impide ese autofix.
-# Paso de verdad al partir `payloads.py` en un modulo por concepto: mientras `Ruling` y `Severity`
-# compartian el import con `Finding` y `Verdict` -que si se usan en runtime- ruff no tenia nada que
-# mover; con un import por simbolo, los vio como solo-tipos y los movio.
 runtime-evaluated-base-classes = [
     "pydantic.BaseModel",
     "slice_runner.infrastructure.contract_model.ContractModel",
 ]
 
 [tool.ruff.lint.isort]
-# Los scripts se importan por nombre (via `pythonpath` de pytest), asi que isort no puede
-# deducir que son first-party y los mezclaria con las dependencias de terceros. Declararlos
-# aqui es lo que hace que la regla refuerce la convencion (stdlib / terceros / propio) en vez
-# de romperla.
 known-first-party = [
     "deploy_core",
     "discover_controles",
@@ -111,35 +67,17 @@ known-first-party = [
     "slice_runner",
 ]
 
-# `S` (flake8-bandit) NO se activa a proposito, y es la unica desviacion del ruleset que
-# prescribe `backend-best-practices`. Sus hallazgos en `skills/` son inherentes al cometido de esos
-# scripts -ejecutar comandos y procesos externos que el repo declara-: obligaria a sembrar los
-# ficheros de `noqa` sin cambiar ni una decision. Y sobre los tests dispara `S101` (usar `assert`)
-# cientos de veces, que en pytest es absurdo.
-
 [tool.ruff.format]
 quote-style = "double"
 skip-magic-trailing-comma = false
 
 [tool.mypy]
 strict = true
-# `src` para que `slice_runner` resuelva sin instalar el paquete, y el directorio de los scripts porque
-# `tests/` los importa por nombre. El programa **no**: es autocontenido.
 mypy_path = "src:skills/slice-runner/scripts"
 
 [tool.pytest.ini_options]
-# Dos arboles de test a proposito: los del programa van co-localizados dentro del paquete y
-# `tests/` se queda con lo que no tiene paquete donde vivir (los contratos entre los `.md`) y con
-# lo que sirve a las skills. El reparto lo razona `docs/design-notes.md`.
 testpaths = ["tests", "src/slice_runner/tests"]
-# Un solo marcador, con un criterio que no se puede discutir en review: el test lanza un
-# subproceso de verdad (`git`, un comando declarado, un ejecutable). Es lo que cuesta tiempo y lo
-# que depende de la maquina; escribir en `tmp_path` no entra. Sirve para acortar el ciclo con
-# `-m "not integration"` y para que la suite entera siga siendo la vara al cerrar una slice.
 markers = [
     "integration: lanza un subproceso real (se deselecciona con -m 'not integration')",
 ]
-# Los scripts de `skills/` (discover_conventions.py, discover_controles.py, metrics.py, deploy_core.py)
-# se importan por nombre, via este pythonpath; `src` es lo que hace importable `slice_runner` sin
-# instalar el proyecto.
 pythonpath = ["src", "skills/slice-runner/scripts", "skills/deploy-watch/scripts"]
