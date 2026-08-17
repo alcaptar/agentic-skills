@@ -40,6 +40,37 @@ cadena, asi que ni el formato del issue ni el JSON de salida cambian, pero las c
   `TypeError`, y la guarda que impide commitear en `master` no puede romper por la forma de preguntar
   justo cuando la rama es una cualquiera.
 
+## Lo que una persona pide sobre la pull request se lee del gesto, no de un marcador
+
+En la subissue el canal es un token al principio del comentario -`-GO` y `-REVIEW` en la pausa de
+alineacion, `-RETRY` para reabrir una slice bloqueada-, porque el hilo de un issue no tiene semantica
+propia: un comentario es un comentario. **En la pull request si la hay**, y es la que se usa: enviar una
+review es el gesto, y `PullRequestReview.asks_for_a_change` no lee ningun marcador.
+
+Lo que decide es el estado, con un `match` exhaustivo y sin rama generica, y cada exclusion tiene su
+motivo medido:
+
+- **`PENDING` no pide nada**: es un lote a medio escribir, y la interfaz de programacion **te lo devuelve
+  cuando es tuyo**, asi que sin esta exclusion el run arrancaria con lo que estas tecleando. Medido: un
+  borrador sale como `PENDING` y sus comentarios de linea no aparecen siquiera en
+  `/pulls/{n}/comments` hasta que se envia.
+- **`APPROVED` no pide nada**: aprobar significa "adelante", no "arreglame esto".
+- **`DISMISSED` no pide nada**: lo que se descarto no se atiende.
+- **`COMMENTED` y `CHANGES_REQUESTED` piden**. Las dos, y no solo la segunda, porque
+  `gh pr review --request-changes` sobre una pull request propia contesta `Can not request changes on
+  your own pull request`: el run abre la pull request con el token de quien lo lanza, asi que el gesto
+  nativo esta vedado justo a esa persona y solo le queda `COMMENTED`.
+
+**Consecuencia aceptada, y se acepta a proposito: cualquier review enviada dispara una vuelta**, tambien
+si solo querias preguntar algo. Lo que se gana es que no hay nada que aprender ni que recordar escribir;
+lo que se paga es que conversar dentro de una review cuesta una llamada al implementador. El sitio para
+conversar sin gastar es la caja de comentarios del issue de la pull request, que **no** se lee -y por eso
+mismo pedir un cambio desde ahi tampoco funciona-.
+
+Hubo una version con marcador (`-CHANGE` en el cuerpo o en un comentario de linea) que resolvia las dos
+cosas a la vez, y se retiro por simplicidad antes de entregar: **si la conversacion dentro de reviews
+resulta caer caro, ese es el cambio que hay que rehacer**, no un caso especial por autor.
+
 ## Puertos
 
 - Interfaces con `ABC` y `@abstractmethod`. Nada mas: sin implementacion por defecto, sin estado.

@@ -5,7 +5,6 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from slice_runner.domain.branch_pull_request import BranchPullRequest
-    from slice_runner.domain.malformed_reason import MalformedReason
     from slice_runner.domain.pull_request_review import PullRequestReview
     from slice_runner.domain.pull_request_status import PullRequestStatus
 
@@ -28,9 +27,6 @@ class Forum(ABC):
 
     @abstractmethod
     def reviews(self, *, repo: str, pull_request: int) -> tuple[PullRequestReview, ...]: ...
-
-    @abstractmethod
-    def write_malformed_response(self, *, repo: str, pull_request: int, reason: MalformedReason) -> None: ...
 
     @abstractmethod
     def authenticated_as(self) -> str | None: ...

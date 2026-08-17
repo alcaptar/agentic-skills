@@ -377,10 +377,47 @@ Si algo se rompe, la etiqueta lo dice y el run para en vez de seguir: `bloqueada
 `bloqueada:verify`, `bloqueada:ci-roja`, `bloqueada:ci-indeterminada`, `bloqueada:conflicto` o
 `abortada:presupuesto`.
 
-**3. Mergear (tu)**
+**3. Mergear, o pedir un cambio (tu)**
 
 Revisas la pull request en GitHub y le das a merge. Eso es tuyo, no del pipeline. GitHub cierra la
 subissue `#43` sola, porque la pull request lleva `Closes #43`.
+
+Si al revisar el diff ves algo que corregir, **no hace falta salirse del flujo ni tocar la subissue**. El
+gesto es el de siempre en GitHub:
+
+1. En **Files changed**, `+` en la linea, escribes, y **Start a review**.
+2. Los comentarios que quieras, en las lineas que quieras. Mientras el lote esta en borrador **no pasa
+   nada**: el programa descarta las reviews sin enviar, y GitHub ni siquiera expone sus comentarios.
+3. **Submit review**. En tu propia pull request GitHub solo te deja *Comment*, y vale: es lo que se
+   espera.
+
+En menos de medio minuto el run sale de esperar el merge, le pasa al implementador **todo** lo que
+comentaste en esa review, deja los controles verdes y anade un commit a **la misma pull request**. Luego
+vuelve a esperarte.
+
+- **Lo que dispara es enviar una review, no un marcador.** No hay nada que escribir aparte de lo que
+  quieres cambiar. Y el boton nativo de *Request changes* funciona igual cuando lo pulsa un compañero,
+  que es el unico que puede: GitHub **no deja pedir cambios en tu propia pull request**, y el run la abre
+  con tu token.
+- **Una aprobacion no dispara nada.** Aprobar significa "adelante", no "arreglame esto".
+- **Consecuencia que conviene saber: cualquier review enviada dispara una vuelta.** Preguntar algo en una
+  review cuesta una llamada al implementador y un commit, asi que para conversar sin gastar usa la caja de
+  comentarios de la pestana **Conversation**, que el run no lee.
+- **Ojo con eso mismo al reves**: pedir un cambio **desde la pestana Conversation no funciona**. Ese
+  comentario no es una review y el run no lo ve. Las peticiones van en **Files changed**.
+- **Puedes pedir cambios tantas veces como quieras.** Cada review nueva dispara su vuelta; el run
+  recuerda cual fue la ultima que atendio, asi que ni repite ni se salta ninguna. Si dejaste varias
+  mientras el run no estaba vivo, se atienden **todas en una sola vuelta**, en el orden en que las
+  enviaste. Lo que **no** cuenta es editar una review ya atendida: envia una nueva.
+- **Usa *Start a review* y no *Comment* si vas a dejar varios.** Con *Comment* cada comentario es su
+  propia review, asi que si el run sondea en medio pagas una llamada al implementador por comentario en
+  vez de una por lote.
+- **Esta vuelta no pasa por el juez**: la miden los controles y la miras tu, que eres quien pidio el
+  cambio. Tampoco gasta los contadores de reintento del juez ni de la integracion continua, asi que
+  pedir varios cambios seguidos no bloquea la slice. Lo que si la acota es el presupuesto de coste.
+- **Si el run ya habia terminado**, reinvocalo igual que la primera vez -la slice en
+  `estado:esperando-merge` sigue siendo elegible- y **ponlo en su rama** antes: `git -C <worktree> switch
+  slice/NN-name`.
 
 **4. El despliegue: hoy no se vigila solo**
 

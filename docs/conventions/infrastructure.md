@@ -422,7 +422,7 @@ importar**: un smoke que solo importe el modulo lo da por bueno. Lo evita
   `stderr`- y vive donde lo necesito el primer adaptador de `git` que lo tuvo. La unica diferencia es que
   `GitWorkspace` cae al `stdout` cuando el `stderr` viene vacio, porque `git commit` sin nada staged
   explica el motivo por `stdout` y una excepcion sin motivo obliga a reproducirlo a mano.
-- **La revision `CHANGES_REQUESTED` que dispara una vuelta viaja entera en el `Run`, marcador y texto, y
+- **La revision que pide un cambio viaja entera en el `Run`, marcador y texto, y
   ese texto es la unica bandera de que hay una correccion en curso.** `Run.last_reviewed_id` y
   `Run.requested_changes` (`domain/run.py`, con su espejo en `RunPayload`) se persisten los dos, y
   `Run.correcting_review` es una propiedad derivada de que el segundo no este vacio. **No sigue la
