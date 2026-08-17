@@ -718,14 +718,15 @@ def test_every_slice_title_slice_spec_documents_yields_a_name_git_accepts_as_a_b
     a title the skill teaches and the program cannot turn into a branch fails here instead of mid-run.
 
     Covers both documented title shapes: the plain `slice-NN (name): title` and the one prefixed with a
-    user story key, `AS-255 slice-NN (name): title`.
+    user story key, `AS-255 slice-NN (name): title`. Counting titles would not tell them apart -- the
+    skill documents several plain ones, so any count stays green after the keyed example disappears --
+    so the keyed shape is asserted by the `key` group the program itself parses out.
     """
     titles = re.findall(r"`((?:[A-Z][A-Z0-9]*-\d+ )?slice-\d+ \([^)]+\)[^`]*)`", _read(_SPEC))
 
-    assert len(titles) > 1, (
-        "slice-spec documents fewer than two slice titles, so this contract cannot be telling the "
-        "plain shape and the user-story-keyed shape apart"
-    )
+    assert titles, "slice-spec documents no slice title, so this contract has nothing to measure"
+
+    keyed = []
     for title in titles:
         parsed = GhRunRepository.SLICE_HEADING.match(title)
         assert parsed, f"the program cannot read the title slice-spec documents: {title}"
@@ -733,3 +734,10 @@ def test_every_slice_title_slice_spec_documents_yields_a_name_git_accepts_as_a_b
         assert re.fullmatch(r"[a-z0-9]+(-[a-z0-9]+)*", name), (
             f"the title `{title}` yields the name `{name}`, which git will not take as a branch"
         )
+        if parsed["key"]:
+            keyed.append(title)
+
+    assert keyed, (
+        "slice-spec documents no title carrying a user story key, so the shape this guard was widened "
+        "for is going unmeasured while the rest of the titles keep it green"
+    )
