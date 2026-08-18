@@ -187,7 +187,10 @@ controlar, verificar, abrir la pull request, esperar a la integracion continua- 
 estado; el estado vive en la subissue, asi que una invocacion interrumpida se retoma reinvocando. Con
 `--slice` se nombra la slice concreta a conducir en vez de dejar que el programa elija la siguiente,
 lo que permite repartir el trabajo entre varios worktrees; pedir una que no existe en el issue o que no
-es ejecutable falla en cerrado, sin tocar nada.
+es ejecutable falla en cerrado, sin tocar nada. **Se nombra por su identificador canonico**, que es
+`slice-NN` cuando la feature no declara historia de usuario y `<CLAVE>-NN` cuando si -`STAFF-124-01`-:
+pedir `slice-01` en una feature con clave falla diciendo que esa slice no existe entre las del issue.
+Vale igual para el `--slice` de `verify`, `read` y `spend`.
 
 #### Comandos
 

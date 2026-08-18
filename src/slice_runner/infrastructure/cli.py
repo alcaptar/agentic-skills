@@ -247,7 +247,10 @@ class Cli:
             "--slice",
             dest="slice_id",
             default=None,
-            help="identifier of the one slice to conduct, e.g. `slice-01`; without it, the next runnable one is chosen",
+            help=(
+                "identifier of the one slice to conduct, e.g. `slice-01`, or `PROJ-1234-01` when the feature "
+                "declares a user story; without it, the next runnable one is chosen"
+            ),
         )
 
         read = subcommands.add_parser(
