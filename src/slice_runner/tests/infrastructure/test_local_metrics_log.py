@@ -475,13 +475,13 @@ class TestDeduplicatingRepeatedClosuresOfTheSameSlice(WithTheLedgerOutOfTheRealH
         log = LocalMetricsLog(clock=self.frozen_at(datetime(2026, 1, 1, tzinfo=UTC)))
         log.record(ClosedSliceMother.merged())
         log = LocalMetricsLog(clock=self.frozen_at(datetime(2026, 1, 2, tzinfo=UTC)))
-        log.record(ClosedSliceMother.merged_with_slice_id("slice-07-con-clave-de-jira"))
+        log.record(ClosedSliceMother.merged_with_a_user_story_key())
 
         found = log.closed_slices(
             repo=None, since=datetime(2000, 1, 1, tzinfo=UTC), until=datetime(2100, 1, 1, tzinfo=UTC)
         )
 
-        assert [record.slice_id for record in found] == ["slice-07-con-clave-de-jira"]
+        assert [record.slice_id for record in found] == ["PROJ-1234-07"]
 
 
 class TestWhereTheLedgerLives:

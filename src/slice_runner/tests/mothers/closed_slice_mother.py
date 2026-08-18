@@ -43,8 +43,8 @@ class ClosedSliceMother:
         return cls._closed(state, issue=issue)
 
     @classmethod
-    def merged_with_slice_id(cls, slice_id: str) -> ClosedSlice:
-        return cls._closed(RunState.MERGED, slice_id=slice_id)
+    def merged_with_a_user_story_key(cls) -> ClosedSlice:
+        return cls._closed(RunState.MERGED, slice_id="PROJ-1234-07")
 
     @classmethod
     def still_open(cls) -> ClosedSlice:
