@@ -114,7 +114,7 @@ Una feature = **un issue padre** + **una subissue por slice**. Un solo formato, 
 
 | Donde | Que lleva |
 |---|---|
-| Issue padre | `## Intencion`, `## Lo que ya existe`, `## Fuentes de convencion` y `## Controles`, los dos ultimos por repo, mas `## Historia de usuario` si la feature tiene una. Las slices son sus subissues, y la barra de progreso la calcula GitHub |
+| Issue padre | `## Intencion`, `## Lo que ya existe`, `## Fuentes de convencion` y `## Controles`, los dos ultimos por repo, mas `## Historia de usuario` si la feature tiene una -y entonces tambien la clave delante de su titulo y la etiqueta `historia:<clave>`-. Las slices son sus subissues, y la barra de progreso la calcula GitHub |
 | Titulo de la subissue | `slice-NN (name): titulo`, con la clave de la historia de usuario delante si el padre la declara; de ahi sale el orden de ejecucion, y de `name` sale la rama (con la clave delante del numero cuando la hay: `slice/AS-255-NN-name`) y el scope del commit |
 | Cuerpo de la subissue | Las lineas de la slice: `REPO:`, `INTENCION:`, `ACEPTACION:`, `SENAL:` |
 | Etiqueta de la subissue | El estado macro, que arranca en `estado:pendiente`, mas `historia:<clave>` si el padre declara historia de usuario |
@@ -245,12 +245,22 @@ SENAL: prometheus min_over_time(application_stock_actual[10m]) < 0 dispara la al
   de `slice-NN` por un espacio: `AS-255 slice-04 (nombre): titulo`. Su ausencia dice que la feature
   no tiene historia de usuario asociada, y el titulo se queda exactamente como hoy: sin esa palabra
   delante.
+
+  **Y tambien delante del titulo del padre** (`AS-255 <feature>`), por el mismo motivo por el que va
+  en el de las subissues: en el listado de issues no se abre nada, y un padre que no la lleva es el
+  unico issue de la feature que no dice a que historia pertenece. El programa **no** parsea el titulo
+  del padre -solo el de las subissues-, asi que esta mitad es para quien mira, no para quien ejecuta.
 - **La etiqueta de historia de usuario lleva la clave dentro, una por historia.** Cuando el padre
   declara `## Historia de usuario`, la subissue nace ademas con `historia:AS-255` (el patron es
   `historia:<clave>`), escrita en la misma llamada de creacion junto a `estado:pendiente`. No entra
   en el vocabulario cerrado de `IssueLabel` -que asume una sola etiqueta de estado por issue-: es
   una etiqueta mas, y filtrar por ella en GitHub aisla exactamente las subissues de esa historia, no
   todas las que tengan alguna.
+
+  **El padre la lleva tambien**, y no es redundante: la etiqueta es la unica forma de pedirle a GitHub
+  "todo lo de esta historia" de una vez, y sin ella el filtro devuelve las slices pero deja fuera el
+  issue donde viven la intencion, las fuentes y los controles. El padre no lleva etiqueta de estado
+  -el estado es de cada slice-, asi que `historia:<clave>` es la unica que tiene.
 - El cuerpo lleva una linea `INTENCION:` con el coste de no hacer la slice: que esta mal hoy y deja de
   estarlo cuando entra. Va **antes** de los `ACEPTACION:` (primero el por que, luego lo que se comprueba
   antes de fusionar, luego lo que se comprueba vivo). Obligatoria siempre, sin exencion posible.
@@ -386,7 +396,8 @@ SENAL: prometheus min_over_time(application_stock_actual[10m]) < 0 dispara la al
    Con la confirmacion dada, y en este orden:
 
    - El padre: `gh issue create --repo <org>/<repo> --title "<feature>" --body-file -`, con el cuerpo
-     del paso 2a/2c/3/3b.
+     del paso 2a/2c/3/3b. Si declaro `## Historia de usuario`, su titulo abre con la clave
+     (`AS-255 <feature>`) y la llamada anade `--label historia:AS-255`.
    - Cada slice, en orden de `slice-NN`, como hija suya:
      `gh issue create --repo <org>/<repo> --title "slice-NN (name): <titulo>" --body-file - --parent <N> --label estado:pendiente`,
      donde `<N>` es el numero del padre. El `--parent` es lo que la hace slice de esa feature y la
@@ -433,7 +444,7 @@ SENAL: prometheus min_over_time(application_stock_actual[10m]) < 0 dispara la al
 
    ```bash
    git worktree add <ruta-del-worktree> --detach origin/<base>
-   slice-runner run <padre> --repo <org>/<repo> --base <base> --slice slice-NN --worktree <ruta-del-worktree>
+   slice-runner run <padre> --repo <org>/<repo> --base <base> --slice <identificador> --worktree <ruta-del-worktree>
    ```
 
    **El `--detach` vale para una slice que arranca de cero, y solo para esa.** El programa crea la rama
@@ -479,6 +490,10 @@ trabajo. Ofrece corregirlas. Checklist:
 - **El parentesis no lleva nada mas que el `name`.** Un type de conventional commit delante, del
   estilo `(refactor: extraer-repo)`, es desviacion: el programa se lleva el parentesis entero como
   nombre y deriva una rama que git rechaza.
+- **El padre declara `## Historia de usuario` pero su propio titulo no abre con la clave, o no lleva
+  la etiqueta `historia:<clave>`.** Las dos mitades sirven para lo mismo -encontrar la feature entera
+  sin abrirla- y las dos se corrigen igual: reportalo como `issue padre`, diciendo cual de las dos
+  falta.
 - **El padre declara `## Historia de usuario` pero alguna subissue no lleva la clave en el
   titulo.** Si el padre trae la seccion y el titulo de una subissue no empieza por esa clave seguida
   de `slice-NN`, es la desviacion a corregir: reportala como `slice-NN (#numero)`, en el titulo,
