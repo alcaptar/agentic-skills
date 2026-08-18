@@ -489,12 +489,20 @@ class Cli:
         return ExitCode.OK
 
     def status(self, *, repo: str, issue: int) -> int:
-        gh_call = self._gh_call(clock=SystemClock())
+        clock = SystemClock()
+        gh_call = self._gh_call(clock=clock)
         try:
-            statuses = ShowFeatureStatus(repository=GhRunRepository(call=gh_call), forum=GhForum(call=gh_call)).execute(
-                ShowFeatureStatusParams(repo=repo, issue=issue)
-            )
-        except (LaggingSearchIndexError, UnreadableIssueError, UnreadableForumError) as error:
+            statuses = ShowFeatureStatus(
+                repository=GhRunRepository(call=gh_call),
+                forum=GhForum(call=gh_call),
+                metrics=LocalMetricsLog(clock=clock),
+            ).execute(ShowFeatureStatusParams(repo=repo, issue=issue))
+        except (
+            LaggingSearchIndexError,
+            UnreadableIssueError,
+            UnreadableForumError,
+            UnreadableMetricsLogError,
+        ) as error:
             return self._reported(f"the status of the feature could not be read: {error}", ExitCode.USAGE_ERROR)
         except GhCommandFailedError as error:
             return self._reported(f"the status of the feature could not be read: {error}", ExitCode.RUN_INTERRUPTED)

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from unittest.mock import Mock, create_autospec
 
 import pytest
@@ -8,8 +9,10 @@ from slice_runner.application.queries.show_feature_status import ShowFeatureStat
 from slice_runner.domain.branch_pull_request import BranchPullRequest
 from slice_runner.domain.forum import Forum
 from slice_runner.domain.issue_label import IssueLabel
+from slice_runner.domain.metrics_log import MetricsLog
 from slice_runner.domain.run_repository import RunRepository
 from slice_runner.domain.slice_status import SliceStatus
+from slice_runner.tests.mothers.closed_slice_record_mother import ClosedSliceRecordMother
 from slice_runner.tests.mothers.parent_issue_mother import ParentIssueMother
 from slice_runner.tests.mothers.run_mother import RunMother
 from slice_runner.tests.mothers.sub_issue_mother import SubIssueMother
@@ -35,8 +38,14 @@ class TestShowFeatureStatus:
         return forum
 
     @pytest.fixture
-    def query(self, repository: Mock, forum: Mock) -> ShowFeatureStatus:
-        return ShowFeatureStatus(repository=repository, forum=forum)
+    def metrics(self) -> Mock:
+        metrics: Mock = create_autospec(MetricsLog, spec_set=True, instance=True)
+        metrics.closed_slices.return_value = ()
+        return metrics
+
+    @pytest.fixture
+    def query(self, repository: Mock, forum: Mock, metrics: Mock) -> ShowFeatureStatus:
+        return ShowFeatureStatus(repository=repository, forum=forum, metrics=metrics)
 
     def test_the_children_are_read_with_the_count_the_parent_declared(
         self, query: ShowFeatureStatus, repository: Mock
@@ -101,3 +110,30 @@ class TestShowFeatureStatus:
         statuses = query.execute(_PARAMS)
 
         assert len(statuses) == 2
+
+    def test_the_registry_is_asked_for_every_closed_slice_of_the_repo_without_a_time_window(
+        self, query: ShowFeatureStatus, metrics: Mock
+    ) -> None:
+        query.execute(_PARAMS)
+
+        metrics.closed_slices.assert_called_once_with(
+            repo=_REPO, since=datetime.min.replace(tzinfo=UTC), until=datetime.max.replace(tzinfo=UTC)
+        )
+
+    def test_a_child_with_a_matching_row_in_the_registry_carries_it_in_its_status(
+        self, query: ShowFeatureStatus, metrics: Mock
+    ) -> None:
+        record = ClosedSliceRecordMother.merged_for_issue(SubIssueMother.pending().number)
+        metrics.closed_slices.return_value = (record,)
+
+        statuses = query.execute(_PARAMS)
+
+        assert statuses[0].record == record
+        assert statuses[1].record is None
+
+    def test_a_child_without_a_row_in_the_registry_carries_no_record_instead_of_inventing_one(
+        self, query: ShowFeatureStatus
+    ) -> None:
+        statuses = query.execute(_PARAMS)
+
+        assert all(status.record is None for status in statuses)

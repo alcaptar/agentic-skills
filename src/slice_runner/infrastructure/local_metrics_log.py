@@ -38,11 +38,16 @@ class LocalMetricsLog(MetricsLog):
         if not ledger.exists():
             return ()
 
-        return tuple(
+        within_window = (
             record
             for record in self._decoded(ledger.read_text(encoding="utf-8"))
             if since <= record.ts <= until and (repo is None or record.repo == repo)
         )
+        latest_by_identity: dict[tuple[str, int], ClosedSliceRecord] = {}
+        for record in within_window:
+            latest_by_identity[record.repo, record.issue] = record
+
+        return tuple(latest_by_identity.values())
 
     @staticmethod
     def _decoded(text: str) -> Iterator[ClosedSliceRecord]:

@@ -2132,6 +2132,32 @@ class TestTheCommandThatShowsFeatureStatus:
         assert output.out == ""
         assert output.err != ""
 
+    def test_a_closed_slice_without_a_run_shows_its_closure_state_and_cost_from_the_registry(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
+        LocalMetricsLog(clock=SystemClock()).record(ClosedSliceMother.merged_for_issue(49))
+
+        Cli(process=self._process(), budgets=Budgets()).status(repo=self._REPO, issue=self._ISSUE)
+
+        lines = capsys.readouterr().out.strip().splitlines()
+        slice_02 = next(line for line in lines if "slice-02" in line)
+        assert RunState.MERGED.value in slice_02
+        assert "$" in slice_02
+
+    def test_a_corrupt_line_in_the_metrics_log_exits_with_a_usage_error_instead_of_a_stack_dump(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
+        ledger = ClaudeConfig.root().joinpath(*LocalMetricsLog.LEDGER)
+        ledger.parent.mkdir(parents=True, exist_ok=True)
+        ledger.write_text("not json\n", encoding="utf-8")
+
+        code = Cli(process=self._process(), budgets=Budgets()).status(repo=self._REPO, issue=self._ISSUE)
+
+        assert code == ExitCode.USAGE_ERROR
+        assert "not JSON" in capsys.readouterr().err
+
 
 class TestTheStatusCommandParsing:
     def test_it_parses_with_the_issue_as_a_positional_and_the_repo_as_a_flag(self) -> None:

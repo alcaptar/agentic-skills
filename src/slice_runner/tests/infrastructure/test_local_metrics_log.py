@@ -391,7 +391,7 @@ class TestReadingBackTheClosedSlices(WithTheLedgerOutOfTheRealHome):
         log = LocalMetricsLog(clock=self.frozen_at(datetime(2026, 1, 1, tzinfo=UTC)))
         log.record(ClosedSliceMother.closed_as(RunState.MERGED))
         log = LocalMetricsLog(clock=self.frozen_at(datetime(2026, 2, 1, tzinfo=UTC)))
-        log.record(ClosedSliceMother.closed_as(RunState.BLOCKED_VERIFY))
+        log.record(ClosedSliceMother.closed_as_for_issue(RunState.BLOCKED_VERIFY, issue=ClosedSliceMother.ISSUE + 1))
 
         found = log.closed_slices(
             repo=None, since=datetime(2000, 1, 1, tzinfo=UTC), until=datetime(2100, 1, 1, tzinfo=UTC)
@@ -438,6 +438,50 @@ class TestReadingBackTheClosedSlices(WithTheLedgerOutOfTheRealHome):
 
         with pytest.raises(UnreadableMetricsLogError):
             log.closed_slices(repo=None, since=datetime(2000, 1, 1, tzinfo=UTC), until=datetime(2100, 1, 1, tzinfo=UTC))
+
+
+class TestDeduplicatingRepeatedClosuresOfTheSameSlice(WithTheLedgerOutOfTheRealHome):
+    def test_two_closures_of_the_same_slice_within_the_window_collapse_into_the_last_one_written(
+        self, tmp_path: Path
+    ) -> None:
+        log = LocalMetricsLog(clock=self.frozen_at(datetime(2026, 1, 1, tzinfo=UTC)))
+        log.record(ClosedSliceMother.closed_as(RunState.BLOCKED_VERIFY))
+        log = LocalMetricsLog(clock=self.frozen_at(datetime(2026, 1, 2, tzinfo=UTC)))
+        log.record(ClosedSliceMother.closed_as(RunState.MERGED))
+
+        found = log.closed_slices(
+            repo=None, since=datetime(2000, 1, 1, tzinfo=UTC), until=datetime(2100, 1, 1, tzinfo=UTC)
+        )
+
+        assert [record.state for record in found] == [RunState.MERGED]
+
+    def test_a_window_that_only_covers_the_earlier_closure_still_returns_it_instead_of_reaching_past_it(
+        self, tmp_path: Path
+    ) -> None:
+        log = LocalMetricsLog(clock=self.frozen_at(datetime(2026, 8, 8, tzinfo=UTC)))
+        log.record(ClosedSliceMother.closed_as(RunState.BLOCKED_VERIFY))
+        log = LocalMetricsLog(clock=self.frozen_at(datetime(2026, 8, 18, tzinfo=UTC)))
+        log.record(ClosedSliceMother.closed_as(RunState.MERGED))
+
+        found = log.closed_slices(
+            repo=None, since=datetime(2026, 8, 8, tzinfo=UTC), until=datetime(2026, 8, 14, tzinfo=UTC)
+        )
+
+        assert [record.state for record in found] == [RunState.BLOCKED_VERIFY]
+
+    def test_the_key_is_the_repo_and_the_issue_and_not_the_slice_id_that_can_change_mid_feature(
+        self, tmp_path: Path
+    ) -> None:
+        log = LocalMetricsLog(clock=self.frozen_at(datetime(2026, 1, 1, tzinfo=UTC)))
+        log.record(ClosedSliceMother.merged())
+        log = LocalMetricsLog(clock=self.frozen_at(datetime(2026, 1, 2, tzinfo=UTC)))
+        log.record(ClosedSliceMother.merged_with_slice_id("slice-07-con-clave-de-jira"))
+
+        found = log.closed_slices(
+            repo=None, since=datetime(2000, 1, 1, tzinfo=UTC), until=datetime(2100, 1, 1, tzinfo=UTC)
+        )
+
+        assert [record.slice_id for record in found] == ["slice-07-con-clave-de-jira"]
 
 
 class TestWhereTheLedgerLives:

@@ -2,9 +2,11 @@ from __future__ import annotations
 
 from slice_runner.domain.issue_label import IssueLabel
 from slice_runner.domain.issue_state import IssueState
+from slice_runner.domain.run_state import RunState
 from slice_runner.domain.slice_status import SliceStatus
 from slice_runner.domain.step import Step
 from slice_runner.infrastructure.feature_status_report import FeatureStatusReport
+from slice_runner.tests.mothers.closed_slice_record_mother import ClosedSliceRecordMother
 from slice_runner.tests.mothers.harness_spend_mother import HarnessSpendMother
 from slice_runner.tests.mothers.run_mother import RunMother
 from slice_runner.tests.mothers.sub_issue_mother import SubIssueMother
@@ -119,3 +121,41 @@ class TestFeatureStatusReport:
         rendered = FeatureStatusReport(statuses=(status,)).rendered()
 
         assert rendered.index(IssueLabel.PENDING.value) == 11
+
+    def test_a_closed_slice_without_a_run_shows_its_closure_state_from_the_registry_as_the_step(self) -> None:
+        record = ClosedSliceRecordMother.closed_as(RunState.BLOCKED_VERIFY)
+        status = SliceStatus(sub_issue=SubIssueMother.pending(), pull_request=None, record=record)
+
+        rendered = FeatureStatusReport(statuses=(status,)).rendered()
+
+        assert RunState.BLOCKED_VERIFY.value in rendered
+
+    def test_a_closed_slice_without_a_run_shows_the_cost_the_registry_recorded(self) -> None:
+        record = ClosedSliceRecordMother.merged()
+        status = SliceStatus(sub_issue=SubIssueMother.pending(), pull_request=None, record=record)
+
+        rendered = FeatureStatusReport(statuses=(status,)).rendered()
+
+        assert record.spend is not None
+        assert f"{record.spend.cost_usd:.2f}" in rendered
+
+    def test_a_closed_slice_whose_registry_row_measured_nothing_shows_no_spend_instead_of_a_zero(self) -> None:
+        record = ClosedSliceRecordMother.merged_measuring_nothing()
+        status = SliceStatus(sub_issue=SubIssueMother.pending(), pull_request=None, record=record)
+
+        rendered = FeatureStatusReport(statuses=(status,)).rendered()
+
+        assert "$" not in rendered
+
+    def test_a_slice_with_an_open_run_prefers_the_run_over_a_stale_registry_row(self) -> None:
+        record = ClosedSliceRecordMother.closed_as(RunState.MERGED)
+        status = SliceStatus(
+            sub_issue=SubIssueMother.blocked(IssueLabel.BLOCKED_CI_RED, RunMother.blocked_on_red_ci()),
+            pull_request=None,
+            record=record,
+        )
+
+        rendered = FeatureStatusReport(statuses=(status,)).rendered()
+
+        assert Step.AWAIT_CI.value in rendered
+        assert RunState.MERGED.value not in rendered

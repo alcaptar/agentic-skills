@@ -35,6 +35,18 @@ class ClosedSliceMother:
         return cls._closed(state)
 
     @classmethod
+    def merged_for_issue(cls, issue: int) -> ClosedSlice:
+        return cls._closed(RunState.MERGED, issue=issue)
+
+    @classmethod
+    def closed_as_for_issue(cls, state: RunState, *, issue: int) -> ClosedSlice:
+        return cls._closed(state, issue=issue)
+
+    @classmethod
+    def merged_with_slice_id(cls, slice_id: str) -> ClosedSlice:
+        return cls._closed(RunState.MERGED, slice_id=slice_id)
+
+    @classmethod
     def still_open(cls) -> ClosedSlice:
         return cls._closed(RunState.OPEN)
 
@@ -83,6 +95,8 @@ class ClosedSliceMother:
         cls,
         state: RunState,
         *,
+        issue: int | None = None,
+        slice_id: str | None = None,
         run: Run | None = None,
         budgets: Budgets | None = None,
         models: RoleModels | None = None,
@@ -96,8 +110,8 @@ class ClosedSliceMother:
     ) -> ClosedSlice:
         return ClosedSlice(
             repo=cls.REPO,
-            issue=cls.ISSUE,
-            slice_id=cls.SLICE_ID,
+            issue=cls.ISSUE if issue is None else issue,
+            slice_id=cls.SLICE_ID if slice_id is None else slice_id,
             name=cls.NAME,
             state=state,
             run=run or RunMother.awaiting_merge(),
