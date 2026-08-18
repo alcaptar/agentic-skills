@@ -215,14 +215,15 @@ class ConductSlice:
                 SelectSliceParams(repo=params.repo, issue=params.issue, slice_id=params.slice_id)
             )
         except NoSliceLeftError as unselectable:
-            for dangling in unselectable.dangling:
-                self._closing_a_merge_missed_between_invocations(params, dangling)
+            reconciled = sum(
+                self._closing_a_merge_missed_between_invocations(params, dangling) for dangling in unselectable.dangling
+            )
             for subissue, response in unselectable.malformed_retries:
                 if response.reason is not None:
                     self._repository.write_malformed_response(
                         repo=params.repo, issue=subissue.number, reason=response.reason
                     )
-            raise
+            raise self._reported_after_reconciling(unselectable, reconciled) from unselectable
 
         for dangling in chosen.dangling:
             self._closing_a_merge_missed_between_invocations(params, dangling)
@@ -621,17 +622,17 @@ class ConductSlice:
 
         return 0
 
-    def _closing_a_merge_missed_between_invocations(self, params: ConductSliceParams, subissue: SubIssue) -> None:
+    def _closing_a_merge_missed_between_invocations(self, params: ConductSliceParams, subissue: SubIssue) -> bool:
         run = subissue.run
         if run is None:
-            return
+            return False
 
         opened = self._forum.any_pull_request(repo=params.repo, branch=subissue.branch)
         if (
             opened is None
             or self._forum.pull_request_state(repo=params.repo, number=opened).state is not PullRequestState.MERGED
         ):
-            return
+            return False
 
         self._record_closure.execute(
             RecordClosureParams(
@@ -649,7 +650,18 @@ class ConductSlice:
         label = subissue.label
         if label is not None:
             self._repository.remove_label(repo=params.repo, issue=subissue.number, remove=label)
+        self._repository.clear_run(repo=params.repo, issue=subissue.number)
         self._close.execute(CloseParentParams(repo=params.repo, issue=params.issue))
+
+        return True
+
+    @staticmethod
+    def _reported_after_reconciling(unselectable: NoSliceLeftError, reconciled: int) -> NoSliceLeftError:
+        error = NoSliceLeftError(f"{unselectable}; reconciled {reconciled} dangling slice(s) before giving up")
+        error.dangling = unselectable.dangling
+        error.malformed_retries = unselectable.malformed_retries
+
+        return error
 
     def _waiting(self, progress: ConductSliceProgress, seconds: int) -> ConductSliceProgress:
         self._clock.sleep(seconds=seconds)
@@ -677,6 +689,7 @@ class ConductSlice:
             )
         )
         if state is RunState.MERGED:
+            self._repository.clear_run(repo=progress.params.repo, issue=progress.subissue.number)
             self._close.execute(CloseParentParams(repo=progress.params.repo, issue=progress.params.issue))
             if not progress.subissue.signal_is_exempt:
                 self._deploy_watch.watch(

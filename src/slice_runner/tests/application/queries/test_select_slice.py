@@ -178,6 +178,16 @@ class TestSelectSlice:
 
         assert query.execute(_PARAMS).dangling == ()
 
+    def test_a_dangling_subissue_that_already_lost_its_label_by_hand_still_counts_as_pending_to_reconcile(
+        self, query: SelectSlice, repository: Mock
+    ) -> None:
+        repository.read_children.return_value = (
+            SubIssueMother.dangling_with_its_label_already_removed_by_hand(),
+            SubIssueMother.pending(),
+        )
+
+        assert query.execute(_PARAMS).dangling == (SubIssueMother.dangling_with_its_label_already_removed_by_hand(),)
+
 
 class TestSelectingTheSliceNamedByTheCaller:
     @pytest.fixture

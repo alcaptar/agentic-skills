@@ -51,6 +51,10 @@ class SubIssueMother:
         )
 
     @staticmethod
+    def dangling_with_its_label_already_removed_by_hand() -> SubIssue:
+        return replace(SubIssueMother.dangling(), label=None)
+
+    @staticmethod
     def carrying(label: IssueLabel) -> SubIssue:
         return replace(SubIssueMother.pending(), label=label)
 

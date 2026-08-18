@@ -44,7 +44,7 @@ class SliceQueue:
 
     @staticmethod
     def _left_dangling(child: SubIssue) -> bool:
-        return child.state is IssueState.CLOSED and child.run is not None and child.label is not None
+        return child.state is IssueState.CLOSED and child.run is not None
 
     @staticmethod
     def _disqualifying(label: IssueLabel | None) -> bool:

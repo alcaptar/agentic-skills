@@ -263,6 +263,7 @@ _KNOWN_NOT_HARNESS_WRITING = {
     ("_record_closure", "execute"),
     ("_record_step", "execute"),
     ("_reopen", "execute"),
+    ("_repository", "clear_run"),
     ("_repository", "flag_unmerged_pull_request"),
     ("_repository", "pause_for_alignment"),
     ("_repository", "read_understanding"),

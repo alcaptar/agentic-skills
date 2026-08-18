@@ -526,6 +526,14 @@ class TestConductSliceClosingAMergeMissedBetweenInvocations:
             repo=Conductor.REPO, issue=dangling.number, remove=dangling.label
         )
 
+    def test_a_dangling_subissue_whose_pull_request_merged_clears_its_run_so_it_stops_being_dangling(self) -> None:
+        dangling = SubIssueMother.dangling()
+        conductor = self._conductor(dangling=(dangling,))
+
+        conductor.conduct()
+
+        conductor.repository.clear_run.assert_any_call(repo=Conductor.REPO, issue=dangling.number)
+
     def test_a_dangling_subissue_whose_pull_request_closed_without_merging_is_left_untouched(self) -> None:
         dangling = SubIssueMother.dangling()
         conductor = self._conductor(dangling=(dangling,))
@@ -635,6 +643,28 @@ class TestConductSliceWhenTheNamedSliceCannotBeSelected:
         conductor.repository.write_malformed_response.assert_called_once_with(
             repo=Conductor.REPO, issue=malformed_sibling.number, reason=MalformedReason.MISSING_INSTRUCTION
         )
+
+    def test_the_failure_after_reconciling_a_dangling_run_says_how_many_it_reconciled_before_giving_up(self) -> None:
+        conductor = Conductor(chosen=SelectSliceResultMother.about_to_start())
+        conductor.select.execute.side_effect = self._unselectable(dangling=(SubIssueMother.dangling(),))
+
+        with pytest.raises(NoSliceLeftError, match="reconciled 1"):
+            conductor.conduct()
+
+    def test_the_failure_with_nothing_dangling_says_it_reconciled_zero_before_giving_up(self) -> None:
+        conductor = Conductor(chosen=SelectSliceResultMother.about_to_start())
+        conductor.select.execute.side_effect = self._unselectable(dangling=())
+
+        with pytest.raises(NoSliceLeftError, match="reconciled 0"):
+            conductor.conduct()
+
+    def test_a_dangling_run_whose_pull_request_closed_without_merging_is_not_counted_as_reconciled(self) -> None:
+        conductor = Conductor(chosen=SelectSliceResultMother.about_to_start())
+        conductor.select.execute.side_effect = self._unselectable(dangling=(SubIssueMother.dangling(),))
+        conductor.forum.pull_request_state.return_value = PullRequestStatusMother.closed()
+
+        with pytest.raises(NoSliceLeftError, match="reconciled 0"):
+            conductor.conduct()
 
 
 class TestConductSliceReopeningABlockedRun:
@@ -1122,6 +1152,13 @@ class TestConductSliceClosingTheParentAfterAMerge:
         conductor.conduct()
 
         conductor.close.execute.assert_called_once_with(CloseParentParams(repo=Conductor.REPO, issue=Conductor.ISSUE))
+
+    def test_a_merged_run_clears_its_persisted_run_so_the_next_invocation_does_not_see_it_as_dangling(self) -> None:
+        conductor = self._conductor()
+
+        conductor.conduct()
+
+        conductor.repository.clear_run.assert_called_once_with(repo=Conductor.REPO, issue=_SUBISSUE)
 
     def test_a_close_that_does_not_merge_the_slice_asks_to_close_nothing(self) -> None:
         conductor = Conductor(
