@@ -253,7 +253,6 @@ _KNOWN_NOT_HARNESS_WRITING = {
     ("_deploy_watch", "watch"),
     ("_forum", "any_pull_request"),
     ("_forum", "pull_request_state"),
-    ("_forum", "write_malformed_response"),
     ("_machine", "after"),
     ("_prechecks", "execute"),
     ("_pull_request", "body"),

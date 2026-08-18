@@ -400,6 +400,7 @@ class TestConductSliceRespondingToAlignment:
         conductor.repository.write_malformed_response.assert_called_once_with(
             repo=Conductor.REPO, issue=_SUBISSUE, reason=MalformedReason.GO_CARRIES_TEXT
         )
+        assert conductor.implement.execute.call_count == 0
 
     def test_a_go_carries_forward_whatever_was_spent_while_asking_for_alignment(self) -> None:
         spend = HarnessSpendMother.of_the_understanding_call()
