@@ -22,6 +22,7 @@ from slice_runner.application.actions.record_step import RecordStep
 from slice_runner.application.actions.reopen_slice import ReopenSlice
 from slice_runner.application.actions.reset_slice import ResetSlice, ResetSliceParams
 from slice_runner.application.actions.run_controls import RunControls
+from slice_runner.application.actions.seek_alignment import SeekAlignment
 from slice_runner.application.actions.stage_slice import StageSlice
 from slice_runner.application.actions.verify_slice import VerifySlice, VerifySliceParams
 from slice_runner.application.queries.check_readiness import CheckReadiness, CheckReadinessParams, CheckReadinessPorts
@@ -574,22 +575,25 @@ class Cli:
                 record_closure=RecordClosure(metrics=LocalMetricsLog(clock=clock), repository=repository),
                 read_ci=ReadCiStatus(ci=GhCi(call=gh_call), forum=forum),
                 read_pull_request=ReadPullRequestStatus(forum=forum),
+                seek_alignment=SeekAlignment(
+                    understanding=ClaudeUnderstanding(
+                        process=self._process,
+                        telemetry=HarnessTelemetry(
+                            trace=LocalCallTrace(clock=clock),
+                            turns=StderrTurnLog(),
+                            spend_log=LocalCallSpendLog(clock=clock),
+                            tool_uses=self._tool_uses(),
+                        ),
+                        reader=reader,
+                    ),
+                    repository=repository,
+                ),
             ),
             ports=ConductSlicePorts(
                 repository=repository,
                 branches=branches,
                 forum=forum,
                 clock=clock,
-                understanding=ClaudeUnderstanding(
-                    process=self._process,
-                    telemetry=HarnessTelemetry(
-                        trace=LocalCallTrace(clock=clock),
-                        turns=StderrTurnLog(),
-                        spend_log=LocalCallSpendLog(clock=clock),
-                        tool_uses=self._tool_uses(),
-                    ),
-                    reader=reader,
-                ),
                 pull_request=SlicePullRequest(),
                 deploy_watch=MutedDeployWatch(),
             ),
