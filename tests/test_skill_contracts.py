@@ -308,7 +308,7 @@ deleted. Anchoring on the longer phrases pins the bullet, not the paragraph that
 
 _PARENT_USER_STORY_ANCHORS = (
     "pero su propio titulo no abre con la clave, o no lleva",
-    "la etiqueta `historia:<clave>`",
+    "la etiqueta `origen:<clave>`",
     "reportalo como `issue padre`, diciendo cual de las dos",
 )
 """Anchors for the checklist item that catches a parent not carrying its own user story key.
