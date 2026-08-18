@@ -306,6 +306,35 @@ deleted. Anchoring on the longer phrases pins the bullet, not the paragraph that
 """
 
 
+_PARENT_USER_STORY_ANCHORS = (
+    "pero su propio titulo no abre con la clave, o no lleva",
+    "la etiqueta `origen:<clave>`",
+    "reportalo como `issue padre`, diciendo cual de las dos",
+)
+"""Anchors for the checklist item that catches a parent not carrying its own user story key.
+
+The key reaches the parent by two surfaces the program never reads -- its title and its label -- so
+neither can be compared against anything the way `SLICE_HEADING` compares the documented subissue
+title. Both exist for the same job: finding the whole feature in a listing without opening it, which
+is also why losing one silently is easy. This pins the sentence that reports the deviation.
+"""
+
+
+def test_validate_reports_a_parent_that_does_not_carry_its_own_user_story_key() -> None:
+    """`validate` has to catch a parent whose title or label drops the key its body declares.
+
+    Same shape as the checklist anchors above: prose with no second surface, so the test pins the
+    sentence instead of comparing two copies of a vocabulary.
+    """
+    prose = " ".join(_spec_prose(_VALIDATE).split())
+
+    missing = [anchor for anchor in _PARENT_USER_STORY_ANCHORS if anchor not in prose]
+    assert not missing, (
+        f"the `validate` mode of {_rel(_SPEC)} no longer states {missing}: a parent that declares a "
+        f"user story has to carry it in its own title and label, or the deviation goes unreported"
+    )
+
+
 def test_validate_reports_the_missing_user_story_key_with_its_rule_and_location() -> None:
     """`validate` has to catch a parent declaring a user story whose subissues do not carry it.
 

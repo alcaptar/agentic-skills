@@ -10,14 +10,13 @@ from slice_runner.application.actions.record_closure import RecordClosureParams
 from slice_runner.application.actions.record_step import RecordStepParams
 from slice_runner.application.actions.reopen_slice import ReopenSliceParams
 from slice_runner.application.actions.run_controls import RunControlsParams
+from slice_runner.application.actions.seek_alignment import SeekAlignmentParams
 from slice_runner.application.actions.stage_slice import StageSliceParams
 from slice_runner.application.actions.verify_slice import VerifySliceParams
 from slice_runner.application.queries.read_ci_status import ReadCiStatusParams
 from slice_runner.application.queries.read_pull_request_status import ReadPullRequestStatusParams
 from slice_runner.application.queries.run_prechecks import RunPrechecksParams
 from slice_runner.application.queries.select_slice import SelectSliceParams
-from slice_runner.domain.alignment import Alignment
-from slice_runner.domain.alignment_response_kind import AlignmentResponseKind
 from slice_runner.domain.discard_cause import DiscardCause
 from slice_runner.domain.exceptions import (
     DirtyIndexError,
@@ -49,6 +48,7 @@ if TYPE_CHECKING:
     from slice_runner.application.actions.record_step import RecordStep
     from slice_runner.application.actions.reopen_slice import ReopenSlice
     from slice_runner.application.actions.run_controls import RunControls
+    from slice_runner.application.actions.seek_alignment import SeekAlignment
     from slice_runner.application.actions.stage_slice import StageSlice
     from slice_runner.application.actions.verify_slice import VerifySlice
     from slice_runner.application.queries.read_ci_status import ReadCiStatus
@@ -72,7 +72,6 @@ if TYPE_CHECKING:
     from slice_runner.domain.state_machine import StateMachine
     from slice_runner.domain.sub_issue import SubIssue
     from slice_runner.domain.transition import Transition
-    from slice_runner.domain.understanding_writer import UnderstandingWriter
     from slice_runner.domain.verdict import Verdict
 
 
@@ -163,6 +162,7 @@ class ConductSliceUseCases:
     record_closure: RecordClosure
     read_ci: ReadCiStatus
     read_pull_request: ReadPullRequestStatus
+    seek_alignment: SeekAlignment
 
 
 @dataclass(frozen=True, kw_only=True, slots=True)
@@ -171,7 +171,6 @@ class ConductSlicePorts:
     branches: Branches
     forum: Forum
     clock: Clock
-    understanding: UnderstandingWriter
     pull_request: PullRequestWriter
     deploy_watch: DeployWatch
 
@@ -199,11 +198,11 @@ class ConductSlice:
         self._record_closure = use_cases.record_closure
         self._read_ci = use_cases.read_ci
         self._read_pull_request = use_cases.read_pull_request
+        self._seek_alignment = use_cases.seek_alignment
         self._repository = ports.repository
         self._branches = ports.branches
         self._forum = ports.forum
         self._clock = ports.clock
-        self._understanding = ports.understanding
         self._pull_request = ports.pull_request
         self._deploy_watch = ports.deploy_watch
         self._machine = machine
@@ -316,25 +315,35 @@ class ConductSlice:
         return replace(progress, label=IssueLabel.IN_PROGRESS)
 
     def _awaiting_alignment(self, progress: ConductSliceProgress) -> SteppedSlice:
-        if progress.run.understanding_pending:
-            stepped = self._publishing_the_understanding(progress, correction="")
-            if stepped.outcome is not Outcome.PENDING:
-                return stepped
+        try:
+            sought = self._seek_alignment.execute(
+                SeekAlignmentParams(
+                    repo=progress.params.repo,
+                    worktree=progress.params.worktree,
+                    subissue=progress.subissue,
+                    parent=progress.parent,
+                    run=progress.run,
+                    understanding=progress.understanding,
+                )
+            )
+        except MeasuredCallError as rejection:
+            discarded = self._discarding(progress, rejection)
 
-            return self._paused_for_alignment(stepped.progress)
-
-        response = self._repository.read_alignment_response(repo=progress.params.repo, issue=progress.subissue.number)
-        if response.kind is AlignmentResponseKind.REVIEW and response.correction != progress.run.corrected:
-            stepped = self._publishing_the_understanding(self._seeded(progress), correction=response.correction)
-            if stepped.outcome is not Outcome.PENDING:
-                return stepped
-            progress = stepped.progress
-        elif response.kind is AlignmentResponseKind.MALFORMED and response.reason is not None:
-            self._repository.write_malformed_response(
-                repo=progress.params.repo, issue=progress.subissue.number, reason=response.reason
+            return self._within_budget(
+                SteppedSlice(progress=discarded, outcome=Outcome.DISCARDED), call=rejection.spend
             )
 
-        return SteppedSlice(progress=progress, outcome=Outcome.of_the_alignment(response.kind))
+        updated = replace(
+            progress,
+            run=sought.run,
+            understanding=sought.understanding,
+            spends=(*progress.spends, sought.spend) if sought.spend is not None else progress.spends,
+        )
+        response = sought.response
+        if response is None:
+            return self._paused_for_alignment(updated)
+
+        return SteppedSlice(progress=updated, outcome=Outcome.of_the_alignment(response))
 
     def _paused_for_alignment(self, progress: ConductSliceProgress) -> SteppedSlice:
         self._repository.pause_for_alignment(
@@ -348,37 +357,6 @@ class ConductSlice:
             progress=replace(progress, label=IssueLabel.AWAITING_ALIGNMENT),
             outcome=Outcome.PENDING,
         )
-
-    def _publishing_the_understanding(self, progress: ConductSliceProgress, *, correction: str) -> SteppedSlice:
-        try:
-            understanding = self._understanding.write(
-                subissue=progress.subissue,
-                parent=progress.parent,
-                repo=progress.params.repo,
-                worktree=progress.params.worktree,
-                alignment=Alignment(agreed=progress.understanding, correction=correction),
-            )
-        except MeasuredCallError as rejection:
-            discarded = self._discarding(progress, rejection)
-
-            return self._within_budget(
-                SteppedSlice(progress=discarded, outcome=Outcome.DISCARDED), call=rejection.spend
-            )
-
-        published = replace(progress, spends=(*progress.spends, understanding.spend), understanding=understanding.text)
-        run = replace(
-            published.run,
-            step=Step.UNDERSTAND,
-            spend=published.spend,
-            corrected=correction,
-            understanding_pending=False,
-        )
-        self._writing(published, run=run)
-        self._repository.write_understanding(
-            repo=progress.params.repo, issue=progress.subissue.number, understanding=understanding.text
-        )
-
-        return SteppedSlice(progress=replace(published, run=run), outcome=Outcome.PENDING)
 
     def _seeded(self, progress: ConductSliceProgress) -> ConductSliceProgress:
         if progress.understanding:
@@ -684,9 +662,6 @@ class ConductSlice:
         error.malformed_retries = unselectable.malformed_retries
 
         return error
-
-    def _writing(self, progress: ConductSliceProgress, *, run: Run) -> None:
-        self._repository.write_run(repo=progress.params.repo, issue=progress.subissue.number, run=run)
 
     def _waiting(self, progress: ConductSliceProgress, seconds: int) -> ConductSliceProgress:
         self._clock.sleep(seconds=seconds)

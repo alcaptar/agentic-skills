@@ -382,7 +382,7 @@ class TestReadingTheChildren:
         self,
     ) -> None:
         macro = {"id": "2", "name": IssueLabel.PENDING.value, "description": "", "color": "000000"}
-        foreign = {"id": "1", "name": "historia:AS-255", "description": "", "color": "000000"}
+        foreign = {"id": "1", "name": "origen:AS-255", "description": "", "color": "000000"}
 
         for labels in ([foreign, macro], [macro, foreign]):
             child = [{"number": 1, "title": "slice-01 (name): resumen", "body": "", "labels": labels, "state": "OPEN"}]
@@ -392,7 +392,7 @@ class TestReadingTheChildren:
             )
 
             assert children[0].label is IssueLabel.PENDING, (
-                f"a foreign `historia:` label placed {labels} confused which state label was resolved"
+                f"a foreign `origen:` label placed {labels} confused which state label was resolved"
             )
 
     def test_the_gh_issue_state_becomes_the_subissue_state(self) -> None:

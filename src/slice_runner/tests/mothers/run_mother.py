@@ -71,6 +71,18 @@ class RunMother:
         )
 
     @staticmethod
+    def about_to_publish_the_understanding() -> Run:
+        return Run(step=Step.UNDERSTAND, understanding_pending=True)
+
+    @staticmethod
+    def awaiting_alignment() -> Run:
+        return Run(step=Step.UNDERSTAND)
+
+    @staticmethod
+    def awaiting_alignment_after_spending(spend: HarnessSpend) -> Run:
+        return Run(step=Step.UNDERSTAND, spend=spend)
+
+    @staticmethod
     def awaiting_alignment_after_a_published_correction(correction: str) -> Run:
         return Run(step=Step.UNDERSTAND, corrected=correction)
 

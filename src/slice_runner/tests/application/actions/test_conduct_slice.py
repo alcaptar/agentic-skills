@@ -8,7 +8,6 @@ import pytest
 
 from slice_runner.application.actions.close_parent import CloseParentParams
 from slice_runner.application.actions.reopen_slice import ReopenSliceParams, ReopenSliceResult
-from slice_runner.domain.alignment import Alignment
 from slice_runner.domain.alignment_response import AlignmentResponse
 from slice_runner.domain.alignment_response_kind import AlignmentResponseKind
 from slice_runner.domain.budgets import Budgets
@@ -68,29 +67,6 @@ class TestConductSliceStartingANewRun:
     @staticmethod
     def _conductor() -> Conductor:
         return Conductor(chosen=SelectSliceResultMother.about_to_start())
-
-    def test_the_understanding_of_the_chosen_slice_is_written_on_its_subissue(self) -> None:
-        conductor = self._conductor()
-
-        conductor.conduct()
-
-        conductor.repository.write_understanding.assert_called_once_with(
-            repo=Conductor.REPO, issue=_SUBISSUE, understanding=Conductor.UNDERSTANDING
-        )
-
-    def test_the_harness_asked_for_the_understanding_is_given_the_subissue_the_parent_and_where_it_runs(self) -> None:
-        conductor = self._conductor()
-        chosen = SelectSliceResultMother.about_to_start()
-
-        conductor.conduct()
-
-        conductor.understanding.write.assert_called_once_with(
-            subissue=chosen.subissue,
-            parent=chosen.parent,
-            repo=Conductor.REPO,
-            worktree=Conductor.WORKTREE,
-            alignment=Alignment(),
-        )
 
     def test_a_call_that_leaves_no_usable_understanding_is_discarded_and_retried_within_budget(self) -> None:
         conductor = self._conductor()
@@ -288,16 +264,6 @@ class TestConductSliceRespondingToAlignment:
     def _conductor(cls, *, budgets: Budgets | None = None) -> Conductor:
         return Conductor(chosen=SelectSliceResultMother.about_to_start(subissue=cls._subissue()), budgets=budgets)
 
-    def test_no_response_yet_asks_gh_about_the_comments_of_the_one_subissue_chosen(self) -> None:
-        conductor = self._conductor(budgets=Budgets(person_wait_seconds=0))
-        conductor.repository.read_alignment_response.return_value = AlignmentResponse(
-            kind=AlignmentResponseKind.NOT_YET
-        )
-
-        conductor.conduct()
-
-        conductor.repository.read_alignment_response.assert_called_once_with(repo=Conductor.REPO, issue=_SUBISSUE)
-
     def test_no_response_yet_ticks_until_the_wait_is_spent_without_touching_the_harness_or_the_understanding_comment(
         self,
     ) -> None:
@@ -325,22 +291,6 @@ class TestConductSliceRespondingToAlignment:
 
         assert conductor.repository.read_alignment_response.call_count == 2
         assert conductor.implement.execute.call_count == 1
-
-    def test_a_review_rewrites_the_understanding_with_the_correction_it_carried(self) -> None:
-        conductor = self._conductor(budgets=Budgets(person_wait_seconds=0))
-        conductor.repository.read_alignment_response.return_value = AlignmentResponse(
-            kind=AlignmentResponseKind.REVIEW, correction="la senal no esta exenta"
-        )
-
-        conductor.conduct()
-
-        conductor.understanding.write.assert_called_once_with(
-            subissue=self._subissue(),
-            parent=SelectSliceResultMother.about_to_start().parent,
-            repo=Conductor.REPO,
-            worktree=Conductor.WORKTREE,
-            alignment=Alignment(agreed=Conductor.UNDERSTANDING, correction="la senal no esta exenta"),
-        )
 
     def test_a_review_publishes_the_rewritten_understanding_and_keeps_waiting_until_the_wait_is_spent(self) -> None:
         conductor = self._conductor(budgets=Budgets(person_wait_seconds=0))
@@ -436,41 +386,6 @@ class TestConductSliceRespondingToAlignment:
             repo=Conductor.REPO, issue=_SUBISSUE, remove=IssueLabel.AWAITING_ALIGNMENT, add=IssueLabel.IN_PROGRESS
         )
 
-    def test_a_go_asks_the_harness_for_no_understanding_of_its_own(self) -> None:
-        conductor = self._conductor()
-        conductor.repository.read_alignment_response.return_value = AlignmentResponse(kind=AlignmentResponseKind.GO)
-
-        conductor.conduct()
-
-        assert conductor.understanding.write.call_count == 0
-
-    def test_a_malformed_go_is_answered_with_what_it_is_missing_instead_of_being_treated_as_silence(self) -> None:
-        conductor = self._conductor(budgets=Budgets(person_wait_seconds=0))
-        malformed = AlignmentResponse(kind=AlignmentResponseKind.MALFORMED, reason=MalformedReason.GO_CARRIES_TEXT)
-        conductor.repository.read_alignment_response.return_value = malformed
-
-        conductor.conduct()
-
-        conductor.repository.write_malformed_response.assert_called_once_with(
-            repo=Conductor.REPO, issue=_SUBISSUE, reason=MalformedReason.GO_CARRIES_TEXT
-        )
-        assert conductor.understanding.write.call_count == 0
-        assert conductor.implement.execute.call_count == 0
-
-    def test_a_malformed_review_is_answered_with_what_it_is_missing_instead_of_rewriting_the_understanding(
-        self,
-    ) -> None:
-        conductor = self._conductor(budgets=Budgets(person_wait_seconds=0))
-        malformed = AlignmentResponse(kind=AlignmentResponseKind.MALFORMED, reason=MalformedReason.MISSING_CORRECTION)
-        conductor.repository.read_alignment_response.return_value = malformed
-
-        conductor.conduct()
-
-        conductor.repository.write_malformed_response.assert_called_once_with(
-            repo=Conductor.REPO, issue=_SUBISSUE, reason=MalformedReason.MISSING_CORRECTION
-        )
-        assert conductor.understanding.write.call_count == 0
-
     def test_a_tick_that_finds_the_prior_malformed_comment_already_acknowledged_answers_it_no_further(self) -> None:
         conductor = self._conductor(budgets=Budgets(person_wait_seconds=60))
         malformed = AlignmentResponse(kind=AlignmentResponseKind.MALFORMED, reason=MalformedReason.GO_CARRIES_TEXT)
@@ -485,6 +400,7 @@ class TestConductSliceRespondingToAlignment:
         conductor.repository.write_malformed_response.assert_called_once_with(
             repo=Conductor.REPO, issue=_SUBISSUE, reason=MalformedReason.GO_CARRIES_TEXT
         )
+        assert conductor.implement.execute.call_count == 0
 
     def test_a_go_carries_forward_whatever_was_spent_while_asking_for_alignment(self) -> None:
         spend = HarnessSpendMother.of_the_understanding_call()
