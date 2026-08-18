@@ -42,6 +42,10 @@ class ClosedSliceRecordMother:
         return cls._record(RunState.MERGED, repo=repo)
 
     @classmethod
+    def merged_for_issue(cls, issue: int) -> ClosedSliceRecord:
+        return cls._record(RunState.MERGED, issue=issue)
+
+    @classmethod
     def merged_measuring(cls, spend: RecordedSpend) -> ClosedSliceRecord:
         return cls._record(RunState.MERGED, spend=spend)
 
@@ -80,6 +84,7 @@ class ClosedSliceRecordMother:
         *,
         ts: datetime | None = None,
         repo: str | None = None,
+        issue: int | None = None,
         slice_id: str | None = None,
         spend: RecordedSpend | None = DEFAULT_SPEND,
         diff: DiffStats | None = None,
@@ -93,7 +98,7 @@ class ClosedSliceRecordMother:
         return ClosedSliceRecord(
             ts=ts or cls.TS,
             repo=repo or cls.REPO,
-            issue=cls.ISSUE,
+            issue=cls.ISSUE if issue is None else issue,
             slice_id=slice_id or cls.SLICE_ID,
             name=cls.NAME,
             state=state,
