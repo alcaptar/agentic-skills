@@ -125,6 +125,44 @@ Y la deriva del codigo contra la vara de aqui, medida a la vez:
 - **Lo que si explica el numero de ficheros es la regla que contaba clases**, que es la que se reescribio
   para preguntar por la dependencia en vez de contar tipos.
 
+## El worktree del programa (lo que se midio)
+
+2026-08-19, al decidir que el worktree deja de ser una cadena que alguien teclea y pasa a montarlo el
+programa. Las mediciones son lo caro de esta decision: la mitad no se puede deducir leyendo codigo.
+
+**Un worktree bajo la raiz del repo tiene tres condiciones, y las tres estan medidas.**
+
+- **Bajo la raiz, o Docker no lo ve.** Cuando los controles corren en contenedor, el compose monta la raiz
+  y el worktree solo existe dentro si cuelga de ella. Medido en los logs de otra persona: sus tests
+  reportan `rootdir: /app/.claude/worktrees/<slice>/src`, o sea la raiz montada en `/app` y el worktree
+  dentro. Un worktree hermano fuera del repo no estaria montado y los controles no podrian correr.
+- **Con punto delante, o los controles se lo comen.** `pytest` y `ruff` **no** recursan dentro de un
+  directorio oculto y **si** dentro de uno visible. Probado con un arbol de juguete: de dos copias del
+  mismo test, la de `visible/` se recogio y la de `.hidden/` no. Sin el punto, `make test` desde la raiz
+  mediria tambien las copias de cada worktree.
+- **Ignorado, porque git no lo hace solo.** Un worktree anidado sale como `?? .wt/` en el
+  `git status` del clon principal. La casa de esa regla es `.git/info/exclude`, que es por clon y no se
+  versiona, asi que no obliga a tocar el `.gitignore` de nadie.
+
+**La clasificacion sale del porcelain, nunca de un mensaje de error, porque git traduce.** Con locale
+español el mismo fallo dice `fatal: '.w/uno' ya existe` y con `LC_ALL=C` dice `already exists`. Y los
+cuatro fallos posibles salen todos con el mismo codigo, y dos de ellos con el mismo texto, asi que el
+codigo no clasifica y el texto no es fiable: quien decide es `git worktree list --porcelain`, que es
+legible por maquina, trae la rama con su prefijo `refs/heads/` y lista **tambien el clon principal**, que
+es worktree de si mismo.
+
+**Que el paso falle no crea un callejon: cierra dos que ya existian.** Hoy la primera invocacion exige que
+la rama **no** exista -precheck de rama existente- y la reanudacion exige que **si** exista
+-`MissingBranchError`-, y las dos paredes se arreglan a mano y se repiten en cada invocacion. Con la ruta y
+la rama derivadas las dos de la identidad de la slice, encontrarlas ya hechas es **prueba de que son de
+esta slice**: nadie mas genera ese par. Solo quedan ambiguos el worktree en otra rama y la ruta ocupada por
+otra cosa, y ahi el mensaje de git trae la ruta del conflicto para poder decirla.
+
+**A los prompts no les faltaba informacion.** Medido sobre 735 comandos de shell del implementador en dos
+dias de otra persona, **el 93% no lleva un `cd` previo**: el agente confia en su directorio de trabajo y
+opera en relativo. Decirle que esta en un worktree seria gastar atencion en lo que ya descubre. Lo que
+faltaba no era texto: era que el programa fuese dueño del directorio.
+
 ## Por donde se le entrega una convencion (lo que se midio)
 
 La pregunta era si las convenciones rinden mas como `.md` que el implementador tiene que leer, o
