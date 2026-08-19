@@ -274,6 +274,29 @@ SENAL: prometheus min_over_time(application_stock_actual[10m]) < 0 dispara la al
   `ACEPTACION: el flujo funciona correctamente` no lo es (nada lo puede refutar). Un criterio no
   falsable deja al verificador de slice-runner sin nada contra lo que mapear el test, asi que no cumple
   el contrato.
+- **Y cada criterio se le pide a quien puede cumplirlo.** El implementador no toca `git` -ni commitea,
+  ni stagea, ni cambia de rama, ni redacta mensajes de commit- y no compone el cuerpo de la pull
+  request: lo que devuelve es codigo, tests y su informe. Un criterio que pida algo fuera de eso es
+  **invalido aunque sea falsable**, porque nadie en el pipeline puede cumplirlo, y su unico efecto es
+  gastar una vuelta hasta que alguien lo descubre. `ACEPTACION: la retirada de los tests va en un
+  segundo commit` hay que reescribirla (el reparto en commits lo decide el programa, una vuelta un
+  commit); `ACEPTACION: el cuerpo de la pull request nombra el test que cubre cada uno retirado`
+  tambien (el cuerpo se compone solo, y en las vueltas de correccion ni siquiera se reescribe). Lo
+  que si esta en su mano es **declararlo en su informe**, que es por donde eso llega a la pull
+  request: `ACEPTACION: por cada test retirado, el informe nombra el del caso de uso que lo cubre`
+  cumple la vara.
+- **Una slice que traslada logica declara que se retira de donde estaba.** Cuando el trabajo es mover
+  algo de A a B -un paso que se va a su caso de uso, una regla que baja al dominio-, el criterio sobre
+  tests dice **que sale de A**, no solo que A sigue verde. "Los tests de A siguen verdes sin tocarlos"
+  es la red que prueba que el comportamiento no cambio **mientras** se traslada, y es buena; pero si es
+  lo unico que se pide, dejar en A la cobertura que ahora tambien vive en B es la respuesta correcta
+  segun la vara, y la duplicidad se queda. Se piden las dos cosas: la red durante el traslado y la
+  retirada despues.
+- **Y al retirarla, un test que cubria dos mitades no se retira entero.** Si el test que sobra
+  comprobaba ademas algo que la pieza nueva no puede ver -la transicion que produce, la etiqueta que se
+  escribe, lo que cruza invocaciones-, esa mitad se queda fijada donde estaba. `ACEPTACION: se retira de
+  A lo que solo ejercita <lo trasladado>, y lo que ademas fijaba una transicion se queda` cumple la
+  vara; `ACEPTACION: se retiran los tests duplicados` no, porque no dice quien decide que es duplicado.
 - El cuerpo lleva una linea `SENAL:` con **como se comprueba viva en produccion** (formato:
   `<fuente> <serie/expresion>; <assert vivo con ventana>; critical|advisory`), o
   `SENAL: exenta - <motivo>`. Es obligatoria cuando la slice cambia comportamiento observable en prod.
@@ -543,6 +566,16 @@ trabajo. Ofrece corregirlas. Checklist:
   reescribelo con la persona hasta que sea refutable (o pregunta que se pretendia). Un criterio vago
   pasa el check de existencia pero deja sin dientes el mapeo criterio↔test del verificador de
   slice-runner.
+- **Y cada criterio cae dentro de lo que el implementador puede hacer.** Si pide un commit, un mensaje
+  de commit, una rama o texto del cuerpo de la pull request, **es la desviacion a corregir**: no lo
+  puede cumplir nadie, y se descubre tarde, cuando la vuelta ya esta pagada. Reescribelo apuntando a lo
+  que si esta en su mano -normalmente, que lo declare en su informe-. Esta es la unica desviacion del
+  checklist que **no se ve leyendo el criterio solo**: hay que preguntarse quien lo cumpliria.
+- **Si la slice traslada logica, sus criterios piden la retirada, no solo la red.** Un criterio que
+  solo diga "los tests de donde estaba siguen verdes sin tocarlos" **es la desviacion a corregir**:
+  describe el estado de mitad del trabajo, y cumplirlo al pie de la letra deja la cobertura duplicada
+  para siempre. Anade el criterio que dice que sale de donde estaba, y el que protege las mitades: lo
+  que ademas fijaba una transicion, una etiqueta o algo que cruza invocaciones se queda.
 - **El padre tiene una seccion `## Fuentes de convencion`** con al menos un puntero (`- doc:` /
   `- skill:`). Si falta (p. ej. un issue anterior a este mecanismo), **es la desviacion a corregir**:
   corre el descubrimiento (paso 3), confirmala con la persona y anadela al cuerpo del padre. Este modo
