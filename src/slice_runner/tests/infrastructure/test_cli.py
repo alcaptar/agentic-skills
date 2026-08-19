@@ -394,7 +394,7 @@ class TestTheCommandThatPrintsAConversation:
                 session=ConversationTranscriptMother.SESSION,
             )
         )
-        ConversationTranscriptMother.written_under(ClaudeConfig.root(), repo=self._WORKTREE)
+        ConversationTranscriptMother.written_under(ClaudeConfig.root(), worktree=self._WORKTREE)
 
     def test_the_conversation_of_a_traced_call_is_printed_as_readable_text(
         self, capsys: pytest.CaptureFixture[str]

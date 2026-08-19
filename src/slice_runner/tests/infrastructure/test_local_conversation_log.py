@@ -13,7 +13,7 @@ from slice_runner.tests.mothers.conversation_transcript_mother import Conversati
 if TYPE_CHECKING:
     from pathlib import Path
 
-_REPO = "/Users/someone/repos/the-slice"
+_WORKTREE = "/Users/someone/repos/the-slice"
 _WARNING_EXCERPT = (
     "\x1b[1m\x1b[33mwarning\x1b[39m\x1b[0m\x1b[1m:\x1b[0m \x1b[1m`VIRTUAL_ENV=/Users/acapdev/repos/agentic-skills/"
     ".venv` does not match the project environment path `.venv` and will be ignored; use `--active` to target "
@@ -28,28 +28,28 @@ class WithARecordedConversation:
     @pytest.fixture(autouse=True)
     def transcript(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
-        ConversationTranscriptMother.written_under(tmp_path, repo=_REPO)
+        ConversationTranscriptMother.written_under(tmp_path, worktree=_WORKTREE)
 
 
 class TestTheTurnsOfARecordedConversation(WithARecordedConversation):
     def test_every_assistant_line_is_counted_as_a_turn_even_a_thinking_only_one(self) -> None:
-        conversation = LocalConversationLog().read(session=ConversationTranscriptMother.SESSION, repo=_REPO)
+        conversation = LocalConversationLog().read(session=ConversationTranscriptMother.SESSION, worktree=_WORKTREE)
 
         assert [turn.number for turn in conversation.turns] == [1, 2, 3, 4]
 
     def test_the_text_a_turn_said_is_kept_as_what_it_decided(self) -> None:
-        conversation = LocalConversationLog().read(session=ConversationTranscriptMother.SESSION, repo=_REPO)
+        conversation = LocalConversationLog().read(session=ConversationTranscriptMother.SESSION, worktree=_WORKTREE)
 
         assert conversation.turns[0].text == "Now let's confirm RED before implementing:"
 
     def test_a_turn_with_no_text_because_it_only_carried_a_tool_call_or_thinking_has_none(self) -> None:
-        conversation = LocalConversationLog().read(session=ConversationTranscriptMother.SESSION, repo=_REPO)
+        conversation = LocalConversationLog().read(session=ConversationTranscriptMother.SESSION, worktree=_WORKTREE)
 
         assert conversation.turns[1].text == ""
         assert conversation.turns[2].text == ""
 
     def test_the_tool_a_turn_called_is_kept_with_its_input_as_the_summary(self) -> None:
-        conversation = LocalConversationLog().read(session=ConversationTranscriptMother.SESSION, repo=_REPO)
+        conversation = LocalConversationLog().read(session=ConversationTranscriptMother.SESSION, worktree=_WORKTREE)
 
         called = conversation.turns[1].tool_calls
         assert len(called) == 1
@@ -57,20 +57,20 @@ class TestTheTurnsOfARecordedConversation(WithARecordedConversation):
         assert "uv run pytest src/slice_runner/tests/infrastructure/test_local_process.py" in called[0].summary
 
     def test_the_result_of_the_tool_call_is_kept_as_what_it_read(self) -> None:
-        conversation = LocalConversationLog().read(session=ConversationTranscriptMother.SESSION, repo=_REPO)
+        conversation = LocalConversationLog().read(session=ConversationTranscriptMother.SESSION, worktree=_WORKTREE)
 
         assert conversation.turns[1].tool_calls[0].result == _WARNING_EXCERPT
         assert conversation.turns[3].tool_calls[0].result == "18: process_timeout_seconds: int = 3600"
 
     def test_a_thinking_only_turn_has_no_tool_call(self) -> None:
-        conversation = LocalConversationLog().read(session=ConversationTranscriptMother.SESSION, repo=_REPO)
+        conversation = LocalConversationLog().read(session=ConversationTranscriptMother.SESSION, worktree=_WORKTREE)
 
         assert conversation.turns[2].tool_calls == ()
 
 
 class TestWhetherACallWasRefused(WithARecordedConversation):
     def test_a_call_the_harness_answered_without_an_error_is_not_marked_as_failed(self) -> None:
-        conversation = LocalConversationLog().read(session=ConversationTranscriptMother.SESSION, repo=_REPO)
+        conversation = LocalConversationLog().read(session=ConversationTranscriptMother.SESSION, worktree=_WORKTREE)
 
         assert [call.failed for turn in conversation.turns for call in turn.tool_calls] == [False, False]
 
@@ -79,10 +79,10 @@ class TestWhetherACallWasRefused(WithARecordedConversation):
     ) -> None:
         monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
         ConversationTranscriptMother.written_under(
-            tmp_path, repo=_REPO, recorded=ConversationTranscriptMother.REJECTED_STRUCTURED_OUTPUT
+            tmp_path, worktree=_WORKTREE, recorded=ConversationTranscriptMother.REJECTED_STRUCTURED_OUTPUT
         )
 
-        conversation = LocalConversationLog().read(session=ConversationTranscriptMother.SESSION, repo=_REPO)
+        conversation = LocalConversationLog().read(session=ConversationTranscriptMother.SESSION, worktree=_WORKTREE)
 
         refused = [call for turn in conversation.turns for call in turn.tool_calls if call.failed]
         assert [call.name for call in refused] == ["StructuredOutput"]
@@ -90,7 +90,7 @@ class TestWhetherACallWasRefused(WithARecordedConversation):
 
 class TestTheSpendOfARecordedConversation(WithARecordedConversation):
     def test_the_usage_of_every_distinct_message_is_summed_only_once_even_if_it_is_split_across_lines(self) -> None:
-        conversation = LocalConversationLog().read(session=ConversationTranscriptMother.SESSION, repo=_REPO)
+        conversation = LocalConversationLog().read(session=ConversationTranscriptMother.SESSION, worktree=_WORKTREE)
 
         spend = conversation.spend
         assert (spend.input_tokens, spend.output_tokens) == (4, 450)
@@ -101,7 +101,7 @@ class TestThePathATurnTouched:
     @staticmethod
     def _conversation_with(tool_name: str, tool_input: dict[str, object], *, tmp_path: Path) -> Path:
         session = "path-session"
-        encoded = _REPO.rstrip("/").replace("/", "-")
+        encoded = _WORKTREE.rstrip("/").replace("/", "-")
         destination = tmp_path / "projects" / encoded / f"{session}.jsonl"
         destination.parent.mkdir(parents=True, exist_ok=True)
         line = json.dumps(
@@ -122,7 +122,7 @@ class TestThePathATurnTouched:
         monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
         self._conversation_with("Read", {"file_path": "src/x.py"}, tmp_path=tmp_path)
 
-        conversation = LocalConversationLog().read(session="path-session", repo=_REPO)
+        conversation = LocalConversationLog().read(session="path-session", worktree=_WORKTREE)
 
         assert conversation.turns[0].tool_calls[0].path == "src/x.py"
 
@@ -132,7 +132,7 @@ class TestThePathATurnTouched:
         monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
         self._conversation_with("Glob", {"path": "src", "pattern": "*.py"}, tmp_path=tmp_path)
 
-        conversation = LocalConversationLog().read(session="path-session", repo=_REPO)
+        conversation = LocalConversationLog().read(session="path-session", worktree=_WORKTREE)
 
         assert conversation.turns[0].tool_calls[0].path == "src"
 
@@ -142,7 +142,7 @@ class TestThePathATurnTouched:
         monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
         self._conversation_with("Bash", {"command": "ls"}, tmp_path=tmp_path)
 
-        conversation = LocalConversationLog().read(session="path-session", repo=_REPO)
+        conversation = LocalConversationLog().read(session="path-session", worktree=_WORKTREE)
 
         assert conversation.turns[0].tool_calls[0].path is None
 
@@ -152,9 +152,9 @@ class TestWhereTheConversationLives:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
-        ConversationTranscriptMother.written_under(tmp_path, repo=_REPO)
+        ConversationTranscriptMother.written_under(tmp_path, worktree=_WORKTREE)
 
-        conversation = LocalConversationLog().read(session=ConversationTranscriptMother.SESSION, repo=_REPO)
+        conversation = LocalConversationLog().read(session=ConversationTranscriptMother.SESSION, worktree=_WORKTREE)
 
         assert len(conversation.turns) == 4
 
@@ -164,7 +164,7 @@ class TestWhereTheConversationLives:
         monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
 
         with pytest.raises(ConversationNotFoundError):
-            LocalConversationLog().read(session="never-recorded", repo=_REPO)
+            LocalConversationLog().read(session="never-recorded", worktree=_WORKTREE)
 
 
 class TestAnUnreadableTranscript:
@@ -173,20 +173,20 @@ class TestAnUnreadableTranscript:
     ) -> None:
         monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
         session = "broken-session"
-        encoded = _REPO.rstrip("/").replace("/", "-")
+        encoded = _WORKTREE.rstrip("/").replace("/", "-")
         destination = tmp_path / "projects" / encoded / f"{session}.jsonl"
         destination.parent.mkdir(parents=True, exist_ok=True)
         destination.write_text("not json at all\n", encoding="utf-8")
 
         with pytest.raises(UnreadableConversationError):
-            LocalConversationLog().read(session=session, repo=_REPO)
+            LocalConversationLog().read(session=session, worktree=_WORKTREE)
 
     def test_a_tool_use_block_whose_input_is_not_an_object_is_refused_instead_of_stringified(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
         session = "broken-session"
-        encoded = _REPO.rstrip("/").replace("/", "-")
+        encoded = _WORKTREE.rstrip("/").replace("/", "-")
         destination = tmp_path / "projects" / encoded / f"{session}.jsonl"
         destination.parent.mkdir(parents=True, exist_ok=True)
         line = (
@@ -196,4 +196,4 @@ class TestAnUnreadableTranscript:
         destination.write_text(f"{line}\n", encoding="utf-8")
 
         with pytest.raises(UnreadableConversationError):
-            LocalConversationLog().read(session=session, repo=_REPO)
+            LocalConversationLog().read(session=session, worktree=_WORKTREE)

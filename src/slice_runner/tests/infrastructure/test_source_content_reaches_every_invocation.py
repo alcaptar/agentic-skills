@@ -88,3 +88,26 @@ class TestTheThreeInvocationsAgreeOnTheSameSourcesTextForTheSameSources:
             self._fuentes_section(understanding_text),
         }
         assert len(sections) == 1
+
+
+class TestTheThreeInvocationsAgreeOnTheSameWorkingDirectory:
+    def test_the_three_invocations_agree_that_the_cwd_is_the_worktree_and_not_the_repo_slug(self) -> None:
+        worktree = AssignmentMother.WORKTREE
+        reader = RecordedSourceReader()
+
+        implementer = ImplementerInvocation(assignment=AssignmentMother.of_the_first_round(), reader=reader)
+        judge = JudgeInvocation(
+            judge=JudgeMother.adversarial(),
+            review=replace(SliceUnderReviewMother.of_the_slice(), worktree=worktree),
+            reader=reader,
+        )
+        understanding = UnderstandingInvocation(
+            subissue=SubIssueMother.pending(),
+            parent=ParentIssueMother.with_sources_and_controls(),
+            repo=AssignmentMother.REPO,
+            worktree=worktree,
+            alignment=Alignment(),
+            reader=reader,
+        )
+
+        assert implementer.cwd == judge.cwd == understanding.cwd == worktree

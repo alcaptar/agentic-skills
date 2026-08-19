@@ -44,5 +44,5 @@ class ReadConversation:
         session = sessions[-1]
 
         return ReadConversationResult(
-            session=session, conversation=self._log.read(session=session, repo=params.worktree)
+            session=session, conversation=self._log.read(session=session, worktree=params.worktree)
         )

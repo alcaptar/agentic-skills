@@ -11,8 +11,8 @@ class ConversationTranscriptMother:
     _PAYLOADS: ClassVar[Path] = Path(__file__).resolve().parents[1] / "payloads"
 
     @classmethod
-    def written_under(cls, root: Path, *, repo: str, recorded: str = "conversation-turns") -> None:
-        encoded = repo.rstrip("/").replace("/", "-")
+    def written_under(cls, root: Path, *, worktree: str, recorded: str = "conversation-turns") -> None:
+        encoded = worktree.rstrip("/").replace("/", "-")
         destination = root / "projects" / encoded / f"{cls.SESSION}.jsonl"
         destination.parent.mkdir(parents=True, exist_ok=True)
         destination.write_text((cls._PAYLOADS / f"{recorded}.jsonl").read_text(encoding="utf-8"), encoding="utf-8")

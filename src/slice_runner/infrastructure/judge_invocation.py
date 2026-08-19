@@ -25,6 +25,10 @@ class JudgeInvocation:
     reader: SourceReader
 
     @property
+    def cwd(self) -> str:
+        return self.review.worktree
+
+    @property
     def argv(self) -> list[str]:
         return [
             self.EXECUTABLE,

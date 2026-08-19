@@ -23,10 +23,12 @@ if TYPE_CHECKING:
 class LocalConversationLog(ConversationLog):
     RESULT_EXCERPT_LENGTH: ClassVar[int] = 500
 
-    def read(self, *, session: str, repo: str) -> Conversation:
-        path = self._path(session=session, repo=repo)
+    def read(self, *, session: str, worktree: str) -> Conversation:
+        path = self._path(session=session, worktree=worktree)
         if not path.exists():
-            raise ConversationNotFoundError(f"no conversation was ever recorded for session {session} under {repo}")
+            raise ConversationNotFoundError(
+                f"no conversation was ever recorded for session {session} under worktree {worktree}"
+            )
 
         lines = self._decoded_lines(path)
         results = self._tool_results_of(lines)
@@ -36,8 +38,8 @@ class LocalConversationLog(ConversationLog):
             spend=self._spend_of(lines),
         )
 
-    def _path(self, *, session: str, repo: str) -> Path:
-        encoded = repo.rstrip("/").replace("/", "-")
+    def _path(self, *, session: str, worktree: str) -> Path:
+        encoded = worktree.rstrip("/").replace("/", "-")
 
         return ClaudeConfig.root().joinpath("projects", encoded, f"{session}.jsonl")
 

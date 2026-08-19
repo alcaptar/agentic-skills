@@ -511,7 +511,7 @@ class TestTheSpendLogOfTheCall:
 
 
 class TestTheToolUseRecordingOfTheCall:
-    def test_the_recorder_is_asked_for_the_slice_step_session_and_repo_of_the_call(self) -> None:
+    def test_the_recorder_is_asked_for_the_slice_step_session_and_worktree_of_the_call(self) -> None:
         process = RecordedProcess(HarnessEnvelopeMother.recorded(_RECORDED))
         tool_uses = RecordedToolUseRecorder()
 
@@ -526,7 +526,7 @@ class TestTheToolUseRecordingOfTheCall:
             reader=RecordedSourceReader(),
         ).implement(AssignmentMother.of_the_first_round())
 
-        assert [(call.slice_id, call.step, call.session, call.repo) for call in tool_uses.calls] == [
+        assert [(call.slice_id, call.step, call.session, call.worktree) for call in tool_uses.calls] == [
             (
                 "slice-05",
                 Step.IMPLEMENT,

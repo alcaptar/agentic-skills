@@ -49,7 +49,7 @@ class TestReadingTheConversationOfASlice:
     ) -> None:
         query.execute(_PARAMS)
 
-        log.read.assert_called_once_with(session=_SESSION, repo=_WORKTREE)
+        log.read.assert_called_once_with(session=_SESSION, worktree=_WORKTREE)
 
     def test_the_result_carries_the_session_and_the_conversation_read(self, query: ReadConversation) -> None:
         result = query.execute(_PARAMS)
@@ -64,7 +64,7 @@ class TestReadingTheConversationOfASlice:
 
         query.execute(_PARAMS)
 
-        log.read.assert_called_once_with(session=_RETRIED_SESSION, repo=_WORKTREE)
+        log.read.assert_called_once_with(session=_RETRIED_SESSION, worktree=_WORKTREE)
 
     def test_a_slice_and_step_with_no_call_ever_traced_raises_instead_of_guessing_a_session(
         self, query: ReadConversation, trace: Mock, log: Mock
