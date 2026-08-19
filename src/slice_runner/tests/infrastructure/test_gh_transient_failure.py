@@ -26,3 +26,21 @@ class TestGhTransientFailure:
 
     def test_a_shorthand_rate_limited_fixture_is_not_mistaken_for_the_real_message(self) -> None:
         assert not GhTransientFailure.of("rate limited")
+
+    def test_the_real_outage_json_parsing_failure_is_read_as_transient(self) -> None:
+        assert GhTransientFailure.of("unexpected end of JSON input")
+
+    def test_the_real_outage_no_server_available_message_is_read_as_transient(self) -> None:
+        assert GhTransientFailure.of("No server is currently available to service your request")
+
+    def test_a_502_worded_differently_from_the_known_marker_is_read_as_transient(self) -> None:
+        assert GhTransientFailure.of("HTTP 502: The upstream service could not be reached right now")
+
+    def test_a_504_worded_differently_from_the_known_marker_is_read_as_transient(self) -> None:
+        assert GhTransientFailure.of("HTTP 504: The request took too long to complete upstream")
+
+    def test_a_generic_4xx_is_not_read_as_transient_through_the_status_code_path(self) -> None:
+        assert not GhTransientFailure.of("HTTP 422: Validation Failed")
+
+    def test_an_invalid_argument_error_is_not_read_as_transient(self) -> None:
+        assert not GhTransientFailure.of("unknown flag: --foo")
