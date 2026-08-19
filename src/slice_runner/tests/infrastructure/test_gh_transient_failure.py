@@ -50,3 +50,6 @@ class TestGhTransientFailure:
             "gh pr view 337 --repo alcaptar/agentic-skills --json state,mergeable: error connecting to api.github.com\n"
             "check your internet connection or https://githubstatus.com"
         )
+
+    def test_a_connection_failure_against_any_github_host_is_read_as_transient(self) -> None:
+        assert GhTransientFailure.of("gh: error connecting to uploads.github.com")
