@@ -14,6 +14,13 @@ _JUDGE = JudgeMother.reading_the_repo_and_its_yardstick()
 _READER = RecordedSourceReader()
 
 
+class TestWhereTheProcessRuns:
+    def test_the_cwd_the_process_needs_is_the_worktree_of_the_slice_under_review(self) -> None:
+        review = SliceUnderReviewMother.of_the_slice()
+
+        assert JudgeInvocation(judge=_JUDGE, review=review, reader=_READER).cwd == review.worktree
+
+
 class TestWhatTheJudgeIsGranted:
     @pytest.fixture
     def argv(self) -> Argv:

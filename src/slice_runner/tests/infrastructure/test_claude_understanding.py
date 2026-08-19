@@ -176,17 +176,17 @@ class TestTheSpendLogOfTheCall:
 
 
 class TestTheToolUseRecordingOfTheCall:
-    def test_the_recorder_is_asked_for_the_slice_step_session_and_repo_of_the_call(self) -> None:
+    def test_the_recorder_is_asked_for_the_slice_step_session_and_worktree_of_the_call(self) -> None:
         tool_uses = RecordedToolUseRecorder()
 
         Writing.understood(Writing.carrying(UnderstandingReportMother.valid()), tool_uses=tool_uses)
 
-        assert [(call.slice_id, call.step, call.session, call.repo) for call in tool_uses.calls] == [
+        assert [(call.slice_id, call.step, call.session, call.worktree) for call in tool_uses.calls] == [
             (
                 SubIssueMother.pending().slice_id.canonical,
                 Step.UNDERSTAND,
                 HarnessEnvelopeMother.SESSION_OF_THE_IMPLEMENTER,
-                UnderstandingInvocationMother.REPO,
+                UnderstandingInvocationMother.WORKTREE,
             )
         ]
 

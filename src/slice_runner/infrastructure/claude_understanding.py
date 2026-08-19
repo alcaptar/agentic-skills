@@ -58,7 +58,7 @@ class ClaudeUnderstanding(UnderstandingWriter):
             HarnessCallSpend(repo=repo, issue=subissue.number, session=envelope.session_id, spend=spend)
         )
         self._telemetry.tool_uses.record_after(
-            slice_id=subissue.slice_id.canonical, step=Step.UNDERSTAND, session=envelope.session_id, repo=repo
+            slice_id=subissue.slice_id.canonical, step=Step.UNDERSTAND, session=envelope.session_id, worktree=worktree
         )
         with envelope.measuring():
             text = self._usable_text(envelope)

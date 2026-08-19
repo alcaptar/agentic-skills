@@ -1,21 +1,40 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from typing import TYPE_CHECKING
 
 import pytest
 
+from slice_runner.domain.alignment import Alignment
 from slice_runner.domain.step import Step
 from slice_runner.infrastructure.claude_config import ClaudeConfig
+from slice_runner.infrastructure.claude_implementer import ClaudeImplementer
+from slice_runner.infrastructure.claude_understanding import ClaudeUnderstanding
+from slice_runner.infrastructure.claude_verifier import ClaudeVerifier
 from slice_runner.infrastructure.conversation_tool_use_recorder import ConversationToolUseRecorder
+from slice_runner.infrastructure.harness_telemetry import HarnessTelemetry
 from slice_runner.infrastructure.local_conversation_log import LocalConversationLog
 from slice_runner.infrastructure.local_tool_use_log import LocalToolUseLog
+from slice_runner.tests.doubles import (
+    RecordedProcess,
+    RecordedSourceReader,
+    RecordedSpendLog,
+    RecordedTrace,
+    RecordedTurnLog,
+)
+from slice_runner.tests.mothers.assignment_mother import AssignmentMother
 from slice_runner.tests.mothers.conversation_transcript_mother import ConversationTranscriptMother
+from slice_runner.tests.mothers.judge_output_mother import HarnessEnvelopeMother, JudgeVerdictMother
+from slice_runner.tests.mothers.parent_issue_mother import ParentIssueMother
+from slice_runner.tests.mothers.sub_issue_mother import SubIssueMother
+from slice_runner.tests.mothers.understanding_report_mother import UnderstandingReportMother
+from slice_runner.tests.mothers.verification_mother import JudgeMother, SliceUnderReviewMother
 
 if TYPE_CHECKING:
     from pathlib import Path
 
-_REPO = "/Users/someone/repos/the-slice"
+_WORKTREE = "/Users/someone/repos/the-slice"
 _SLICE_ID = "slice-05"
 
 
@@ -41,11 +60,11 @@ class TestARecordedConversation(WithTheToolUseLogOutOfTheRealHome):
     def test_every_tool_use_of_the_conversation_lands_in_the_log_labelled_with_the_slice_step_and_session(
         self, tmp_path: Path
     ) -> None:
-        ConversationTranscriptMother.written_under(tmp_path, repo=_REPO)
+        ConversationTranscriptMother.written_under(tmp_path, worktree=_WORKTREE)
         recorder = ConversationToolUseRecorder(conversations=LocalConversationLog(), tool_use_log=LocalToolUseLog())
 
         recorder.record_after(
-            slice_id=_SLICE_ID, step=Step.IMPLEMENT, session=ConversationTranscriptMother.SESSION, repo=_REPO
+            slice_id=_SLICE_ID, step=Step.IMPLEMENT, session=ConversationTranscriptMother.SESSION, worktree=_WORKTREE
         )
 
         assert WrittenToolUses.records_under(tmp_path) == [
@@ -64,12 +83,12 @@ class TestARecordedConversation(WithTheToolUseLogOutOfTheRealHome):
         self, tmp_path: Path
     ) -> None:
         ConversationTranscriptMother.written_under(
-            tmp_path, repo=_REPO, recorded=ConversationTranscriptMother.REJECTED_STRUCTURED_OUTPUT
+            tmp_path, worktree=_WORKTREE, recorded=ConversationTranscriptMother.REJECTED_STRUCTURED_OUTPUT
         )
         recorder = ConversationToolUseRecorder(conversations=LocalConversationLog(), tool_use_log=LocalToolUseLog())
 
         recorder.record_after(
-            slice_id=_SLICE_ID, step=Step.UNDERSTAND, session=ConversationTranscriptMother.SESSION, repo=_REPO
+            slice_id=_SLICE_ID, step=Step.UNDERSTAND, session=ConversationTranscriptMother.SESSION, worktree=_WORKTREE
         )
 
         assert WrittenToolUses.records_under(tmp_path)[0]["uses"] == [
@@ -93,14 +112,14 @@ class TestATranscriptThatCannotBeRead(WithTheToolUseLogOutOfTheRealHome):
     def test_a_session_never_recorded_leaves_the_run_going_instead_of_raising(self, tmp_path: Path) -> None:
         recorder = ConversationToolUseRecorder(conversations=LocalConversationLog(), tool_use_log=LocalToolUseLog())
 
-        recorder.record_after(slice_id=_SLICE_ID, step=Step.IMPLEMENT, session="never-recorded", repo=_REPO)
+        recorder.record_after(slice_id=_SLICE_ID, step=Step.IMPLEMENT, session="never-recorded", worktree=_WORKTREE)
 
         assert WrittenToolUses.records_under(tmp_path) == []
 
     def test_a_session_never_recorded_is_not_abandoned_in_silence_but_says_so(self, tmp_path: Path) -> None:
         recorder = ConversationToolUseRecorder(conversations=LocalConversationLog(), tool_use_log=LocalToolUseLog())
 
-        recorder.record_after(slice_id=_SLICE_ID, step=Step.IMPLEMENT, session="never-recorded", repo=_REPO)
+        recorder.record_after(slice_id=_SLICE_ID, step=Step.IMPLEMENT, session="never-recorded", worktree=_WORKTREE)
 
         assert WrittenUnrecordedToolUses.records_under(tmp_path) == [
             {
@@ -113,13 +132,13 @@ class TestATranscriptThatCannotBeRead(WithTheToolUseLogOutOfTheRealHome):
 
     def test_a_corrupted_transcript_leaves_the_run_going_instead_of_raising(self, tmp_path: Path) -> None:
         session = "broken-session"
-        encoded = _REPO.rstrip("/").replace("/", "-")
+        encoded = _WORKTREE.rstrip("/").replace("/", "-")
         destination = tmp_path / "projects" / encoded / f"{session}.jsonl"
         destination.parent.mkdir(parents=True, exist_ok=True)
         destination.write_text("not json at all\n", encoding="utf-8")
         recorder = ConversationToolUseRecorder(conversations=LocalConversationLog(), tool_use_log=LocalToolUseLog())
 
-        recorder.record_after(slice_id=_SLICE_ID, step=Step.IMPLEMENT, session=session, repo=_REPO)
+        recorder.record_after(slice_id=_SLICE_ID, step=Step.IMPLEMENT, session=session, worktree=_WORKTREE)
 
         assert WrittenToolUses.records_under(tmp_path) == []
 
@@ -127,13 +146,13 @@ class TestATranscriptThatCannotBeRead(WithTheToolUseLogOutOfTheRealHome):
         self, tmp_path: Path
     ) -> None:
         session = "broken-session"
-        encoded = _REPO.rstrip("/").replace("/", "-")
+        encoded = _WORKTREE.rstrip("/").replace("/", "-")
         destination = tmp_path / "projects" / encoded / f"{session}.jsonl"
         destination.parent.mkdir(parents=True, exist_ok=True)
         destination.write_text("not json at all\n", encoding="utf-8")
         recorder = ConversationToolUseRecorder(conversations=LocalConversationLog(), tool_use_log=LocalToolUseLog())
 
-        recorder.record_after(slice_id=_SLICE_ID, step=Step.IMPLEMENT, session=session, repo=_REPO)
+        recorder.record_after(slice_id=_SLICE_ID, step=Step.IMPLEMENT, session=session, worktree=_WORKTREE)
 
         assert WrittenUnrecordedToolUses.records_under(tmp_path) == [
             {
@@ -143,3 +162,61 @@ class TestATranscriptThatCannotBeRead(WithTheToolUseLogOutOfTheRealHome):
                 "cause": "unreadable",
             }
         ]
+
+
+class TestARunThatCallsAllThreeStepsOfTheHarness(WithTheToolUseLogOutOfTheRealHome):
+    _WORKTREE = AssignmentMother.WORKTREE
+    _SESSION = ConversationTranscriptMother.SESSION
+
+    @classmethod
+    def _envelope(cls, structured_output: dict[str, object]) -> dict[str, object]:
+        return HarnessEnvelopeMother.carrying(structured_output, recorded="implementer-two-paths") | {
+            "session_id": cls._SESSION
+        }
+
+    @classmethod
+    def _run_all_three(cls, tmp_path: Path) -> None:
+        ConversationTranscriptMother.written_under(tmp_path, worktree=cls._WORKTREE)
+        tool_uses = ConversationToolUseRecorder(conversations=LocalConversationLog(), tool_use_log=LocalToolUseLog())
+        telemetry = HarnessTelemetry(
+            trace=RecordedTrace(), turns=RecordedTurnLog(), spend_log=RecordedSpendLog(), tool_uses=tool_uses
+        )
+        reader = RecordedSourceReader()
+
+        ClaudeUnderstanding(
+            process=RecordedProcess(cls._envelope(UnderstandingReportMother.valid())),
+            telemetry=telemetry,
+            reader=reader,
+        ).write(
+            subissue=SubIssueMother.pending(),
+            parent=ParentIssueMother.with_sources_and_controls(),
+            repo=AssignmentMother.REPO,
+            worktree=cls._WORKTREE,
+            alignment=Alignment(),
+        )
+        ClaudeImplementer(
+            process=RecordedProcess(
+                HarnessEnvelopeMother.recorded("implementer-two-paths") | {"session_id": cls._SESSION}
+            ),
+            telemetry=telemetry,
+            reader=reader,
+        ).implement(AssignmentMother.of_the_first_round())
+        ClaudeVerifier(
+            process=RecordedProcess(cls._envelope(JudgeVerdictMother.passing())),
+            telemetry=telemetry,
+            reader=reader,
+        ).verify(JudgeMother.adversarial(), replace(SliceUnderReviewMother.of_the_slice(), worktree=cls._WORKTREE))
+
+    def test_the_three_calls_each_leave_their_own_row_in_the_tool_use_ledger(self, tmp_path: Path) -> None:
+        self._run_all_three(tmp_path)
+
+        assert [(row["step"], row["session"]) for row in WrittenToolUses.records_under(tmp_path)] == [
+            ("understand", self._SESSION),
+            ("implement", self._SESSION),
+            ("verify", self._SESSION),
+        ]
+
+    def test_none_of_the_three_calls_falls_back_to_the_unrecorded_ledger(self, tmp_path: Path) -> None:
+        self._run_all_three(tmp_path)
+
+        assert WrittenUnrecordedToolUses.records_under(tmp_path) == []

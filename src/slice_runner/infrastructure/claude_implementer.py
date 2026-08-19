@@ -45,7 +45,10 @@ class ClaudeImplementer(Implementer):
             HarnessCallSpend(repo=assignment.repo, issue=assignment.issue, session=envelope.session_id, spend=spend)
         )
         self._telemetry.tool_uses.record_after(
-            slice_id=assignment.slice_id, step=Step.IMPLEMENT, session=envelope.session_id, repo=assignment.worktree
+            slice_id=assignment.slice_id,
+            step=Step.IMPLEMENT,
+            session=envelope.session_id,
+            worktree=assignment.worktree,
         )
         with envelope.measuring():
             self._reject_denials(envelope)

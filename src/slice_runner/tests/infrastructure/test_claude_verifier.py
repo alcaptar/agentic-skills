@@ -63,6 +63,25 @@ class TestTheVerdictOfARecordedCall:
         assert (first.rule, first.path, first.line) == ("convenciones", "mod.py", 11)
 
 
+class TestWhereTheProcessRuns:
+    def test_the_worktree_becomes_the_working_directory_of_the_process_and_not_the_conductors(self) -> None:
+        review = SliceUnderReviewMother.of_the_slice()
+        process = RecordedProcess(HarnessEnvelopeMother.recorded())
+
+        ClaudeVerifier(
+            process=process,
+            telemetry=HarnessTelemetry(
+                trace=RecordedTrace(),
+                turns=RecordedTurnLog(),
+                spend_log=RecordedSpendLog(),
+                tool_uses=RecordedToolUseRecorder(),
+            ),
+            reader=_READER,
+        ).verify(_JUDGE, review)
+
+        assert process.cwd == review.worktree
+
+
 class TestHowTheJudgeIsCalled:
     def test_the_prompt_travels_on_standard_input_and_not_in_the_argv(self) -> None:
         review = SliceUnderReviewMother.of_the_slice()
@@ -221,7 +240,7 @@ class TestTheSpendLogOfTheCall:
 
 
 class TestTheToolUseRecordingOfTheCall:
-    def test_the_recorder_is_asked_for_the_slice_step_session_and_repo_of_the_call(self) -> None:
+    def test_the_recorder_is_asked_for_the_slice_step_session_and_worktree_of_the_call(self) -> None:
         process = RecordedProcess(HarnessEnvelopeMother.recorded())
         tool_uses = RecordedToolUseRecorder()
 
@@ -236,7 +255,7 @@ class TestTheToolUseRecordingOfTheCall:
             reader=_READER,
         ).verify(_JUDGE, SliceUnderReviewMother.of_the_slice())
 
-        assert [(call.slice_id, call.step, call.session, call.repo) for call in tool_uses.calls] == [
+        assert [(call.slice_id, call.step, call.session, call.worktree) for call in tool_uses.calls] == [
             (
                 SliceUnderReviewMother.SLICE_ID,
                 Step.VERIFY,

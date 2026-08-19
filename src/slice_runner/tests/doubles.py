@@ -265,15 +265,15 @@ class RecordedToolUseCall:
     slice_id: str
     step: Step
     session: str
-    repo: str
+    worktree: str
 
 
 class RecordedToolUseRecorder(ToolUseRecorder):
     def __init__(self) -> None:
         self.calls: list[RecordedToolUseCall] = []
 
-    def record_after(self, *, slice_id: str, step: Step, session: str, repo: str) -> None:
-        self.calls.append(RecordedToolUseCall(slice_id=slice_id, step=step, session=session, repo=repo))
+    def record_after(self, *, slice_id: str, step: Step, session: str, worktree: str) -> None:
+        self.calls.append(RecordedToolUseCall(slice_id=slice_id, step=step, session=session, worktree=worktree))
 
 
 class RecordingClock(Clock):

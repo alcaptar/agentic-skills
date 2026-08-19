@@ -18,9 +18,9 @@ class ConversationToolUseRecorder(ToolUseRecorder):
         self._conversations = conversations
         self._tool_use_log = tool_use_log
 
-    def record_after(self, *, slice_id: str, step: Step, session: str, repo: str) -> None:
+    def record_after(self, *, slice_id: str, step: Step, session: str, worktree: str) -> None:
         try:
-            conversation = self._conversations.read(session=session, repo=repo)
+            conversation = self._conversations.read(session=session, worktree=worktree)
         except (ConversationNotFoundError, UnreadableConversationError) as unreadable:
             self._tool_use_log.record_unrecorded(
                 UnrecordedCallToolUse(
