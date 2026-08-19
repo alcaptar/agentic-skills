@@ -253,9 +253,19 @@ class ConductSlice:
         if self._branch_still_standing(progress):
             return self._conducting(progress)
         if progress.run.step is Step.UNDERSTAND:
-            return self._aligning(progress)
+            if progress.run.understanding_pending:
+                return self._aligning(progress)
+
+            return self._recreating_the_branch(progress)
 
         self._missing_branch(progress)
+
+    def _recreating_the_branch(self, progress: ConductSliceProgress) -> ConductSliceResult:
+        self._branches.create(
+            worktree=progress.params.worktree, name=progress.subissue.branch, base=progress.params.base
+        )
+
+        return self._conducting(progress)
 
     def _reopened(
         self, params: ConductSliceParams, chosen: SelectSliceResult, *, retry: RetryResponse
