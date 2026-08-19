@@ -801,12 +801,26 @@ class TestConductSliceResumingAnInterruptedRun:
         assert conductor.verify.execute.call_count == 0
         assert conductor.repository.write_run.call_count == 0
 
-    def test_a_run_persisted_at_understand_whose_pause_never_landed_cuts_the_branch_instead_of_raising(self) -> None:
+    def test_a_run_whose_understanding_was_already_published_recreates_the_branch_without_asking_the_harness_again(
+        self,
+    ) -> None:
         conductor = Conductor(
             chosen=SelectSliceResultMother.resumed_at(
                 RunMother.understanding_after_a_discard(HarnessSpendMother.of_the_understanding_call())
             )
         )
+        conductor.branches.exists.return_value = False
+        conductor.repository.read_alignment_response.return_value = AlignmentResponse(kind=AlignmentResponseKind.GO)
+
+        conductor.conduct()
+
+        assert conductor.prechecks.execute.call_count == 0
+        assert conductor.branches.create.call_count == 1
+        assert conductor.understanding.write.call_count == 0
+        assert conductor.implement.execute.call_count == 1
+
+    def test_a_run_whose_understanding_is_still_pending_publishes_it_even_with_the_branch_missing(self) -> None:
+        conductor = Conductor(chosen=SelectSliceResultMother.resumed_at(RunMother.about_to_publish_the_understanding()))
         conductor.branches.exists.return_value = False
         conductor.repository.read_alignment_response.return_value = AlignmentResponse(kind=AlignmentResponseKind.GO)
 
