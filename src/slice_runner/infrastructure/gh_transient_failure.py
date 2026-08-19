@@ -25,6 +25,7 @@ class GhTransientFailure:
             "service unavailable",
             "gateway timeout",
             "no server is currently available to service your request",
+            "error connecting to api.github.com",
         }
     )
 

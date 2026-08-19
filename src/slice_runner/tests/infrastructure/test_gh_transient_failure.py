@@ -44,3 +44,9 @@ class TestGhTransientFailure:
 
     def test_an_invalid_argument_error_is_not_read_as_transient(self) -> None:
         assert not GhTransientFailure.of("unknown flag: --foo")
+
+    def test_a_connection_failure_without_a_status_code_is_read_as_transient(self) -> None:
+        assert GhTransientFailure.of(
+            "gh pr view 337 --repo alcaptar/agentic-skills --json state,mergeable: error connecting to api.github.com\n"
+            "check your internet connection or https://githubstatus.com"
+        )
