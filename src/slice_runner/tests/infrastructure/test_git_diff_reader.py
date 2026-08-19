@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 from slice_runner.domain.exceptions import EmptyIndexError, UnresolvableRepoOrBaseError
+from slice_runner.infrastructure.git_branches import GitCommandFailedError
 from slice_runner.infrastructure.git_diff_reader import GitDiffReader
 from slice_runner.tests.git_repo import Git
 from slice_runner.tests.mothers.repo_mother import RepoMother
@@ -19,7 +20,7 @@ class TestWhatItReads:
     def test_the_diff_comes_back_as_text_so_nobody_downstream_has_to_open_a_file(self, tmp_path: Path) -> None:
         repo = RepoMother.with_the_slice_staged(tmp_path)
 
-        read = self._reader().read(repo=str(repo), base=Git.BASE_BRANCH)
+        read = self._reader().read(worktree=str(repo), base=Git.BASE_BRANCH)
 
         assert "-    return 1" in read.text
         assert "+    return 2" in read.text
@@ -28,7 +29,7 @@ class TestWhatItReads:
         repo = RepoMother.with_the_slice_staged(tmp_path)
         staged_before = Git.run(repo, "status", "--porcelain")
 
-        self._reader().read(repo=str(repo), base=Git.BASE_BRANCH)
+        self._reader().read(worktree=str(repo), base=Git.BASE_BRANCH)
 
         assert [entry.name for entry in tmp_path.iterdir()] == [repo.name]
         assert Git.run(repo, "status", "--porcelain") == staged_before
@@ -36,14 +37,14 @@ class TestWhatItReads:
     def test_the_scope_is_every_staged_file_and_not_a_path_to_a_listing(self, tmp_path: Path) -> None:
         repo = RepoMother.with_the_slice_staged(tmp_path)
 
-        read = self._reader().read(repo=str(repo), base=Git.BASE_BRANCH)
+        read = self._reader().read(worktree=str(repo), base=Git.BASE_BRANCH)
 
         assert read.files == ("mod.py",)
 
     def test_the_stats_count_the_one_file_touched_and_its_added_and_deleted_lines(self, tmp_path: Path) -> None:
         repo = RepoMother.with_the_slice_staged(tmp_path)
 
-        read = self._reader().read(repo=str(repo), base=Git.BASE_BRANCH)
+        read = self._reader().read(worktree=str(repo), base=Git.BASE_BRANCH)
 
         assert (read.stats.files_changed, read.stats.lines_added, read.stats.lines_deleted) == (1, 1, 1)
 
@@ -52,7 +53,7 @@ class TestWhatItReads:
         (repo / "other.py").write_text("def g() -> int:\n    return 3\n", encoding="utf-8")
         Git.run(repo, "add", "other.py")
 
-        read = self._reader().read(repo=str(repo), base=Git.BASE_BRANCH)
+        read = self._reader().read(worktree=str(repo), base=Git.BASE_BRANCH)
 
         assert (read.stats.files_changed, read.stats.lines_added, read.stats.lines_deleted) == (2, 3, 1)
 
@@ -63,7 +64,7 @@ class TestWhatItReads:
         (repo / "asset.png").write_bytes(b"\x89PNG\r\n\x1a\n\x00")
         Git.run(repo, "add", "asset.png")
 
-        read = self._reader().read(repo=str(repo), base=Git.BASE_BRANCH)
+        read = self._reader().read(worktree=str(repo), base=Git.BASE_BRANCH)
 
         assert (read.stats.files_changed, read.stats.lines_added, read.stats.lines_deleted) == (2, 1, 1)
 
@@ -103,7 +104,7 @@ class TestDiffingAgainstTheBranchesActualOrigin:
     ) -> None:
         repo = self._repo_branched_from_a_freshly_fetched_origin(tmp_path)
 
-        read = GitDiffReader(process=Real.process()).read(repo=str(repo), base=f"origin/{Git.BASE_BRANCH}")
+        read = GitDiffReader(process=Real.process()).read(worktree=str(repo), base=f"origin/{Git.BASE_BRANCH}")
 
         assert read.files == ("mod.py",)
 
@@ -112,7 +113,7 @@ class TestDiffingAgainstTheBranchesActualOrigin:
     ) -> None:
         repo = self._repo_branched_from_a_freshly_fetched_origin(tmp_path)
 
-        read = GitDiffReader(process=Real.process()).read(repo=str(repo), base=Git.BASE_BRANCH)
+        read = GitDiffReader(process=Real.process()).read(worktree=str(repo), base=Git.BASE_BRANCH)
 
         assert "upstream.py" in read.files
 
@@ -125,7 +126,7 @@ class TestWhatItRefusesToRead:
         repo = RepoMother.with_the_slice_staged(tmp_path)
         (repo / "mod.py").write_text("def f() -> int:\n    return 999\n", encoding="utf-8")
 
-        read = GitDiffReader(process=Real.process()).read(repo=str(repo), base=Git.BASE_BRANCH)
+        read = GitDiffReader(process=Real.process()).read(worktree=str(repo), base=Git.BASE_BRANCH)
 
         assert "999" not in read.text
         assert "+    return 2" in read.text
@@ -134,16 +135,87 @@ class TestWhatItRefusesToRead:
         repo = RepoMother.with_nothing_staged(tmp_path)
 
         with pytest.raises(EmptyIndexError, match="nothing staged"):
-            GitDiffReader(process=Real.process()).read(repo=str(repo), base=Git.BASE_BRANCH)
+            GitDiffReader(process=Real.process()).read(worktree=str(repo), base=Git.BASE_BRANCH)
 
     def test_a_base_that_does_not_resolve_is_told_apart_from_an_empty_index(self, tmp_path: Path) -> None:
         repo = RepoMother.with_the_slice_staged(tmp_path)
 
         with pytest.raises(UnresolvableRepoOrBaseError, match="not-a-base"):
-            GitDiffReader(process=Real.process()).read(repo=str(repo), base="not-a-base")
+            GitDiffReader(process=Real.process()).read(worktree=str(repo), base="not-a-base")
 
     def test_a_directory_that_is_not_a_repo_is_told_apart_too(self, tmp_path: Path) -> None:
         outside = RepoMother.outside_git(tmp_path)
 
         with pytest.raises(UnresolvableRepoOrBaseError):
-            GitDiffReader(process=Real.process()).read(repo=str(outside), base=Git.BASE_BRANCH)
+            GitDiffReader(process=Real.process()).read(worktree=str(outside), base=Git.BASE_BRANCH)
+
+
+@pytest.mark.integration
+class TestWhatDirtyReports:
+    def test_a_tracked_file_edited_without_staging_is_named(self, tmp_path: Path) -> None:
+        repo = RepoMother.with_the_slice_committed(tmp_path)
+        (repo / "mod.py").write_text("def f() -> int:\n    return 999\n", encoding="utf-8")
+
+        dirty = GitDiffReader(process=Real.process()).dirty(worktree=str(repo))
+
+        assert "mod.py" in dirty
+
+    def test_a_tracked_file_deleted_without_staging_is_named(self, tmp_path: Path) -> None:
+        repo = RepoMother.with_the_slice_committed(tmp_path)
+        (repo / "mod.py").unlink()
+
+        dirty = GitDiffReader(process=Real.process()).dirty(worktree=str(repo))
+
+        assert "mod.py" in dirty
+
+    def test_a_clean_worktree_reports_no_file_at_all(self, tmp_path: Path) -> None:
+        repo = RepoMother.with_the_slice_committed(tmp_path)
+
+        dirty = GitDiffReader(process=Real.process()).dirty(worktree=str(repo))
+
+        assert dirty == ()
+
+    def test_a_change_staged_and_not_touched_again_is_not_named_because_it_was_already_declared(
+        self, tmp_path: Path
+    ) -> None:
+        repo = RepoMother.with_the_slice_committed(tmp_path)
+        (repo / "mod.py").write_text("def f() -> int:\n    return 3\n", encoding="utf-8")
+        Git.run(repo, "add", "mod.py")
+
+        dirty = GitDiffReader(process=Real.process()).dirty(worktree=str(repo))
+
+        assert dirty == ()
+
+    def test_a_change_staged_and_then_touched_again_is_still_named_for_the_part_left_undeclared(
+        self, tmp_path: Path
+    ) -> None:
+        repo = RepoMother.with_the_slice_committed(tmp_path)
+        (repo / "mod.py").write_text("def f() -> int:\n    return 3\n", encoding="utf-8")
+        Git.run(repo, "add", "mod.py")
+        (repo / "mod.py").write_text("def f() -> int:\n    return 4\n", encoding="utf-8")
+
+        dirty = GitDiffReader(process=Real.process()).dirty(worktree=str(repo))
+
+        assert "mod.py" in dirty
+
+    def test_an_untracked_file_inside_a_new_directory_is_named_by_itself_not_collapsed_to_its_directory(
+        self, tmp_path: Path
+    ) -> None:
+        repo = RepoMother.with_the_slice_committed(tmp_path)
+        (repo / "new_module").mkdir()
+        (repo / "new_module" / "leftover.py").write_text("def f() -> int:\n    return 1\n", encoding="utf-8")
+
+        dirty = GitDiffReader(process=Real.process()).dirty(worktree=str(repo))
+
+        assert "new_module/leftover.py" in dirty
+
+
+@pytest.mark.integration
+class TestWhatDirtyRefusesToRead:
+    def test_a_directory_that_is_not_a_repo_raises_the_exception_the_repos_git_commands_share(
+        self, tmp_path: Path
+    ) -> None:
+        outside = RepoMother.outside_git(tmp_path)
+
+        with pytest.raises(GitCommandFailedError):
+            GitDiffReader(process=Real.process()).dirty(worktree=str(outside))

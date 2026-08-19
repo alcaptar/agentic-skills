@@ -572,7 +572,8 @@ class Cli:
                             tool_uses=self._tool_uses(),
                         ),
                         reader=reader,
-                    )
+                    ),
+                    reader=GitDiffReader(process=self._process),
                 ),
                 stage=StageSlice(workspace=workspace),
                 run_controls=RunControls(controls=LocalControlRunner(process=self._process)),

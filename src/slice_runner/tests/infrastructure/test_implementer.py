@@ -232,6 +232,16 @@ class TestTheSliceDataThatTravelsWithTheBrief:
             AssignmentMother.of_a_repo_exempt_from_controls()
         )
 
+    def test_a_round_after_a_dead_call_says_so_and_names_every_file_the_worktree_brought_dirty(self) -> None:
+        sent = self._sent(AssignmentMother.of_a_round_after_a_dead_call())
+
+        assert "la vuelta anterior murio sin informe legible" in sent
+        assert "src/leftover.py" in sent
+        assert "src/removed.py" in sent
+
+    def test_a_first_round_carries_no_mention_of_a_dead_call_because_there_was_no_previous_call(self) -> None:
+        assert "murio sin informe legible" not in self._sent(AssignmentMother.of_the_first_round())
+
 
 class TestTheAgreedUnderstandingThatTravelsWithTheBrief:
     @staticmethod

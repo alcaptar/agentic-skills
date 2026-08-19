@@ -440,6 +440,7 @@ class ConductSlice:
                     understanding=progress.understanding,
                     retry_instruction=progress.retry_instruction,
                     requested_changes=progress.run.requested_changes,
+                    previous_call_died=progress.run.previous_call_died,
                 )
             )
         except MeasuredCallError as rejection:

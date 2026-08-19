@@ -15,6 +15,7 @@ class Run:
     step: Step
     corrected: str = ""
     understanding_pending: bool = False
+    previous_call_died: bool = False
     control_retries: int = 0
     hygiene_retries: int = 0
     verify_retries: int = 0

@@ -61,7 +61,8 @@ _SUB1_BODY = (
     "SENAL: exenta - spike de medicion\n"
     "\n"
     "<!-- slice-runner:estado\n"
-    '{"step": "await-ci", "corrected": "", "understanding_pending": false, "control_retries": 1, '
+    '{"step": "await-ci", "corrected": "", "understanding_pending": false, '
+    '"previous_call_died": false, "control_retries": 1, '
     '"hygiene_retries": 0, "verify_retries": 0, '
     '"correction_retries": 0, "ci_retries": 0, "indeterminate_ticks": 2, "verify_discards": 0, '
     '"understand_discards": 0, "implement_discards": 0, "control_rounds_logged": 0, '
@@ -369,6 +370,25 @@ class TestReadingTheChildren:
             ),
         )
 
+    def test_a_state_block_with_previous_call_died_reads_it_back_so_the_next_round_knows_the_call_died(self) -> None:
+        with_a_dead_call = [
+            {
+                "number": 1,
+                "title": "slice-01 (x): y",
+                "body": (
+                    'INTENCION: z\n\n<!-- slice-runner:estado\n{"step": "implement", "previous_call_died": true}\n-->\n'
+                ),
+                "labels": [],
+                "state": "OPEN",
+            }
+        ]
+
+        children = GhRunRepository(call=GhCallDoubles.wired(self._process(children=with_a_dead_call))).read_children(
+            repo=_REPO, parent=43, expected=1
+        )
+
+        assert children[0].run == RunMother.implementing_after_a_dead_call()
+
     def test_the_macro_state_label_present_on_the_issue_is_read_as_the_issue_label(self) -> None:
         children = GhRunRepository(call=GhCallDoubles.wired(self._process())).read_children(
             repo=_REPO, parent=43, expected=2
@@ -497,12 +517,24 @@ class TestWritingTheExecutionStateBlock:
             "\n"
             "<!-- slice-runner:estado\n"
             '{"step": "implement", "corrected": "", "understanding_pending": false, '
+            '"previous_call_died": false, '
             '"control_retries": 0, "hygiene_retries": 0, "verify_retries": 0, '
             '"correction_retries": 0, "ci_retries": 0, "indeterminate_ticks": 0, "verify_discards": 0, '
             '"understand_discards": 0, "implement_discards": 0, "control_rounds_logged": 0, '
             '"last_reviewed_id": 0, "requested_changes": []}\n'
             "-->\n"
         )
+
+    def test_a_run_carrying_a_dead_previous_call_writes_it_as_true_so_the_next_round_reads_it_back(self) -> None:
+        process = self._process(body=_SUB2_BODY)
+
+        GhRunRepository(call=GhCallDoubles.wired(process)).write_run(
+            repo=_OTHER_REPO, issue=44, run=RunMother.implementing_after_a_dead_call()
+        )
+
+        block = re.search(r"<!-- slice-runner:estado\n(.*?)\n-->", process.calls[1].stdin, re.DOTALL)
+        assert block is not None
+        assert json.loads(block.group(1))["previous_call_died"] is True
 
     def test_a_body_that_already_has_a_block_gets_only_the_block_replaced(self) -> None:
         process = self._process(body=_SUB1_BODY)
@@ -519,6 +551,7 @@ class TestWritingTheExecutionStateBlock:
             "\n"
             "<!-- slice-runner:estado\n"
             '{"step": "await-merge", "corrected": "", "understanding_pending": false, '
+            '"previous_call_died": false, '
             '"control_retries": 0, "hygiene_retries": 0, "verify_retries": 0, '
             '"correction_retries": 0, "ci_retries": 0, "indeterminate_ticks": 0, "verify_discards": 0, '
             '"understand_discards": 0, "implement_discards": 0, "control_rounds_logged": 0, '
@@ -576,6 +609,7 @@ class TestWritingTheExecutionStateBlock:
             "\n"
             "<!-- slice-runner:estado\n"
             '{"step": "verify", "corrected": "", "understanding_pending": false, '
+            '"previous_call_died": false, '
             '"control_retries": 0, "hygiene_retries": 0, "verify_retries": 0, '
             '"correction_retries": 0, "ci_retries": 0, "indeterminate_ticks": 0, "verify_discards": 0, '
             '"understand_discards": 0, "implement_discards": 0, "control_rounds_logged": 0, '

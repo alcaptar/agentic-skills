@@ -91,9 +91,12 @@ class StateMachine:
     def _after_implementing(self, run: Run, outcome: Outcome) -> Transition:
         match outcome:
             case Outcome.DONE:
-                return self._moving_to(run, Step.RUN_CONTROLS)
+                return self._moving_to(replace(run, previous_call_died=False), Step.RUN_CONTROLS)
             case Outcome.DISCARDED:
-                return self._moving_to(replace(run, implement_discards=run.implement_discards + 1), Step.IMPLEMENT)
+                return self._moving_to(
+                    replace(run, implement_discards=run.implement_discards + 1, previous_call_died=True),
+                    Step.IMPLEMENT,
+                )
             case _:
                 self._impossible(run, outcome)
 
