@@ -43,7 +43,7 @@ class VerifySlice:
         self._corpus = corpus
 
     def execute(self, params: VerifySliceParams) -> Verification:
-        diff = self._reader.read(repo=params.worktree, base=params.base)
+        diff = self._reader.read(worktree=params.worktree, base=params.base)
         verification = self._verifier.verify(
             self._judge_reading(params.worktree),
             SliceUnderReview(

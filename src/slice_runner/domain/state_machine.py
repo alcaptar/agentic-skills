@@ -20,13 +20,20 @@ if TYPE_CHECKING:
 class StateMachine:
     budgets: Budgets
 
-    def after(self, run: Run, outcome: Outcome) -> Transition:
+    def after(self, run: Run, outcome: Outcome, *, call_died: bool = False) -> Transition:
         if outcome is Outcome.OVER_BUDGET:
-            return self._closed(run, RunState.ABORTED_BUDGET)
+            return self._closed(self._marking_a_dead_call(run, call_died), RunState.ABORTED_BUDGET)
         if outcome is Outcome.CONFLICTING:
             return self._after_a_catch_up_conflict(run)
 
         return self._after_the_step_of(run, outcome)
+
+    @staticmethod
+    def _marking_a_dead_call(run: Run, call_died: bool) -> Run:
+        if call_died:
+            return replace(run, previous_call_died=True)
+
+        return run
 
     def _after_a_catch_up_conflict(self, run: Run) -> Transition:
         match run.step:
@@ -55,7 +62,11 @@ class StateMachine:
             case IssueLabel.BLOCKED_CI_INDETERMINATE | IssueLabel.BLOCKED_CI_CONFLICT:
                 return replace(run, indeterminate_ticks=0)
             case IssueLabel.ABORTED_BUDGET:
-                return replace(run, spend=HarnessSpend.nothing())
+                return replace(
+                    run,
+                    spend=HarnessSpend.nothing(),
+                    spend_before_reopening=run.spend_before_reopening.plus(run.spend),
+                )
             case _:
                 raise ImpossibleTransitionError(f"the label `{blocked}` names no closed run that can be reopened")
 
@@ -107,9 +118,12 @@ class StateMachine:
     def _after_implementing(self, run: Run, outcome: Outcome) -> Transition:
         match outcome:
             case Outcome.DONE:
-                return self._moving_to(run, Step.RUN_CONTROLS)
+                return self._moving_to(replace(run, previous_call_died=False), Step.RUN_CONTROLS)
             case Outcome.DISCARDED:
-                return self._moving_to(replace(run, implement_discards=run.implement_discards + 1), Step.IMPLEMENT)
+                return self._moving_to(
+                    replace(run, implement_discards=run.implement_discards + 1, previous_call_died=True),
+                    Step.IMPLEMENT,
+                )
             case _:
                 self._impossible(run, outcome)
 

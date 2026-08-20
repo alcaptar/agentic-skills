@@ -66,6 +66,10 @@ class AssignmentMother:
         )
 
     @classmethod
+    def of_a_round_after_a_dead_call(cls) -> Assignment:
+        return replace(cls.of_the_first_round(), dirty_worktree_files=("src/leftover.py", "src/removed.py"))
+
+    @classmethod
     def of_a_repo_exempt_from_controls(cls) -> Assignment:
         return replace(cls.of_the_first_round(), controls=ParentIssueMother.with_exempt_controls().controls)
 

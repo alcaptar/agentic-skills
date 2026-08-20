@@ -84,7 +84,7 @@ class TestVerifySlice:
     ) -> None:
         action.execute(_PARAMS)
 
-        reader.read.assert_called_once_with(repo=_PARAMS.worktree, base=_PARAMS.base)
+        reader.read.assert_called_once_with(worktree=_PARAMS.worktree, base=_PARAMS.base)
 
     def test_the_judge_gets_the_diff_that_was_just_read_and_not_the_repo_and_base(
         self, action: VerifySlice, verifier: Mock

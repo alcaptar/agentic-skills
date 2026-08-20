@@ -824,6 +824,7 @@ class TestTheTransitionOfEveryPair:
                 "step": "implement",
                 "corrected": "",
                 "understanding_pending": False,
+                "previous_call_died": False,
                 "control_retries": 1,
                 "hygiene_retries": 0,
                 "verify_retries": 0,

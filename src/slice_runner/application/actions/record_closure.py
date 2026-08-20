@@ -54,7 +54,7 @@ class RecordClosure:
                 run=params.run,
                 budgets=params.budgets,
                 models=params.models,
-                spends=tuple(spend for spend in params.spends if spend.measured),
+                spends=tuple(spend for spend in self._with_history(params) if spend.measured),
                 findings=params.findings,
                 findings_of_the_last_round=params.findings_of_the_last_round,
                 discard_cause=params.discard_cause,
@@ -67,3 +67,10 @@ class RecordClosure:
             self._repository.publish_findings(
                 repo=params.repo, issue=params.issue, findings=params.findings_of_the_last_round
             )
+
+    @staticmethod
+    def _with_history(params: RecordClosureParams) -> tuple[HarnessSpend, ...]:
+        if not params.run.spend_before_reopening.measured:
+            return params.spends
+
+        return (params.run.spend_before_reopening, *params.spends)

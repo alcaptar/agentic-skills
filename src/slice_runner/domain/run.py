@@ -15,6 +15,7 @@ class Run:
     step: Step
     corrected: str = ""
     understanding_pending: bool = False
+    previous_call_died: bool = False
     control_retries: int = 0
     hygiene_retries: int = 0
     verify_retries: int = 0
@@ -28,6 +29,7 @@ class Run:
     last_reviewed_id: int = 0
     requested_changes: tuple[RequestedChange, ...] = ()
     spend: HarnessSpend = field(default_factory=HarnessSpend.nothing)
+    spend_before_reopening: HarnessSpend = field(default_factory=HarnessSpend.nothing)
 
     @property
     def correcting_review(self) -> bool:

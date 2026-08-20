@@ -7,6 +7,7 @@ from unittest.mock import Mock, create_autospec
 import pytest
 
 from slice_runner.application.actions.implement_slice import ImplementSlice, ImplementSliceParams
+from slice_runner.domain.diff_reader import DiffReader
 from slice_runner.domain.implementer import Implementer
 from slice_runner.tests.mothers.control_outcome_mother import ControlOutcomeMother
 from slice_runner.tests.mothers.implementation_mother import ImplementationMother
@@ -31,17 +32,26 @@ class TestImplementSlice:
         return implementer
 
     @pytest.fixture
-    def action(self, implementer: Mock) -> ImplementSlice:
-        return ImplementSlice(implementer=implementer)
+    def reader(self) -> Mock:
+        reader: Mock = create_autospec(DiffReader, spec_set=True, instance=True)
+        reader.dirty.return_value = ()
+        return reader
+
+    @pytest.fixture
+    def action(self, implementer: Mock, reader: Mock) -> ImplementSlice:
+        return ImplementSlice(implementer=implementer, reader=reader)
 
     @staticmethod
-    def _params(*findings: Finding, subissue: SubIssue | None = None) -> ImplementSliceParams:
+    def _params(
+        *findings: Finding, subissue: SubIssue | None = None, previous_call_died: bool = False
+    ) -> ImplementSliceParams:
         return ImplementSliceParams(
             repo=_REPO,
             worktree=_WORKTREE,
             subissue=subissue or SubIssueMother.pending(),
             parent=ParentIssueMother.with_sources_and_controls(),
             findings=findings,
+            previous_call_died=previous_call_died,
         )
 
     @staticmethod
@@ -146,3 +156,21 @@ class TestImplementSlice:
         action.execute(self._params())
 
         assert self._assigned(implementer).understanding == ""
+
+    def test_a_previous_call_that_died_asks_the_reader_and_assigns_the_files_it_found_dirty(
+        self, action: ImplementSlice, implementer: Mock, reader: Mock
+    ) -> None:
+        reader.dirty.return_value = ("src/leftover.py",)
+
+        action.execute(self._params(previous_call_died=True))
+
+        reader.dirty.assert_called_once_with(worktree=_WORKTREE)
+        assert self._assigned(implementer).dirty_worktree_files == ("src/leftover.py",)
+
+    def test_a_round_that_did_not_follow_a_dead_call_never_asks_the_reader_and_assigns_no_file(
+        self, action: ImplementSlice, implementer: Mock, reader: Mock
+    ) -> None:
+        action.execute(self._params(previous_call_died=False))
+
+        reader.dirty.assert_not_called()
+        assert self._assigned(implementer).dirty_worktree_files == ()

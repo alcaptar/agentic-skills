@@ -140,6 +140,7 @@ class ConductSliceProgress:
 class SteppedSlice:
     progress: ConductSliceProgress
     outcome: Outcome
+    call_died: bool = False
 
 
 @dataclass(frozen=True, kw_only=True, slots=True)
@@ -257,7 +258,10 @@ class ConductSlice:
 
             return self._caught_up_before_conducting(progress)
         if progress.run.step is Step.UNDERSTAND:
-            return self._aligning(progress)
+            if progress.run.understanding_pending:
+                return self._aligning(progress)
+
+            return self._recreating_the_branch(progress)
 
         self._missing_branch(progress)
 
@@ -280,6 +284,13 @@ class ConductSlice:
         closed = self._recorded(progress, transition)
 
         return self._closing(closed, transition.state)
+
+    def _recreating_the_branch(self, progress: ConductSliceProgress) -> ConductSliceResult:
+        self._branches.create(
+            worktree=progress.params.worktree, name=progress.subissue.branch, base=progress.params.base
+        )
+
+        return self._conducting(progress)
 
     def _reopened(
         self, params: ConductSliceParams, chosen: SelectSliceResult, *, retry: RetryResponse
@@ -395,7 +406,7 @@ class ConductSlice:
             stepped = self._stepping(progress)
             if isinstance(stepped, HaltedSlice):
                 return self._ending(stepped.progress, stepped.halt)
-            transition = self._machine.after(stepped.progress.run, stepped.outcome)
+            transition = self._machine.after(stepped.progress.run, stepped.outcome, call_died=stepped.call_died)
             progress = self._recorded(stepped.progress, transition)
             if transition.state is not RunState.OPEN:
                 return self._closing(progress, transition.state)
@@ -464,13 +475,14 @@ class ConductSlice:
                     understanding=progress.understanding,
                     retry_instruction=progress.retry_instruction,
                     requested_changes=progress.run.requested_changes,
+                    previous_call_died=progress.run.previous_call_died,
                 )
             )
         except MeasuredCallError as rejection:
             discarded = self._discarding(progress, rejection)
 
             return self._within_budget(
-                SteppedSlice(progress=discarded, outcome=Outcome.DISCARDED), call=rejection.spend
+                SteppedSlice(progress=discarded, outcome=Outcome.DISCARDED, call_died=True), call=rejection.spend
             )
 
         implemented = replace(

@@ -30,3 +30,4 @@ class Assignment:
     understanding: str = ""
     retry_instruction: str = ""
     requested_changes: tuple[RequestedChange, ...] = ()
+    dirty_worktree_files: tuple[str, ...] = ()

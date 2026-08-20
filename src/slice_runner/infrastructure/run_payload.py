@@ -19,6 +19,7 @@ class RunPayload(ContractModel):
     step: Step
     corrected: str = ""
     understanding_pending: bool = False
+    previous_call_died: bool = False
     control_retries: Spent = 0
     hygiene_retries: Spent = 0
     verify_retries: Spent = 0
@@ -32,6 +33,7 @@ class RunPayload(ContractModel):
     last_reviewed_id: Spent = 0
     requested_changes: list[RequestedChangePayload] = Field(default_factory=list)
     spend: SpendPayload | None = None
+    spend_before_reopening: SpendPayload | None = None
 
     @classmethod
     def from_dict(cls, data: dict[str, object]) -> Self:
@@ -43,6 +45,7 @@ class RunPayload(ContractModel):
             step=run.step,
             corrected=run.corrected,
             understanding_pending=run.understanding_pending,
+            previous_call_died=run.previous_call_died,
             control_retries=run.control_retries,
             hygiene_retries=run.hygiene_retries,
             verify_retries=run.verify_retries,
@@ -56,6 +59,9 @@ class RunPayload(ContractModel):
             last_reviewed_id=run.last_reviewed_id,
             requested_changes=[RequestedChangePayload.from_domain(change) for change in run.requested_changes],
             spend=SpendPayload.from_domain(run.spend) if run.spend.measured else None,
+            spend_before_reopening=(
+                SpendPayload.from_domain(run.spend_before_reopening) if run.spend_before_reopening.measured else None
+            ),
         )
 
     def to_domain(self) -> Run:
@@ -63,6 +69,7 @@ class RunPayload(ContractModel):
             step=self.step,
             corrected=self.corrected,
             understanding_pending=self.understanding_pending,
+            previous_call_died=self.previous_call_died,
             control_retries=self.control_retries,
             hygiene_retries=self.hygiene_retries,
             verify_retries=self.verify_retries,
@@ -76,4 +83,9 @@ class RunPayload(ContractModel):
             last_reviewed_id=self.last_reviewed_id,
             requested_changes=tuple(payload.to_domain() for payload in self.requested_changes),
             spend=self.spend.to_domain() if self.spend is not None else HarnessSpend.nothing(),
+            spend_before_reopening=(
+                self.spend_before_reopening.to_domain()
+                if self.spend_before_reopening is not None
+                else HarnessSpend.nothing()
+            ),
         )
