@@ -10,4 +10,5 @@ class Step(StrEnum):
     VERIFY = "verify"
     OPEN_PULL_REQUEST = "open-pull-request"
     AWAIT_CI = "await-ci"
+    CATCH_UP = "catch-up"
     AWAIT_MERGE = "await-merge"

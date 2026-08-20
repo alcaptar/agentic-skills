@@ -45,7 +45,14 @@ class IssueLabel(StrEnum):
                 return cls.AWAITING_ALIGNMENT
             case Step.AWAIT_MERGE:
                 return cls.AWAITING_MERGE
-            case Step.IMPLEMENT | Step.RUN_CONTROLS | Step.VERIFY | Step.OPEN_PULL_REQUEST | Step.AWAIT_CI:
+            case (
+                Step.IMPLEMENT
+                | Step.RUN_CONTROLS
+                | Step.VERIFY
+                | Step.OPEN_PULL_REQUEST
+                | Step.AWAIT_CI
+                | Step.CATCH_UP
+            ):
                 return cls.IN_PROGRESS
 
     @classmethod

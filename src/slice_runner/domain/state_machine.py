@@ -43,24 +43,31 @@ class StateMachine:
                 | Step.RUN_CONTROLS
                 | Step.VERIFY
                 | Step.OPEN_PULL_REQUEST
-                | Step.AWAIT_CI
+                | Step.CATCH_UP
             ):
                 return self._closed(run, RunState.BLOCKED_CI_CONFLICT)
+            case Step.AWAIT_CI:
+                return self._retrying_a_catch_up(run)
             case Step.AWAIT_MERGE:
                 self._impossible(run, Outcome.CONFLICTING)
 
+    def _retrying_a_catch_up(self, run: Run) -> Transition:
+        if run.catch_up_retries < self.budgets.catch_up_retries:
+            return self._moving_to(replace(run, catch_up_retries=run.catch_up_retries + 1), Step.CATCH_UP)
+
+        return self._closed(run, RunState.BLOCKED_CI_CONFLICT)
+
     def reopened(self, run: Run, *, blocked: IssueLabel) -> Run:
         match blocked:
-            case IssueLabel.BLOCKED_CONTROLS:
-                return replace(run, control_retries=0)
-            case IssueLabel.BLOCKED_HYGIENE:
-                return replace(run, hygiene_retries=0)
-            case IssueLabel.BLOCKED_VERIFY:
-                return replace(run, verify_retries=0)
-            case IssueLabel.BLOCKED_CI_RED:
-                return replace(run, ci_retries=0)
-            case IssueLabel.BLOCKED_CI_INDETERMINATE | IssueLabel.BLOCKED_CI_CONFLICT:
-                return replace(run, indeterminate_ticks=0)
+            case (
+                IssueLabel.BLOCKED_CONTROLS
+                | IssueLabel.BLOCKED_HYGIENE
+                | IssueLabel.BLOCKED_VERIFY
+                | IssueLabel.BLOCKED_CI_RED
+                | IssueLabel.BLOCKED_CI_INDETERMINATE
+                | IssueLabel.BLOCKED_CI_CONFLICT
+            ):
+                return self._with_the_retry_counter_reset(run, blocked=blocked)
             case IssueLabel.ABORTED_BUDGET:
                 return replace(
                     run,
@@ -70,11 +77,38 @@ class StateMachine:
             case _:
                 raise ImpossibleTransitionError(f"the label `{blocked}` names no closed run that can be reopened")
 
+    @staticmethod
+    def _with_the_retry_counter_reset(
+        run: Run,
+        *,
+        blocked: Literal[
+            IssueLabel.BLOCKED_CONTROLS,
+            IssueLabel.BLOCKED_HYGIENE,
+            IssueLabel.BLOCKED_VERIFY,
+            IssueLabel.BLOCKED_CI_RED,
+            IssueLabel.BLOCKED_CI_INDETERMINATE,
+            IssueLabel.BLOCKED_CI_CONFLICT,
+        ],
+    ) -> Run:
+        match blocked:
+            case IssueLabel.BLOCKED_CONTROLS:
+                return replace(run, control_retries=0)
+            case IssueLabel.BLOCKED_HYGIENE:
+                return replace(run, hygiene_retries=0)
+            case IssueLabel.BLOCKED_VERIFY:
+                return replace(run, verify_retries=0)
+            case IssueLabel.BLOCKED_CI_RED:
+                return replace(run, ci_retries=0)
+            case IssueLabel.BLOCKED_CI_INDETERMINATE:
+                return replace(run, indeterminate_ticks=0)
+            case IssueLabel.BLOCKED_CI_CONFLICT:
+                return replace(run, catch_up_retries=0)
+
     def _after_the_step_of(self, run: Run, outcome: Outcome) -> Transition:
         match run.step:
             case Step.UNDERSTAND | Step.IMPLEMENT | Step.RUN_CONTROLS | Step.VERIFY:
                 return self._after_producing(run, outcome, run.step)
-            case Step.OPEN_PULL_REQUEST | Step.AWAIT_CI | Step.AWAIT_MERGE:
+            case Step.OPEN_PULL_REQUEST | Step.AWAIT_CI | Step.CATCH_UP | Step.AWAIT_MERGE:
                 return self._after_delivering(run, outcome, run.step)
 
     def _after_producing(
@@ -94,15 +128,26 @@ class StateMachine:
                 return self._after_the_judge(run, outcome)
 
     def _after_delivering(
-        self, run: Run, outcome: Outcome, step: Literal[Step.OPEN_PULL_REQUEST, Step.AWAIT_CI, Step.AWAIT_MERGE]
+        self,
+        run: Run,
+        outcome: Outcome,
+        step: Literal[Step.OPEN_PULL_REQUEST, Step.AWAIT_CI, Step.CATCH_UP, Step.AWAIT_MERGE],
     ) -> Transition:
         match step:
             case Step.OPEN_PULL_REQUEST:
                 return self._after_the_pull_request(run, outcome)
             case Step.AWAIT_CI:
                 return self._after_asking_the_ci(run, outcome)
+            case Step.CATCH_UP:
+                return self._after_catching_up_the_branch(run, outcome)
             case Step.AWAIT_MERGE:
                 return self._after_asking_for_the_merge(run, outcome)
+
+    def _after_catching_up_the_branch(self, run: Run, outcome: Outcome) -> Transition:
+        if outcome is Outcome.DONE:
+            return self._moving_to(replace(run, catching_up_the_branch=True), Step.RUN_CONTROLS)
+
+        self._impossible(run, outcome)
 
     def _after_the_alignment_pause(self, run: Run, outcome: Outcome) -> Transition:
         match outcome:
@@ -145,6 +190,8 @@ class StateMachine:
         return replace(run, control_rounds_logged=run.control_rounds_logged + 1)
 
     def _after_controls_pass(self, run: Run) -> Transition:
+        if run.catching_up_the_branch:
+            return self._moving_to(run, Step.OPEN_PULL_REQUEST)
         if run.correcting_review:
             return self._moving_to(replace(run, requested_changes=()), Step.OPEN_PULL_REQUEST)
 
@@ -152,13 +199,17 @@ class StateMachine:
 
     def _retrying_a_mechanical_failure(self, run: Run) -> Transition:
         if run.control_retries < self.budgets.control_retries:
-            return self._moving_to(replace(run, control_retries=run.control_retries + 1), Step.IMPLEMENT)
+            return self._moving_to(
+                replace(run, control_retries=run.control_retries + 1, catching_up_the_branch=False), Step.IMPLEMENT
+            )
 
         return self._closed(run, RunState.BLOCKED_CONTROLS)
 
     def _retrying_a_hygiene_rejection(self, run: Run) -> Transition:
         if run.hygiene_retries < self.budgets.hygiene_retries:
-            return self._moving_to(replace(run, hygiene_retries=run.hygiene_retries + 1), Step.IMPLEMENT)
+            return self._moving_to(
+                replace(run, hygiene_retries=run.hygiene_retries + 1, catching_up_the_branch=False), Step.IMPLEMENT
+            )
 
         return self._closed(run, RunState.BLOCKED_HYGIENE)
 
@@ -189,7 +240,7 @@ class StateMachine:
 
     def _after_the_pull_request(self, run: Run, outcome: Outcome) -> Transition:
         if outcome is Outcome.DONE:
-            return self._moving_to(run, Step.AWAIT_CI)
+            return self._moving_to(replace(run, catching_up_the_branch=False), Step.AWAIT_CI)
 
         self._impossible(run, outcome)
 

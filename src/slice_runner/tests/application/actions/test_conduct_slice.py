@@ -900,6 +900,87 @@ class TestConductSliceResumingCatchesUpTheBranch:
         assert conductor.branches.catch_up.call_count == 0
 
 
+class _ResumedAwaitingTheCi:
+    @staticmethod
+    def _conductor(*, budgets: Budgets | None = None) -> Conductor:
+        return Conductor(chosen=SelectSliceResultMother.resumed_at(RunMother.about_to_ask_the_ci()), budgets=budgets)
+
+
+class TestConductSliceCatchesUpTheBranchWhenTheCiFindsAConflict(_ResumedAwaitingTheCi):
+    def test_a_conflict_found_by_the_ci_is_caught_up_instead_of_closing_the_run(self) -> None:
+        conductor = self._conductor(budgets=Budgets(ci_wait_seconds=30))
+        conductor.ci.status.side_effect = [CiStatus.NO_CHECKS, CiStatus.PENDING]
+        conductor.forum.pull_request_state.return_value = PullRequestStatusMother.open_and_conflicting()
+
+        result = conductor.conduct()
+
+        assert conductor.branches.catch_up.call_count == 1
+        assert (result.halt, result.state, result.step) == (Halt.WAIT_EXHAUSTED, RunState.OPEN, Step.AWAIT_CI)
+
+    def test_the_round_trip_after_a_conflict_never_repays_the_implementer_or_the_judge(self) -> None:
+        conductor = self._conductor(budgets=Budgets(ci_wait_seconds=30))
+        conductor.ci.status.side_effect = [CiStatus.NO_CHECKS, CiStatus.PENDING]
+        conductor.forum.pull_request_state.return_value = PullRequestStatusMother.open_and_conflicting()
+
+        conductor.conduct()
+
+        assert (conductor.implement.execute.call_count, conductor.verify.execute.call_count) == (0, 0)
+
+    def test_the_delivery_that_reopens_the_pull_request_is_told_it_comes_from_a_catch_up(self) -> None:
+        conductor = self._conductor(budgets=Budgets(ci_wait_seconds=30))
+        conductor.ci.status.side_effect = [CiStatus.NO_CHECKS, CiStatus.PENDING]
+        conductor.forum.pull_request_state.return_value = PullRequestStatusMother.open_and_conflicting()
+
+        conductor.conduct()
+
+        assert conductor.deliver.execute.call_args.args[0].from_catch_up is True
+
+    def test_the_catch_up_retries_exhausted_closes_the_run_as_a_conflict_just_like_before(self) -> None:
+        conductor = self._conductor(budgets=Budgets(catch_up_retries=1))
+        conductor.ci.status.return_value = CiStatus.NO_CHECKS
+        conductor.forum.pull_request_state.return_value = PullRequestStatusMother.open_and_conflicting()
+
+        result = conductor.conduct()
+
+        assert conductor.branches.catch_up.call_count == 1
+        assert result.state is RunState.BLOCKED_CI_CONFLICT
+
+    def test_resuming_with_a_catch_up_retry_already_spent_does_not_reset_the_counter(self) -> None:
+        conductor = Conductor(
+            chosen=SelectSliceResultMother.resumed_at(RunMother.with_one_catch_up_retry_already_spent()),
+            budgets=Budgets(catch_up_retries=1),
+        )
+        conductor.ci.status.return_value = CiStatus.NO_CHECKS
+        conductor.forum.pull_request_state.return_value = PullRequestStatusMother.open_and_conflicting()
+
+        result = conductor.conduct()
+
+        assert conductor.branches.catch_up.call_count == 0
+        assert result.state is RunState.BLOCKED_CI_CONFLICT
+
+    def test_a_control_round_that_fails_after_the_catch_up_still_sends_the_repaired_round_to_the_judge(self) -> None:
+        conductor = self._conductor(budgets=Budgets(ci_wait_seconds=30))
+        conductor.ci.status.side_effect = [CiStatus.NO_CHECKS, CiStatus.PENDING]
+        conductor.forum.pull_request_state.return_value = PullRequestStatusMother.open_and_conflicting()
+        conductor.controls.run.side_effect = [ControlOutcomeMother.red(), ControlOutcomeMother.green()]
+
+        conductor.conduct()
+
+        assert conductor.verify.execute.call_count == 1
+
+    def test_a_control_round_that_fails_after_the_catch_up_does_not_leave_the_next_delivery_skipping_its_commit(
+        self,
+    ) -> None:
+        conductor = self._conductor(budgets=Budgets(ci_wait_seconds=30))
+        conductor.ci.status.side_effect = [CiStatus.NO_CHECKS, CiStatus.PENDING]
+        conductor.forum.pull_request_state.return_value = PullRequestStatusMother.open_and_conflicting()
+        conductor.controls.run.side_effect = [ControlOutcomeMother.red(), ControlOutcomeMother.green()]
+
+        conductor.conduct()
+
+        assert conductor.deliver.execute.call_args.args[0].from_catch_up is False
+
+
 class TestConductSliceResumingWithSpendAlreadyPersisted:
     def test_reinvoking_does_not_reset_the_budget_because_the_prior_spend_travels_with_the_run(self) -> None:
         prior = HarnessSpendMother.of_the_implementer_call()
@@ -1971,11 +2052,7 @@ class TestConductSliceWaitingForTheMerge:
         assert conductor.repository.flag_unmerged_pull_request.call_count == 0
 
 
-class TestConductSliceWaitingForTheCi:
-    @staticmethod
-    def _conductor(*, budgets: Budgets | None = None) -> Conductor:
-        return Conductor(chosen=SelectSliceResultMother.resumed_at(RunMother.about_to_ask_the_ci()), budgets=budgets)
-
+class TestConductSliceWaitingForTheCi(_ResumedAwaitingTheCi):
     def test_a_pending_ci_ticks_with_the_separation_the_budget_declares_until_the_total_wait_is_spent(self) -> None:
         conductor = self._conductor(budgets=Budgets(ci_wait_seconds=90))
         conductor.ci.status.return_value = CiStatus.PENDING
@@ -2108,11 +2185,7 @@ class TestConductSliceWaitingForTheCi:
         assert conductor.metrics.record.call_args.args[0].state is RunState.BLOCKED_CI_RED
 
 
-class TestConductSliceReusesTheSamePullRequestStatusReadForTheCiAndTheMerge:
-    @staticmethod
-    def _conductor(*, budgets: Budgets | None = None) -> Conductor:
-        return Conductor(chosen=SelectSliceResultMother.resumed_at(RunMother.about_to_ask_the_ci()), budgets=budgets)
-
+class TestConductSliceReusesTheSamePullRequestStatusReadForTheCiAndTheMerge(_ResumedAwaitingTheCi):
     def test_a_green_ci_asks_about_the_pull_request_only_once_to_poll_the_merge_and_not_to_check_a_conflict(
         self,
     ) -> None:

@@ -48,7 +48,7 @@ _BLOCKS: list[tuple[IssueLabel, Run, Run]] = [
     (
         IssueLabel.BLOCKED_CI_CONFLICT,
         RunMother.blocked_on_conflict(),
-        replace(RunMother.blocked_on_conflict(), indeterminate_ticks=0),
+        replace(RunMother.blocked_on_conflict(), catch_up_retries=0),
     ),
     (
         IssueLabel.ABORTED_BUDGET,

@@ -270,6 +270,31 @@ mide. Las reglas que salen de estas decisiones siguen en su capa.
   mandar un prompt desproporcionado. Cuando el corpus de runs reales tenga fuentes mas grandes que las de
   este repo, este numero es el que hay que revisar con esa medicion delante.
 
+- **Los reintentos de la puesta al dia, y por que no comparten contador con nada que ya existiera.** La
+  integracion continua diagnosticando `bloqueada: conflicto` ya se contaba -PR #221, arriba- pero el run
+  cerraba ahi mismo, y las nueve fusiones de `master` hechas a mano en el historial de este repo
+  (`git log --grep="Merge remote-tracking branch 'origin/master' into"`) son la medida de lo que costaba
+  eso. Repetir `GitBranches.catch_up` -que ya usa `_caught_up_before_conducting` al reanudar- desde
+  `AWAIT_CI` cierra ese hueco, pero necesita su propio presupuesto: no es un tick de espera
+  (`indeterminate_ticks` cuenta lecturas de la integracion continua que todavia no contestaron, y una
+  fusion contesta al momento) ni un reintento de la integracion continua roja (`ci_retries` paga cuando el
+  codigo esta mal y hay que reimplementar; una puesta al dia no toca codigo ni cuesta harness -la ronda de
+  controles y la entrega que siguen son deterministas, y el juez ni se invoca-). Compartir cualquiera de
+  los dos habria financiado un bucle ajeno al que lo agota, que es la misma razon por la que la higiene ya
+  tiene contador propio frente a los controles. El valor, **3**, no tiene corpus de runs reales que medirlo
+  -la propia razon de ser de esta slice es que el patron nunca llego a automatizarse-, y se eligio con el
+  mismo razonamiento que `gh_retries`: unos pocos empujones bastan para poner al dia la rama que se movio
+  mientras la pull request esperaba, sin dejar que una base que no deja de moverse convierta el run en un
+  bucle que solo el coste del juez frenaba hasta ahora.
+- **Por que `DeliverSlice` no comitea cuando la entrega viene de una puesta al dia.** Un `catch_up` que
+  resuelve fusionando ya deja su propio commit de merge en el arbol; comitear de nuevo staggearia un
+  indice vacio -o peor, algo que ni el implementador declaro- encima de un commit que ya existe. La
+  decision no la toma "si el indice esta vacio": eso seguiria siendo un fallo ruidoso y deseable en
+  cualquier otro camino, incluido un implementador que no produjo nada. La toma un dato explicito,
+  `from_catch_up`, que viaja desde la maquina de estados (`Run.catching_up_the_branch`) hasta el caso de
+  uso de entrega: el push si es incondicional en los dos casos, porque es lo que hace que la integracion
+  continua vuelva a arrancar sobre una pull request que ya dejo de estar detras.
+
 ### El descarte de aprobacion pagada, y por que hay dos comprobaciones de coste
 
 La comprobacion de despues de la llamada cierra el bucle del descarte del juez -que no gasta reintento
