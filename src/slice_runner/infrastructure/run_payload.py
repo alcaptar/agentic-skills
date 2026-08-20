@@ -19,6 +19,7 @@ class RunPayload(ContractModel):
     step: Step
     corrected: str = ""
     understanding_pending: bool = False
+    previous_call_died: bool = False
     control_retries: Spent = 0
     hygiene_retries: Spent = 0
     verify_retries: Spent = 0
@@ -43,6 +44,7 @@ class RunPayload(ContractModel):
             step=run.step,
             corrected=run.corrected,
             understanding_pending=run.understanding_pending,
+            previous_call_died=run.previous_call_died,
             control_retries=run.control_retries,
             hygiene_retries=run.hygiene_retries,
             verify_retries=run.verify_retries,
@@ -63,6 +65,7 @@ class RunPayload(ContractModel):
             step=self.step,
             corrected=self.corrected,
             understanding_pending=self.understanding_pending,
+            previous_call_died=self.previous_call_died,
             control_retries=self.control_retries,
             hygiene_retries=self.hygiene_retries,
             verify_retries=self.verify_retries,

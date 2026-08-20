@@ -1205,6 +1205,33 @@ class TestConductSliceImplementing:
         assert (recorded.run.implement_discards, recorded.discard_cause) == (1, DiscardCause.FAILED_CALL)
         assert recorded.spends[:2] == (HarnessSpendMother.of_the_implementer_call(),) * 2
 
+    def test_the_retry_after_a_broken_call_is_told_the_previous_call_died_and_the_flag_clears_once_it_delivers(
+        self,
+    ) -> None:
+        conductor = self._conductor()
+        conductor.implement.execute.side_effect = [
+            RejectionMother.invalid_implementation_report(),
+            ImplementationMother.of_two_paths(),
+        ]
+
+        conductor.conduct()
+
+        first_round, retried = conductor.implement.execute.call_args_list
+        assert first_round.args[0].previous_call_died is False
+        assert retried.args[0].previous_call_died is True
+        written = [call.kwargs["run"] for call in conductor.repository.write_run.call_args_list]
+        assert written[-1].previous_call_died is False
+
+    def test_a_call_killed_from_outside_leaves_the_flag_on_even_though_the_run_closes_over_budget(self) -> None:
+        conductor = self._conductor()
+        conductor.implement.execute.side_effect = RejectionMother.envelope_nobody_could_parse()
+
+        result = conductor.conduct()
+
+        assert result.state is RunState.ABORTED_BUDGET
+        written = [call.kwargs["run"] for call in conductor.repository.write_run.call_args_list]
+        assert written[-1].previous_call_died is True
+
 
 class TestConductSliceWhenTheControlsComeBackRed:
     @staticmethod

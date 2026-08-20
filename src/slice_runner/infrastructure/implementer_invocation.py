@@ -81,6 +81,7 @@ class ImplementerInvocation:
                 *self._findings,
                 *self._control_logs,
                 *self._hygiene_refusal,
+                *self._dirty_worktree,
                 *self._understanding,
                 *self._retry_instruction,
                 *self._requested_changes,
@@ -182,6 +183,18 @@ class ImplementerInvocation:
             "- la vuelta anterior no llego a medirse: el indice quedo sucio y los controles no se ejecutaron",
             f"  - {refusal}",
             "  - declara en tu informe TODO fichero que toques, o no lo toques",
+        ]
+
+    @property
+    def _dirty_worktree(self) -> list[str]:
+        files = self.assignment.dirty_worktree_files
+        if not files:
+            return []
+
+        return [
+            "- la vuelta anterior murio sin informe legible: el arbol de trabajo puede traer ediciones o borrados "
+            "que nadie declaro",
+            *(f"  - {path}" for path in files),
         ]
 
     @classmethod

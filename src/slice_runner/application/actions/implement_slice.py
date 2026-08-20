@@ -8,6 +8,7 @@ from slice_runner.domain.assignment import Assignment
 if TYPE_CHECKING:
     from pathlib import Path
 
+    from slice_runner.domain.diff_reader import DiffReader
     from slice_runner.domain.finding import Finding
     from slice_runner.domain.implementation import Implementation
     from slice_runner.domain.implementer import Implementer
@@ -28,17 +29,18 @@ class ImplementSliceParams:
     understanding: str = ""
     retry_instruction: str = ""
     requested_changes: tuple[RequestedChange, ...] = ()
+    previous_call_died: bool = False
 
 
 class ImplementSlice:
-    def __init__(self, *, implementer: Implementer) -> None:
+    def __init__(self, *, implementer: Implementer, reader: DiffReader) -> None:
         self._implementer = implementer
+        self._reader = reader
 
     def execute(self, params: ImplementSliceParams) -> Implementation:
         return self._implementer.implement(self._assignment(params))
 
-    @staticmethod
-    def _assignment(params: ImplementSliceParams) -> Assignment:
+    def _assignment(self, params: ImplementSliceParams) -> Assignment:
         return Assignment(
             issue=params.subissue.number,
             slice_id=params.subissue.slice_id.canonical,
@@ -56,4 +58,11 @@ class ImplementSlice:
             understanding=params.understanding,
             retry_instruction=params.retry_instruction,
             requested_changes=params.requested_changes,
+            dirty_worktree_files=self._dirty_worktree_files(params),
         )
+
+    def _dirty_worktree_files(self, params: ImplementSliceParams) -> tuple[str, ...]:
+        if not params.previous_call_died:
+            return ()
+
+        return self._reader.dirty(worktree=params.worktree)
