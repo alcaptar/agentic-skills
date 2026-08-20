@@ -195,6 +195,27 @@ class AnsweringByArgv(Process):
         return list(argv) in [call.argv for call in self.calls]
 
 
+class SpyingProcess(Process):
+    def __init__(self) -> None:
+        self._real = Real.process()
+        self.calls: list[RecordedCall] = []
+
+    def run(
+        self,
+        argv: list[str],
+        *,
+        stdin: str = "",
+        cwd: str | None = None,
+        on_line: Callable[[str], None] | None = None,
+    ) -> ProcessOutput:
+        self.calls.append(RecordedCall(argv=list(argv), stdin=stdin))
+
+        return self._real.run(argv, stdin=stdin, cwd=cwd, on_line=on_line)
+
+    def invoked(self, *tokens: str) -> bool:
+        return any(all(token in call.argv for token in tokens) for call in self.calls)
+
+
 class RealExceptTheJudge(Process):
     def __init__(self, judge_output: dict[str, object]) -> None:
         self._judge_output = judge_output

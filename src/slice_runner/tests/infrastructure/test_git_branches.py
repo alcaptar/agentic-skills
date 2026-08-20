@@ -4,8 +4,10 @@ from typing import TYPE_CHECKING
 
 import pytest
 
+from slice_runner.domain.branch_catch_up_outcome import BranchCatchUpOutcome
 from slice_runner.domain.exceptions import UnresolvableBaseError
 from slice_runner.infrastructure.git_branches import GitBranches, GitCommandFailedError
+from slice_runner.tests.doubles import SpyingProcess
 from slice_runner.tests.git_repo import Git
 from slice_runner.tests.real_process import Real
 
@@ -195,3 +197,204 @@ class TestGitBranchesComparingABaseAgainstItsRemote:
 
         with pytest.raises(UnresolvableBaseError, match="never-existed"):
             GitBranches(process=Real.process()).commits_behind_remote(worktree=str(repo), base="never-existed")
+
+
+@pytest.mark.integration
+class TestGitBranchesCatchingUpTheBranch:
+    _SLICE_BRANCH = "slice/22-la-rama-se-pone-al-dia"
+
+    @staticmethod
+    def _repo_with_the_slice_branch_pushed(tmp_path: Path) -> tuple[Path, Path]:
+        remote = tmp_path / "remote.git"
+        Git.run(tmp_path, "init", "--bare", str(remote))
+        repo = Git.init_repo(tmp_path / "repo")
+        Git.run(repo, "commit", "--allow-empty", "-m", "base")
+        Git.run(repo, "remote", "add", "origin", str(remote))
+        Git.run(repo, "push", "-u", "origin", Git.BASE_BRANCH)
+        Git.run(repo, "switch", "-c", TestGitBranchesCatchingUpTheBranch._SLICE_BRANCH, f"origin/{Git.BASE_BRANCH}")
+        Git.run(repo, "push", "-u", "origin", TestGitBranchesCatchingUpTheBranch._SLICE_BRANCH)
+
+        return repo, remote
+
+    def test_a_branch_left_behind_by_a_push_from_elsewhere_ends_up_at_the_remote_tip(self, tmp_path: Path) -> None:
+        repo, remote = self._repo_with_the_slice_branch_pushed(tmp_path)
+        elsewhere = Git.clone(remote=remote, into=tmp_path / "elsewhere")
+        Git.run(elsewhere, "switch", self._SLICE_BRANCH)
+        Git.run(elsewhere, "commit", "--allow-empty", "-m", "pushed from elsewhere")
+        Git.run(elsewhere, "push")
+
+        outcome = GitBranches(process=Real.process()).catch_up(
+            worktree=str(repo), name=self._SLICE_BRANCH, base=Git.BASE_BRANCH
+        )
+
+        assert outcome is BranchCatchUpOutcome.CAUGHT_UP
+        assert Git.run(repo, "rev-parse", "HEAD").strip() == Git.run(elsewhere, "rev-parse", self._SLICE_BRANCH).strip()
+
+    def test_a_base_that_gained_commits_since_the_branch_was_born_is_merged_into_the_branch(
+        self, tmp_path: Path
+    ) -> None:
+        repo, remote = self._repo_with_the_slice_branch_pushed(tmp_path)
+        elsewhere = Git.clone(remote=remote, into=tmp_path / "elsewhere")
+        Git.run(elsewhere, "commit", "--allow-empty", "-m", "the base gained a commit")
+        Git.run(elsewhere, "push")
+        base_gain = Git.run(elsewhere, "rev-parse", Git.BASE_BRANCH).strip()
+
+        outcome = GitBranches(process=Real.process()).catch_up(
+            worktree=str(repo), name=self._SLICE_BRANCH, base=Git.BASE_BRANCH
+        )
+
+        assert outcome is BranchCatchUpOutcome.CAUGHT_UP
+        Git.run(repo, "merge-base", "--is-ancestor", base_gain, "HEAD")
+
+    def test_a_commit_the_branch_already_had_keeps_its_own_identifier_after_catching_up(self, tmp_path: Path) -> None:
+        repo, remote = self._repo_with_the_slice_branch_pushed(tmp_path)
+        elsewhere = Git.clone(remote=remote, into=tmp_path / "elsewhere")
+        Git.run(elsewhere, "switch", self._SLICE_BRANCH)
+        Git.run(elsewhere, "commit", "--allow-empty", "-m", "pushed from elsewhere")
+        Git.run(elsewhere, "push")
+        remote_commit = Git.run(elsewhere, "rev-parse", "HEAD").strip()
+        Git.run(repo, "commit", "--allow-empty", "-m", "work already done locally")
+        local_commit = Git.run(repo, "rev-parse", "HEAD").strip()
+
+        outcome = GitBranches(process=Real.process()).catch_up(
+            worktree=str(repo), name=self._SLICE_BRANCH, base=Git.BASE_BRANCH
+        )
+
+        assert outcome is BranchCatchUpOutcome.CAUGHT_UP
+        assert Git.run(repo, "rev-parse", local_commit).strip() == local_commit
+        Git.run(repo, "merge-base", "--is-ancestor", local_commit, "HEAD")
+        Git.run(repo, "merge-base", "--is-ancestor", remote_commit, "HEAD")
+        Git.run(repo, "push")
+
+    @staticmethod
+    def _repo_with_a_conflicting_edit_pushed_from_elsewhere(tmp_path: Path) -> tuple[Path, Path]:
+        remote = tmp_path / "remote.git"
+        Git.run(tmp_path, "init", "--bare", str(remote))
+        repo = Git.init_repo(tmp_path / "repo")
+        (repo / "shared.txt").write_text("base\n")
+        Git.run(repo, "add", "shared.txt")
+        Git.run(repo, "commit", "-m", "base")
+        Git.run(repo, "remote", "add", "origin", str(remote))
+        Git.run(repo, "push", "-u", "origin", Git.BASE_BRANCH)
+        Git.run(repo, "switch", "-c", TestGitBranchesCatchingUpTheBranch._SLICE_BRANCH, f"origin/{Git.BASE_BRANCH}")
+        Git.run(repo, "push", "-u", "origin", TestGitBranchesCatchingUpTheBranch._SLICE_BRANCH)
+        elsewhere = Git.clone(remote=remote, into=tmp_path / "elsewhere")
+        Git.run(elsewhere, "switch", TestGitBranchesCatchingUpTheBranch._SLICE_BRANCH)
+        (elsewhere / "shared.txt").write_text("from elsewhere\n")
+        Git.run(elsewhere, "commit", "-am", "edited from elsewhere")
+        Git.run(elsewhere, "push")
+
+        return repo, remote
+
+    def test_files_left_conflicting_close_the_merge_instead_of_leaving_the_worktree_half_merged(
+        self, tmp_path: Path
+    ) -> None:
+        repo, _ = self._repo_with_a_conflicting_edit_pushed_from_elsewhere(tmp_path)
+        (repo / "shared.txt").write_text("from the worktree\n")
+        Git.run(repo, "commit", "-am", "edited locally")
+
+        outcome = GitBranches(process=Real.process()).catch_up(
+            worktree=str(repo), name=self._SLICE_BRANCH, base=Git.BASE_BRANCH
+        )
+
+        assert outcome is BranchCatchUpOutcome.CONFLICTING
+        assert Git.run(repo, "status", "--porcelain").strip() == ""
+        assert not (repo / ".git" / "MERGE_HEAD").exists()
+
+    def test_a_branch_that_is_already_up_to_date_with_both_remotes_gains_no_merge_commit_and_makes_no_merge_call(
+        self, tmp_path: Path
+    ) -> None:
+        repo, _ = self._repo_with_the_slice_branch_pushed(tmp_path)
+        before = Git.run(repo, "rev-parse", "HEAD").strip()
+        spy = SpyingProcess()
+
+        outcome = GitBranches(process=spy).catch_up(worktree=str(repo), name=self._SLICE_BRANCH, base=Git.BASE_BRANCH)
+
+        assert outcome is BranchCatchUpOutcome.CAUGHT_UP
+        assert Git.run(repo, "rev-parse", "HEAD").strip() == before
+        assert not spy.invoked("merge")
+
+    @staticmethod
+    def _repo_with_the_slice_branch_created_but_not_pushed(tmp_path: Path) -> tuple[Path, Path]:
+        remote = tmp_path / "remote.git"
+        Git.run(tmp_path, "init", "--bare", str(remote))
+        repo = Git.init_repo(tmp_path / "repo")
+        Git.run(repo, "commit", "--allow-empty", "-m", "base")
+        Git.run(repo, "remote", "add", "origin", str(remote))
+        Git.run(repo, "push", "-u", "origin", Git.BASE_BRANCH)
+        Git.run(repo, "switch", "-c", TestGitBranchesCatchingUpTheBranch._SLICE_BRANCH, f"origin/{Git.BASE_BRANCH}")
+
+        return repo, remote
+
+    def test_a_branch_never_pushed_to_its_own_remote_still_catches_up_from_the_base(self, tmp_path: Path) -> None:
+        repo, remote = self._repo_with_the_slice_branch_created_but_not_pushed(tmp_path)
+        elsewhere = Git.clone(remote=remote, into=tmp_path / "elsewhere")
+        Git.run(elsewhere, "commit", "--allow-empty", "-m", "the base gained a commit")
+        Git.run(elsewhere, "push")
+        base_gain = Git.run(elsewhere, "rev-parse", Git.BASE_BRANCH).strip()
+
+        outcome = GitBranches(process=Real.process()).catch_up(
+            worktree=str(repo), name=self._SLICE_BRANCH, base=Git.BASE_BRANCH
+        )
+
+        assert outcome is BranchCatchUpOutcome.CAUGHT_UP
+        Git.run(repo, "merge-base", "--is-ancestor", base_gain, "HEAD")
+
+    def test_a_branch_never_pushed_to_its_own_remote_and_already_at_the_base_makes_no_merge_call(
+        self, tmp_path: Path
+    ) -> None:
+        repo, _ = self._repo_with_the_slice_branch_created_but_not_pushed(tmp_path)
+        before = Git.run(repo, "rev-parse", "HEAD").strip()
+        spy = SpyingProcess()
+
+        outcome = GitBranches(process=spy).catch_up(worktree=str(repo), name=self._SLICE_BRANCH, base=Git.BASE_BRANCH)
+
+        assert outcome is BranchCatchUpOutcome.CAUGHT_UP
+        assert Git.run(repo, "rev-parse", "HEAD").strip() == before
+        assert not spy.invoked("merge")
+
+    def test_uncommitted_changes_left_by_a_crashed_invocation_raise_instead_of_reporting_a_conflict(
+        self, tmp_path: Path
+    ) -> None:
+        repo, _ = self._repo_with_a_conflicting_edit_pushed_from_elsewhere(tmp_path)
+        (repo / "shared.txt").write_text("uncommitted work left by a crash\n")
+
+        with pytest.raises(GitCommandFailedError, match="overwritten by merge"):
+            GitBranches(process=Real.process()).catch_up(
+                worktree=str(repo), name=self._SLICE_BRANCH, base=Git.BASE_BRANCH
+            )
+
+    @staticmethod
+    def _repo_with_the_branch_diverged_from_a_base_that_also_moved_on(tmp_path: Path) -> tuple[Path, Path]:
+        repo, remote = TestGitBranchesCatchingUpTheBranch._repo_with_the_slice_branch_pushed(tmp_path)
+        Git.run(repo, "commit", "--allow-empty", "-m", "work done on the branch")
+        elsewhere = Git.clone(remote=remote, into=tmp_path / "elsewhere")
+        Git.run(elsewhere, "commit", "--allow-empty", "-m", "the base moved on too")
+        Git.run(elsewhere, "push")
+
+        return repo, remote
+
+    def test_a_machine_wide_merge_ff_only_setting_does_not_stop_a_genuine_merge_from_completing(
+        self, tmp_path: Path
+    ) -> None:
+        repo, _ = self._repo_with_the_branch_diverged_from_a_base_that_also_moved_on(tmp_path)
+        Git.run(repo, "config", "merge.ff", "only")
+
+        outcome = GitBranches(process=Real.process()).catch_up(
+            worktree=str(repo), name=self._SLICE_BRANCH, base=Git.BASE_BRANCH
+        )
+
+        assert outcome is BranchCatchUpOutcome.CAUGHT_UP
+
+    def test_a_machine_wide_commit_gpgsign_setting_with_no_usable_key_does_not_report_a_conflict(
+        self, tmp_path: Path
+    ) -> None:
+        repo, _ = self._repo_with_the_branch_diverged_from_a_base_that_also_moved_on(tmp_path)
+        Git.run(repo, "config", "commit.gpgsign", "true")
+        Git.run(repo, "config", "user.signingkey", "not-a-real-key")
+
+        outcome = GitBranches(process=Real.process()).catch_up(
+            worktree=str(repo), name=self._SLICE_BRANCH, base=Git.BASE_BRANCH
+        )
+
+        assert outcome is BranchCatchUpOutcome.CAUGHT_UP

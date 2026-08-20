@@ -10,6 +10,7 @@ from slice_runner.application.actions.close_parent import CloseParentParams
 from slice_runner.application.actions.reopen_slice import ReopenSliceParams, ReopenSliceResult
 from slice_runner.domain.alignment_response import AlignmentResponse
 from slice_runner.domain.alignment_response_kind import AlignmentResponseKind
+from slice_runner.domain.branch_catch_up_outcome import BranchCatchUpOutcome
 from slice_runner.domain.budgets import Budgets
 from slice_runner.domain.ci_indeterminate_cause import CiIndeterminateCause
 from slice_runner.domain.ci_status import CiStatus
@@ -816,6 +817,73 @@ class TestConductSliceResumingAnInterruptedRun:
         assert conductor.branches.create.call_count == 1
         assert conductor.understanding.write.call_count == 1
         assert conductor.implement.execute.call_count == 1
+
+
+class TestConductSliceResumingCatchesUpTheBranch:
+    @staticmethod
+    def _conductor() -> Conductor:
+        return Conductor(chosen=SelectSliceResultMother.resumed_at(RunMother.implementing()))
+
+    def test_resuming_catches_up_the_branch_against_its_own_remote_and_the_declared_base_before_implementing(
+        self,
+    ) -> None:
+        conductor = self._conductor()
+
+        conductor.conduct()
+
+        conductor.branches.catch_up.assert_called_once_with(
+            worktree=Conductor.WORKTREE, name=_BRANCH, base=Conductor.BASE
+        )
+
+    def test_a_branch_already_caught_up_still_reaches_the_implementer(self) -> None:
+        conductor = self._conductor()
+
+        conductor.conduct()
+
+        assert conductor.implement.execute.call_count == 1
+
+    def test_a_conflicting_catch_up_closes_the_run_before_spending_any_call_on_the_harness(self) -> None:
+        conductor = self._conductor()
+        conductor.branches.catch_up.return_value = BranchCatchUpOutcome.CONFLICTING
+
+        result = conductor.conduct()
+
+        assert result.state is RunState.BLOCKED_CI_CONFLICT
+        assert (conductor.implement.execute.call_count, conductor.verify.execute.call_count) == (0, 0)
+
+    def test_a_conflicting_catch_up_writes_the_conflict_label_and_records_the_closed_row(self) -> None:
+        conductor = self._conductor()
+        conductor.branches.catch_up.return_value = BranchCatchUpOutcome.CONFLICTING
+
+        conductor.conduct()
+
+        conductor.repository.write_label.assert_called_once_with(
+            repo=Conductor.REPO, issue=_SUBISSUE, remove=IssueLabel.IN_PROGRESS, add=IssueLabel.BLOCKED_CI_CONFLICT
+        )
+        assert conductor.metrics.record.call_args.args[0].state is RunState.BLOCKED_CI_CONFLICT
+
+    def test_a_branch_that_no_longer_exists_is_never_asked_to_catch_up(self) -> None:
+        conductor = self._conductor()
+        conductor.branches.exists.return_value = False
+
+        with pytest.raises(MissingBranchError):
+            conductor.conduct()
+
+        assert conductor.branches.catch_up.call_count == 0
+
+    def test_a_run_already_awaiting_the_ci_of_a_pull_request_already_open_is_never_asked_to_catch_up(self) -> None:
+        conductor = Conductor(chosen=SelectSliceResultMother.resumed_at(RunMother.about_to_ask_the_ci()))
+
+        conductor.conduct()
+
+        assert conductor.branches.catch_up.call_count == 0
+
+    def test_a_run_already_awaiting_the_merge_of_a_pull_request_already_open_is_never_asked_to_catch_up(self) -> None:
+        conductor = Conductor(chosen=SelectSliceResultMother.resumed_at(RunMother.awaiting_merge()))
+
+        conductor.conduct()
+
+        assert conductor.branches.catch_up.call_count == 0
 
 
 class TestConductSliceResumingWithSpendAlreadyPersisted:

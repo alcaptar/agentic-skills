@@ -23,8 +23,24 @@ class StateMachine:
     def after(self, run: Run, outcome: Outcome) -> Transition:
         if outcome is Outcome.OVER_BUDGET:
             return self._closed(run, RunState.ABORTED_BUDGET)
+        if outcome is Outcome.CONFLICTING:
+            return self._after_a_catch_up_conflict(run)
 
         return self._after_the_step_of(run, outcome)
+
+    def _after_a_catch_up_conflict(self, run: Run) -> Transition:
+        match run.step:
+            case (
+                Step.UNDERSTAND
+                | Step.IMPLEMENT
+                | Step.RUN_CONTROLS
+                | Step.VERIFY
+                | Step.OPEN_PULL_REQUEST
+                | Step.AWAIT_CI
+            ):
+                return self._closed(run, RunState.BLOCKED_CI_CONFLICT)
+            case Step.AWAIT_MERGE:
+                self._impossible(run, Outcome.CONFLICTING)
 
     def reopened(self, run: Run, *, blocked: IssueLabel) -> Run:
         match blocked:
@@ -173,8 +189,6 @@ class StateMachine:
                 return self._counting_a_tick_with_no_answer(run)
             case Outcome.FAILED:
                 return self._retrying_a_red_ci(self._answered(run))
-            case Outcome.CONFLICTING:
-                return self._closed(run, RunState.BLOCKED_CI_CONFLICT)
             case _:
                 self._impossible(run, outcome)
 
