@@ -20,11 +20,18 @@ if TYPE_CHECKING:
 class StateMachine:
     budgets: Budgets
 
-    def after(self, run: Run, outcome: Outcome) -> Transition:
+    def after(self, run: Run, outcome: Outcome, *, call_died: bool = False) -> Transition:
         if outcome is Outcome.OVER_BUDGET:
-            return self._closed(run, RunState.ABORTED_BUDGET)
+            return self._closed(self._marking_a_dead_call(run, call_died), RunState.ABORTED_BUDGET)
 
         return self._after_the_step_of(run, outcome)
+
+    @staticmethod
+    def _marking_a_dead_call(run: Run, call_died: bool) -> Run:
+        if call_died:
+            return replace(run, previous_call_died=True)
+
+        return run
 
     def reopened(self, run: Run, *, blocked: IssueLabel) -> Run:
         match blocked:

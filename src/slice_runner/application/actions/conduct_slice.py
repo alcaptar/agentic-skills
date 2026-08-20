@@ -139,6 +139,7 @@ class ConductSliceProgress:
 class SteppedSlice:
     progress: ConductSliceProgress
     outcome: Outcome
+    call_died: bool = False
 
 
 @dataclass(frozen=True, kw_only=True, slots=True)
@@ -371,7 +372,7 @@ class ConductSlice:
             stepped = self._stepping(progress)
             if isinstance(stepped, HaltedSlice):
                 return self._ending(stepped.progress, stepped.halt)
-            transition = self._machine.after(stepped.progress.run, stepped.outcome)
+            transition = self._machine.after(stepped.progress.run, stepped.outcome, call_died=stepped.call_died)
             progress = self._recorded(stepped.progress, transition)
             if transition.state is not RunState.OPEN:
                 return self._closing(progress, transition.state)
@@ -447,7 +448,7 @@ class ConductSlice:
             discarded = self._discarding(progress, rejection)
 
             return self._within_budget(
-                SteppedSlice(progress=discarded, outcome=Outcome.DISCARDED), call=rejection.spend
+                SteppedSlice(progress=discarded, outcome=Outcome.DISCARDED, call_died=True), call=rejection.spend
             )
 
         implemented = replace(

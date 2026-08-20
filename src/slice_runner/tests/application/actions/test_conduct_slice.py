@@ -1208,6 +1208,16 @@ class TestConductSliceImplementing:
         written = [call.kwargs["run"] for call in conductor.repository.write_run.call_args_list]
         assert written[-1].previous_call_died is False
 
+    def test_a_call_killed_from_outside_leaves_the_flag_on_even_though_the_run_closes_over_budget(self) -> None:
+        conductor = self._conductor()
+        conductor.implement.execute.side_effect = RejectionMother.envelope_nobody_could_parse()
+
+        result = conductor.conduct()
+
+        assert result.state is RunState.ABORTED_BUDGET
+        written = [call.kwargs["run"] for call in conductor.repository.write_run.call_args_list]
+        assert written[-1].previous_call_died is True
+
 
 class TestConductSliceWhenTheControlsComeBackRed:
     @staticmethod
