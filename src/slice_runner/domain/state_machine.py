@@ -46,7 +46,11 @@ class StateMachine:
             case IssueLabel.BLOCKED_CI_INDETERMINATE | IssueLabel.BLOCKED_CI_CONFLICT:
                 return replace(run, indeterminate_ticks=0)
             case IssueLabel.ABORTED_BUDGET:
-                return replace(run, spend=HarnessSpend.nothing())
+                return replace(
+                    run,
+                    spend=HarnessSpend.nothing(),
+                    spend_before_reopening=run.spend_before_reopening.plus(run.spend),
+                )
             case _:
                 raise ImpossibleTransitionError(f"the label `{blocked}` names no closed run that can be reopened")
 

@@ -156,6 +156,25 @@ class TestWhichSpendsCount:
 
         assert written.spends == (first, last)
 
+    def test_a_run_that_carries_spend_from_before_a_reopening_has_it_prepended_to_the_recorded_spends(self) -> None:
+        closer = _Closer()
+        before_reopening = HarnessSpendMother.of_the_understanding_call()
+        this_window = HarnessSpendMother.of_the_judge_call()
+
+        written = closer.close(
+            run=RunMother.judging_after_a_reopening_for_budget(before_reopening), spends=(this_window,)
+        )
+
+        assert written.spends == (before_reopening, this_window)
+
+    def test_a_run_never_reopened_records_only_the_spends_this_invocation_paid(self) -> None:
+        closer = _Closer()
+        this_window = HarnessSpendMother.of_the_judge_call()
+
+        written = closer.close(run=RunMother.judging(), spends=(this_window,))
+
+        assert written.spends == (this_window,)
+
 
 class TestPublishingTheVetoFindings:
     def test_a_closure_by_veto_with_findings_of_the_last_round_publishes_them(self) -> None:

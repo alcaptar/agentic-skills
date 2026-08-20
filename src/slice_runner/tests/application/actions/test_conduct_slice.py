@@ -864,6 +864,33 @@ class TestConductSliceResumingWithSpendAlreadyPersisted:
         assert written[0].spend == HarnessSpend.summing((prior, HarnessSpendMother.of_the_judge_call()))
 
 
+class TestConductSliceResumingAfterAReopeningForBudget:
+    def test_the_first_call_of_the_new_window_is_not_blocked_by_the_spend_carried_from_before_the_reopening(
+        self,
+    ) -> None:
+        prior = HarnessSpendMother.of_the_implementer_call()
+        conductor = Conductor(
+            chosen=SelectSliceResultMother.resumed_at(RunMother.judging_after_a_reopening_for_budget(prior)),
+            budgets=Budgets(slice_cost_usd=prior.cost_usd),
+        )
+
+        result = conductor.conduct()
+
+        assert conductor.verify.execute.call_count == 1
+        assert result.state is RunState.MERGED
+
+    def test_the_durable_row_of_a_reopened_run_sums_what_it_spent_before_the_reopening_and_after_it(self) -> None:
+        prior = HarnessSpendMother.of_the_implementer_call()
+        conductor = Conductor(
+            chosen=SelectSliceResultMother.resumed_at(RunMother.judging_after_a_reopening_for_budget(prior))
+        )
+
+        conductor.conduct()
+
+        recorded: ClosedSlice = conductor.metrics.record.call_args.args[0]
+        assert recorded.spends == (prior, HarnessSpendMother.of_the_judge_call())
+
+
 class TestConductSliceOnTheHappyPath:
     @staticmethod
     def _conductor(*, budgets: Budgets | None = None) -> Conductor:
