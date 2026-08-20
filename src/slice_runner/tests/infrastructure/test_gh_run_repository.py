@@ -694,6 +694,7 @@ class TestWritingTheExecutionStateBlock:
             "\n"
             "<!-- slice-runner:estado\n"
             '{"step": "verify", "corrected": "", "understanding_pending": false, '
+            '"previous_call_died": false, '
             '"control_retries": 0, "hygiene_retries": 0, "verify_retries": 0, '
             '"correction_retries": 0, "ci_retries": 0, "indeterminate_ticks": 0, "verify_discards": 0, '
             '"understand_discards": 0, "implement_discards": 0, "control_rounds_logged": 0, '
