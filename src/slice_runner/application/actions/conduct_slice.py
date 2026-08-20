@@ -17,6 +17,7 @@ from slice_runner.application.queries.read_ci_status import ReadCiStatusParams
 from slice_runner.application.queries.read_pull_request_status import ReadPullRequestStatusParams
 from slice_runner.application.queries.run_prechecks import RunPrechecksParams
 from slice_runner.application.queries.select_slice import SelectSliceParams
+from slice_runner.domain.branch_catch_up_outcome import BranchCatchUpOutcome
 from slice_runner.domain.discard_cause import DiscardCause
 from slice_runner.domain.exceptions import (
     DirtyIndexError,
@@ -252,7 +253,10 @@ class ConductSlice:
 
     def _resuming(self, progress: ConductSliceProgress) -> ConductSliceResult:
         if self._branch_still_standing(progress):
-            return self._conducting(progress)
+            if self._already_delivered(progress.run.step):
+                return self._conducting(progress)
+
+            return self._caught_up_before_conducting(progress)
         if progress.run.step is Step.UNDERSTAND:
             if progress.run.understanding_pending:
                 return self._aligning(progress)
@@ -260,6 +264,26 @@ class ConductSlice:
             return self._recreating_the_branch(progress)
 
         self._missing_branch(progress)
+
+    @staticmethod
+    def _already_delivered(step: Step) -> bool:
+        return step is Step.AWAIT_CI or step is Step.AWAIT_MERGE
+
+    def _caught_up_before_conducting(self, progress: ConductSliceProgress) -> ConductSliceResult:
+        outcome = self._branches.catch_up(
+            worktree=progress.params.worktree, name=progress.subissue.branch, base=progress.params.base
+        )
+        match outcome:
+            case BranchCatchUpOutcome.CONFLICTING:
+                return self._blocked_by_a_catch_up_conflict(progress)
+            case BranchCatchUpOutcome.CAUGHT_UP:
+                return self._conducting(progress)
+
+    def _blocked_by_a_catch_up_conflict(self, progress: ConductSliceProgress) -> ConductSliceResult:
+        transition = self._machine.after(progress.run, Outcome.CONFLICTING)
+        closed = self._recorded(progress, transition)
+
+        return self._closing(closed, transition.state)
 
     def _recreating_the_branch(self, progress: ConductSliceProgress) -> ConductSliceResult:
         self._branches.create(

@@ -27,6 +27,7 @@ from slice_runner.application.queries.run_prechecks import RunPrechecks
 from slice_runner.application.queries.select_slice import SelectSlice
 from slice_runner.domain.alignment_response import AlignmentResponse
 from slice_runner.domain.alignment_response_kind import AlignmentResponseKind
+from slice_runner.domain.branch_catch_up_outcome import BranchCatchUpOutcome
 from slice_runner.domain.branches import Branches
 from slice_runner.domain.budgets import Budgets
 from slice_runner.domain.ci import Ci
@@ -88,6 +89,7 @@ class Conductor:
         self.repository.read_alignment_response.return_value = AlignmentResponse(kind=AlignmentResponseKind.NOT_YET)
         self.repository.read_understanding.return_value = self.UNDERSTANDING
         self.branches: Mock = create_autospec(Branches, spec_set=True, instance=True)
+        self.branches.catch_up.return_value = BranchCatchUpOutcome.CAUGHT_UP
         self.controls: Mock = create_autospec(ControlRunner, spec_set=True, instance=True)
         self.controls.run.return_value = ControlOutcomeMother.green()
         self.ci: Mock = create_autospec(Ci, spec_set=True, instance=True)
