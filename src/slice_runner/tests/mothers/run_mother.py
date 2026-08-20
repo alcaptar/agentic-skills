@@ -123,6 +123,14 @@ class RunMother:
         return Run(step=Step.VERIFY, spend=spend)
 
     @staticmethod
+    def aborted_for_budget_after_a_prior_reopening(*, spend_before_reopening: HarnessSpend, spend: HarnessSpend) -> Run:
+        return Run(step=Step.VERIFY, spend_before_reopening=spend_before_reopening, spend=spend)
+
+    @staticmethod
+    def judging_after_a_reopening_for_budget(spend_before_reopening: HarnessSpend) -> Run:
+        return Run(step=Step.VERIFY, spend_before_reopening=spend_before_reopening)
+
+    @staticmethod
     def that_went_back_for_every_reason() -> Run:
         return Run(
             step=Step.AWAIT_MERGE,
