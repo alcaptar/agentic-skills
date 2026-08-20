@@ -877,7 +877,7 @@ class TestConductSliceResumingAfterAReopeningForBudget:
         result = conductor.conduct()
 
         assert conductor.verify.execute.call_count == 1
-        assert result.state is not RunState.ABORTED_BUDGET
+        assert result.state is RunState.MERGED
 
     def test_the_durable_row_of_a_reopened_run_sums_what_it_spent_before_the_reopening_and_after_it(self) -> None:
         prior = HarnessSpendMother.of_the_implementer_call()
