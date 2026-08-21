@@ -658,6 +658,31 @@ calibrado con dos casos, los dos del mecanismo que se acaba de retirar.
 - **Seguridad**: nunca ejecuta rollback ni toca backends; max_runtime + circuit breaker; merge y rollback los decide el usuario.
 - **El encadenado esta apagado desde 2026-08-13, y se apago por el cableado.** El programa lleva `MutedDeployWatch` inyectado en vez de `ClaudeDeployWatch`, asi que mergear una slice ya no lanza `claude -p '/deploy-watch ...'`. El motivo es de calendario, no de diseno: la skill todavia no esta pulida -es la unica pieza del pipeline que nunca se ha medido contra un despliegue real de otra persona- y el equipo empieza a probar el flujo esta semana; una llamada que cuesta dinero, tarda y puede confundir a quien nunca ha visto la herramienta es exactamente lo que no debe encontrarse en su primera slice. **Lo que no se apago**: la linea `SENAL:` se sigue disenando en el slicing, se sigue exigiendo, y su emision sigue siendo criterio de aceptacion que el juez mide antes de mergear -o sea que lo que se pierde es la comprobacion post-deploy, no la observabilidad de la slice-. Se eligio el adaptador mudo sobre las otras dos formas por lo que cuesta **volver**: una bandera de linea de comandos anadia superficie que habria que retirar despues, y borrar la llamada de `ConductSlice` dejaba el puerto sin consumidor y obligaba a reescribir codigo y test para reencender. El detalle de la decision de capa vive en `docs/conventions/infrastructure.md`; cuando se pula, se reencienden la linea de `cli.py`, el paso 4 del `README.md` y su diagrama.
 
+### La regla que se aplico tres veces y nunca se escribio (2026-08-21)
+
+Vaciar el conductor de trabajo que era de un caso de uso se hizo en #295 (los dos pasos que esperan),
+#302 -"que ejecutar los controles deje de estar a medias entre el conductor y un caso de uso"- y #308
+(entender). Tres veces el mismo movimiento, y la regla se quedo en el `git log`: `application.md` solo
+recogio el caso particular de la telemetria.
+
+La recaida llego con la puesta al dia de la rama. El entendimiento que la persona aprobo con `-GO`
+prometia un caso de uso propio para ella; la implementacion llamo al puerto desde el conductor, y ademas
+metio ahi la proyeccion de su vocabulario a `Outcome`. Nada lo freno, y no por descuido de nadie:
+
+- **El juez no tenia con que.** Su vara principal son las fuentes de convencion que recibe, y la regla no
+  estaba escrita en ninguna. Con `domain.md` en la mano si cazo la proyeccion **dentro** del conductor
+  -bloqueo por la rama por omision de un `match`- pero no que la proyeccion entera no fuese suya.
+- **Los criterios de aceptacion hablaban solo de comportamiento.** Fusiona, no rebasa, cierra sin gastar
+  arnes. Ninguno decia donde vive la pieza, asi que el mapeo criterio-test no tenia nada que exigir ahi.
+- **El plan aprobado no lo verifica nadie.** El `-GO` es un contrato entre la persona y el programa, y el
+  juez -a proposito- no recibe narrativas del implementador. Contrastar las rutas que el plan promete con
+  las que el diff toca es trabajo determinista que hoy no existe.
+
+De ahi salen las dos cosas que se hicieron a la vez que esta nota: la regla en `application.md`
+-atemporal, sin contar precedentes, que es lo que esta nota si puede hacer- y la exigencia en `slice-spec`
+de que un criterio pueda fijar donde vive una pieza. La tercera, el contraste entre el plan y el diff,
+queda como trabajo declarado.
+
 ## Roadmap de autonomia (pendiente)
 
 Estado actual: **Nivel 1** — una slice por invocacion, todo bajo control manual. Subir de nivel solo cuando el anterior sea fiable; el cuello de botella nunca es implementar, es la calidad del gate de verificacion.
