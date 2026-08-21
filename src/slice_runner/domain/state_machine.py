@@ -69,12 +69,14 @@ class StateMachine:
                 | IssueLabel.BLOCKED_CI_CONFLICT
             ):
                 return self._with_the_retry_counter_reset(run, blocked=blocked)
-            case IssueLabel.ABORTED_BUDGET | IssueLabel.ABORTED_UNMEASURED_CALL:
+            case IssueLabel.ABORTED_BUDGET:
                 return replace(
                     run,
                     spend=HarnessSpend.nothing(),
                     spend_before_reopening=run.spend_before_reopening.plus(run.spend),
                 )
+            case IssueLabel.ABORTED_UNMEASURED_CALL:
+                return run
             case _:
                 raise ImpossibleTransitionError(f"the label `{blocked}` names no closed run that can be reopened")
 

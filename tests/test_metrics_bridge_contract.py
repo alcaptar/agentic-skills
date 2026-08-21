@@ -39,7 +39,7 @@ def test_the_durable_vocabulary_the_program_writes_is_the_one_metrics_py_reads()
     duplicated = {
         "veredicto": ({str(v) for v in DurableVerdict}, {str(v) for v in metrics.Veredicto}),
         "ci": ({str(c) for c in DurableCi}, {str(c) for c in metrics.Ci}),
-        "descartes_causa": (
+        "descartes.causa": (
             {str(c) for c in DurableDiscardCause},
             {str(c) for c in metrics.CausaDescarte},
         ),

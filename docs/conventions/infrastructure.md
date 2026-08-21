@@ -198,6 +198,15 @@ importar**: un smoke que solo importe el modulo lo da por bueno. Lo evita
   **Solo lo que ese script lee por clave literal se queda en castellano; el resto habla el idioma del
   codigo.** El lado que **relee** el log tolera las dos formas con `validation_alias`, para que una fila
   ya escrita con la forma vieja se siga agregando.
+
+  **Desviacion declarada: la clave legacy de un campo que crecio a value object con varios campos
+  atados no se tolera con `validation_alias`, se ignora entera.** `descartes_verify_causa` solo
+  llevaba la causa de un descarte; hoy esa causa viaja dentro de `DiscardedCall`, atada a un paso y a
+  un motivo que la fila vieja nunca escribio. Reconstruir el value object solo con la causa le
+  atribuiria un paso que nunca tuvo -exactamente el estado a medias que ese value object existe para
+  hacer irrepresentable-, asi que la fila vieja se relee sin `discarded_call` en vez de con uno
+  incompleto. El precio es pequeno y a proposito: solo pierde el enriquecimiento las filas escritas
+  antes de esta migracion, y esa perdida es mas honesta que inventar un paso o un motivo.
 - **Un registro que debe tolerar que un value object crezca no nombra sus campos.** La regla general
   existe para que un contrato que cambia de forma rompa donde se declara; aqui se invierte a proposito
   cuando el criterio que trajo la fila pide justo lo contrario: que anadir un campo no obligue a tocar el
