@@ -5,13 +5,10 @@ from typing import TYPE_CHECKING
 from slice_runner.domain.branch_catch_up_outcome import BranchCatchUpOutcome
 from slice_runner.domain.branches import Branches
 from slice_runner.domain.exceptions import UnresolvableBaseError
+from slice_runner.infrastructure.git_command_failed_error import GitCommandFailedError
 
 if TYPE_CHECKING:
-    from slice_runner.infrastructure.process import Process, ProcessOutput
-
-
-class GitCommandFailedError(OSError):
-    pass
+    from slice_runner.infrastructure.process import Process
 
 
 class GitBranches(Branches):
@@ -26,23 +23,21 @@ class GitBranches(Branches):
         if output.code == 1:
             return False
 
-        raise self._failure(argv, output)
+        raise GitCommandFailedError.from_command(argv, output)
 
     def create(self, *, worktree: str, name: str, base: str) -> None:
         self._fetch(worktree)
         argv = ["git", "-C", worktree, "switch", "-c", name, f"origin/{base}"]
         output = self._process.run(argv, stdin="")
         if output.code != 0:
-            raise self._failure(argv, output)
+            raise GitCommandFailedError.from_command(argv, output)
 
     def commits_behind_remote(self, *, worktree: str, base: str) -> int:
         self._fetch(worktree)
         argv = ["git", "-C", worktree, "rev-list", "--count", f"{base}..origin/{base}"]
         output = self._process.run(argv, stdin="")
         if output.code != 0:
-            raise UnresolvableBaseError(
-                f"{base} does not resolve against its remote: {output.stderr.strip() or f'git exited {output.code}'}"
-            )
+            raise UnresolvableBaseError(f"{base} does not resolve against its remote: {output.reason(tool=argv[0])}")
 
         return int(output.stdout.strip())
 
@@ -61,7 +56,7 @@ class GitBranches(Branches):
         argv = ["git", "-C", worktree, "rev-list", "--count", f"HEAD..{ref}"]
         output = self._process.run(argv, stdin="")
         if output.code != 0:
-            raise self._failure(argv, output)
+            raise GitCommandFailedError.from_command(argv, output)
 
         return int(output.stdout.strip()) > 0
 
@@ -73,7 +68,7 @@ class GitBranches(Branches):
         if output.code == 1:
             return False
 
-        raise self._failure(argv, output)
+        raise GitCommandFailedError.from_command(argv, output)
 
     def _merged(self, worktree: str, ref: str) -> bool:
         argv = ["git", "-C", worktree, "-c", "merge.ff=true", "-c", "commit.gpgsign=false", "merge", "--no-edit", ref]
@@ -81,7 +76,7 @@ class GitBranches(Branches):
         if output.code == 0:
             return True
         if not self._merge_in_progress(worktree):
-            raise self._failure(argv, output)
+            raise GitCommandFailedError.from_command(argv, output)
 
         self._abort_merge(worktree)
 
@@ -97,14 +92,10 @@ class GitBranches(Branches):
         argv = ["git", "-C", worktree, "merge", "--abort"]
         output = self._process.run(argv, stdin="")
         if output.code != 0:
-            raise self._failure(argv, output)
+            raise GitCommandFailedError.from_command(argv, output)
 
     def _fetch(self, worktree: str) -> None:
         argv = ["git", "-C", worktree, "fetch", "origin", "--quiet"]
         output = self._process.run(argv, stdin="")
         if output.code != 0:
-            raise self._failure(argv, output)
-
-    @staticmethod
-    def _failure(argv: list[str], output: ProcessOutput) -> GitCommandFailedError:
-        return GitCommandFailedError(f"{' '.join(argv)}: {output.stderr.strip() or f'git exited {output.code}'}")
+            raise GitCommandFailedError.from_command(argv, output)

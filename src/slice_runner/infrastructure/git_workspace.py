@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from slice_runner.domain.workspace import Workspace
-from slice_runner.infrastructure.git_branches import GitCommandFailedError
+from slice_runner.infrastructure.git_command_failed_error import GitCommandFailedError
 
 if TYPE_CHECKING:
     from slice_runner.infrastructure.process import Process
@@ -44,10 +44,6 @@ class GitWorkspace(Workspace):
         argv = ["git", "-C", worktree, *args]
         output = self._process.run(argv, stdin="")
         if output.code != 0:
-            raise GitCommandFailedError(f"{' '.join(argv)}: {self._reason(output.stderr, output.stdout, output.code)}")
+            raise GitCommandFailedError.from_command(argv, output)
 
         return output.stdout
-
-    @staticmethod
-    def _reason(stderr: str, stdout: str, code: int) -> str:
-        return stderr.strip() or stdout.strip() or f"git exited {code}"

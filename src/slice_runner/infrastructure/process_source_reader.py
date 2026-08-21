@@ -32,11 +32,11 @@ class ProcessSourceReader(SourceReader):
         return cited
 
     def _read(self, *, worktree: str, source: Source) -> str:
-        output = self._process.run(["cat", source.path], stdin="", cwd=worktree)
+        argv = ["cat", source.path]
+        output = self._process.run(argv, stdin="", cwd=worktree)
         if output.code != 0:
             raise UnreadableSourceError(
-                f"{source.path} could not be read under {worktree}: "
-                f"{output.stderr.strip() or f'cat exited {output.code}'}"
+                f"{source.path} could not be read under {worktree}: {output.reason(tool=argv[0])}"
             )
 
         return output.stdout

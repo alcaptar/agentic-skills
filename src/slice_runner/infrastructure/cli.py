@@ -80,7 +80,8 @@ from slice_runner.infrastructure.gh_call import GhCall
 from slice_runner.infrastructure.gh_ci import GhCi
 from slice_runner.infrastructure.gh_forum import GhForum
 from slice_runner.infrastructure.gh_run_repository import GhCommandFailedError, GhRunRepository
-from slice_runner.infrastructure.git_branches import GitBranches, GitCommandFailedError
+from slice_runner.infrastructure.git_branches import GitBranches
+from slice_runner.infrastructure.git_command_failed_error import GitCommandFailedError
 from slice_runner.infrastructure.git_diff_reader import GitDiffReader
 from slice_runner.infrastructure.git_workspace import GitWorkspace
 from slice_runner.infrastructure.harness_telemetry import HarnessTelemetry

@@ -6,7 +6,7 @@ from slice_runner.domain.diff_reader import DiffReader
 from slice_runner.domain.diff_stats import DiffStats
 from slice_runner.domain.exceptions import EmptyIndexError, UnresolvableRepoOrBaseError
 from slice_runner.domain.slice_diff import SliceDiff
-from slice_runner.infrastructure.git_branches import GitCommandFailedError
+from slice_runner.infrastructure.git_command_failed_error import GitCommandFailedError
 
 if TYPE_CHECKING:
     from slice_runner.infrastructure.process import Process
@@ -31,7 +31,7 @@ class GitDiffReader(DiffReader):
         argv = ["git", "-C", worktree, "status", "--porcelain", "--untracked-files=all"]
         output = self._process.run(argv, stdin="")
         if output.code != 0:
-            raise GitCommandFailedError(f"{' '.join(argv)}: {output.stderr.strip() or f'git exited {output.code}'}")
+            raise GitCommandFailedError.from_command(argv, output)
 
         return tuple(line[3:] for line in output.stdout.splitlines() if line.strip() and line[1] != " ")
 
@@ -59,7 +59,7 @@ class GitDiffReader(DiffReader):
         output = self._process.run(argv, stdin="")
         if output.code != 0:
             raise UnresolvableRepoOrBaseError(
-                f"could not diff {worktree!r} against {base!r}: {output.stderr.strip() or f'git exited {output.code}'}"
+                f"could not diff {worktree!r} against {base!r}: {output.reason(tool=argv[0])}"
             )
 
         return output.stdout

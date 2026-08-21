@@ -14,6 +14,9 @@ class ProcessOutput:
     stdout: str
     stderr: str
 
+    def reason(self, *, tool: str) -> str:
+        return self.stderr.strip() or self.stdout.strip() or f"{tool} exited {self.code}"
+
 
 class ProcessNotRunnableError(OSError):
     pass
