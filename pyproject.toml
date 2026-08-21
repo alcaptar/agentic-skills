@@ -56,6 +56,7 @@ ban-relative-imports = "all"
 runtime-evaluated-base-classes = [
     "pydantic.BaseModel",
     "slice_runner.infrastructure.contract_model.ContractModel",
+    "slice_runner.infrastructure.open_vocabulary_model.OpenVocabularyModel",
 ]
 
 [tool.ruff.lint.isort]

@@ -13,15 +13,27 @@ from slice_runner.tests.mothers.judge_output_mother import HarnessEnvelopeMother
 
 class TestTheEnvelopeWeKnow:
     @pytest.mark.parametrize("recorded", HarnessEnvelopeMother.ALL_RECORDED)
-    def test_every_recorded_call_validates_whole_so_the_declared_keys_are_the_real_ones(self, recorded: str) -> None:
+    def test_every_recorded_call_brings_every_key_we_consume_so_a_rename_still_breaks(self, recorded: str) -> None:
+        recorded_envelope = HarnessEnvelopeMother.recorded(recorded)
+        consumed = {field.alias or name for name, field in HarnessOutput.model_fields.items()}
+
+        assert consumed <= set(recorded_envelope)
+
+    @pytest.mark.parametrize("recorded", HarnessEnvelopeMother.ALL_RECORDED)
+    def test_every_recorded_call_validates_so_the_keys_we_declare_are_the_real_ones(self, recorded: str) -> None:
         envelope = HarnessOutput.from_dict(HarnessEnvelopeMother.recorded(recorded))
 
         assert envelope.is_error is False
         assert envelope.structured_output
 
-    def test_a_key_we_do_not_know_is_rejected_instead_of_ignored(self) -> None:
-        with pytest.raises(InvalidHarnessOutputError, match="campo_nuevo_del_harness"):
-            HarnessOutput.from_dict(HarnessEnvelopeMother.plus(campo_nuevo_del_harness=1))
+    def test_a_key_we_do_not_know_is_ignored_so_a_field_added_upstream_does_not_lose_a_paid_call(self) -> None:
+        envelope = HarnessOutput.from_dict(HarnessEnvelopeMother.plus(subagent_stats={"spawned": 0}))
+
+        assert envelope.to_domain().measured
+
+    def test_a_key_we_consume_that_stops_arriving_is_still_rejected(self) -> None:
+        with pytest.raises(InvalidHarnessOutputError, match="total_cost_usd"):
+            HarnessOutput.from_dict(HarnessEnvelopeMother.without("total_cost_usd"))
 
     def test_a_text_that_looks_like_a_boolean_is_not_taken_as_one(self) -> None:
         with pytest.raises(InvalidHarnessOutputError, match=r"`is_error`.*valid boolean"):
@@ -134,16 +146,17 @@ class TestWhatTheHarnessMeasured:
 
         assert spend.output_tokens == 0
 
-    def test_a_model_usage_entry_with_a_key_we_do_not_know_is_rejected_instead_of_ignored(self) -> None:
+    def test_a_model_usage_entry_with_a_key_we_do_not_know_is_ignored_like_the_envelope_itself(self) -> None:
         recorded = HarnessEnvelopeMother.recorded("full-recipe")
         model_usage = recorded["modelUsage"]
         assert isinstance(model_usage, dict)
         model_id, entry = next(iter(model_usage.items()))
         assert isinstance(entry, dict)
-        broken = recorded | {"modelUsage": {model_id: entry | {"campo_nuevo_del_harness": 1}}}
+        widened = recorded | {"modelUsage": {model_id: entry | {"campo_nuevo_del_harness": 1}}}
 
-        with pytest.raises(InvalidHarnessOutputError, match="campo_nuevo_del_harness"):
-            HarnessOutput.from_dict(broken)
+        spend = HarnessOutput.from_dict(widened).to_domain()
+
+        assert spend.models == (model_id,)
 
 
 class TestTheSessionEveryCallRunsUnder:

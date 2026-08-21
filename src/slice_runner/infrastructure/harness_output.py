@@ -8,8 +8,8 @@ from pydantic import Field
 
 from slice_runner.domain.exceptions import InvalidHarnessOutputError, MeasuredCallError
 from slice_runner.domain.harness_spend import HarnessSpend
-from slice_runner.infrastructure.contract_model import ContractModel
 from slice_runner.infrastructure.model_usage_payload import ModelUsageEntry
+from slice_runner.infrastructure.open_vocabulary_model import OpenVocabularyModel
 from slice_runner.infrastructure.permission_denial import PermissionDenial
 
 if TYPE_CHECKING:
@@ -18,33 +18,21 @@ if TYPE_CHECKING:
     from slice_runner.infrastructure.process import ProcessOutput
 
 
-class HarnessOutput(ContractModel):
+class HarnessOutput(OpenVocabularyModel):
     CAUSE_FIELDS: ClassVar[tuple[str, ...]] = ("is_error", "subtype", "stop_reason", "terminal_reason")
     RESULT: ClassVar[str] = "result"
 
     is_error: bool = Field(strict=True)
     structured_output: dict[str, object]
 
-    api_error_status: object = None
     duration_api_ms: int | None = None
     duration_ms: int
-    fast_mode_disabled_reason: object = None
-    fast_mode_state: object = None
     model_usage: dict[str, ModelUsageEntry] | None = Field(alias="modelUsage", default=None)
     num_turns: int
     permission_denials: tuple[PermissionDenial, ...] = ()
-    result: object = None
     session_id: str
-    stop_reason: object = None
-    subtype: object = None
-    terminal_reason: object = None
-    time_to_request_ms: object = None
     total_cost_usd: float
     ttft_ms: int | None = None
-    ttft_stream_ms: object = None
-    type: object = None
-    usage: object = None
-    uuid: object = None
 
     def to_domain(self) -> HarnessSpend:
         return HarnessSpend(
