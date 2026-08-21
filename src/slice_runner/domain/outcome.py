@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 from slice_runner.domain.alignment_response_kind import AlignmentResponseKind
 from slice_runner.domain.ci_status import CiStatus
 from slice_runner.domain.control_status import ControlStatus
+from slice_runner.domain.cost_exhaustion import CostExhaustion
 from slice_runner.domain.ruling import Ruling
 from slice_runner.domain.severity import Severity
 
@@ -23,6 +24,7 @@ class Outcome(StrEnum):
     INDETERMINATE = "indeterminate"
     DISCARDED = "discarded"
     OVER_BUDGET = "over-budget"
+    CALL_NOT_MEASURED = "call-not-measured"
     CONFLICTING = "conflicting"
     CHANGES_REQUESTED = "changes-requested"
 
@@ -64,3 +66,13 @@ class Outcome(StrEnum):
             return cls.INDETERMINATE
 
         return cls.DONE
+
+    @classmethod
+    def of_the_cost_exhaustion(cls, exhaustion: CostExhaustion, *, otherwise: Outcome) -> Outcome:
+        match exhaustion:
+            case CostExhaustion.WITHIN_BUDGET:
+                return otherwise
+            case CostExhaustion.CALL_UNMEASURED:
+                return cls.CALL_NOT_MEASURED
+            case CostExhaustion.TOTAL_EXCEEDED:
+                return cls.OVER_BUDGET

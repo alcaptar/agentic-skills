@@ -26,7 +26,7 @@ class StateMachine:
         if outcome is Outcome.CONFLICTING:
             return self._after_a_catch_up_conflict(run)
 
-        return self._after_the_step_of(run, outcome)
+        return self._after_the_step_of(run, outcome, call_died=call_died)
 
     @staticmethod
     def _marking_a_dead_call(run: Run, call_died: bool) -> Run:
@@ -75,6 +75,8 @@ class StateMachine:
                     spend=HarnessSpend.nothing(),
                     spend_before_reopening=run.spend_before_reopening.plus(run.spend),
                 )
+            case IssueLabel.ABORTED_UNMEASURED_CALL:
+                return run
             case _:
                 raise ImpossibleTransitionError(f"the label `{blocked}` names no closed run that can be reopened")
 
@@ -105,10 +107,10 @@ class StateMachine:
             case IssueLabel.BLOCKED_CI_CONFLICT:
                 return replace(run, catch_up_retries=0, indeterminate_ticks=0)
 
-    def _after_the_step_of(self, run: Run, outcome: Outcome) -> Transition:
+    def _after_the_step_of(self, run: Run, outcome: Outcome, *, call_died: bool) -> Transition:
         match run.step:
             case Step.UNDERSTAND | Step.IMPLEMENT | Step.RUN_CONTROLS | Step.VERIFY:
-                return self._after_producing(run, outcome, run.step)
+                return self._after_producing(run, outcome, run.step, call_died=call_died)
             case Step.OPEN_PULL_REQUEST | Step.AWAIT_CI | Step.CATCH_UP | Step.AWAIT_MERGE:
                 return self._after_delivering(run, outcome, run.step)
 
@@ -117,16 +119,18 @@ class StateMachine:
         run: Run,
         outcome: Outcome,
         step: Literal[Step.UNDERSTAND, Step.IMPLEMENT, Step.RUN_CONTROLS, Step.VERIFY],
+        *,
+        call_died: bool,
     ) -> Transition:
         match step:
             case Step.UNDERSTAND:
-                return self._after_the_alignment_pause(run, outcome)
+                return self._after_the_alignment_pause(run, outcome, call_died=call_died)
             case Step.IMPLEMENT:
-                return self._after_implementing(run, outcome)
+                return self._after_implementing(run, outcome, call_died=call_died)
             case Step.RUN_CONTROLS:
                 return self._after_the_controls(run, outcome)
             case Step.VERIFY:
-                return self._after_the_judge(run, outcome)
+                return self._after_the_judge(run, outcome, call_died=call_died)
 
     def _after_delivering(
         self,
@@ -150,7 +154,7 @@ class StateMachine:
 
         self._impossible(run, outcome)
 
-    def _after_the_alignment_pause(self, run: Run, outcome: Outcome) -> Transition:
+    def _after_the_alignment_pause(self, run: Run, outcome: Outcome, *, call_died: bool) -> Transition:
         match outcome:
             case Outcome.DONE:
                 return self._moving_to(run, Step.IMPLEMENT)
@@ -158,10 +162,12 @@ class StateMachine:
                 return self._ticking(run)
             case Outcome.DISCARDED:
                 return self._moving_to(replace(run, understand_discards=run.understand_discards + 1), Step.UNDERSTAND)
+            case Outcome.CALL_NOT_MEASURED:
+                return self._closed(self._marking_a_dead_call(run, call_died), RunState.ABORTED_UNMEASURED_CALL)
             case _:
                 self._impossible(run, outcome)
 
-    def _after_implementing(self, run: Run, outcome: Outcome) -> Transition:
+    def _after_implementing(self, run: Run, outcome: Outcome, *, call_died: bool) -> Transition:
         match outcome:
             case Outcome.DONE:
                 return self._moving_to(replace(run, previous_call_died=False), Step.RUN_CONTROLS)
@@ -170,6 +176,8 @@ class StateMachine:
                     replace(run, implement_discards=run.implement_discards + 1, previous_call_died=True),
                     Step.IMPLEMENT,
                 )
+            case Outcome.CALL_NOT_MEASURED:
+                return self._closed(self._marking_a_dead_call(run, call_died), RunState.ABORTED_UNMEASURED_CALL)
             case _:
                 self._impossible(run, outcome)
 
@@ -214,7 +222,7 @@ class StateMachine:
 
         return self._closed(run, RunState.BLOCKED_HYGIENE)
 
-    def _after_the_judge(self, run: Run, outcome: Outcome) -> Transition:
+    def _after_the_judge(self, run: Run, outcome: Outcome, *, call_died: bool) -> Transition:
         match outcome:
             case Outcome.DONE:
                 return self._moving_to(run, Step.OPEN_PULL_REQUEST)
@@ -224,6 +232,8 @@ class StateMachine:
                 return self._correcting_what_does_not_block(run)
             case Outcome.FAILED:
                 return self._retrying_a_veto(run)
+            case Outcome.CALL_NOT_MEASURED:
+                return self._closed(self._marking_a_dead_call(run, call_died), RunState.ABORTED_UNMEASURED_CALL)
             case _:
                 self._impossible(run, outcome)
 

@@ -59,6 +59,11 @@ _BLOCKS: list[tuple[IssueLabel, Run, Run]] = [
             spend_before_reopening=HarnessSpendMother.of_the_implementer_call(),
         ),
     ),
+    (
+        IssueLabel.ABORTED_UNMEASURED_CALL,
+        RunMother.aborted_for_an_unmeasured_call(HarnessSpendMother.of_the_implementer_call()),
+        RunMother.aborted_for_an_unmeasured_call(HarnessSpendMother.of_the_implementer_call()),
+    ),
 ]
 
 

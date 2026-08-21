@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from slice_runner.domain.cost_exhaustion import CostExhaustion
 from slice_runner.domain.step import Step
 
 if TYPE_CHECKING:
@@ -42,8 +43,10 @@ class Budgets:
     def exhausted(self, total: HarnessSpend) -> bool:
         return total.cost_usd >= self.slice_cost_usd
 
-    def cost_exhausted(self, *, call: HarnessSpend | None, total: HarnessSpend) -> bool:
+    def cost_exhausted(self, *, call: HarnessSpend | None, total: HarnessSpend) -> CostExhaustion:
         if call is None or not call.measured:
-            return True
+            return CostExhaustion.CALL_UNMEASURED
+        if self.exhausted(total):
+            return CostExhaustion.TOTAL_EXCEEDED
 
-        return self.exhausted(total)
+        return CostExhaustion.WITHIN_BUDGET

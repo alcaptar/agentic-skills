@@ -6,13 +6,13 @@ from unittest.mock import Mock, create_autospec
 from slice_runner.application.actions.record_closure import RecordClosure, RecordClosureParams
 from slice_runner.domain.budgets import Budgets
 from slice_runner.domain.diff_stats import DiffStats
-from slice_runner.domain.discard_cause import DiscardCause
 from slice_runner.domain.harness_spend import HarnessSpend
 from slice_runner.domain.metrics_log import MetricsLog
 from slice_runner.domain.role_models import RoleModels
 from slice_runner.domain.run_repository import RunRepository
 from slice_runner.domain.run_state import RunState
 from slice_runner.domain.severity import Severity
+from slice_runner.tests.mothers.discarded_call_mother import DiscardedCallMother
 from slice_runner.tests.mothers.harness_spend_mother import HarnessSpendMother
 from slice_runner.tests.mothers.run_mother import RunMother
 from slice_runner.tests.mothers.verdict_mother import FindingMother
@@ -77,10 +77,11 @@ class TestTheRowItWrites:
 
     def test_the_cause_of_a_discarded_verdict_reaches_the_row(self) -> None:
         closer = _Closer()
+        discarded = DiscardedCallMother.of_an_incoherent_verdict()
 
-        written = closer.close(discard_cause=DiscardCause.INCOHERENT_VERDICT)
+        written = closer.close(discarded_call=discarded)
 
-        assert written.discard_cause is DiscardCause.INCOHERENT_VERDICT
+        assert written.discarded_call == discarded
 
     def test_what_the_implementer_declared_left_out_reaches_the_row(self) -> None:
         closer = _Closer()

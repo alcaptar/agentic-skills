@@ -5,11 +5,13 @@ from typing import TYPE_CHECKING, Self
 from slice_runner.domain.ci_indeterminate_cause import CiIndeterminateCause
 from slice_runner.domain.discard_cause import DiscardCause
 from slice_runner.domain.run_state import RunState
+from slice_runner.domain.step import Step
 from slice_runner.infrastructure.contract_model import ContractModel
 
 if TYPE_CHECKING:
     from slice_runner.domain.closed_slice_record import ClosedSliceRecord
     from slice_runner.domain.diff_stats import DiffStats
+    from slice_runner.domain.discarded_call import DiscardedCall
     from slice_runner.domain.recorded_spend import RecordedSpend
     from slice_runner.domain.severity_count import SeverityCount
 
@@ -50,6 +52,16 @@ class DiffStatsPayload(ContractModel):
         return cls(files_changed=stats.files_changed, lines_added=stats.lines_added, lines_deleted=stats.lines_deleted)
 
 
+class DiscardedCallPayload(ContractModel):
+    step: Step
+    cause: DiscardCause
+    reason: str
+
+    @classmethod
+    def from_domain(cls, discarded: DiscardedCall) -> Self:
+        return cls(step=discarded.step, cause=discarded.cause, reason=discarded.reason)
+
+
 class ClosedSliceRecordPayload(ContractModel):
     ts: str
     repo: str
@@ -67,7 +79,7 @@ class ClosedSliceRecordPayload(ContractModel):
     verify_discards: int
     understand_discards: int
     implement_discards: int
-    discard_cause: DiscardCause | None = None
+    discarded_call: DiscardedCallPayload | None = None
     ci_indeterminate_cause: CiIndeterminateCause | None = None
     spend: RecordedSpendPayload | None = None
     variant: str | None = None
@@ -97,7 +109,9 @@ class ClosedSliceRecordPayload(ContractModel):
                 "verify_discards": record.verify_discards,
                 "understand_discards": record.understand_discards,
                 "implement_discards": record.implement_discards,
-                "discard_cause": record.discard_cause,
+                "discarded_call": DiscardedCallPayload.from_domain(record.discarded_call)
+                if record.discarded_call is not None
+                else None,
                 "ci_indeterminate_cause": record.ci_indeterminate_cause,
                 "spend": RecordedSpendPayload.from_domain(record.spend) if record.spend is not None else None,
                 "variant": record.variant,

@@ -37,6 +37,13 @@ class RejectionMother:
         return rejection
 
     @staticmethod
+    def invalid_understanding_report_with_an_overlong_message() -> InvalidUnderstandingReportError:
+        rejection = InvalidUnderstandingReportError("a" * 250)
+        rejection.spend = HarnessSpendMother.of_the_understanding_call()
+
+        return rejection
+
+    @staticmethod
     def invalid_implementation_report() -> InvalidImplementationReportError:
         rejection = InvalidImplementationReportError("the implementer did not emit the report the brief asked for")
         rejection.spend = HarnessSpendMother.of_the_implementer_call()

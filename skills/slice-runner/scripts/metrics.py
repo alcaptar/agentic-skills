@@ -75,7 +75,9 @@ class Veredicto(StrEnum):
     prohibido): tampoco es un veto del juez ni un control en rojo -no se llego a ejecutar ninguno-,
     asi que compartir cualquiera de los otros dos dejaria ese mismo instrumento leyendo un fallo que
     no fue suyo. Solo la variante `programa` la escribe hoy: su agente (`SKILL.md`, paso 6.2)
-    reintenta `pr-hygiene` sin limite propio.
+    reintenta `pr-hygiene` sin limite propio. `ABORTADA_LLAMADA_NO_MEDIDA` es una llamada al arnes
+    que no dejo nada que medir: no es lo mismo que `ABORTADA_PRESUPUESTO`, que es el gasto acumulado
+    de verdad rebasando el tope.
     """
 
     PASA = "PASA"
@@ -83,6 +85,7 @@ class Veredicto(StrEnum):
     BLOQUEADA_CONTROLES = "bloqueada-controles"
     BLOQUEADA_HIGIENE = "bloqueada-higiene"
     ABORTADA_PRESUPUESTO = "abortada-presupuesto"
+    ABORTADA_LLAMADA_NO_MEDIDA = "abortada-llamada-no-medida"
 
 
 class Ci(StrEnum):
@@ -191,15 +194,35 @@ def _grupo(row: dict[str, object], clave: str) -> dict[str, object]:
     return {str(k): v for k, v in valor.items()} if isinstance(valor, dict) else {}
 
 
-def _causa(row: dict[str, object], clave: str, vocabulario: type[_Causa]) -> _Causa | None:
-    """La causa si la fila trae una del `vocabulario`, y si no, ninguna.
+def _causa(row: dict[str, object], *claves: str, vocabulario: type[_Causa]) -> _Causa | None:
+    """La causa si la fila trae una del `vocabulario` bajo cualquiera de `claves`, y si no, ninguna.
 
-    Una causa que no reconocemos se lee como ausente por lo mismo que `_load` se salta una linea
-    corrupta: el log es durable y una fila rara no puede tumbar el agregado de todo el historico
-    que si es legible.
+    Varias claves porque el log durable tiene el campo viejo y el nuevo escritos en filas distintas,
+    igual que `_numero`. Una causa que no reconocemos se lee como ausente por lo mismo que `_load` se
+    salta una linea corrupta: el log es durable y una fila rara no puede tumbar el agregado de todo
+    el historico que si es legible.
     """
-    valor = row.get(clave)
-    return vocabulario(valor) if isinstance(valor, str) and valor in set(vocabulario) else None
+    for clave in claves:
+        valor = row.get(clave)
+        if isinstance(valor, str) and valor in set(vocabulario):
+            return vocabulario(valor)
+    return None
+
+
+_PASO_VERIFY = "verify"
+
+
+def _causa_de_verify(row: dict[str, object], descartes: dict[str, object]) -> CausaDescarte | None:
+    """La causa del descarte que cerro (o retraso) el verificador, y solo la suya.
+
+    El descarte tambien puede venir de entender o de implementar desde que la causa viaja con su
+    `paso`: un `paso` que no sea `verify` no es de este campo. El campo legado, escrito antes de esa
+    distincion y sin `paso`, siempre fue de verify.
+    """
+    paso = descartes.get("paso")
+    if paso not in (None, _PASO_VERIFY):
+        return None
+    return _causa({**row, **descartes}, "causa", "descartes_verify_causa", vocabulario=CausaDescarte)
 
 
 @dataclass(frozen=True, kw_only=True, slots=True)
@@ -236,6 +259,7 @@ class Fila:
     def from_row(row: dict[str, object]) -> Fila:
         veredicto = _texto(row, "veredicto")
         harness = _grupo(row, "harness")
+        descartes = _grupo(row, "descartes")
         return Fila(
             repo=_texto(row, "repo"),
             slice_id=_texto(row, "slice_id"),
@@ -252,8 +276,8 @@ class Fila:
             turnos=_opcional(harness, "turnos"),
             duracion_ms=_opcional(harness, "duracion_ms"),
             tokens_cache=_opcional(harness, "tokens_cache"),
-            descartes_verify_causa=_causa(row, "descartes_verify_causa", CausaDescarte),
-            ci_indeterminada_causa=_causa(row, "ci_indeterminada_causa", CausaCiIndeterminada),
+            descartes_verify_causa=_causa_de_verify(row, descartes),
+            ci_indeterminada_causa=_causa(row, "ci_indeterminada_causa", vocabulario=CausaCiIndeterminada),
             modelos=_lista_str(row, "modelos"),
             variante=_texto_opcional(row, "variante"),
         )
