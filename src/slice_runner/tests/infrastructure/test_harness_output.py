@@ -182,6 +182,22 @@ class TestAStreamedEnvelope:
 
         assert envelope.structured_output == {"paths": [{"path": "hello.py", "kind": "production"}], "left_out": []}
 
+    def test_a_denial_with_a_key_we_do_not_know_is_read_because_it_travels_in_the_same_foreign_envelope(
+        self,
+    ) -> None:
+        widened = HarnessEnvelopeMother.denying_a_read() | {
+            "permission_denials": [
+                dict(denial) | {"campo_nuevo_del_harness": 1}
+                for denial in HarnessEnvelopeMother.DENIALS_AS_THE_HARNESS_SENDS_THEM
+            ]
+        }
+
+        envelope = HarnessOutput.from_dict(widened)
+
+        assert [denial.denied_action for denial in envelope.permission_denials] == [
+            f"Read {HarnessEnvelopeMother.DENIED_READ}"
+        ]
+
     def test_permission_denials_still_extract_empty_when_none_of_the_turns_were_denied(self) -> None:
         envelope = HarnessOutput.from_process(self._streamed())
 
