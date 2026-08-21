@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from slice_runner.infrastructure.contract_model import ContractModel
+from slice_runner.infrastructure.open_vocabulary_model import OpenVocabularyModel
 
 
-class PermissionDenial(ContractModel):
+class PermissionDenial(OpenVocabularyModel):
     tool_name: str
     tool_use_id: str
     tool_input: dict[str, object]
