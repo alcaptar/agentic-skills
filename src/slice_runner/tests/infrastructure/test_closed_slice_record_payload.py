@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from slice_runner.domain.ci_indeterminate_cause import CiIndeterminateCause
 from slice_runner.domain.diff_stats import DiffStats
-from slice_runner.domain.discard_cause import DiscardCause
 from slice_runner.infrastructure.closed_slice_record_payload import ClosedSliceRecordPayload
 from slice_runner.tests.mothers.closed_slice_record_mother import ClosedSliceRecordMother
+from slice_runner.tests.mothers.discarded_call_mother import DiscardedCallMother
 
 
 class TestTheContractEmittedForOneClosedSlice:
@@ -57,11 +57,15 @@ class TestTheContractEmittedForOneClosedSlice:
         assert contract["diff"] == {"files_changed": 4, "lines_added": 51, "lines_deleted": 9}
 
     def test_the_cause_a_verdict_was_discarded_travels_in_the_domains_own_english_vocabulary(self) -> None:
-        record = ClosedSliceRecordMother.merged_discarding_because_of(DiscardCause.FAILED_CALL)
+        record = ClosedSliceRecordMother.merged_discarding_because_of(DiscardedCallMother.of_a_failed_call())
 
         contract = ClosedSliceRecordPayload.from_domain(record).to_contract()
 
-        assert contract["discard_cause"] == "failed-call"
+        assert contract["discarded_call"] == {
+            "step": "verify",
+            "cause": "failed-call",
+            "reason": "claude: command not found",
+        }
 
     def test_the_cause_ci_could_not_be_read_travels_in_the_domains_own_english_vocabulary(self) -> None:
         record = ClosedSliceRecordMother.blocked_indeterminate_because_of(CiIndeterminateCause.COMMAND_FAILED)

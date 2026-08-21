@@ -18,7 +18,7 @@ from slice_runner.application.queries.read_pull_request_status import ReadPullRe
 from slice_runner.application.queries.run_prechecks import RunPrechecksParams
 from slice_runner.application.queries.select_slice import SelectSliceParams
 from slice_runner.domain.branch_catch_up_outcome import BranchCatchUpOutcome
-from slice_runner.domain.discard_cause import DiscardCause
+from slice_runner.domain.discarded_call import DiscardedCall
 from slice_runner.domain.exceptions import (
     DirtyIndexError,
     MeasuredCallError,
@@ -111,7 +111,7 @@ class ConductSliceProgress:
     retry_instruction: str = ""
     pull_request: int | None = None
     waited_seconds: int = 0
-    discard_cause: DiscardCause | None = None
+    discarded_call: DiscardedCall | None = None
     ci_indeterminate_cause: CiIndeterminateCause | None = None
     diff_stats: DiffStats | None = None
 
@@ -574,16 +574,17 @@ class ConductSlice:
         return self._within_budget(stepped, call=verification.spend)
 
     def _within_budget(self, stepped: SteppedSlice, *, call: HarnessSpend | None) -> SteppedSlice:
-        if not self._budgets.cost_exhausted(call=call, total=stepped.progress.spend):
-            return stepped
+        exhaustion = self._budgets.cost_exhausted(call=call, total=stepped.progress.spend)
 
-        return replace(stepped, outcome=Outcome.OVER_BUDGET)
+        return replace(stepped, outcome=Outcome.of_the_cost_exhaustion(exhaustion, otherwise=stepped.outcome))
 
     @staticmethod
     def _discarding(progress: ConductSliceProgress, rejection: MeasuredCallError) -> ConductSliceProgress:
         spends = progress.spends if rejection.spend is None else (*progress.spends, rejection.spend)
 
-        return replace(progress, spends=spends, discard_cause=DiscardCause.of_the_rejection(rejection))
+        return replace(
+            progress, spends=spends, discarded_call=DiscardedCall.of_the_rejection(progress.run.step, rejection)
+        )
 
     def _opening_the_pull_request(self, progress: ConductSliceProgress) -> SteppedSlice:
         opened = self._deliver.execute(
@@ -738,7 +739,7 @@ class ConductSlice:
                 spends=progress.spends,
                 findings=progress.findings_of_every_round,
                 findings_of_the_last_round=progress.findings_of_the_last_round,
-                discard_cause=progress.discard_cause,
+                discarded_call=progress.discarded_call,
                 ci_indeterminate_cause=progress.ci_indeterminate_cause,
                 debt=progress.debt,
                 diff_stats=progress.diff_stats,

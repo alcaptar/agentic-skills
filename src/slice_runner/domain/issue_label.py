@@ -18,6 +18,7 @@ class IssueLabel(StrEnum):
     BLOCKED_CI_INDETERMINATE = "bloqueada:ci-indeterminada"
     BLOCKED_CI_CONFLICT = "bloqueada:conflicto"
     ABORTED_BUDGET = "abortada:presupuesto"
+    ABORTED_UNMEASURED_CALL = "abortada:llamada-no-medida"
 
     @classmethod
     def of(cls, *, state: RunState, step: Step) -> IssueLabel | None:
@@ -37,6 +38,8 @@ class IssueLabel(StrEnum):
                 return cls._of_the_blocked_reason(state)
             case RunState.ABORTED_BUDGET:
                 return cls.ABORTED_BUDGET
+            case RunState.ABORTED_UNMEASURED_CALL:
+                return cls.ABORTED_UNMEASURED_CALL
 
     @classmethod
     def _of_the_open_step(cls, step: Step) -> IssueLabel:

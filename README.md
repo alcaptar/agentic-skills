@@ -261,7 +261,7 @@ El codigo de salida es el contrato con quien lo invoca:
 | `2` | No hay veredicto de fiar: un proceso del run no se pudo lanzar, o el juez devolvio un veredicto incoherente |
 | `3` | No hay nada que juzgar: el indice esta vacio (¿falto el `git add`?) |
 | `4` | Error de uso: el repo o la base no resuelven, falta un argumento, el issue o el estado que se quiere leer no se pueden leer, `read` no encuentra la conversacion pedida, o el rastro/registro durable que `read` o `spend` leen trae una linea corrupta |
-| `5` | `run`: la slice cerro **sin** mergear (controles, juez, integracion continua o presupuesto). Hay que mirar el issue; reinvocar sin tocar nada repite el cierre |
+| `5` | `run`: la slice cerro **sin** mergear (controles, juez, integracion continua, presupuesto o una llamada al arnes que no dejo nada que medir). Hay que mirar el issue; reinvocar sin tocar nada repite el cierre |
 | `7` | `run`: se agoto la espera con el run todavia abierto -pausa de alineacion, integracion continua o merge-. Reinvocar es exactamente lo que toca. Esperando el merge, ademas, un comentario en la subissue dice que la pull request quedo sin fusionar y recuerda que en borrador el merge no puede ocurrir |
 | `8` | `run`: los prechecks pararon la invocacion antes de tocar codigo |
 | `9` | `run`: el issue no tiene ninguna slice ejecutable (todas cerradas, bloqueadas o abortadas) |
@@ -378,8 +378,8 @@ los controles verdes -> juzga el diff con `claude -p` -> commit -> abre la pull 
 verde -> etiqueta la subissue `estado:esperando-merge` y **para**.
 
 Si algo se rompe, la etiqueta lo dice y el run para en vez de seguir: `bloqueada:controles`,
-`bloqueada:verify`, `bloqueada:ci-roja`, `bloqueada:ci-indeterminada`, `bloqueada:conflicto` o
-`abortada:presupuesto`.
+`bloqueada:verify`, `bloqueada:ci-roja`, `bloqueada:ci-indeterminada`, `bloqueada:conflicto`,
+`abortada:presupuesto` o `abortada:llamada-no-medida`.
 
 **3. Mergear, o pedir un cambio (tu)**
 

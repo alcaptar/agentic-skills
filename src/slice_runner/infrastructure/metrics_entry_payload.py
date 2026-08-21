@@ -8,9 +8,11 @@ from pydantic import AliasChoices, Field
 
 from slice_runner.domain.ci_indeterminate_cause import CiIndeterminateCause
 from slice_runner.domain.discard_cause import DiscardCause
+from slice_runner.domain.discarded_call import DiscardedCall
 from slice_runner.domain.exceptions import RunNotClosedError
 from slice_runner.domain.run_state import RunState
 from slice_runner.domain.severity import Severity
+from slice_runner.domain.step import Step
 from slice_runner.infrastructure.contract_model import ContractModel
 from slice_runner.infrastructure.corpus_verdict_payload import SeverityCountPayload
 from slice_runner.infrastructure.json_schema import JsonSchema
@@ -27,6 +29,7 @@ class DurableVerdict(StrEnum):
     BLOCKED_CONTROLS = "bloqueada-controles"
     BLOCKED_HYGIENE = "bloqueada-higiene"
     ABORTED_BUDGET = "abortada-presupuesto"
+    ABORTED_UNMEASURED_CALL = "abortada-llamada-no-medida"
 
 
 class DurableCi(StrEnum):
@@ -86,6 +89,7 @@ class DurableClosure:
         RunState.BLOCKED_CONTROLS: DurableVerdict.BLOCKED_CONTROLS,
         RunState.BLOCKED_HYGIENE: DurableVerdict.BLOCKED_HYGIENE,
         RunState.ABORTED_BUDGET: DurableVerdict.ABORTED_BUDGET,
+        RunState.ABORTED_UNMEASURED_CALL: DurableVerdict.ABORTED_UNMEASURED_CALL,
     }
 
     _STATES_WITH_NO_CI: ClassVar[dict[DurableVerdict, RunState]] = {
@@ -93,6 +97,7 @@ class DurableClosure:
         DurableVerdict.BLOCKED_CONTROLS: RunState.BLOCKED_CONTROLS,
         DurableVerdict.BLOCKED_HYGIENE: RunState.BLOCKED_HYGIENE,
         DurableVerdict.ABORTED_BUDGET: RunState.ABORTED_BUDGET,
+        DurableVerdict.ABORTED_UNMEASURED_CALL: RunState.ABORTED_UNMEASURED_CALL,
     }
     _MERGED_STATES: ClassVar[dict[DurableCi, RunState]] = {
         DurableCi.GREEN: RunState.MERGED,
@@ -113,7 +118,11 @@ class DurableClosure:
             case RunState.BLOCKED_CI_CONFLICT:
                 return cls(verdict=DurableVerdict.PASS, ci=DurableCi.CONFLICT)
             case (
-                RunState.BLOCKED_VERIFY | RunState.BLOCKED_CONTROLS | RunState.BLOCKED_HYGIENE | RunState.ABORTED_BUDGET
+                RunState.BLOCKED_VERIFY
+                | RunState.BLOCKED_CONTROLS
+                | RunState.BLOCKED_HYGIENE
+                | RunState.ABORTED_BUDGET
+                | RunState.ABORTED_UNMEASURED_CALL
             ):
                 return cls(verdict=cls._VERDICTS_WITH_NO_CI[state], ci=DurableCi.NONE)
             case RunState.OPEN:
@@ -132,6 +141,7 @@ class DurableClosure:
                 | DurableVerdict.BLOCKED_CONTROLS
                 | DurableVerdict.BLOCKED_HYGIENE
                 | DurableVerdict.ABORTED_BUDGET
+                | DurableVerdict.ABORTED_UNMEASURED_CALL
             ):
                 return cls._STATES_WITH_NO_CI[verdict]
 
@@ -152,6 +162,21 @@ class HarnessMeasurementPayload(ContractModel):
                 "tokens_cache": spend.cache_read_tokens,
             }
         )
+
+
+class DiscardedCallPayload(ContractModel):
+    step: Step = Field(alias="paso")
+    cause: DurableDiscardCause = Field(alias="causa")
+    reason: str = Field(alias="motivo")
+
+    @classmethod
+    def from_domain(cls, discarded: DiscardedCall) -> Self:
+        return cls.model_validate(
+            {"paso": discarded.step, "causa": DurableDiscardCause.of(discarded.cause), "motivo": discarded.reason}
+        )
+
+    def to_domain(self) -> DiscardedCall:
+        return DiscardedCall(step=self.step, cause=self.cause.to_domain(), reason=self.reason)
 
 
 class DiffStatsPayload(ContractModel):
@@ -191,7 +216,7 @@ class MetricsEntryPayload(ContractModel):
     understand_discards: int
     implement_discards: int
     harness: HarnessMeasurementPayload | None = None
-    discard_cause: DurableDiscardCause | None = Field(alias="descartes_verify_causa", default=None)
+    discarded_call: DiscardedCallPayload | None = Field(alias="descartes", default=None)
     ci_indeterminate_cause: DurableCiIndeterminateCause | None = Field(alias="ci_indeterminada_causa", default=None)
     models: list[str] | None = Field(alias="modelos", default=None)
     variant: str = Field(alias="variante")
@@ -240,8 +265,8 @@ class MetricsEntryPayload(ContractModel):
                 "understand_discards": closed.run.understand_discards,
                 "implement_discards": closed.run.implement_discards,
                 "harness": HarnessMeasurementPayload.from_domain(spend) if spend.measured else None,
-                "descartes_verify_causa": DurableDiscardCause.of(closed.discard_cause)
-                if closed.discard_cause
+                "descartes": DiscardedCallPayload.from_domain(closed.discarded_call)
+                if closed.discarded_call is not None
                 else None,
                 "ci_indeterminada_causa": DurableCiIndeterminateCause.of(closed.ci_indeterminate_cause)
                 if closed.ci_indeterminate_cause

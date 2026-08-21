@@ -65,5 +65,6 @@ class SliceQueue:
                 | IssueLabel.BLOCKED_CI_INDETERMINATE
                 | IssueLabel.BLOCKED_CI_CONFLICT
                 | IssueLabel.ABORTED_BUDGET
+                | IssueLabel.ABORTED_UNMEASURED_CALL
             ):
                 return True

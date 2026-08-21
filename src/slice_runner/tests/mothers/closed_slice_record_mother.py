@@ -11,7 +11,7 @@ from slice_runner.domain.severity_count import SeverityCount
 if TYPE_CHECKING:
     from slice_runner.domain.ci_indeterminate_cause import CiIndeterminateCause
     from slice_runner.domain.diff_stats import DiffStats
-    from slice_runner.domain.discard_cause import DiscardCause
+    from slice_runner.domain.discarded_call import DiscardedCall
 
 
 class ClosedSliceRecordMother:
@@ -62,8 +62,8 @@ class ClosedSliceRecordMother:
         return cls._record(RunState.MERGED, implement_retries=implement_retries, verify_retries=verify_retries)
 
     @classmethod
-    def merged_discarding_because_of(cls, cause: DiscardCause | None) -> ClosedSliceRecord:
-        return cls._record(RunState.MERGED, discard_cause=cause)
+    def merged_discarding_because_of(cls, discarded: DiscardedCall | None) -> ClosedSliceRecord:
+        return cls._record(RunState.MERGED, discarded_call=discarded)
 
     @classmethod
     def merged_after_discarding_harness_calls(
@@ -90,7 +90,7 @@ class ClosedSliceRecordMother:
         diff: DiffStats | None = None,
         implement_retries: int = 0,
         verify_retries: int = 0,
-        discard_cause: DiscardCause | None = None,
+        discarded_call: DiscardedCall | None = None,
         ci_indeterminate_cause: CiIndeterminateCause | None = None,
         understand_discards: int = 0,
         implement_discards: int = 0,
@@ -112,7 +112,7 @@ class ClosedSliceRecordMother:
             verify_discards=0,
             understand_discards=understand_discards,
             implement_discards=implement_discards,
-            discard_cause=discard_cause,
+            discarded_call=discarded_call,
             ci_indeterminate_cause=ci_indeterminate_cause,
             spend=spend,
             variant="programa",

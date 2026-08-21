@@ -10,7 +10,7 @@ if TYPE_CHECKING:
     from slice_runner.domain.budgets import Budgets
     from slice_runner.domain.ci_indeterminate_cause import CiIndeterminateCause
     from slice_runner.domain.diff_stats import DiffStats
-    from slice_runner.domain.discard_cause import DiscardCause
+    from slice_runner.domain.discarded_call import DiscardedCall
     from slice_runner.domain.finding import Finding
     from slice_runner.domain.harness_spend import HarnessSpend
     from slice_runner.domain.metrics_log import MetricsLog
@@ -32,7 +32,7 @@ class RecordClosureParams:
     spends: tuple[HarnessSpend, ...] = field(default=())
     findings: tuple[Finding, ...] = field(default=())
     findings_of_the_last_round: tuple[Finding, ...] = field(default=())
-    discard_cause: DiscardCause | None = None
+    discarded_call: DiscardedCall | None = None
     ci_indeterminate_cause: CiIndeterminateCause | None = None
     debt: tuple[str, ...] = field(default=())
     diff_stats: DiffStats | None = None
@@ -57,7 +57,7 @@ class RecordClosure:
                 spends=tuple(spend for spend in self._with_history(params) if spend.measured),
                 findings=params.findings,
                 findings_of_the_last_round=params.findings_of_the_last_round,
-                discard_cause=params.discard_cause,
+                discarded_call=params.discarded_call,
                 ci_indeterminate_cause=params.ci_indeterminate_cause,
                 debt=params.debt,
                 diff_stats=params.diff_stats,

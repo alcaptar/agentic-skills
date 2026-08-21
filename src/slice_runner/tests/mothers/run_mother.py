@@ -131,6 +131,10 @@ class RunMother:
         return Run(step=Step.VERIFY, spend=spend)
 
     @staticmethod
+    def aborted_for_an_unmeasured_call(spend: HarnessSpend) -> Run:
+        return Run(step=Step.VERIFY, spend=spend)
+
+    @staticmethod
     def aborted_for_budget_after_a_prior_reopening(*, spend_before_reopening: HarnessSpend, spend: HarnessSpend) -> Run:
         return Run(step=Step.VERIFY, spend_before_reopening=spend_before_reopening, spend=spend)
 

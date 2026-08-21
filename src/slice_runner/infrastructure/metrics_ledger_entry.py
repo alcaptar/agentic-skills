@@ -14,19 +14,19 @@ from slice_runner.infrastructure.contract_model import ContractModel
 from slice_runner.infrastructure.corpus_verdict_payload import SeverityCountPayload
 from slice_runner.infrastructure.metrics_entry_payload import (
     DiffStatsPayload,
+    DiscardedCallPayload,
     DurableCi,
     DurableCiIndeterminateCause,
     DurableClosure,
-    DurableDiscardCause,
     DurableVerdict,
     HarnessMeasurementPayload,
 )
 
 if TYPE_CHECKING:
     from slice_runner.domain.ci_indeterminate_cause import CiIndeterminateCause
-    from slice_runner.domain.discard_cause import DiscardCause
+    from slice_runner.domain.discarded_call import DiscardedCall
 
-_IGNORED_LEGACY_KEYS = ("duracion_s", "coste_tokens")
+_IGNORED_LEGACY_KEYS = ("duracion_s", "coste_tokens", "descartes_verify_causa")
 
 
 class MetricsLedgerRowPayload(ContractModel):
@@ -53,7 +53,7 @@ class MetricsLedgerRowPayload(ContractModel):
     verify_discards: int = Field(alias="descartes_verify", default=0)
     understand_discards: int = 0
     implement_discards: int = 0
-    discard_cause: DurableDiscardCause | None = Field(alias="descartes_verify_causa", default=None)
+    discarded_call: DiscardedCallPayload | None = Field(alias="descartes", default=None)
     ci_indeterminate_cause: DurableCiIndeterminateCause | None = Field(alias="ci_indeterminada_causa", default=None)
     harness: HarnessMeasurementPayload | None = None
     variant: str | None = Field(alias="variante", default=None)
@@ -104,7 +104,7 @@ class MetricsLedgerEntry:
             verify_discards=payload.verify_discards,
             understand_discards=payload.understand_discards,
             implement_discards=payload.implement_discards,
-            discard_cause=cls._discard_cause(payload.discard_cause),
+            discarded_call=cls._discarded_call(payload),
             ci_indeterminate_cause=cls._ci_indeterminate_cause(payload.ci_indeterminate_cause),
             spend=cls._spend(payload.harness) if payload.harness is not None else None,
             variant=payload.variant,
@@ -125,8 +125,8 @@ class MetricsLedgerEntry:
             raise UnreadableMetricsLogError(f"the metrics log has an unreadable timestamp: {error}") from error
 
     @staticmethod
-    def _discard_cause(cause: DurableDiscardCause | None) -> DiscardCause | None:
-        return cause.to_domain() if cause is not None else None
+    def _discarded_call(payload: MetricsLedgerRowPayload) -> DiscardedCall | None:
+        return payload.discarded_call.to_domain() if payload.discarded_call is not None else None
 
     @staticmethod
     def _ci_indeterminate_cause(cause: DurableCiIndeterminateCause | None) -> CiIndeterminateCause | None:

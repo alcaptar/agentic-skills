@@ -8,15 +8,16 @@ import pytest
 from slice_runner.domain.budgets import Budgets
 from slice_runner.domain.ci_indeterminate_cause import CiIndeterminateCause
 from slice_runner.domain.diff_stats import DiffStats
-from slice_runner.domain.discard_cause import DiscardCause
 from slice_runner.domain.exceptions import UnreadableMetricsLogError
 from slice_runner.domain.role_models import RoleModels
 from slice_runner.domain.run_state import RunState
 from slice_runner.domain.severity import Severity
 from slice_runner.domain.severity_count import SeverityCount
+from slice_runner.domain.step import Step
 from slice_runner.infrastructure.metrics_entry_payload import MetricsEntryPayload
 from slice_runner.infrastructure.metrics_ledger_entry import MetricsLedgerEntry
 from slice_runner.tests.mothers.closed_slice_mother import ClosedSliceMother
+from slice_runner.tests.mothers.discarded_call_mother import DiscardedCallMother
 from slice_runner.tests.mothers.harness_spend_mother import HarnessSpendMother
 from slice_runner.tests.mothers.run_mother import RunMother
 from slice_runner.tests.mothers.verdict_mother import FindingMother
@@ -98,15 +99,27 @@ class TestReadingBackARowThisProgramWrote:
         assert record is not None
         assert record.diff is None
 
-    def test_the_cause_of_a_discarded_verdict_is_read_back_as_the_domain_value_it_came_from(self) -> None:
+    def test_the_discarded_call_of_a_discarded_verdict_is_read_back_whole(self) -> None:
+        discarded = DiscardedCallMother.of_a_failed_call()
         row = MetricsEntryPayload.from_domain(
-            ClosedSliceMother.merged_discarding_because_of(DiscardCause.FAILED_CALL), ts=_STAMP.isoformat()
+            ClosedSliceMother.merged_discarding_because_of(discarded), ts=_STAMP.isoformat()
         ).to_contract()
 
         record = MetricsLedgerEntry.read(row)
 
         assert record is not None
-        assert record.discard_cause is DiscardCause.FAILED_CALL
+        assert record.discarded_call == discarded
+
+    def test_a_discarded_call_from_a_step_other_than_verify_is_read_back_with_that_step(self) -> None:
+        discarded = DiscardedCallMother.of_the_step(Step.IMPLEMENT)
+        row = MetricsEntryPayload.from_domain(
+            ClosedSliceMother.merged_discarding_because_of(discarded), ts=_STAMP.isoformat()
+        ).to_contract()
+
+        record = MetricsLedgerEntry.read(row)
+
+        assert record is not None
+        assert record.discarded_call == discarded
 
     def test_the_cause_ci_could_not_be_read_is_read_back_as_the_domain_value_it_came_from(self) -> None:
         row = MetricsEntryPayload.from_domain(
@@ -132,6 +145,20 @@ class TestReadingBackARowThisProgramWrote:
 
 
 class TestToleratingHistory:
+    def test_a_row_written_before_the_step_existed_is_read_with_no_discarded_call(self) -> None:
+        row = MetricsEntryPayload.from_domain(
+            ClosedSliceMother.merged_discarding_because_of(DiscardedCallMother.of_a_failed_call()),
+            ts=_STAMP.isoformat(),
+        ).to_contract()
+        descartes = row.pop("descartes")
+        assert isinstance(descartes, dict)
+        row["descartes_verify_causa"] = descartes["causa"]
+
+        record = MetricsLedgerEntry.read(row)
+
+        assert record is not None
+        assert record.discarded_call is None
+
     def test_the_retired_label_for_a_control_block_is_still_read_as_that_state(self) -> None:
         row = MetricsEntryPayload.from_domain(
             ClosedSliceMother.closed_as(RunState.BLOCKED_CONTROLS), ts=_STAMP.isoformat()
@@ -293,6 +320,13 @@ class TestRejectingCorruption:
     def test_a_timestamp_that_is_not_iso_formatted_is_rejected_instead_of_skipped(self) -> None:
         row = MetricsEntryPayload.from_domain(ClosedSliceMother.merged(), ts=_STAMP.isoformat()).to_contract()
         row["ts"] = "not-a-timestamp"
+
+        with pytest.raises(UnreadableMetricsLogError):
+            MetricsLedgerEntry.read(row)
+
+    def test_a_key_this_program_never_wrote_is_rejected_instead_of_silently_tolerated(self) -> None:
+        row = MetricsEntryPayload.from_domain(ClosedSliceMother.merged(), ts=_STAMP.isoformat()).to_contract()
+        row["descartes_causa"] = "llamada-fallida"
 
         with pytest.raises(UnreadableMetricsLogError):
             MetricsLedgerEntry.read(row)

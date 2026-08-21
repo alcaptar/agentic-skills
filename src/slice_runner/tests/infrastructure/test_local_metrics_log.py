@@ -12,7 +12,6 @@ from slice_runner.domain.budgets import Budgets
 from slice_runner.domain.ci_indeterminate_cause import CiIndeterminateCause
 from slice_runner.domain.clock import Clock
 from slice_runner.domain.diff_stats import DiffStats
-from slice_runner.domain.discard_cause import DiscardCause
 from slice_runner.domain.exceptions import RunNotClosedError, UnreadableMetricsLogError
 from slice_runner.domain.role_models import RoleModels
 from slice_runner.domain.run_state import RunState
@@ -20,6 +19,7 @@ from slice_runner.domain.severity import Severity
 from slice_runner.infrastructure.claude_config import ClaudeConfig
 from slice_runner.infrastructure.local_metrics_log import LocalMetricsLog
 from slice_runner.tests.mothers.closed_slice_mother import ClosedSliceMother
+from slice_runner.tests.mothers.discarded_call_mother import DiscardedCallMother
 from slice_runner.tests.mothers.harness_spend_mother import HarnessSpendMother
 from slice_runner.tests.mothers.run_mother import RunMother
 from slice_runner.tests.mothers.verdict_mother import FindingMother
@@ -76,6 +76,7 @@ class TestHowEachClosureIsRecorded(WithTheLedgerOutOfTheRealHome):
             (RunState.BLOCKED_CONTROLS, "bloqueada-controles", "none"),
             (RunState.BLOCKED_HYGIENE, "bloqueada-higiene", "none"),
             (RunState.ABORTED_BUDGET, "abortada-presupuesto", "none"),
+            (RunState.ABORTED_UNMEASURED_CALL, "abortada-llamada-no-medida", "none"),
         ],
     )
     def test_every_closure_of_the_program_has_its_own_pair_in_the_durable_vocabulary(
@@ -85,6 +86,21 @@ class TestHowEachClosureIsRecorded(WithTheLedgerOutOfTheRealHome):
 
         row = WrittenMetricsLog.row_under(tmp_path)
         assert (row["veredicto"], row["ci"]) == (verdict, ci)
+
+    def test_a_budget_abort_is_recorded_with_a_cost_that_really_is_above_its_own_cap(self, tmp_path: Path) -> None:
+        budgets = Budgets(slice_cost_usd=0.1)
+        spend = HarnessSpendMother.of_the_implementer_call()
+
+        LocalMetricsLog(clock=self.frozen_at()).record(ClosedSliceMother.aborted_over_budget(budgets, spend=spend))
+
+        row = WrittenMetricsLog.row_under(tmp_path)
+        harness = row["harness"]
+        recorded_budgets = row["budgets"]
+        assert isinstance(harness, dict)
+        assert isinstance(recorded_budgets, dict)
+        assert row["veredicto"] == "abortada-presupuesto"
+        assert harness["coste_usd"] == spend.cost_usd
+        assert harness["coste_usd"] > recorded_budgets["slice_cost_usd"]
 
     def test_a_run_that_has_not_closed_is_rejected_instead_of_written_as_a_row(self, tmp_path: Path) -> None:
         with pytest.raises(RunNotClosedError, match="one line per closed slice"):
@@ -315,31 +331,47 @@ class TestWhatTheRunAlreadyCounted(WithTheLedgerOutOfTheRealHome):
 
 
 class TestWhyTheJudgeWasReinvoked(WithTheLedgerOutOfTheRealHome):
+    @staticmethod
+    def _descartes(row: dict[str, object]) -> dict[str, object]:
+        descartes = row["descartes"]
+        assert isinstance(descartes, dict)
+        return descartes
+
     def test_the_cause_of_the_discards_travels_next_to_their_count(self, tmp_path: Path) -> None:
         run = RunMother.that_went_back_for_every_reason()
 
         LocalMetricsLog(clock=self.frozen_at()).record(
-            ClosedSliceMother.merged_discarding_because_of(DiscardCause.FAILED_CALL)
+            ClosedSliceMother.merged_discarding_because_of(DiscardedCallMother.of_a_failed_call())
         )
 
         row = WrittenMetricsLog.row_under(tmp_path)
-        assert (row["descartes_verify"], row["descartes_verify_causa"]) == (run.verify_discards, "llamada-fallida")
+        assert row["descartes_verify"] == run.verify_discards
+        assert self._descartes(row)["causa"] == "llamada-fallida"
+
+    def test_the_step_of_the_discard_travels_next_to_its_cause(self, tmp_path: Path) -> None:
+        discarded = DiscardedCallMother.of_a_failed_call()
+
+        LocalMetricsLog(clock=self.frozen_at()).record(ClosedSliceMother.merged_discarding_because_of(discarded))
+
+        row = WrittenMetricsLog.row_under(tmp_path)
+        assert self._descartes(row)["paso"] == "verify"
 
     def test_an_incoherent_verdict_is_recorded_as_a_different_cause_than_a_call_that_never_answered(
         self, tmp_path: Path
     ) -> None:
         LocalMetricsLog(clock=self.frozen_at()).record(
-            ClosedSliceMother.merged_discarding_because_of(DiscardCause.INCOHERENT_VERDICT)
+            ClosedSliceMother.merged_discarding_because_of(DiscardedCallMother.of_an_incoherent_verdict())
         )
 
-        assert WrittenMetricsLog.row_under(tmp_path)["descartes_verify_causa"] == "veredicto-incoherente"
+        row = WrittenMetricsLog.row_under(tmp_path)
+        assert self._descartes(row)["causa"] == "veredicto-incoherente"
 
     def test_without_a_cause_only_the_count_travels_because_none_is_invented(self, tmp_path: Path) -> None:
         LocalMetricsLog(clock=self.frozen_at()).record(ClosedSliceMother.merged_discarding_because_of(None))
 
         row = WrittenMetricsLog.row_under(tmp_path)
         assert "descartes_verify" in row
-        assert "descartes_verify_causa" not in row
+        assert "descartes" not in row
 
 
 class TestWhyTheCiCouldNotBeRead(WithTheLedgerOutOfTheRealHome):

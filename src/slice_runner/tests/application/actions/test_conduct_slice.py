@@ -82,8 +82,25 @@ class TestConductSliceStartingANewRun:
         assert conductor.understanding.write.call_count == 2
         assert (conductor.repository.pause_for_alignment.call_count, conductor.branches.create.call_count) == (1, 1)
         recorded = conductor.closed
-        assert (recorded.run.understand_discards, recorded.discard_cause) == (1, DiscardCause.FAILED_CALL)
+        assert recorded.run.understand_discards == 1
+        assert recorded.discarded_call is not None
+        assert recorded.discarded_call.step is Step.UNDERSTAND
+        assert recorded.discarded_call.cause is DiscardCause.FAILED_CALL
+        assert recorded.discarded_call.reason == "the harness returned only blank text as its understanding"
         assert recorded.spends[:2] == (HarnessSpendMother.of_the_understanding_call(),) * 2
+
+    def test_a_discard_whose_message_is_longer_than_the_reason_limit_is_recorded_with_it_truncated(self) -> None:
+        conductor = self._conductor()
+        conductor.understanding.write.side_effect = [
+            RejectionMother.invalid_understanding_report_with_an_overlong_message(),
+            UnderstandingMother.of_the_chosen_slice(),
+        ]
+        conductor.repository.read_alignment_response.return_value = AlignmentResponse(kind=AlignmentResponseKind.GO)
+
+        conductor.conduct()
+
+        assert conductor.closed.discarded_call is not None
+        assert conductor.closed.discarded_call.reason == "a" * 200
 
     def test_discard_after_discard_of_the_understanding_closes_the_run_and_writes_its_label(self) -> None:
         conductor = Conductor(chosen=SelectSliceResultMother.about_to_start(), budgets=Budgets(slice_cost_usd=0.03))
@@ -99,7 +116,11 @@ class TestConductSliceStartingANewRun:
         conductor.repository.write_label.assert_any_call(
             repo=Conductor.REPO, issue=_SUBISSUE, remove=IssueLabel.AWAITING_ALIGNMENT, add=IssueLabel.ABORTED_BUDGET
         )
-        assert conductor.metrics.record.call_args.args[0].state is RunState.ABORTED_BUDGET
+        recorded = conductor.metrics.record.call_args.args[0]
+        assert recorded.state is RunState.ABORTED_BUDGET
+        assert recorded.discarded_call is not None
+        assert recorded.discarded_call.step is Step.UNDERSTAND
+        assert recorded.discarded_call.cause is DiscardCause.FAILED_CALL
         assert conductor.repository.pause_for_alignment.call_count == 0
 
     def test_the_invocation_that_asks_for_alignment_ticks_instead_of_writing_any_code(self) -> None:
@@ -1387,7 +1408,10 @@ class TestConductSliceImplementing:
 
         assert conductor.implement.execute.call_count == 2
         recorded = conductor.closed
-        assert (recorded.run.implement_discards, recorded.discard_cause) == (1, DiscardCause.FAILED_CALL)
+        assert recorded.run.implement_discards == 1
+        assert recorded.discarded_call is not None
+        assert recorded.discarded_call.step is Step.IMPLEMENT
+        assert recorded.discarded_call.cause is DiscardCause.FAILED_CALL
         assert recorded.spends[:2] == (HarnessSpendMother.of_the_implementer_call(),) * 2
 
     def test_the_retry_after_a_broken_call_is_told_the_previous_call_died_and_the_flag_clears_once_it_delivers(
@@ -1407,13 +1431,15 @@ class TestConductSliceImplementing:
         written = [call.kwargs["run"] for call in conductor.repository.write_run.call_args_list]
         assert written[-1].previous_call_died is False
 
-    def test_a_call_killed_from_outside_leaves_the_flag_on_even_though_the_run_closes_over_budget(self) -> None:
+    def test_a_call_killed_from_outside_leaves_the_flag_on_even_though_the_run_closes_for_an_unmeasured_call(
+        self,
+    ) -> None:
         conductor = self._conductor()
         conductor.implement.execute.side_effect = RejectionMother.envelope_nobody_could_parse()
 
         result = conductor.conduct()
 
-        assert result.state is RunState.ABORTED_BUDGET
+        assert result.state is RunState.ABORTED_UNMEASURED_CALL
         written = [call.kwargs["run"] for call in conductor.repository.write_run.call_args_list]
         assert written[-1].previous_call_died is True
 
@@ -1663,7 +1689,7 @@ class TestConductSliceWhenTheJudgeSpeaks:
         recorded = conductor.metrics.record.call_args.args[0]
         assert (recorded.run.verify_discards, recorded.run.verify_retries) == (1, 0)
         assert recorded.spend.calls == 2
-        assert recorded.discard_cause is DiscardCause.INCOHERENT_VERDICT
+        assert recorded.discarded_call.cause is DiscardCause.INCOHERENT_VERDICT
 
     def test_a_call_that_left_no_verdict_at_all_is_discarded_as_a_failed_call_and_not_as_an_incoherent_one(
         self,
@@ -1673,7 +1699,7 @@ class TestConductSliceWhenTheJudgeSpeaks:
 
         conductor.conduct()
 
-        assert conductor.metrics.record.call_args.args[0].discard_cause is DiscardCause.FAILED_CALL
+        assert conductor.metrics.record.call_args.args[0].discarded_call.cause is DiscardCause.FAILED_CALL
 
 
 class TestConductSliceWhenTheCostOfTheSliceRunsOut:
@@ -1691,7 +1717,11 @@ class TestConductSliceWhenTheCostOfTheSliceRunsOut:
         conductor.repository.write_label.assert_called_once_with(
             repo=Conductor.REPO, issue=_SUBISSUE, remove=IssueLabel.IN_PROGRESS, add=IssueLabel.ABORTED_BUDGET
         )
-        assert conductor.metrics.record.call_args.args[0].state is RunState.ABORTED_BUDGET
+        recorded = conductor.metrics.record.call_args.args[0]
+        assert recorded.state is RunState.ABORTED_BUDGET
+        assert recorded.discarded_call is not None
+        assert recorded.discarded_call.step is Step.VERIFY
+        assert recorded.discarded_call.cause is DiscardCause.INCOHERENT_VERDICT
 
     def test_discard_after_discard_of_the_implementation_closes_the_run_and_writes_its_label(self) -> None:
         conductor = Conductor(
@@ -1709,7 +1739,11 @@ class TestConductSliceWhenTheCostOfTheSliceRunsOut:
         conductor.repository.write_label.assert_called_once_with(
             repo=Conductor.REPO, issue=_SUBISSUE, remove=IssueLabel.IN_PROGRESS, add=IssueLabel.ABORTED_BUDGET
         )
-        assert conductor.metrics.record.call_args.args[0].state is RunState.ABORTED_BUDGET
+        recorded = conductor.metrics.record.call_args.args[0]
+        assert recorded.state is RunState.ABORTED_BUDGET
+        assert recorded.discarded_call is not None
+        assert recorded.discarded_call.step is Step.IMPLEMENT
+        assert recorded.discarded_call.cause is DiscardCause.FAILED_CALL
 
     def test_a_discard_with_cost_left_asks_the_judge_again_instead_of_closing(self) -> None:
         conductor = self._judging(budgets=Budgets(slice_cost_usd=0.2))
@@ -1732,7 +1766,10 @@ class TestConductSliceWhenTheCostOfTheSliceRunsOut:
         result = conductor.conduct()
 
         assert conductor.verify.execute.call_count == 1
-        assert result.state is RunState.ABORTED_BUDGET
+        assert result.state is RunState.ABORTED_UNMEASURED_CALL
+        recorded = conductor.metrics.record.call_args.args[0]
+        assert recorded.discarded_call.step is Step.VERIFY
+        assert recorded.discarded_call.cause is DiscardCause.FAILED_CALL
 
     def test_a_call_with_no_measurement_closes_the_run_even_after_an_earlier_call_of_the_run_was_measured(
         self,
@@ -1747,7 +1784,7 @@ class TestConductSliceWhenTheCostOfTheSliceRunsOut:
 
         assert conductor.implement.execute.call_count == 1
         assert conductor.verify.execute.call_count == 1
-        assert result.state is RunState.ABORTED_BUDGET
+        assert result.state is RunState.ABORTED_UNMEASURED_CALL
 
     def test_an_unmeasured_implementation_call_closes_the_run_instead_of_spinning_for_a_cost_nobody_can_add_up(
         self,
@@ -1761,7 +1798,7 @@ class TestConductSliceWhenTheCostOfTheSliceRunsOut:
         result = conductor.conduct()
 
         assert conductor.implement.execute.call_count == 1
-        assert result.state is RunState.ABORTED_BUDGET
+        assert result.state is RunState.ABORTED_UNMEASURED_CALL
 
     def test_an_implementation_that_spent_the_whole_cost_closes_before_running_a_single_control(self) -> None:
         conductor = Conductor(

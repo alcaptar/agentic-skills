@@ -8,7 +8,7 @@ if TYPE_CHECKING:
 
     from slice_runner.domain.ci_indeterminate_cause import CiIndeterminateCause
     from slice_runner.domain.diff_stats import DiffStats
-    from slice_runner.domain.discard_cause import DiscardCause
+    from slice_runner.domain.discarded_call import DiscardedCall
     from slice_runner.domain.recorded_spend import RecordedSpend
     from slice_runner.domain.run_state import RunState
     from slice_runner.domain.severity_count import SeverityCount
@@ -32,7 +32,7 @@ class ClosedSliceRecord:
     verify_discards: int
     understand_discards: int
     implement_discards: int
-    discard_cause: DiscardCause | None
+    discarded_call: DiscardedCall | None
     ci_indeterminate_cause: CiIndeterminateCause | None
     spend: RecordedSpend | None
     variant: str | None
