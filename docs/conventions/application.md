@@ -50,6 +50,25 @@ todas las piezas de un sistema estan en su sitio-, partirlo no quita ni un puert
 entre dos piezas y anade una tercera que las componga. Quien agrupe tiene que poder nombrar que recorre;
 si no puede nombrarlo, esta agrupando para callar al linter.
 
+## Conducir no es ejecutar
+
+Un caso de uso que dirige un flujo de punta a punta **invoca** sus pasos; no los ejecuta. Cada paso que
+despacha entra por su propio caso de uso, y quien conduce no habla con los puertos que ese paso necesita
+para hacer su trabajo.
+
+**La linea, para que no se amplie por precedente: lo que se despacha como paso del flujo va por caso de
+uso; una comprobacion previa no.** Preguntar si existe lo que un paso va a necesitar, o prepararlo antes
+de entrar en el bucle, puede seguir haciendose contra el puerto desde quien conduce: no es un paso, no
+tiene resultado que el flujo consuma y no aparece en el estado que se persiste. La vara para dudar no es
+el tamano de la llamada: **si su resultado se proyecta a un desenlace que el flujo recibe, es un paso**.
+
+**Y traducir el resultado de un paso al vocabulario del flujo tampoco es de quien conduce**: esa
+proyeccion vive del lado del destino (`docs/conventions/domain.md`), porque si no cada paso nuevo trae
+su propio `if` al conductor y la regla acaba repartida entre los sitios que la invocan.
+
+Lo que se gana es que el fichero que dirige el flujo no crezca con cada paso que se anade, y que un paso
+se pueda medir sin montar el bucle entero.
+
 ## Dejar constancia no es conducir
 
 **Quien decide el flujo no compone la telemetria.** El caso de uso que orquesta un proceso largo decide

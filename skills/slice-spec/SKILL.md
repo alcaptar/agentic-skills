@@ -274,6 +274,14 @@ SENAL: prometheus min_over_time(application_stock_actual[10m]) < 0 dispara la al
   `ACEPTACION: el flujo funciona correctamente` no lo es (nada lo puede refutar). Un criterio no
   falsable deja al verificador de slice-runner sin nada contra lo que mapear el test, asi que no cumple
   el contrato.
+- **Un criterio puede fijar donde vive una pieza, y cuando la slice introduce una tiene que hacerlo.**
+  "Se ejecuta desde su propio caso de uso" o "la proyeccion vive en el vocabulario de destino" son tan
+  falsables como cualquier criterio de comportamiento -borras la pieza de su sitio y el criterio cae-, y
+  son lo unico que le da al verificador algo que exigir sobre la **forma**. Sin ellos, la arquitectura
+  queda huerfana entre dos varas: los criterios solo hablan de lo que el codigo hace, y las convenciones
+  del repo solo cubren lo que alguien se acordo de escribir en ellas. Un criterio de forma no sustituye a
+  la convencion -si la regla vale para todo el repo, su casa es `docs/conventions/`-, pero es lo que
+  impide que **esta** slice nazca en el sitio equivocado mientras la convencion se escribe.
 - **Y cada criterio se le pide a quien puede cumplirlo.** El implementador no toca `git` -ni commitea,
   ni stagea, ni cambia de rama, ni redacta mensajes de commit- y no compone el cuerpo de la pull
   request: lo que devuelve es codigo, tests y su informe. Un criterio que pida algo fuera de eso es
