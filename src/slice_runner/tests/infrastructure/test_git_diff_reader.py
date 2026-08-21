@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 from slice_runner.domain.exceptions import EmptyIndexError, UnresolvableRepoOrBaseError
-from slice_runner.infrastructure.git_branches import GitCommandFailedError
+from slice_runner.infrastructure.git_command_failed_error import GitCommandFailedError
 from slice_runner.infrastructure.git_diff_reader import GitDiffReader
 from slice_runner.tests.git_repo import Git
 from slice_runner.tests.mothers.repo_mother import RepoMother

@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from slice_runner.infrastructure.git_branches import GitCommandFailedError
+from slice_runner.infrastructure.git_command_failed_error import GitCommandFailedError
 from slice_runner.infrastructure.git_workspace import GitWorkspace
 from slice_runner.infrastructure.process import ProcessOutput
 from slice_runner.tests.doubles import ScriptedProcess

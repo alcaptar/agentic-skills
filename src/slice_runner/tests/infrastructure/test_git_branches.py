@@ -6,13 +6,26 @@ import pytest
 
 from slice_runner.domain.branch_catch_up_outcome import BranchCatchUpOutcome
 from slice_runner.domain.exceptions import UnresolvableBaseError
-from slice_runner.infrastructure.git_branches import GitBranches, GitCommandFailedError
-from slice_runner.tests.doubles import SpyingProcess
+from slice_runner.infrastructure.git_branches import GitBranches
+from slice_runner.infrastructure.git_command_failed_error import GitCommandFailedError
+from slice_runner.infrastructure.process import ProcessOutput
+from slice_runner.tests.doubles import ScriptedProcess, SpyingProcess
 from slice_runner.tests.git_repo import Git
 from slice_runner.tests.real_process import Real
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+
+class TestCommitsBehindRemoteWithTheReasonOnlyOnStdout:
+    def test_the_message_carries_what_stdout_says_instead_of_the_bare_exit_code(self) -> None:
+        process = ScriptedProcess(
+            ProcessOutput(code=0, stdout="", stderr=""),
+            ProcessOutput(code=1, stdout="fatal: ambiguous argument 'main..origin/main'", stderr=""),
+        )
+
+        with pytest.raises(UnresolvableBaseError, match="fatal: ambiguous argument"):
+            GitBranches(process=process).commits_behind_remote(worktree="/repos/agentic-skills", base="main")
 
 
 @pytest.mark.integration
