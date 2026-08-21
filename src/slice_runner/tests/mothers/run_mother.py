@@ -123,6 +123,10 @@ class RunMother:
         return Run(step=Step.AWAIT_CI, catch_up_retries=3)
 
     @staticmethod
+    def blocked_on_conflict_with_indeterminate_ticks_piled_up() -> Run:
+        return Run(step=Step.AWAIT_CI, catch_up_retries=3, indeterminate_ticks=8)
+
+    @staticmethod
     def aborted_for_budget(spend: HarnessSpend) -> Run:
         return Run(step=Step.VERIFY, spend=spend)
 

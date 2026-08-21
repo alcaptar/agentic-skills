@@ -294,6 +294,18 @@ mide. Las reglas que salen de estas decisiones siguen en su capa.
   `from_catch_up`, que viaja desde la maquina de estados (`Run.catching_up_the_branch`) hasta el caso de
   uso de entrega: el push si es incondicional en los dos casos, porque es lo que hace que la integracion
   continua vuelva a arrancar sobre una pull request que ya dejo de estar detras.
+- **Reabrir por conflicto reinicia tambien `indeterminate_ticks`, no solo `catch_up_retries`.** Un run
+  puede acumular ticks de integracion continua ilegible, cerrar despues por conflicto con esos ticks casi
+  agotados, y al reabrirlo la primera lectura ilegible lo cerraria otra vez con un motivo distinto del que
+  la persona acaba de resolver a mano. Reabrir es una oportunidad nueva para los dos contadores que pudo
+  dejar vivos ese cierre, no solo para el que lo causo.
+- **La transicion que reintenta la puesta al dia espera antes de volver a preguntar, con
+  `seconds_between_ticks`.** Justo despues de empujar la fusion, GitHub recalcula la mergeabilidad de
+  forma asincrona y puede devolver el diagnostico anterior: sin esa espera, una lectura estancada gasta un
+  reintento al instante y paga una ronda entera de controles por vuelta, lo que en un par de minutos agota
+  `catch_up_retries` y cierra en `bloqueada:conflicto` -el desenlace que esta pieza existe para evitar-. Va
+  en el reintento y no en la lectura de la integracion continua porque es el unico punto del ciclo con un
+  tope garantizado independiente de cuanto tarde la ronda de controles que sigue.
 
 ### El descarte de aprobacion pagada, y por que hay dos comprobaciones de coste
 

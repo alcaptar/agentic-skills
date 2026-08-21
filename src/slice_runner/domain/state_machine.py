@@ -53,7 +53,8 @@ class StateMachine:
 
     def _retrying_a_catch_up(self, run: Run) -> Transition:
         if run.catch_up_retries < self.budgets.catch_up_retries:
-            return self._moving_to(replace(run, catch_up_retries=run.catch_up_retries + 1), Step.CATCH_UP)
+            moved = replace(run, catch_up_retries=run.catch_up_retries + 1, step=Step.CATCH_UP)
+            return Transition(run=moved, wait_seconds=self.budgets.seconds_between_ticks)
 
         return self._closed(run, RunState.BLOCKED_CI_CONFLICT)
 
@@ -102,7 +103,7 @@ class StateMachine:
             case IssueLabel.BLOCKED_CI_INDETERMINATE:
                 return replace(run, indeterminate_ticks=0)
             case IssueLabel.BLOCKED_CI_CONFLICT:
-                return replace(run, catch_up_retries=0)
+                return replace(run, catch_up_retries=0, indeterminate_ticks=0)
 
     def _after_the_step_of(self, run: Run, outcome: Outcome) -> Transition:
         match run.step:

@@ -95,6 +95,25 @@ class TestReopenSlice:
             repo=_REPO, issue=subissue.number, remove=label, add=IssueLabel.IN_PROGRESS
         )
 
+    def test_reopening_after_a_conflict_also_resets_the_indeterminate_ticks_piled_up_before_it(
+        self, action: ReopenSlice, repository: Mock
+    ) -> None:
+        subissue = SubIssueMother.blocked(
+            IssueLabel.BLOCKED_CI_CONFLICT, RunMother.blocked_on_conflict_with_indeterminate_ticks_piled_up()
+        )
+
+        action.execute(ReopenSliceParams(repo=_REPO, subissue=subissue, instruction=_INSTRUCTION))
+
+        repository.write_run.assert_called_once_with(
+            repo=_REPO,
+            issue=subissue.number,
+            run=replace(
+                RunMother.blocked_on_conflict_with_indeterminate_ticks_piled_up(),
+                catch_up_retries=0,
+                indeterminate_ticks=0,
+            ),
+        )
+
     def test_the_instruction_that_reopened_the_slice_is_left_on_the_subissue_marked_as_consumed(
         self, action: ReopenSlice, repository: Mock
     ) -> None:

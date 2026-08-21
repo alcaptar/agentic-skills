@@ -935,6 +935,15 @@ class TestConductSliceCatchesUpTheBranchWhenTheCiFindsAConflict(_ResumedAwaiting
 
         assert conductor.deliver.execute.call_args.args[0].from_catch_up is True
 
+    def test_the_retry_that_returns_to_catch_up_waits_before_asking_the_ci_again(self) -> None:
+        conductor = self._conductor(budgets=Budgets(catch_up_retries=1, seconds_between_ticks=45))
+        conductor.ci.status.return_value = CiStatus.NO_CHECKS
+        conductor.forum.pull_request_state.return_value = PullRequestStatusMother.open_and_conflicting()
+
+        conductor.conduct()
+
+        assert conductor.clock.sleep.call_args_list[0].kwargs["seconds"] == 45
+
     def test_the_catch_up_retries_exhausted_closes_the_run_as_a_conflict_just_like_before(self) -> None:
         conductor = self._conductor(budgets=Budgets(catch_up_retries=1))
         conductor.ci.status.return_value = CiStatus.NO_CHECKS
@@ -2128,7 +2137,7 @@ class TestConductSliceWaitingForTheCi(_ResumedAwaitingTheCi):
             add=IssueLabel.BLOCKED_CI_INDETERMINATE,
         )
 
-    def test_a_conflicting_pull_request_with_no_checks_closes_on_the_first_tick_without_spending_the_window(
+    def test_a_conflicting_pull_request_with_no_checks_spends_its_own_retry_budget_not_the_indeterminate_window(
         self,
     ) -> None:
         conductor = self._conductor()
@@ -2137,7 +2146,7 @@ class TestConductSliceWaitingForTheCi(_ResumedAwaitingTheCi):
 
         result = conductor.conduct()
 
-        assert conductor.clock.sleep.call_count == 0
+        assert conductor.clock.sleep.call_count == Budgets().catch_up_retries
         assert result.state is RunState.BLOCKED_CI_CONFLICT
         conductor.repository.write_label.assert_called_once_with(
             repo=Conductor.REPO,

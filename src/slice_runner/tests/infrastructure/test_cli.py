@@ -121,7 +121,7 @@ _TABLE: list[tuple[Step, Outcome, dict[str, int], tuple[Step, RunState, int]]] =
     (Step.AWAIT_CI, Outcome.FAILED, {}, (Step.IMPLEMENT, RunState.OPEN, 0)),
     (Step.AWAIT_CI, Outcome.FAILED, {"ci_retries": 1}, (Step.AWAIT_CI, RunState.BLOCKED_CI_RED, 0)),
     (Step.AWAIT_CI, Outcome.OVER_BUDGET, {}, (Step.AWAIT_CI, RunState.ABORTED_BUDGET, 0)),
-    (Step.AWAIT_CI, Outcome.CONFLICTING, {}, (Step.CATCH_UP, RunState.OPEN, 0)),
+    (Step.AWAIT_CI, Outcome.CONFLICTING, {}, (Step.CATCH_UP, RunState.OPEN, 30)),
     (
         Step.AWAIT_CI,
         Outcome.CONFLICTING,
