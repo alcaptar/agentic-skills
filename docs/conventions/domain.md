@@ -121,8 +121,8 @@ esta en `docs/design-notes.md`**: aqui va la regla que los gobierna, no la medic
 - **El descarte de una llamada al arnes no gasta reintento en ninguno de los pasos que la hacen.** Donde
   no se ha tocado el codigo es evidente; donde si, la llamada rota pudo dejar cambios sin comitear pero
   nada de eso llega al indice -un informe que no se puede leer nunca llega al paso que staggea-, asi que
-  tampoco es un intento de la fase que un control o un juez lleguen a medir. Quien lo acota es el
-  presupuesto de coste, que **si** cierra. Darle contador propio seria inventar una politica que ninguna
+  tampoco es un intento de la fase que un control o un juez lleguen a medir. Quien lo acota es la
+  pregunta del coste, que **si** cierra, con el estado que corresponda a lo que impidio seguir. Darle contador propio seria inventar una politica que ninguna
   medicion sostiene; dejarlo sin ningun cierre seria un bucle que paga una llamada por vuelta y no termina.
 - **El presupuesto de coste impide la siguiente llamada; no tira la que ya se pago.** Un veredicto que
   aprueba nunca se convierte en agotado -entregar no cuesta harness-, y la llamada siguiente se corta
@@ -131,9 +131,14 @@ esta en `docs/design-notes.md`**: aqui va la regla que los gobierna, no la medic
 - **La pregunta del coste se hace por llamada, no por el agregado**, y esa firma es load-bearing: se mira
   primero si **esa** llamada dejo medicion y solo despues se suma. Al agregado se le puede preguntar
   eternamente sin que conteste que no, porque lo que no se mide no suma.
-- **Un gasto no medido cuenta como agotado**, no como cero: lo que no se puede sumar no se puede acotar.
-  Es la misma eleccion fail-closed que una lectura indeterminada: el precio del falso positivo es una
-  reinvocacion, y el del falso negativo es el bucle que el tope existe para cortar.
+- **Un gasto no medido cierra el run, y con estado propio.** Lo que no se puede sumar no se puede
+  acotar, asi que la pregunta del coste contesta que no se sigue: es la misma eleccion fail-closed que
+  una lectura indeterminada, y el precio del falso positivo es una reinvocacion mientras el del falso
+  negativo es el bucle que el tope existe para cortar. Lo que **no** puede contestar es agotado: no
+  poder medir y haberse pasado del tope son causas distintas, se reparan en sitios distintos, y
+  colapsarlas manda a diagnosticar el dinero cuando el problema estaba en la respuesta. Por eso la
+  pregunta devuelve **cual** de las cosas ocurre y no un booleano, y por eso reabrir por una llamada no
+  medida conserva lo gastado: lo que fallo no fue el presupuesto.
 - **Lo que se cuenta son todas las llamadas del run.** Contar solo una parte abarataria el numero a costa
   de dejar sin cierre el bucle del descarte.
 
