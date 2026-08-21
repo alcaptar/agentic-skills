@@ -290,8 +290,8 @@ echo '{"run": {"step": "run-controls", "control_retries": 2}, "outcome": "failed
 
 ```json
 {"run": {"step": "run-controls", "corrected": "", "understanding_pending": false,
- "previous_call_died": false, "control_retries": 2,
- "hygiene_retries": 0, "verify_retries": 0, "correction_retries": 0, "ci_retries": 0,
+ "previous_call_died": false, "catching_up_the_branch": false, "control_retries": 2,
+ "hygiene_retries": 0, "verify_retries": 0, "correction_retries": 0, "ci_retries": 0, "catch_up_retries": 0,
  "indeterminate_ticks": 0, "verify_discards": 0, "understand_discards": 0, "implement_discards": 0,
  "control_rounds_logged": 1, "last_reviewed_id": 0, "requested_changes": []}, "state": "blocked-controls",
  "wait_seconds": 0}

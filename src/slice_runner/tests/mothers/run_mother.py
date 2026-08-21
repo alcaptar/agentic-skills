@@ -53,6 +53,10 @@ class RunMother:
         return Run(step=Step.AWAIT_CI, ci_retries=1)
 
     @staticmethod
+    def with_one_catch_up_retry_already_spent() -> Run:
+        return Run(step=Step.AWAIT_CI, catch_up_retries=1)
+
+    @staticmethod
     def awaiting_merge() -> Run:
         return Run(step=Step.AWAIT_MERGE)
 
@@ -116,7 +120,11 @@ class RunMother:
 
     @staticmethod
     def blocked_on_conflict() -> Run:
-        return Run(step=Step.AWAIT_CI, indeterminate_ticks=3)
+        return Run(step=Step.AWAIT_CI, catch_up_retries=3)
+
+    @staticmethod
+    def blocked_on_conflict_with_indeterminate_ticks_piled_up() -> Run:
+        return Run(step=Step.AWAIT_CI, catch_up_retries=3, indeterminate_ticks=8)
 
     @staticmethod
     def aborted_for_budget(spend: HarnessSpend) -> Run:

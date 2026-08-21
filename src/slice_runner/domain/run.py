@@ -16,11 +16,13 @@ class Run:
     corrected: str = ""
     understanding_pending: bool = False
     previous_call_died: bool = False
+    catching_up_the_branch: bool = False
     control_retries: int = 0
     hygiene_retries: int = 0
     verify_retries: int = 0
     correction_retries: int = 0
     ci_retries: int = 0
+    catch_up_retries: int = 0
     indeterminate_ticks: int = 0
     verify_discards: int = 0
     understand_discards: int = 0

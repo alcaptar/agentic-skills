@@ -38,7 +38,7 @@ class TestDeliverSlice:
         return DeliverSlice(workspace=workspace, forum=forum)
 
     @staticmethod
-    def _params() -> DeliverSliceParams:
+    def _params(*, from_catch_up: bool = False) -> DeliverSliceParams:
         return DeliverSliceParams(
             worktree=_WORKTREE,
             repo=_REPO,
@@ -47,6 +47,7 @@ class TestDeliverSlice:
             title=_TITLE,
             commit_message=_COMMIT_MESSAGE,
             body=_BODY,
+            from_catch_up=from_catch_up,
         )
 
     def test_the_commit_carries_the_message_it_was_given_and_not_the_title_of_the_pull_request(
@@ -103,6 +104,20 @@ class TestDeliverSlice:
         workspace.commit.assert_not_called()
         workspace.push.assert_not_called()
         forum.create_pull_request.assert_not_called()
+
+    def test_a_delivery_coming_from_a_catch_up_skips_the_commit_because_the_merge_already_produced_one(
+        self, action: DeliverSlice, workspace: Mock
+    ) -> None:
+        action.execute(self._params(from_catch_up=True))
+
+        workspace.commit.assert_not_called()
+
+    def test_a_delivery_coming_from_a_catch_up_still_pushes_the_branch_so_the_ci_can_be_asked_again(
+        self, action: DeliverSlice, workspace: Mock
+    ) -> None:
+        action.execute(self._params(from_catch_up=True))
+
+        workspace.push.assert_called_once_with(worktree=_WORKTREE, branch=_BRANCH)
 
     def test_standing_on_a_branch_that_is_not_the_one_the_slice_declared_stops_the_delivery(
         self, action: DeliverSlice, workspace: Mock, forum: Mock

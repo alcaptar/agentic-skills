@@ -121,7 +121,16 @@ _TABLE: list[tuple[Step, Outcome, dict[str, int], tuple[Step, RunState, int]]] =
     (Step.AWAIT_CI, Outcome.FAILED, {}, (Step.IMPLEMENT, RunState.OPEN, 0)),
     (Step.AWAIT_CI, Outcome.FAILED, {"ci_retries": 1}, (Step.AWAIT_CI, RunState.BLOCKED_CI_RED, 0)),
     (Step.AWAIT_CI, Outcome.OVER_BUDGET, {}, (Step.AWAIT_CI, RunState.ABORTED_BUDGET, 0)),
-    (Step.AWAIT_CI, Outcome.CONFLICTING, {}, (Step.AWAIT_CI, RunState.BLOCKED_CI_CONFLICT, 0)),
+    (Step.AWAIT_CI, Outcome.CONFLICTING, {}, (Step.CATCH_UP, RunState.OPEN, 30)),
+    (
+        Step.AWAIT_CI,
+        Outcome.CONFLICTING,
+        {"catch_up_retries": Budgets().catch_up_retries},
+        (Step.AWAIT_CI, RunState.BLOCKED_CI_CONFLICT, 0),
+    ),
+    (Step.CATCH_UP, Outcome.DONE, {}, (Step.RUN_CONTROLS, RunState.OPEN, 0)),
+    (Step.CATCH_UP, Outcome.CONFLICTING, {}, (Step.CATCH_UP, RunState.BLOCKED_CI_CONFLICT, 0)),
+    (Step.CATCH_UP, Outcome.OVER_BUDGET, {}, (Step.CATCH_UP, RunState.ABORTED_BUDGET, 0)),
     (Step.AWAIT_MERGE, Outcome.DONE, {}, (Step.AWAIT_MERGE, RunState.MERGED, 0)),
     (Step.AWAIT_MERGE, Outcome.PENDING, {}, (Step.AWAIT_MERGE, RunState.OPEN, 30)),
     (Step.AWAIT_MERGE, Outcome.OVER_BUDGET, {}, (Step.AWAIT_MERGE, RunState.ABORTED_BUDGET, 0)),
@@ -825,11 +834,13 @@ class TestTheTransitionOfEveryPair:
                 "corrected": "",
                 "understanding_pending": False,
                 "previous_call_died": False,
+                "catching_up_the_branch": False,
                 "control_retries": 1,
                 "hygiene_retries": 0,
                 "verify_retries": 0,
                 "correction_retries": 0,
                 "ci_retries": 0,
+                "catch_up_retries": 0,
                 "indeterminate_ticks": 0,
                 "verify_discards": 1,
                 "understand_discards": 0,
@@ -1304,7 +1315,7 @@ class TestWhenTheRunClosesWithoutBeingMerged:
             ),
         )
 
-        code = invocation.conduct(logs=tmp_path / "logs")
+        code = invocation.conduct(logs=tmp_path / "logs", budgets=Budgets(catch_up_retries=0))
 
         assert code == ExitCode.RUN_UNMERGED
         assert json.loads(capsys.readouterr().out) == {

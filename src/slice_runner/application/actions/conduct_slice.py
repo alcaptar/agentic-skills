@@ -427,7 +427,7 @@ class ConductSlice:
         match progress.run.step:
             case Step.UNDERSTAND | Step.IMPLEMENT | Step.RUN_CONTROLS | Step.VERIFY:
                 return self._stepping_while_producing(progress, progress.run.step)
-            case Step.OPEN_PULL_REQUEST | Step.AWAIT_CI | Step.AWAIT_MERGE:
+            case Step.OPEN_PULL_REQUEST | Step.AWAIT_CI | Step.CATCH_UP | Step.AWAIT_MERGE:
                 return self._stepping_while_delivering(progress, progress.run.step)
 
     def _stepping_while_producing(
@@ -446,15 +446,34 @@ class ConductSlice:
                 return self._judging(progress)
 
     def _stepping_while_delivering(
-        self, progress: ConductSliceProgress, step: Literal[Step.OPEN_PULL_REQUEST, Step.AWAIT_CI, Step.AWAIT_MERGE]
+        self,
+        progress: ConductSliceProgress,
+        step: Literal[Step.OPEN_PULL_REQUEST, Step.AWAIT_CI, Step.CATCH_UP, Step.AWAIT_MERGE],
     ) -> SteppedSlice | HaltedSlice:
         match step:
             case Step.OPEN_PULL_REQUEST:
                 return self._opening_the_pull_request(progress)
             case Step.AWAIT_CI:
                 return self._asking_the_ci(progress)
+            case Step.CATCH_UP:
+                return self._catching_up_the_branch(progress)
             case Step.AWAIT_MERGE:
                 return self._asking_for_the_merge(progress)
+
+    def _catching_up_the_branch(self, progress: ConductSliceProgress) -> SteppedSlice:
+        outcome = self._branches.catch_up(
+            worktree=progress.params.worktree, name=progress.subissue.branch, base=progress.params.base
+        )
+
+        return SteppedSlice(progress=progress, outcome=self._outcome_of_the_catch_up(outcome))
+
+    @staticmethod
+    def _outcome_of_the_catch_up(outcome: BranchCatchUpOutcome) -> Outcome:
+        match outcome:
+            case BranchCatchUpOutcome.CAUGHT_UP:
+                return Outcome.DONE
+            case BranchCatchUpOutcome.CONFLICTING:
+                return Outcome.CONFLICTING
 
     def _implementing(self, progress: ConductSliceProgress) -> SteppedSlice:
         if self._budgets.exhausted(progress.spend):
@@ -578,6 +597,7 @@ class ConductSlice:
                 body=self._pull_request.body(
                     progress.subissue, debt=progress.debt, findings=progress.findings_of_the_last_round
                 ),
+                from_catch_up=progress.run.catching_up_the_branch,
             )
         )
 
