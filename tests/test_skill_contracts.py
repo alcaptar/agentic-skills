@@ -427,7 +427,7 @@ def _grace_window(text: str) -> tuple[int, int]:
     """The two numbers of the grace window as some surface writes them: ticks and seconds."""
     ticks = re.search(r"(\d+)\s+ticks\s+indeterminados", text)
     assert ticks, "the grace window is stated without how many ticks it takes"
-    seconds = re.search(r"(\d+)\s+s\s+o\s+mas\s+entre\s+tick\s+y\s+tick", text)
+    seconds = re.search(r"(\d+)\s+s\s+o\s+m[aá]s\s+entre\s+tick\s+y\s+tick", text)
     assert seconds, "the grace window is stated without how long a tick waits"
 
     return int(ticks.group(1)), int(seconds.group(1))

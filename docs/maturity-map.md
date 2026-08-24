@@ -44,6 +44,6 @@ Cherny lista productos oficiales por escalón: Auto mode, Agent view, `/loop` `/
 
 Todo lo demás (orquestación, worktrees, routines, review genérico, sandboxing) conviene apoyarlo en los primitivos oficiales en vez de re-implementarlo.
 
-## Siguiente paso hacia Step 2
+## Siguiente paso hacía Step 2
 
 Cerrar el "self-verification loop you trust": validar el verificador en runs reales hasta ganarle confianza, y solo entonces activar Nivel 2 (`/loop` con presupuesto + circuit breaker por intentos). No aumentar el nº de agentes antes.

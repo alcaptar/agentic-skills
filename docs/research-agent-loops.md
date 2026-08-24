@@ -1,8 +1,8 @@
 # Loops autónomos de agentes de código: qué se ha descubierto
 
 > **Bibliografia, no vara de medir.** Resume lo que otros han publicado y medido, con sus fuentes.
-> No describe este repo ni lo gobierna; se cita desde `docs/design-notes.md` cuando una decision se
-> apoya en algo de aqui.
+> No describe este repo ni lo gobierna; se cita desde `docs/design-notes.md` cuando una decisión se
+> apoya en algo de aquí.
 
 Research sobre el estado del arte de los loops autónomos para el flujo **spec -> slice -> implementar -> PR -> CI verde**. Cubre cuatro dimensiones: resultados y lecciones reales, verificación y calidad, coste y economía, y seguridad y guardrails; más una comparativa de frameworks.
 
@@ -68,7 +68,7 @@ Evidencia académica de que separar roles funciona:
 
 ### TDD, red-green-refactor y sus trampas
 - Con agentes, el **TDD test-first se vuelve casi obligatorio** para evitar que el agente "juegue" con tests que pasan mientras la implementación diverge. `[media]`
-- Pero los agentes **derivan sistemáticamente hacia "big bang" test-first** (generan muchos tests de golpe y luego implementan), saltándose el ciclo red-green. Herramientas como **tdd-guard** lo fuerzan con un hook + un "juez" IA separado (otra vez writer != verifier). `[media]` ([brgr.one](https://www.brgr.one/blog/ai-coding-agents-tdd-enforcement))
+- Pero los agentes **derivan sistemáticamente hacía "big bang" test-first** (generan muchos tests de golpe y luego implementan), saltándose el ciclo red-green. Herramientas como **tdd-guard** lo fuerzan con un hook + un "juez" IA separado (otra vez writer != verifier). `[media]` ([brgr.one](https://www.brgr.one/blog/ai-coding-agents-tdd-enforcement))
 - Coste de forzar TDD: **~duplica el tiempo** y sube tokens, a cambio de mejor calidad de asserts y adherencia arquitectónica. `[media]`
 - **Paradoja del prompting de TDD** `[fuerte]`: en modelos pequeños, añadir instrucciones procedimentales de TDD **sin** contexto de tests empeoró los resultados (regresiones +42%). Lo que ayuda es **surfacing de contexto** (qué tests están en riesgo), no prescribir el workflow: el enfoque TDAD redujo regresiones **un 70%** (6.08% -> 1.82%) dándole al agente análisis de impacto. ([TDAD, arXiv](https://arxiv.org/pdf/2603.17973))
 
@@ -111,7 +111,7 @@ Evidencia académica de que separar roles funciona:
 - Dato de gobierno: solo **52%** de las empresas puede auditar qué datos tocan sus agentes; **48%** tiene un punto ciego total. `[media]`
 
 ### Riesgos "blandos" (Osmani)
-Tres deudas compuestas de los loops autónomos: **intent debt** (el agente rellena contexto ausente con suposiciones confiadas), **comprehension debt** (el código se envía más rápido de lo que el equipo lo lee), y **cognitive surrender** (aceptar outputs sin escrutinio). `[media]` ([Osmani](https://addyosmani.com/blog/loop-engineering/))
+Tres deudas compuestas de los loops autónomos: **intent debt** (el agente rellena contexto ausente con suposiciones confiadas), **comprehensión debt** (el código se envía más rápido de lo que el equipo lo lee), y **cognitive surrender** (aceptar outputs sin escrutinio). `[media]` ([Osmani](https://addyosmani.com/blog/loop-engineering/))
 
 ---
 
@@ -147,7 +147,7 @@ Qué **sugiere ajustar / vigilar**:
 3. **Coste impredecible (30x)**: para el Nivel 2 (`/loop`), añadir **presupuesto de tokens/$** como circuit-breaker además de `max_consecutive_failures` y `max_runtime`. Medir **coste por slice aceptada (mergeada)**, no por slice intentada.
 4. **Aislamiento runtime, no solo worktree**: para el Nivel 3 (paralelo), el `COMPOSE_PROJECT_NAME`/puertos por worktree que ya anotamos es exactamente el gap "código aislado != ejecución aislada".
 5. **Circuit breaker con contador de intentos por slice** (estilo Ralph: marcar "stuck" tras N) encaja con nuestro `[!]` de slice bloqueada.
-6. **Cuidado con intent/comprehension debt y rubber-stamping**: el gate de check-alignment y leer los outputs a propósito son la contramedida.
+6. **Cuidado con intent/comprehensión debt y rubber-stamping**: el gate de check-alignment y leer los outputs a propósito son la contramedida.
 
 ---
 
