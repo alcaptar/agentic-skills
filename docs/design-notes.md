@@ -325,8 +325,8 @@ política declarada, es la ausencia de una. `RoleModels` no tenía campo `verify
 podía decir con que modelo corria el juez ni la fila durable lo escribia -no se podía saber con que se
 juzgo una slice ya cerrada, ni separar su coste del de la sesión que lanzo el run (issue #259)-.
 
-Declarado hay que elegir, y la elección es `"opus"`, frente al `"sonnet"` que fijan `ImplementerInvocation`
-y `UnderstandingInvocation`. **No la sostiene ningún corpus**: nada de las 60 verificaciones registradas
+Declarado hay que elegir, y la elección es `"opus"`, frente al `"sonnet"` que fija `ImplementerInvocation`
+-`UnderstandingInvocation` tambien lo subio despues, por el apartado siguiente-. **No la sostiene ningún corpus**: nada de las 60 verificaciones registradas
 (más arriba) compara el mismo diff juzgado por dos modelos distintos. Lo que la sostiene es la asimetría
 del coste del error. Un implementador flojo cuesta una ronda de corrección más, que se ve en el momento y
 se paga una vez; un juez flojo aprueba una pull request mala, que no se ve y la paga quien venga detrás.
@@ -337,6 +337,37 @@ slice: `models_by_role.verify` viaja en la fila durable, así que en cuanto haya
 juzgados por modelos distintos se podran comparar, y bajarlo sera cambiar una constante con los datos
 delante. Hay test de las tres cosas: que `RoleModels` no se construye sin `verify`, que
 `JudgeInvocation.argv` emite `--model`, y que la fila durable lo trae.
+
+### Por que el entendimiento tambien sube a Opus (2026-08-24)
+
+El paso que redacta el entendimiento pasa de `"sonnet"` a `"opus"`. Lo sostiene la misma asimetria del
+apartado anterior, aplicada al unico paso anterior al diff.
+
+Los numeros con los que se decidio, sobre 92 slices cerradas de dos repos y dos equipos
+-`alcaptar/agentic-skills` y `mercadona/mo.ntc.control.api`-:
+
+- **El entendimiento es el 11% del gasto en los dos**: 10,9% aqui (media 1,23 $ por llamada) y 11,4%
+  alli (media 0,59 $). Que la proporcion se repita con costes absolutos que difieren al doble es lo que
+  hace fiable la estimacion: subirlo encarece el run **entre un 15% y un 22%**, no lo multiplica.
+- **26 de cada 100 entendimientos necesitan correccion**: 38 de 145 llevaron al menos un `-REVIEW`
+  -24 de 79 aqui, 14 de 66 alli-, y tres necesitaron tres rondas.
+- **Y el `-REVIEW` no repara el dano.** Cruzando las 89 slices que casan con su recuento: las que se
+  aprobaron a la primera cierran con 0,40 hallazgos `high` y 0,81 `medium` de media; las que hubo que
+  corregir, con 0,47 y 1,25. **La correlacion no prueba causa**: puede que las slices con `-REVIEW` sean
+  sencillamente las mas dificiles, y con estos datos las dos explicaciones no se separan.
+
+Lo que decide, igual que con el juez, es donde cae el error que **no** se ve. Un entendimiento flojo que
+la persona caza cuesta un `-REVIEW` y algo mas de un dolar. El que no caza pasa el `-GO` **blindado**: el
+implementador tiene escrito que lo que decidio una persona ahi no se reabre por su cuenta, y el juez no
+lo recibe -decision ratificada al cerrar #347-. Es ademas el unico paso sin red debajo: al implementador
+lo cazan los tests y los controles, al juez la rubrica y la evidencia citable; al entendimiento solo lo
+lee una persona, y solo si esa persona ve lo que falta.
+
+**Tampoco a esto lo sostiene ningun corpus**: 0 de las 92 slices cerradas habian corrido `understand` con
+otro modelo, asi que no hay dos poblaciones que comparar. Lo reversible es lo mismo que en el juez:
+`models_by_role.understand` ya viaja en la fila durable, la linea base queda escrita aqui -26% de
+`-REVIEW`, y 0,40 `high` y 0,81 `medium` en las aprobadas a la primera- y en cuanto haya slices con
+`"opus"` se repite el mismo cruce y se baja o se mantiene con los datos delante.
 
 ### La duplicación con `skills/`: por que se acepta
 
