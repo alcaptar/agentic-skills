@@ -762,6 +762,45 @@ declarado**, no hechos: la convención no los ejecuta. El orden que se recomendo
 tiene fecha de caducidad primero -el de contar hallazgos, por la slice del indulto- y el de los
 marcadores después, porque ya había que tocarlo.
 
+## La vara dice la regla; el codigo dice su forma (lo que se midio)
+
+`docs/conventions/infrastructure.md` describia, en dos vinetas, como estaban montados tres adaptadores
+concretos: que agrupaban su telemetria en un objeto, que el rastro lo escribia "el adaptador que la
+hace", y dos motivos que razonaban sobre cuantos puertos le caben a una firma antes de que salte el
+linter. Las dos vinetas eran verdad el dia que se escribieron.
+
+**Que se midio.** Dejaron de serlo con la slice que puso la secuencia de una llamada al arnes en un solo
+sitio, y **nada aviso**: `make check` siguio verde, la integracion continua paso, el juez no dijo nada.
+El fallo se encontro a mano, leyendo la capa despues de mergear, y lo que habria pasado si no es
+concreto: el siguiente rol se escribe leyendo esa capa -el `CLAUDE.md` lo hace obligatorio-, asi que la
+convencion le habria dicho que inyectase la telemetria y registrase por su cuenta, justo lo que el
+invariante iba a ponerle en rojo. Una vara que instruye a hacer lo que otra vara prohibe es peor que
+no tener ninguna.
+
+**Por que caduco, y no es mala suerte.** Una convencion de este repo **viaja dentro del prompt** de los
+tres agentes, asi que no es un documento que se consulta: es contexto que se carga entero, siempre. Cada
+frase que describe la forma del codigo compite por la atencion con la regla y, a diferencia del codigo,
+no se actualiza cuando la forma cambia. Escribirla ahi es congelar en prosa un dato que quien lea el
+arbol puede descubrir mejor -y que, al descubrirlo, encontrara al dia-.
+
+De ahi el reparto que esta nota fija: **la convencion dice lo que el codigo no puede decir de si mismo**
+-que esta prohibido, por que se eligio, que consecuencia se acepto- y **el codigo dice su propia forma**.
+La regla que sobrevivio a la poda es la que cumple eso: el rastro lo escribe la capa que ve la respuesta
+y no la que orquesta, sin nombrar quien ni con cuantos puertos.
+
+**Que se hizo.** Se retiro la vineta de agrupar la telemetria -su regla de fondo, agrupar dependencias
+cuando la lista es el trabajo, ya vive en `application.md`, y aqui solo era su aplicacion a un caso- y
+se podo la del rastro dejando la regla, su motivo atemporal y la consecuencia sobre el identificador de
+sesion. **No se anadio nada**: lo que impide que el rol siguiente registre por su cuenta no es una frase,
+es la firma -sin la telemetria en el constructor no tiene con que- y el invariante de alcance total. Y la
+regla general de que una decision se escribe una vez ya vive en `architecture.md`.
+
+**Lo que queda declarado.** Que esto vuelva a pasar no lo impide nada todavia: ninguna vara mide si una
+frase de una convencion sigue describiendo el arbol. El contrato de rutas comprueba que una ruta citada
+existe, no que una afirmacion sobre el codigo siga siendo cierta, y por diseno no puede -comparar prosa
+con arbol es lo que este repo evita en el otro sentido-. Lo unico que baja el riesgo es la regla de esta
+nota: no escribir la afirmacion.
+
 ## Roadmap de autonomia (pendiente)
 
 Estado actual: **Nivel 1** — una slice por invocación, todo bajo control manual. Subir de nivel solo cuando el anterior sea fiable; el cuello de botella nunca es implementar, es la calidad del gate de verificación.
