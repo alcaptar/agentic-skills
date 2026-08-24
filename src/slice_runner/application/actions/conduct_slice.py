@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Literal, NoReturn
 
+from slice_runner.application.actions.catch_up_branch import CatchUpBranchParams
 from slice_runner.application.actions.close_parent import CloseParentParams
 from slice_runner.application.actions.deliver_slice import DeliverSliceParams
 from slice_runner.application.actions.implement_slice import ImplementSliceParams
@@ -17,7 +18,6 @@ from slice_runner.application.queries.read_ci_status import ReadCiStatusParams
 from slice_runner.application.queries.read_pull_request_status import ReadPullRequestStatusParams
 from slice_runner.application.queries.run_prechecks import RunPrechecksParams
 from slice_runner.application.queries.select_slice import SelectSliceParams
-from slice_runner.domain.branch_catch_up_outcome import BranchCatchUpOutcome
 from slice_runner.domain.discarded_call import DiscardedCall
 from slice_runner.domain.exceptions import (
     DirtyIndexError,
@@ -42,6 +42,7 @@ from slice_runner.domain.step import Step
 if TYPE_CHECKING:
     from pathlib import Path
 
+    from slice_runner.application.actions.catch_up_branch import CatchUpBranch
     from slice_runner.application.actions.close_parent import CloseParent
     from slice_runner.application.actions.deliver_slice import DeliverSlice
     from slice_runner.application.actions.implement_slice import ImplementSlice
@@ -165,6 +166,7 @@ class ConductSliceUseCases:
     read_ci: ReadCiStatus
     read_pull_request: ReadPullRequestStatus
     seek_alignment: SeekAlignment
+    catch_up: CatchUpBranch
 
 
 @dataclass(frozen=True, kw_only=True, slots=True)
@@ -201,6 +203,7 @@ class ConductSlice:
         self._read_ci = use_cases.read_ci
         self._read_pull_request = use_cases.read_pull_request
         self._seek_alignment = use_cases.seek_alignment
+        self._catch_up = use_cases.catch_up
         self._repository = ports.repository
         self._branches = ports.branches
         self._forum = ports.forum
@@ -270,14 +273,15 @@ class ConductSlice:
         return step is Step.AWAIT_CI or step is Step.AWAIT_MERGE
 
     def _caught_up_before_conducting(self, progress: ConductSliceProgress) -> ConductSliceResult:
-        outcome = self._branches.catch_up(
-            worktree=progress.params.worktree, name=progress.subissue.branch, base=progress.params.base
+        caught_up = self._catch_up.execute(
+            CatchUpBranchParams(
+                worktree=progress.params.worktree, branch=progress.subissue.branch, base=progress.params.base
+            )
         )
-        match outcome:
-            case BranchCatchUpOutcome.CONFLICTING:
-                return self._blocked_by_a_catch_up_conflict(progress)
-            case BranchCatchUpOutcome.CAUGHT_UP:
-                return self._conducting(progress)
+        if caught_up.outcome is Outcome.CONFLICTING:
+            return self._blocked_by_a_catch_up_conflict(progress)
+
+        return self._conducting(progress)
 
     def _blocked_by_a_catch_up_conflict(self, progress: ConductSliceProgress) -> ConductSliceResult:
         transition = self._machine.after(progress.run, Outcome.CONFLICTING)
@@ -461,19 +465,13 @@ class ConductSlice:
                 return self._asking_for_the_merge(progress)
 
     def _catching_up_the_branch(self, progress: ConductSliceProgress) -> SteppedSlice:
-        outcome = self._branches.catch_up(
-            worktree=progress.params.worktree, name=progress.subissue.branch, base=progress.params.base
+        caught_up = self._catch_up.execute(
+            CatchUpBranchParams(
+                worktree=progress.params.worktree, branch=progress.subissue.branch, base=progress.params.base
+            )
         )
 
-        return SteppedSlice(progress=progress, outcome=self._outcome_of_the_catch_up(outcome))
-
-    @staticmethod
-    def _outcome_of_the_catch_up(outcome: BranchCatchUpOutcome) -> Outcome:
-        match outcome:
-            case BranchCatchUpOutcome.CAUGHT_UP:
-                return Outcome.DONE
-            case BranchCatchUpOutcome.CONFLICTING:
-                return Outcome.CONFLICTING
+        return SteppedSlice(progress=progress, outcome=caught_up.outcome)
 
     def _implementing(self, progress: ConductSliceProgress) -> SteppedSlice:
         if self._budgets.exhausted(progress.spend):
