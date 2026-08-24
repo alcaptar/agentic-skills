@@ -35,7 +35,7 @@ from slice_runner.tests.mothers.verification_mother import JudgeMother, SliceUnd
 if TYPE_CHECKING:
     from pathlib import Path
 
-_WORKTREE = "/Users/someone/repos/the-slice"
+_WORKTREE = ConversationTranscriptMother.WORKTREE
 _SLICE_ID = "slice-05"
 
 
@@ -61,7 +61,7 @@ class TestARecordedConversation(WithTheToolUseLogOutOfTheRealHome):
     def test_every_tool_use_of_the_conversation_lands_in_the_log_labelled_with_the_slice_step_and_session(
         self, tmp_path: Path
     ) -> None:
-        ConversationTranscriptMother.written_under(tmp_path, worktree=_WORKTREE)
+        ConversationTranscriptMother.written_under(tmp_path)
         recorder = ConversationToolUseRecorder(conversations=LocalConversationLog(), tool_use_log=LocalToolUseLog())
 
         recorder.record_after(
@@ -84,7 +84,7 @@ class TestARecordedConversation(WithTheToolUseLogOutOfTheRealHome):
         self, tmp_path: Path
     ) -> None:
         ConversationTranscriptMother.written_under(
-            tmp_path, worktree=_WORKTREE, recorded=ConversationTranscriptMother.REJECTED_STRUCTURED_OUTPUT
+            tmp_path, recorded=ConversationTranscriptMother.REJECTED_STRUCTURED_OUTPUT
         )
         recorder = ConversationToolUseRecorder(conversations=LocalConversationLog(), tool_use_log=LocalToolUseLog())
 
@@ -133,10 +133,9 @@ class TestATranscriptThatCannotBeRead(WithTheToolUseLogOutOfTheRealHome):
 
     def test_a_corrupted_transcript_leaves_the_run_going_instead_of_raising(self, tmp_path: Path) -> None:
         session = "broken-session"
-        encoded = _WORKTREE.rstrip("/").replace("/", "-")
-        destination = tmp_path / "projects" / encoded / f"{session}.jsonl"
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        destination.write_text("not json at all\n", encoding="utf-8")
+        ConversationTranscriptMother.destination_of(tmp_path, session=session).write_text(
+            "not json at all\n", encoding="utf-8"
+        )
         recorder = ConversationToolUseRecorder(conversations=LocalConversationLog(), tool_use_log=LocalToolUseLog())
 
         recorder.record_after(slice_id=_SLICE_ID, step=Step.IMPLEMENT, session=session, worktree=_WORKTREE)
@@ -147,10 +146,9 @@ class TestATranscriptThatCannotBeRead(WithTheToolUseLogOutOfTheRealHome):
         self, tmp_path: Path
     ) -> None:
         session = "broken-session"
-        encoded = _WORKTREE.rstrip("/").replace("/", "-")
-        destination = tmp_path / "projects" / encoded / f"{session}.jsonl"
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        destination.write_text("not json at all\n", encoding="utf-8")
+        ConversationTranscriptMother.destination_of(tmp_path, session=session).write_text(
+            "not json at all\n", encoding="utf-8"
+        )
         recorder = ConversationToolUseRecorder(conversations=LocalConversationLog(), tool_use_log=LocalToolUseLog())
 
         recorder.record_after(slice_id=_SLICE_ID, step=Step.IMPLEMENT, session=session, worktree=_WORKTREE)
@@ -166,7 +164,7 @@ class TestATranscriptThatCannotBeRead(WithTheToolUseLogOutOfTheRealHome):
 
 
 class TestARunThatCallsAllThreeStepsOfTheHarness(WithTheToolUseLogOutOfTheRealHome):
-    _WORKTREE = AssignmentMother.WORKTREE
+    _WORKTREE = ConversationTranscriptMother.WORKTREE
     _SESSION = ConversationTranscriptMother.SESSION
 
     @classmethod
@@ -181,7 +179,7 @@ class TestARunThatCallsAllThreeStepsOfTheHarness(WithTheToolUseLogOutOfTheRealHo
 
     @classmethod
     def _run_all_three(cls, tmp_path: Path) -> None:
-        ConversationTranscriptMother.written_under(tmp_path, worktree=cls._WORKTREE)
+        ConversationTranscriptMother.written_under(tmp_path)
         tool_uses = ConversationToolUseRecorder(conversations=LocalConversationLog(), tool_use_log=LocalToolUseLog())
         telemetry = HarnessTelemetry(
             trace=RecordedTrace(), turns=RecordedTurnLog(), spend_log=RecordedSpendLog(), tool_uses=tool_uses
@@ -204,7 +202,7 @@ class TestARunThatCallsAllThreeStepsOfTheHarness(WithTheToolUseLogOutOfTheRealHo
                 telemetry=telemetry,
             ),
             reader=reader,
-        ).implement(AssignmentMother.of_the_first_round())
+        ).implement(replace(AssignmentMother.of_the_first_round(), worktree=cls._WORKTREE))
         ClaudeVerifier(
             calls=cls._calls(RecordedProcess(cls._envelope(JudgeVerdictMother.passing())), telemetry=telemetry),
             reader=reader,

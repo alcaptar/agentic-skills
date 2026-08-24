@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from typing import TYPE_CHECKING, ClassVar
 
 from slice_runner.domain.conversation import Conversation, ConversationTurn, ToolCall
@@ -22,6 +23,7 @@ if TYPE_CHECKING:
 
 class LocalConversationLog(ConversationLog):
     RESULT_EXCERPT_LENGTH: ClassVar[int] = 500
+    OUTSIDE_A_PROJECT_DIRECTORY_NAME: ClassVar[re.Pattern[str]] = re.compile(r"[^A-Za-z0-9-]")
 
     def read(self, *, session: str, worktree: str) -> Conversation:
         path = self._path(session=session, worktree=worktree)
@@ -39,7 +41,7 @@ class LocalConversationLog(ConversationLog):
         )
 
     def _path(self, *, session: str, worktree: str) -> Path:
-        encoded = worktree.rstrip("/").replace("/", "-")
+        encoded = self.OUTSIDE_A_PROJECT_DIRECTORY_NAME.sub("-", worktree.rstrip("/"))
 
         return ClaudeConfig.root().joinpath("projects", encoded, f"{session}.jsonl")
 
