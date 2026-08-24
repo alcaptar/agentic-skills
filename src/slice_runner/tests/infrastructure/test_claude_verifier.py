@@ -31,14 +31,19 @@ _READER = RecordedSourceReader()
 
 class Calling:
     @staticmethod
-    def _calls(process: Process) -> HarnessInvocationRunner:
+    def _calls(
+        process: Process,
+        *,
+        trace: RecordedTrace | None = None,
+        tool_uses: RecordedToolUseRecorder | None = None,
+    ) -> HarnessInvocationRunner:
         return HarnessInvocationRunner(
             process=process,
             telemetry=HarnessTelemetry(
-                trace=RecordedTrace(),
+                trace=trace or RecordedTrace(),
                 turns=RecordedTurnLog(),
                 spend_log=RecordedSpendLog(),
-                tool_uses=RecordedToolUseRecorder(),
+                tool_uses=tool_uses or RecordedToolUseRecorder(),
             ),
         )
 
@@ -118,6 +123,30 @@ class TestWhenTheJudgeAnswersSomethingIncoherent(Calling):
             )
 
         assert rejection.value.spend == HarnessSpendMother.of_the_judge_call()
+
+
+class TestTheCallSubjectComesFromTheReviewsOwnFields(Calling):
+    def test_the_trace_carries_the_reviews_own_repo_issue_and_slice_id_and_not_a_crossed_field(self) -> None:
+        trace = RecordedTrace()
+        review = SliceUnderReviewMother.of_the_slice()
+
+        ClaudeVerifier(
+            calls=self._calls(RecordedProcess(HarnessEnvelopeMother.recorded()), trace=trace), reader=_READER
+        ).verify(_JUDGE, review)
+
+        recorded = trace.calls[0]
+        assert (recorded.repo, recorded.issue, recorded.slice_id) == (review.repo, review.issue, review.slice_id)
+
+    def test_the_tool_use_recording_carries_the_reviews_own_worktree_and_slice_id(self) -> None:
+        tool_uses = RecordedToolUseRecorder()
+        review = SliceUnderReviewMother.of_the_slice()
+
+        ClaudeVerifier(
+            calls=self._calls(RecordedProcess(HarnessEnvelopeMother.recorded()), tool_uses=tool_uses), reader=_READER
+        ).verify(_JUDGE, review)
+
+        recorded = tool_uses.calls[0]
+        assert (recorded.worktree, recorded.slice_id) == (review.worktree, review.slice_id)
 
 
 class TestWhatTheHarnessDeniedTheJudge(Calling):

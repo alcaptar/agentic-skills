@@ -33,14 +33,20 @@ _RECORDED = "implementer-two-paths"
 
 class Writing:
     @staticmethod
-    def understood(process: Process, *, alignment: Alignment | None = None) -> Understanding:
+    def understood(
+        process: Process,
+        *,
+        alignment: Alignment | None = None,
+        trace: RecordedTrace | None = None,
+        tool_uses: RecordedToolUseRecorder | None = None,
+    ) -> Understanding:
         calls = HarnessInvocationRunner(
             process=process,
             telemetry=HarnessTelemetry(
-                trace=RecordedTrace(),
+                trace=trace or RecordedTrace(),
                 turns=RecordedTurnLog(),
                 spend_log=RecordedSpendLog(),
-                tool_uses=RecordedToolUseRecorder(),
+                tool_uses=tool_uses or RecordedToolUseRecorder(),
             ),
         )
 
@@ -78,6 +84,33 @@ class TestWhereTheProcessRuns:
         Writing.understood(process, alignment=Alignment(correction="la senal no esta exenta, hay que medirla"))
 
         assert "la senal no esta exenta, hay que medirla" in process.stdin
+
+
+class TestTheCallSubjectComesFromItsOwnArguments:
+    def test_the_trace_carries_the_calls_own_repo_issue_and_slice_id_and_not_a_crossed_field(self) -> None:
+        trace = RecordedTrace()
+        subissue = SubIssueMother.pending()
+
+        Writing.understood(Writing.carrying(UnderstandingReportMother.valid()), trace=trace)
+
+        recorded = trace.calls[0]
+        assert (recorded.repo, recorded.issue, recorded.slice_id) == (
+            UnderstandingInvocationMother.REPO,
+            subissue.number,
+            subissue.slice_id.canonical,
+        )
+
+    def test_the_tool_use_recording_carries_the_calls_own_worktree_and_slice_id(self) -> None:
+        tool_uses = RecordedToolUseRecorder()
+        subissue = SubIssueMother.pending()
+
+        Writing.understood(Writing.carrying(UnderstandingReportMother.valid()), tool_uses=tool_uses)
+
+        recorded = tool_uses.calls[0]
+        assert (recorded.worktree, recorded.slice_id) == (
+            UnderstandingInvocationMother.WORKTREE,
+            subissue.slice_id.canonical,
+        )
 
 
 class TestTheUnderstandingOfARecordedCall:

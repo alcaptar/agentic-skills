@@ -37,14 +37,19 @@ _RECORDED = "implementer-two-paths"
 
 class Calling:
     @staticmethod
-    def _calls(process: Process) -> HarnessInvocationRunner:
+    def _calls(
+        process: Process,
+        *,
+        trace: RecordedTrace | None = None,
+        tool_uses: RecordedToolUseRecorder | None = None,
+    ) -> HarnessInvocationRunner:
         return HarnessInvocationRunner(
             process=process,
             telemetry=HarnessTelemetry(
-                trace=RecordedTrace(),
+                trace=trace or RecordedTrace(),
                 turns=RecordedTurnLog(),
                 spend_log=RecordedSpendLog(),
-                tool_uses=RecordedToolUseRecorder(),
+                tool_uses=tool_uses or RecordedToolUseRecorder(),
             ),
         )
 
@@ -148,6 +153,36 @@ class TestWhereTheProcessRuns(Calling):
         )
 
         assert process.calls == 1
+
+
+class TestTheCallSubjectComesFromTheAssignmentsOwnFields(Calling):
+    def test_the_trace_carries_the_assignments_own_repo_issue_and_slice_id_and_not_a_crossed_field(self) -> None:
+        trace = RecordedTrace()
+        assignment = AssignmentMother.of_the_first_round()
+
+        ClaudeImplementer(
+            calls=self._calls(RecordedProcess(HarnessEnvelopeMother.recorded(_RECORDED)), trace=trace),
+            reader=RecordedSourceReader(),
+        ).implement(assignment)
+
+        recorded = trace.calls[0]
+        assert (recorded.repo, recorded.issue, recorded.slice_id) == (
+            assignment.repo,
+            assignment.issue,
+            assignment.slice_id,
+        )
+
+    def test_the_tool_use_recording_carries_the_assignments_own_worktree_and_slice_id(self) -> None:
+        tool_uses = RecordedToolUseRecorder()
+        assignment = AssignmentMother.of_the_first_round()
+
+        ClaudeImplementer(
+            calls=self._calls(RecordedProcess(HarnessEnvelopeMother.recorded(_RECORDED)), tool_uses=tool_uses),
+            reader=RecordedSourceReader(),
+        ).implement(assignment)
+
+        recorded = tool_uses.calls[0]
+        assert (recorded.worktree, recorded.slice_id) == (assignment.worktree, assignment.slice_id)
 
 
 class TestTheSliceDataThatTravelsWithTheBrief(Calling):
