@@ -1,7 +1,9 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
+
+from slice_runner.domain.harness_spend import HarnessSpend
 
 if TYPE_CHECKING:
     from slice_runner.domain.closed_slice_record import ClosedSliceRecord
@@ -13,3 +15,4 @@ class SliceStatus:
     sub_issue: SubIssue
     pull_request: int | None
     record: ClosedSliceRecord | None = None
+    spend: HarnessSpend = field(default_factory=HarnessSpend.nothing)

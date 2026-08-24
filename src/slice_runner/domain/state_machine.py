@@ -70,11 +70,7 @@ class StateMachine:
             ):
                 return self._with_the_retry_counter_reset(run, blocked=blocked)
             case IssueLabel.ABORTED_BUDGET:
-                return replace(
-                    run,
-                    spend=HarnessSpend.nothing(),
-                    spend_before_reopening=run.spend_before_reopening.plus(run.spend),
-                )
+                return replace(run, spend=HarnessSpend.nothing())
             case IssueLabel.ABORTED_UNMEASURED_CALL:
                 return run
             case _:

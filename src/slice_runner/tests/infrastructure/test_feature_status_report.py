@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from slice_runner.domain.harness_spend import HarnessSpend
 from slice_runner.domain.issue_label import IssueLabel
 from slice_runner.domain.issue_state import IssueState
 from slice_runner.domain.run_state import RunState
@@ -64,11 +65,28 @@ class TestFeatureStatusReport:
         status = SliceStatus(
             sub_issue=SubIssueMother.blocked(IssueLabel.IN_PROGRESS, RunMother.judging_after_spending(spend)),
             pull_request=None,
+            spend=spend,
         )
 
         rendered = FeatureStatusReport(statuses=(status,)).rendered()
 
         assert f"{spend.cost_usd:.2f}" in rendered
+
+    def test_an_open_run_whose_persisted_run_reflects_only_its_last_invocation_shows_the_full_traced_spend(
+        self,
+    ) -> None:
+        persisted_only = HarnessSpendMother.of_the_implementer_call()
+        traced_total = HarnessSpend.summing((persisted_only, HarnessSpendMother.of_the_judge_call()))
+        status = SliceStatus(
+            sub_issue=SubIssueMother.blocked(IssueLabel.IN_PROGRESS, RunMother.judging_after_spending(persisted_only)),
+            pull_request=None,
+            spend=traced_total,
+        )
+
+        rendered = FeatureStatusReport(statuses=(status,)).rendered()
+
+        assert f"{traced_total.cost_usd:.2f}" in rendered
+        assert f"{persisted_only.cost_usd:.2f}" not in rendered
 
     def test_a_run_that_spent_no_retry_at_all_does_not_print_retries_as_a_zero(self) -> None:
         status = SliceStatus(

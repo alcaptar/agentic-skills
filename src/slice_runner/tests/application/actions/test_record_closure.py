@@ -5,6 +5,8 @@ from unittest.mock import Mock, create_autospec
 
 from slice_runner.application.actions.record_closure import RecordClosure, RecordClosureParams
 from slice_runner.domain.budgets import Budgets
+from slice_runner.domain.call_spend_log import CallSpendLog
+from slice_runner.domain.call_trace import CallTrace
 from slice_runner.domain.diff_stats import DiffStats
 from slice_runner.domain.harness_spend import HarnessSpend
 from slice_runner.domain.metrics_log import MetricsLog
@@ -13,6 +15,7 @@ from slice_runner.domain.run_repository import RunRepository
 from slice_runner.domain.run_state import RunState
 from slice_runner.domain.severity import Severity
 from slice_runner.tests.mothers.discarded_call_mother import DiscardedCallMother
+from slice_runner.tests.mothers.harness_call_mother import HarnessCallMother
 from slice_runner.tests.mothers.harness_spend_mother import HarnessSpendMother
 from slice_runner.tests.mothers.run_mother import RunMother
 from slice_runner.tests.mothers.verdict_mother import FindingMother
@@ -30,10 +33,16 @@ class _Closer:
     def __init__(self) -> None:
         self.metrics: Mock = create_autospec(MetricsLog, spec_set=True, instance=True)
         self.repository: Mock = create_autospec(RunRepository, spec_set=True, instance=True)
+        self.trace: Mock = create_autospec(CallTrace, spec_set=True, instance=True)
+        self.trace.calls_of.return_value = ()
+        self.spend_log: Mock = create_autospec(CallSpendLog, spec_set=True, instance=True)
+        self.spend_log.spend_of.return_value = HarnessSpend.nothing()
 
     @property
     def action(self) -> RecordClosure:
-        return RecordClosure(metrics=self.metrics, repository=self.repository)
+        return RecordClosure(
+            metrics=self.metrics, repository=self.repository, trace=self.trace, spend_log=self.spend_log
+        )
 
     def close(self, **overrides: object) -> ClosedSlice:
         params = {
@@ -45,7 +54,6 @@ class _Closer:
             "run": RunMother.awaiting_merge(),
             "budgets": Budgets(),
             "models": RoleModels(understand="sonnet", implement="sonnet", verify="sonnet"),
-            "spends": (HarnessSpendMother.of_the_implementer_call(),),
             **overrides,
         }
         self.action.execute(RecordClosureParams(**params))  # type: ignore[arg-type]
@@ -132,49 +140,65 @@ class TestTheRowItWrites:
 
 
 class TestWhichSpendsCount:
-    def test_a_spend_that_was_never_measured_does_not_enter_the_row_instead_of_counting_as_zero(self) -> None:
+    def test_the_row_asks_the_trace_for_the_calls_of_this_slice_and_writes_what_the_spend_log_sums(self) -> None:
+        closer = _Closer()
+        closer.trace.calls_of.return_value = (HarnessCallMother.of_the_implementer(),)
+        closer.spend_log.spend_of.return_value = HarnessSpendMother.of_the_implementer_call()
+
+        written = closer.close()
+
+        closer.trace.calls_of.assert_called_once_with(repo=_REPO, issue=_ISSUE, slice_id=_SLICE)
+        closer.spend_log.spend_of.assert_called_once_with((HarnessCallMother.SESSION_OF_THE_IMPLEMENTER,))
+        assert written.spend == HarnessSpendMother.of_the_implementer_call()
+
+    def test_two_invocations_traced_with_distinct_sessions_are_each_summed_once_and_not_dropped(self) -> None:
+        closer = _Closer()
+        closer.trace.calls_of.return_value = (HarnessCallMother.of_the_implementer(), HarnessCallMother.of_the_judge())
+        closer.spend_log.spend_of.return_value = HarnessSpend.summing(
+            (HarnessSpendMother.of_the_implementer_call(), HarnessSpendMother.of_the_judge_call())
+        )
+
+        written = closer.close()
+
+        closer.spend_log.spend_of.assert_called_once_with(
+            (HarnessCallMother.SESSION_OF_THE_IMPLEMENTER, HarnessCallMother.SESSION_OF_THE_JUDGE)
+        )
+        assert written.spend == HarnessSpend.summing(
+            (HarnessSpendMother.of_the_implementer_call(), HarnessSpendMother.of_the_judge_call())
+        )
+
+    def test_the_spend_the_persisted_run_already_carries_is_not_added_on_top_of_the_trace_and_the_log(self) -> None:
+        closer = _Closer()
+        already_on_the_run = HarnessSpendMother.of_the_understanding_call()
+        closer.trace.calls_of.return_value = (HarnessCallMother.of_the_implementer(), HarnessCallMother.of_the_judge())
+        closer.spend_log.spend_of.return_value = HarnessSpend.summing(
+            (HarnessSpendMother.of_the_implementer_call(), HarnessSpendMother.of_the_judge_call())
+        )
+
+        written = closer.close(run=RunMother.judging_after_spending(already_on_the_run))
+
+        assert written.spend == HarnessSpend.summing(
+            (HarnessSpendMother.of_the_implementer_call(), HarnessSpendMother.of_the_judge_call())
+        )
+
+    def test_a_spend_log_with_nothing_measured_leaves_the_row_with_no_spend_instead_of_a_zero_one(self) -> None:
         closer = _Closer()
 
-        written = closer.close(spends=(HarnessSpend.nothing(),))
+        written = closer.close()
 
         assert written.spends == ()
 
-    def test_the_measured_spends_are_kept_in_the_order_they_were_paid(self) -> None:
+    def test_a_call_that_cost_nothing_but_was_measured_still_reaches_the_row_instead_of_being_treated_as_unmeasured(
+        self,
+    ) -> None:
         closer = _Closer()
-        first = HarnessSpendMother.of_the_understanding_call()
-        second = HarnessSpendMother.of_the_implementer_call()
+        closer.trace.calls_of.return_value = (HarnessCallMother.of_the_implementer(),)
+        free_call = HarnessSpendMother.of_a_call_that_cost_nothing()
+        closer.spend_log.spend_of.return_value = free_call
 
-        written = closer.close(spends=(first, second))
+        written = closer.close()
 
-        assert written.spends == (first, second)
-
-    def test_an_unmeasured_spend_between_two_measured_ones_is_dropped_without_dropping_the_others(self) -> None:
-        closer = _Closer()
-        first = HarnessSpendMother.of_the_understanding_call()
-        last = HarnessSpendMother.of_the_judge_call()
-
-        written = closer.close(spends=(first, HarnessSpend.nothing(), last))
-
-        assert written.spends == (first, last)
-
-    def test_a_run_that_carries_spend_from_before_a_reopening_has_it_prepended_to_the_recorded_spends(self) -> None:
-        closer = _Closer()
-        before_reopening = HarnessSpendMother.of_the_understanding_call()
-        this_window = HarnessSpendMother.of_the_judge_call()
-
-        written = closer.close(
-            run=RunMother.judging_after_a_reopening_for_budget(before_reopening), spends=(this_window,)
-        )
-
-        assert written.spends == (before_reopening, this_window)
-
-    def test_a_run_never_reopened_records_only_the_spends_this_invocation_paid(self) -> None:
-        closer = _Closer()
-        this_window = HarnessSpendMother.of_the_judge_call()
-
-        written = closer.close(run=RunMother.judging(), spends=(this_window,))
-
-        assert written.spends == (this_window,)
+        assert written.spends == (free_call,)
 
 
 class TestPublishingTheVetoFindings:

@@ -334,10 +334,10 @@ class TestReadingTheChildren:
 
         assert children[0].run == RunMother.judging_after_spending(HarnessSpendMother.of_the_implementer_call())
 
-    def test_a_state_block_with_a_spend_before_reopening_reads_it_back_so_the_durable_row_can_add_it_later(
+    def test_a_state_block_with_a_spend_before_reopening_key_written_before_this_slice_is_read_ignoring_it(
         self,
     ) -> None:
-        with_history = [
+        with_the_legacy_key = [
             {
                 "number": 1,
                 "title": "slice-01 (x): y",
@@ -357,34 +357,7 @@ class TestReadingTheChildren:
             }
         ]
 
-        children = GhRunRepository(call=GhCallDoubles.wired(self._process(children=with_history))).read_children(
-            repo=_REPO, parent=43, expected=1
-        )
-
-        assert children[0].run == RunMother.judging_after_a_reopening_for_budget(
-            HarnessSpendMother.of_the_implementer_call()
-        )
-
-    def test_a_state_block_written_before_this_slice_with_no_spend_before_reopening_key_reads_it_as_unmeasured(
-        self,
-    ) -> None:
-        without_the_key = [
-            {
-                "number": 1,
-                "title": "slice-01 (x): y",
-                "body": (
-                    "INTENCION: z\n\n"
-                    "<!-- slice-runner:estado\n"
-                    '{"step": "verify", "control_retries": 0, "verify_retries": 0, "ci_retries": 0, '
-                    '"indeterminate_ticks": 0, "verify_discards": 0}\n'
-                    "-->\n"
-                ),
-                "labels": [],
-                "state": "OPEN",
-            }
-        ]
-
-        children = GhRunRepository(call=GhCallDoubles.wired(self._process(children=without_the_key))).read_children(
+        children = GhRunRepository(call=GhCallDoubles.wired(self._process(children=with_the_legacy_key))).read_children(
             repo=_REPO, parent=43, expected=1
         )
 
@@ -700,36 +673,6 @@ class TestWritingTheExecutionStateBlock:
             '"understand_discards": 0, "implement_discards": 0, "control_rounds_logged": 0, '
             '"last_reviewed_id": 0, "requested_changes": [], '
             '"spend": {"cost_usd": 0.3433209, "turns": 9, "duration_ms": 36315, "calls": 1, '
-            '"models": ["claude-sonnet-5"], "input_tokens": 13, "output_tokens": 1159, '
-            '"cache_creation_tokens": 42251, "cache_read_tokens": 241303, "ttft_ms": 5588, '
-            '"duration_api_ms": 32189}}\n'
-            "-->\n"
-        )
-
-    def test_a_run_carrying_spend_from_before_a_reopening_writes_it_nested_under_its_own_key(self) -> None:
-        process = self._process(body=_SUB2_BODY)
-
-        GhRunRepository(call=GhCallDoubles.wired(process)).write_run(
-            repo=_OTHER_REPO,
-            issue=44,
-            run=RunMother.judging_after_a_reopening_for_budget(HarnessSpendMother.of_the_implementer_call()),
-        )
-
-        assert process.calls[1].stdin == (
-            "REPO: alcaptar/otro-repo\n"
-            "INTENCION: comprobar que el orden sale del titulo y no de la interfaz de programacion\n"
-            "ACEPTACION: se ordena por slice-NN aunque la api la devuelva antes\n"
-            "SENAL: exenta - spike de medicion\n"
-            "\n"
-            "<!-- slice-runner:estado\n"
-            '{"step": "verify", "corrected": "", "understanding_pending": false, '
-            '"previous_call_died": false, "catching_up_the_branch": false, '
-            '"control_retries": 0, "hygiene_retries": 0, "verify_retries": 0, '
-            '"correction_retries": 0, "ci_retries": 0, "catch_up_retries": 0, "indeterminate_ticks": 0, '
-            '"verify_discards": 0, '
-            '"understand_discards": 0, "implement_discards": 0, "control_rounds_logged": 0, '
-            '"last_reviewed_id": 0, "requested_changes": [], '
-            '"spend_before_reopening": {"cost_usd": 0.3433209, "turns": 9, "duration_ms": 36315, "calls": 1, '
             '"models": ["claude-sonnet-5"], "input_tokens": 13, "output_tokens": 1159, '
             '"cache_creation_tokens": 42251, "cache_read_tokens": 241303, "ttft_ms": 5588, '
             '"duration_api_ms": 32189}}\n'

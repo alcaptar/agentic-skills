@@ -24,8 +24,8 @@ class FeatureStatusReport:
         run = status.sub_issue.run
         if run is not None:
             parts.append(run.step.value)
-            if run.spend.measured:
-                parts.append(f"${run.spend.cost_usd:.2f}")
+            if status.spend.measured:
+                parts.append(f"${status.spend.cost_usd:.2f}")
             if run.implement_retries > 0:
                 parts.append(f"retries={run.implement_retries}")
         elif status.record is not None:

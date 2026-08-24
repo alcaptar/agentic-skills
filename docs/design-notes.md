@@ -647,6 +647,30 @@ lo aceptado y lo rechazado -el 4% y el 12% de arriba- no se puede calcular sin v
 Frenar por esa ratio se descarto: seria un tercer suelo secreto, aplicado despues de pagar la llamada y
 calibrado con dos casos, los dos del mecanismo que se acaba de retirar.
 
+### El gasto que se consulta deja de depender del `Run` persistido (2026-08-21)
+
+`status` y la fila que cierra una slice (`ClosedSliceRecord.spend`) leian el gasto de `Run.spend`,
+acumulado en memoria por el conductor tick a tick. Una invocacion que muere justo despues de que el
+arnes conteste -la llamada ya quedo grabada en `spend.jsonl`- pero antes de que el tick escriba el
+`Run` de vuelta dejaba ese coste huerfano: ni la consulta ni la fila volvian a verlo. La retrospectiva
+de 2026-08-20 lo midio en dos slices reales: la #330 registro 1,95 $ cuando sus seis llamadas sumaban
+6,71 $, y la #332 registro 16,28 $ cuando sus nueve sumaban 24,46 $.
+
+El arreglo cruza el rastro de llamadas (`CallTrace`) con el registro de gasto por sesion
+(`CallSpendLog`) -la misma lectura que ya usaban `SpendByRole`/`SpendOfStep` para otro caso de uso-, en
+vez de leer `Run.spend`. `Run.spend` sigue existiendo y sigue siendo la cuenta en vivo que aborta un run
+por presupuesto durante la conduccion; lo que cambio es de donde sale el numero que se **escribe** al
+cerrar y el que se **muestra** al consultar.
+
+Ese cambio dejo sin lector el campo `Run.spend_before_reopening`, que acumulaba el gasto de vueltas
+anteriores cada vez que una slice se reabria tras un `ABORTED_BUDGET`: nadie fuera del propio campo lo
+leia para producir un resultado, asi que se retiro del dominio entero (`Run`, `StateMachine.reopened`).
+`RunPayload` sigue declarando la clave `spend_before_reopening` -sin ella, `extra="forbid"` rechazaria
+un bloque de estado que una slice en vuelo ya escribio con ese campo-, pero `from_domain()` ya no la
+emite nunca y `to_domain()` la lee y la descarta en vez de pasarla a `Run(...)`. Es compatibilidad de
+lectura pura: se puede retirar la clave del payload en cuanto no quede ningun run persistido de antes de
+esta fecha que todavia la lleve.
+
 ## deploy-watch
 
 ### Decisiones clave

@@ -497,6 +497,8 @@ class Cli:
                 repository=GhRunRepository(call=gh_call),
                 forum=GhForum(call=gh_call),
                 metrics=LocalMetricsLog(clock=clock),
+                trace=LocalCallTrace(clock=clock),
+                spend_log=LocalCallSpendLog(clock=clock),
             ).execute(ShowFeatureStatusParams(repo=repo, issue=issue))
         except (
             LaggingSearchIndexError,
@@ -582,7 +584,12 @@ class Cli:
                 deliver=DeliverSlice(workspace=workspace, forum=forum),
                 close=CloseParent(repository=repository),
                 record_step=RecordStep(repository=repository, events=StderrEventLog(), clock=clock),
-                record_closure=RecordClosure(metrics=LocalMetricsLog(clock=clock), repository=repository),
+                record_closure=RecordClosure(
+                    metrics=LocalMetricsLog(clock=clock),
+                    repository=repository,
+                    trace=LocalCallTrace(clock=clock),
+                    spend_log=LocalCallSpendLog(clock=clock),
+                ),
                 read_ci=ReadCiStatus(ci=GhCi(call=gh_call), forum=forum),
                 read_pull_request=ReadPullRequestStatus(forum=forum),
                 seek_alignment=SeekAlignment(
