@@ -13,7 +13,7 @@ from slice_runner.tests.mothers.conversation_transcript_mother import Conversati
 if TYPE_CHECKING:
     from pathlib import Path
 
-_WORKTREE = "/Users/someone/repos/the-slice"
+_WORKTREE = ConversationTranscriptMother.WORKTREE
 _WARNING_EXCERPT = (
     "\x1b[1m\x1b[33mwarning\x1b[39m\x1b[0m\x1b[1m:\x1b[0m \x1b[1m`VIRTUAL_ENV=/Users/acapdev/repos/agentic-skills/"
     ".venv` does not match the project environment path `.venv` and will be ignored; use `--active` to target "
@@ -28,7 +28,7 @@ class WithARecordedConversation:
     @pytest.fixture(autouse=True)
     def transcript(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
-        ConversationTranscriptMother.written_under(tmp_path, worktree=_WORKTREE)
+        ConversationTranscriptMother.written_under(tmp_path)
 
 
 class TestTheTurnsOfARecordedConversation(WithARecordedConversation):
@@ -79,7 +79,7 @@ class TestWhetherACallWasRefused(WithARecordedConversation):
     ) -> None:
         monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
         ConversationTranscriptMother.written_under(
-            tmp_path, worktree=_WORKTREE, recorded=ConversationTranscriptMother.REJECTED_STRUCTURED_OUTPUT
+            tmp_path, recorded=ConversationTranscriptMother.REJECTED_STRUCTURED_OUTPUT
         )
 
         conversation = LocalConversationLog().read(session=ConversationTranscriptMother.SESSION, worktree=_WORKTREE)
@@ -100,10 +100,7 @@ class TestTheSpendOfARecordedConversation(WithARecordedConversation):
 class TestThePathATurnTouched:
     @staticmethod
     def _conversation_with(tool_name: str, tool_input: dict[str, object], *, tmp_path: Path) -> Path:
-        session = "path-session"
-        encoded = _WORKTREE.rstrip("/").replace("/", "-")
-        destination = tmp_path / "projects" / encoded / f"{session}.jsonl"
-        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination = ConversationTranscriptMother.destination_of(tmp_path, session="path-session")
         line = json.dumps(
             {
                 "type": "assistant",
@@ -148,11 +145,11 @@ class TestThePathATurnTouched:
 
 
 class TestWhereTheConversationLives:
-    def test_the_repo_path_is_encoded_by_replacing_every_slash_with_a_dash(
+    def test_a_worktree_whose_path_carries_dots_is_still_found_where_the_harness_keeps_it(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
-        ConversationTranscriptMother.written_under(tmp_path, worktree=_WORKTREE)
+        ConversationTranscriptMother.written_under(tmp_path)
 
         conversation = LocalConversationLog().read(session=ConversationTranscriptMother.SESSION, worktree=_WORKTREE)
 
@@ -173,10 +170,9 @@ class TestAnUnreadableTranscript:
     ) -> None:
         monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
         session = "broken-session"
-        encoded = _WORKTREE.rstrip("/").replace("/", "-")
-        destination = tmp_path / "projects" / encoded / f"{session}.jsonl"
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        destination.write_text("not json at all\n", encoding="utf-8")
+        ConversationTranscriptMother.destination_of(tmp_path, session=session).write_text(
+            "not json at all\n", encoding="utf-8"
+        )
 
         with pytest.raises(UnreadableConversationError):
             LocalConversationLog().read(session=session, worktree=_WORKTREE)
@@ -186,9 +182,7 @@ class TestAnUnreadableTranscript:
     ) -> None:
         monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
         session = "broken-session"
-        encoded = _WORKTREE.rstrip("/").replace("/", "-")
-        destination = tmp_path / "projects" / encoded / f"{session}.jsonl"
-        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination = ConversationTranscriptMother.destination_of(tmp_path, session=session)
         line = (
             '{"type":"assistant","message":{"id":"msg_1","content":'
             '[{"type":"tool_use","id":"toolu_1","name":"Bash","input":"not an object"}],"usage":{}}}'

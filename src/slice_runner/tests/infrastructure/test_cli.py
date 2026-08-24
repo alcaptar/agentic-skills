@@ -410,7 +410,7 @@ class TestTheCommandThatPrintsAConversation:
     _REPO = "alcaptar/agentic-skills"
     _ISSUE = 45
     _SLICE = "slice-05"
-    _WORKTREE = "/Users/someone/repos/the-slice"
+    _WORKTREE = ConversationTranscriptMother.WORKTREE
 
     @pytest.fixture(autouse=True)
     def toolbox(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -426,7 +426,7 @@ class TestTheCommandThatPrintsAConversation:
                 session=ConversationTranscriptMother.SESSION,
             )
         )
-        ConversationTranscriptMother.written_under(ClaudeConfig.root(), worktree=self._WORKTREE)
+        ConversationTranscriptMother.written_under(ClaudeConfig.root())
 
     def test_the_conversation_of_a_traced_call_is_printed_as_readable_text(
         self, capsys: pytest.CaptureFixture[str]
@@ -483,10 +483,11 @@ class TestTheCommandThatPrintsAConversation:
         assert output.out == ""
         assert "not JSON" in output.err
 
-    def _transcript_path(self) -> Path:
-        encoded = self._WORKTREE.rstrip("/").replace("/", "-")
-
-        return ClaudeConfig.root() / "projects" / encoded / f"{ConversationTranscriptMother.SESSION}.jsonl"
+    @staticmethod
+    def _transcript_path() -> Path:
+        return ConversationTranscriptMother.destination_of(
+            ClaudeConfig.root(), session=ConversationTranscriptMother.SESSION
+        )
 
     @staticmethod
     def _corrupted(path: Path) -> None:
