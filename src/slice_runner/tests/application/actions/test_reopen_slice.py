@@ -54,9 +54,7 @@ _BLOCKS: list[tuple[IssueLabel, Run, Run]] = [
         IssueLabel.ABORTED_BUDGET,
         RunMother.aborted_for_budget(HarnessSpendMother.of_the_implementer_call()),
         replace(
-            RunMother.aborted_for_budget(HarnessSpendMother.of_the_implementer_call()),
-            spend=HarnessSpend.nothing(),
-            spend_before_reopening=HarnessSpendMother.of_the_implementer_call(),
+            RunMother.aborted_for_budget(HarnessSpendMother.of_the_implementer_call()), spend=HarnessSpend.nothing()
         ),
     ),
     (
@@ -139,28 +137,6 @@ class TestReopenSlice:
             subissue, run=replace(RunMother.blocked_on_controls(), control_retries=0), label=IssueLabel.IN_PROGRESS
         )
         assert result.instruction == _INSTRUCTION
-
-    def test_reopening_a_run_blocked_for_budget_a_second_time_keeps_both_windows_instead_of_only_the_latest(
-        self, action: ReopenSlice, repository: Mock
-    ) -> None:
-        first_window = HarnessSpendMother.of_the_understanding_call()
-        second_window = HarnessSpendMother.of_the_implementer_call()
-        blocked_run = RunMother.aborted_for_budget_after_a_prior_reopening(
-            spend_before_reopening=first_window, spend=second_window
-        )
-        subissue = SubIssueMother.blocked(IssueLabel.ABORTED_BUDGET, blocked_run)
-
-        action.execute(ReopenSliceParams(repo=_REPO, subissue=subissue, instruction=_INSTRUCTION))
-
-        repository.write_run.assert_called_once_with(
-            repo=_REPO,
-            issue=subissue.number,
-            run=replace(
-                blocked_run,
-                spend=HarnessSpend.nothing(),
-                spend_before_reopening=HarnessSpend.summing((first_window, second_window)),
-            ),
-        )
 
     def test_a_subissue_with_no_run_on_record_cannot_be_reopened(self, action: ReopenSlice) -> None:
         subissue = replace(

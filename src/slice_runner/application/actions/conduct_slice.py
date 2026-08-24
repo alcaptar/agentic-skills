@@ -701,7 +701,6 @@ class ConductSlice:
                 run=run,
                 budgets=self._budgets,
                 models=self._models,
-                spends=(run.spend,),
             )
         )
         label = subissue.label
@@ -736,7 +735,6 @@ class ConductSlice:
                 run=progress.run,
                 budgets=self._budgets,
                 models=self._models,
-                spends=progress.spends,
                 findings=progress.findings_of_every_round,
                 findings_of_the_last_round=progress.findings_of_the_last_round,
                 discarded_call=progress.discarded_call,

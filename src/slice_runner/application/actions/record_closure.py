@@ -8,6 +8,8 @@ from slice_runner.domain.run_state import RunState
 
 if TYPE_CHECKING:
     from slice_runner.domain.budgets import Budgets
+    from slice_runner.domain.call_spend_log import CallSpendLog
+    from slice_runner.domain.call_trace import CallTrace
     from slice_runner.domain.ci_indeterminate_cause import CiIndeterminateCause
     from slice_runner.domain.diff_stats import DiffStats
     from slice_runner.domain.discarded_call import DiscardedCall
@@ -29,7 +31,6 @@ class RecordClosureParams:
     run: Run
     budgets: Budgets
     models: RoleModels
-    spends: tuple[HarnessSpend, ...] = field(default=())
     findings: tuple[Finding, ...] = field(default=())
     findings_of_the_last_round: tuple[Finding, ...] = field(default=())
     discarded_call: DiscardedCall | None = None
@@ -39,11 +40,16 @@ class RecordClosureParams:
 
 
 class RecordClosure:
-    def __init__(self, *, metrics: MetricsLog, repository: RunRepository) -> None:
+    def __init__(
+        self, *, metrics: MetricsLog, repository: RunRepository, trace: CallTrace, spend_log: CallSpendLog
+    ) -> None:
         self._metrics = metrics
         self._repository = repository
+        self._trace = trace
+        self._spend_log = spend_log
 
     def execute(self, params: RecordClosureParams) -> None:
+        spend = self._spend_of(params)
         self._metrics.record(
             ClosedSlice(
                 repo=params.repo,
@@ -54,7 +60,7 @@ class RecordClosure:
                 run=params.run,
                 budgets=params.budgets,
                 models=params.models,
-                spends=tuple(spend for spend in self._with_history(params) if spend.measured),
+                spends=(spend,) if spend.measured else (),
                 findings=params.findings,
                 findings_of_the_last_round=params.findings_of_the_last_round,
                 discarded_call=params.discarded_call,
@@ -68,9 +74,8 @@ class RecordClosure:
                 repo=params.repo, issue=params.issue, findings=params.findings_of_the_last_round
             )
 
-    @staticmethod
-    def _with_history(params: RecordClosureParams) -> tuple[HarnessSpend, ...]:
-        if not params.run.spend_before_reopening.measured:
-            return params.spends
+    def _spend_of(self, params: RecordClosureParams) -> HarnessSpend:
+        calls = self._trace.calls_of(repo=params.repo, issue=params.issue, slice_id=params.slice_id)
+        sessions = tuple(call.session for call in calls)
 
-        return (params.run.spend_before_reopening, *params.spends)
+        return self._spend_log.spend_of(sessions)

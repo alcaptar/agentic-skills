@@ -39,6 +39,7 @@ from slice_runner.domain.run_state import RunState
 from slice_runner.domain.step import Step
 from slice_runner.tests.conductor import Conductor
 from slice_runner.tests.mothers.control_outcome_mother import ControlOutcomeMother
+from slice_runner.tests.mothers.harness_call_mother import HarnessCallMother
 from slice_runner.tests.mothers.harness_spend_mother import HarnessSpendMother
 from slice_runner.tests.mothers.implementation_mother import ImplementationMother
 from slice_runner.tests.mothers.parent_issue_mother import ParentIssueMother
@@ -76,6 +77,21 @@ class TestConductSliceStartingANewRun:
             UnderstandingMother.of_the_chosen_slice(),
         ]
         conductor.repository.read_alignment_response.return_value = AlignmentResponse(kind=AlignmentResponseKind.GO)
+        conductor.trace.calls_of.return_value = (
+            HarnessCallMother.of_the_discarded_understanding(),
+            HarnessCallMother.of_the_implementer(),
+            HarnessCallMother.of_the_judge(),
+        )
+        conductor.seed_spend(
+            session=HarnessCallMother.SESSION_OF_THE_DISCARDED_UNDERSTANDING,
+            spend=HarnessSpendMother.of_a_call_that_cost_nothing(),
+        )
+        conductor.seed_spend(
+            session=HarnessCallMother.SESSION_OF_THE_IMPLEMENTER, spend=HarnessSpendMother.of_the_implementer_call()
+        )
+        conductor.seed_spend(
+            session=HarnessCallMother.SESSION_OF_THE_JUDGE, spend=HarnessSpendMother.of_the_judge_call()
+        )
 
         conductor.conduct()
 
@@ -87,7 +103,13 @@ class TestConductSliceStartingANewRun:
         assert recorded.discarded_call.step is Step.UNDERSTAND
         assert recorded.discarded_call.cause is DiscardCause.FAILED_CALL
         assert recorded.discarded_call.reason == "the harness returned only blank text as its understanding"
-        assert recorded.spends[:2] == (HarnessSpendMother.of_the_understanding_call(),) * 2
+        assert recorded.spend == HarnessSpend.summing(
+            (
+                HarnessSpendMother.of_a_call_that_cost_nothing(),
+                HarnessSpendMother.of_the_implementer_call(),
+                HarnessSpendMother.of_the_judge_call(),
+            )
+        )
 
     def test_a_discard_whose_message_is_longer_than_the_reason_limit_is_recorded_with_it_truncated(self) -> None:
         conductor = self._conductor()
@@ -1027,11 +1049,19 @@ class TestConductSliceResumingWithSpendAlreadyPersisted:
     def test_the_durable_row_of_a_reinvoked_run_still_carries_the_cost_paid_in_an_earlier_invocation(self) -> None:
         prior = HarnessSpendMother.of_the_implementer_call()
         conductor = Conductor(chosen=SelectSliceResultMother.resumed_at(RunMother.judging_after_spending(prior)))
+        conductor.trace.calls_of.return_value = (
+            HarnessCallMother.of_the_implementer(),
+            HarnessCallMother.of_the_judge(),
+        )
+        conductor.seed_spend(session=HarnessCallMother.SESSION_OF_THE_IMPLEMENTER, spend=prior)
+        conductor.seed_spend(
+            session=HarnessCallMother.SESSION_OF_THE_JUDGE, spend=HarnessSpendMother.of_the_judge_call()
+        )
 
         conductor.conduct()
 
         recorded: ClosedSlice = conductor.metrics.record.call_args.args[0]
-        assert recorded.spends == (prior, HarnessSpendMother.of_the_judge_call())
+        assert recorded.spend == HarnessSpend.summing((prior, HarnessSpendMother.of_the_judge_call()))
 
     def test_the_run_written_after_a_paid_call_persists_the_cumulative_spend_and_not_only_this_calls(self) -> None:
         prior = HarnessSpendMother.of_the_implementer_call()
@@ -1042,32 +1072,24 @@ class TestConductSliceResumingWithSpendAlreadyPersisted:
         written = [call.kwargs["run"] for call in conductor.repository.write_run.call_args_list]
         assert written[0].spend == HarnessSpend.summing((prior, HarnessSpendMother.of_the_judge_call()))
 
-
-class TestConductSliceResumingAfterAReopeningForBudget:
-    def test_the_first_call_of_the_new_window_is_not_blocked_by_the_spend_carried_from_before_the_reopening(
-        self,
-    ) -> None:
-        prior = HarnessSpendMother.of_the_implementer_call()
+    def test_the_closed_row_of_a_run_resumed_after_a_dead_invocation_counts_every_call_the_trace_holds(self) -> None:
+        lost_to_the_dead_invocation = HarnessSpendMother.of_the_understanding_call()
+        the_last_persisted = HarnessSpendMother.of_the_implementer_call()
         conductor = Conductor(
-            chosen=SelectSliceResultMother.resumed_at(RunMother.judging_after_a_reopening_for_budget(prior)),
-            budgets=Budgets(slice_cost_usd=prior.cost_usd),
+            chosen=SelectSliceResultMother.resumed_at(RunMother.judging_after_spending(the_last_persisted))
         )
-
-        result = conductor.conduct()
-
-        assert conductor.verify.execute.call_count == 1
-        assert result.state is RunState.MERGED
-
-    def test_the_durable_row_of_a_reopened_run_sums_what_it_spent_before_the_reopening_and_after_it(self) -> None:
-        prior = HarnessSpendMother.of_the_implementer_call()
-        conductor = Conductor(
-            chosen=SelectSliceResultMother.resumed_at(RunMother.judging_after_a_reopening_for_budget(prior))
+        conductor.trace.calls_of.return_value = (
+            HarnessCallMother.of_the_implementer(),
+            HarnessCallMother.of_the_judge(),
         )
+        conductor.seed_spend(session=HarnessCallMother.SESSION_OF_THE_IMPLEMENTER, spend=lost_to_the_dead_invocation)
+        conductor.seed_spend(session=HarnessCallMother.SESSION_OF_THE_JUDGE, spend=the_last_persisted)
 
         conductor.conduct()
 
         recorded: ClosedSlice = conductor.metrics.record.call_args.args[0]
-        assert recorded.spends == (prior, HarnessSpendMother.of_the_judge_call())
+        assert recorded.run.spend == HarnessSpend.summing((the_last_persisted, HarnessSpendMother.of_the_judge_call()))
+        assert recorded.spend == HarnessSpend.summing((lost_to_the_dead_invocation, the_last_persisted))
 
 
 class TestConductSliceOnTheHappyPath:
@@ -1193,6 +1215,16 @@ class TestConductSliceOnTheHappyPath:
 
     def test_the_durable_row_carries_the_slice_the_state_and_every_call_that_was_paid_for(self) -> None:
         conductor = self._conductor()
+        conductor.trace.calls_of.return_value = (
+            HarnessCallMother.of_the_implementer(),
+            HarnessCallMother.of_the_judge(),
+        )
+        conductor.seed_spend(
+            session=HarnessCallMother.SESSION_OF_THE_IMPLEMENTER, spend=HarnessSpendMother.of_the_implementer_call()
+        )
+        conductor.seed_spend(
+            session=HarnessCallMother.SESSION_OF_THE_JUDGE, spend=HarnessSpendMother.of_the_judge_call()
+        )
 
         conductor.conduct()
 
@@ -1203,9 +1235,8 @@ class TestConductSliceOnTheHappyPath:
             "prechecks-deterministas",
         )
         assert recorded.state is RunState.MERGED
-        assert recorded.spends == (
-            HarnessSpendMother.of_the_implementer_call(),
-            HarnessSpendMother.of_the_judge_call(),
+        assert recorded.spend == HarnessSpend.summing(
+            (HarnessSpendMother.of_the_implementer_call(), HarnessSpendMother.of_the_judge_call())
         )
 
     def test_the_durable_row_carries_the_budgets_and_the_models_this_invocation_ran_with(self) -> None:
@@ -1403,6 +1434,21 @@ class TestConductSliceImplementing:
             RejectionMother.invalid_implementation_report(),
             ImplementationMother.of_two_paths(),
         ]
+        conductor.trace.calls_of.return_value = (
+            HarnessCallMother.of_the_discarded_implementer(),
+            HarnessCallMother.of_the_implementer(),
+            HarnessCallMother.of_the_judge(),
+        )
+        conductor.seed_spend(
+            session=HarnessCallMother.SESSION_OF_THE_DISCARDED_IMPLEMENTER,
+            spend=HarnessSpendMother.of_a_call_that_cost_nothing(),
+        )
+        conductor.seed_spend(
+            session=HarnessCallMother.SESSION_OF_THE_IMPLEMENTER, spend=HarnessSpendMother.of_the_implementer_call()
+        )
+        conductor.seed_spend(
+            session=HarnessCallMother.SESSION_OF_THE_JUDGE, spend=HarnessSpendMother.of_the_judge_call()
+        )
 
         conductor.conduct()
 
@@ -1412,7 +1458,13 @@ class TestConductSliceImplementing:
         assert recorded.discarded_call is not None
         assert recorded.discarded_call.step is Step.IMPLEMENT
         assert recorded.discarded_call.cause is DiscardCause.FAILED_CALL
-        assert recorded.spends[:2] == (HarnessSpendMother.of_the_implementer_call(),) * 2
+        assert recorded.spend == HarnessSpend.summing(
+            (
+                HarnessSpendMother.of_a_call_that_cost_nothing(),
+                HarnessSpendMother.of_the_implementer_call(),
+                HarnessSpendMother.of_the_judge_call(),
+            )
+        )
 
     def test_the_retry_after_a_broken_call_is_told_the_previous_call_died_and_the_flag_clears_once_it_delivers(
         self,
@@ -1683,12 +1735,33 @@ class TestConductSliceWhenTheJudgeSpeaks:
     def test_a_discarded_verdict_spends_no_verify_retry_and_still_counts_what_the_call_cost(self) -> None:
         conductor = self._conductor()
         conductor.verify.execute.side_effect = [RejectionMother.incoherent_verdict(), VerificationMother.passing()]
+        conductor.trace.calls_of.return_value = (
+            HarnessCallMother.of_the_discarded_verdict(),
+            HarnessCallMother.of_the_implementer(),
+            HarnessCallMother.of_the_judge(),
+        )
+        conductor.seed_spend(
+            session=HarnessCallMother.SESSION_OF_THE_DISCARDED_VERDICT,
+            spend=HarnessSpendMother.of_a_call_that_cost_nothing(),
+        )
+        conductor.seed_spend(
+            session=HarnessCallMother.SESSION_OF_THE_IMPLEMENTER, spend=HarnessSpendMother.of_the_implementer_call()
+        )
+        conductor.seed_spend(
+            session=HarnessCallMother.SESSION_OF_THE_JUDGE, spend=HarnessSpendMother.of_the_judge_call()
+        )
 
         conductor.conduct()
 
         recorded = conductor.metrics.record.call_args.args[0]
         assert (recorded.run.verify_discards, recorded.run.verify_retries) == (1, 0)
-        assert recorded.spend.calls == 2
+        assert recorded.spend == HarnessSpend.summing(
+            (
+                HarnessSpendMother.of_a_call_that_cost_nothing(),
+                HarnessSpendMother.of_the_implementer_call(),
+                HarnessSpendMother.of_the_judge_call(),
+            )
+        )
         assert recorded.discarded_call.cause is DiscardCause.INCOHERENT_VERDICT
 
     def test_a_call_that_left_no_verdict_at_all_is_discarded_as_a_failed_call_and_not_as_an_incoherent_one(
