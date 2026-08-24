@@ -704,8 +704,30 @@ metio ahi la proyección de su vocabulario a `Outcome`. Nada lo freno, y no por 
 
 De ahi salen las dos cosas que se hicieron a la vez que esta nota: la regla en `application.md`
 -atemporal, sin contar precedentes, que es lo que esta nota si puede hacer- y la exigencia en `slice-spec`
-de que un criterio pueda fijar donde vive una pieza. La tercera, el contraste entre el plan y el diff,
-queda como trabajo declarado.
+de que un criterio pueda fijar donde vive una pieza.
+
+**La tercera se descarto el 2026-08-24, y no se va a hacer** (#347 y #348, cerrados). Contrastar el plan
+con el diff parecia la pata que faltaba y no lo era, por tres motivos que solo se ven de cerca:
+
+- **El mecanismo no habria cazado su propio precedente.** El contraste se especifico extrayendo del
+  informe los tokens en backticks que empiezan por un directorio de primer nivel del repo, prestado del
+  contrato de rutas citadas de `tests/test_pipeline_invariants.py`. El entendimiento aprobado en #334
+  nombra la pieza incumplida como `application/actions/catch_up_branch.py`, relativa al paquete: no
+  empieza por `src/`, asi que se cae del extractor. Las rutas de un `.md` se escriben desde la raiz y las
+  de un plan no.
+- **El plan es revisable por diseno.** El brief del implementador dice que no es un guion que transcribir,
+  asi que desviarse de el por buen criterio al escribir el codigo es el comportamiento que se quiere. Un
+  aviso que no sabe distinguir esa desviacion de la otra salta igual en las dos.
+- **El sitio de una promesa que importa no es el plan.** Si es una regla general del repo, va a
+  `docs/conventions/`; si es de esa slice, va como criterio de forma. Las dos llegan al juez. Lo que no
+  cabe en ninguna de las dos es decision de implementacion, y esa no debe bloquear nada.
+
+Y el acceso que se echaba en falta ya existe: el cuerpo de la pull request cierra con `Closes #<subissue>`
+y el entendimiento aprobado es un comentario de esa misma subissue, asi que quien revisa lo tiene a un
+clic. Lo que no hay es quien lo compare, y comparar automaticamente es justo lo fragil.
+
+**Cuando reabrirlo**: si vuelve a aparecer una desviacion entre plan y diff que ni la convencion del repo
+ni el criterio de forma cacen. Entonces se disena sobre ese caso, no sobre el extractor de rutas.
 
 ## Una regla de negocio se escribe una vez (lo que se midió)
 
