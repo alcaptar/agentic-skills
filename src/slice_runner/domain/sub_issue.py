@@ -21,6 +21,7 @@ class SubIssue:
     intention: str
     criteria: tuple[str, ...]
     signal: str
+    excludes: str
     run: Run | None
     label: IssueLabel | None
 

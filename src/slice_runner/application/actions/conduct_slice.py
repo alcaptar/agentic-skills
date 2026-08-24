@@ -547,6 +547,7 @@ class ConductSlice:
                     slice_id=progress.subissue.slice_id.canonical,
                     prior_art=progress.parent.prior_art,
                     signal=progress.subissue.signal,
+                    excludes=progress.subissue.excludes,
                     criteria=progress.subissue.criteria,
                     sources=progress.parent.sources,
                     checklist=progress.chosen.checklist,

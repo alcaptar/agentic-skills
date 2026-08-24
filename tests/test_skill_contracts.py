@@ -96,15 +96,16 @@ parent and twelve subissues, a deviation without its location is one the person 
 Nothing else in the tree states it, so the anchors travel with the sentence.
 """
 
-_SUBISSUE_LINES = frozenset({"REPO", "INTENCION", "ACEPTACION", "SENAL"})
-"""The four labelled lines a subissue body carries, written down instead of derived from the example.
+_SUBISSUE_LINES = frozenset({"REPO", "INTENCION", "ACEPTACION", "SENAL", "EXCLUYE"})
+"""The five labelled lines a subissue body carries, written down instead of derived from the example.
 
 Only one of them has a consumer in the program: `REPO:`, which `SubissueBody` reads, and which the test
-above measures against it. Nothing in production reads `INTENCION:`, `ACEPTACION:` or `SENAL:` yet --
-they travel as prose to the implementer and to `deploy-watch` -- so there is no second surface to
-compare the set against, and deriving it from the very example under test approves whatever the example
-happens to say: drop `SENAL:` from the three regions at once and all three sets still match. So the set
-is an external claim about the prose, with its reason next to it, like `_CONFIRMATION_ANCHORS`.
+above measures against it. Nothing in production reads `INTENCION:`, `ACEPTACION:`, `SENAL:` or
+`EXCLUYE:` yet -- they travel as prose to the implementer and to `deploy-watch` -- so there is no second
+surface to compare the set against, and deriving it from the very example under test approves whatever
+the example happens to say: drop `SENAL:` from the three regions at once and all three sets still match.
+So the set is an external claim about the prose, with its reason next to it, like
+`_CONFIRMATION_ANCHORS`.
 """
 
 
@@ -193,12 +194,12 @@ def test_the_subissue_slice_spec_documents_is_read_by_the_program_as_the_slice_i
     block is absent: it belongs to the machine, so a documented body that already carried one would have
     the skill writing a run that never happened.
 
-    The four labelled lines are asserted, not just `REPO:`, because all four now have a consumer: the
-    intention, the criteria and the signal travel into the prompts of the implementer and of the judge.
-    Parsing them is fail-soft by design -- a line the parser does not recognise is not an error, it is an
-    empty field -- so a rename on one side alone would leave both agents working with an empty yardstick
-    and nothing at all would break. `_SUBISSUE_LINES` already claims the example writes the four; this is
-    what checks the program reads the four.
+    The five labelled lines are asserted, not just `REPO:`, because all five now have a consumer: the
+    intention, the criteria, the signal and what is excluded travel into the prompts of the implementer
+    and of the judge. Parsing them is fail-soft by design -- a line the parser does not recognise is not
+    an error, it is an empty field -- so a rename on one side alone would leave both agents working with
+    an empty yardstick and nothing at all would break. `_SUBISSUE_LINES` already claims the example
+    writes the five; this is what checks the program reads the five.
     """
     title = _documented_subissue_title()
     label = {"id": "LA_kwDOThEBoM8AAAACu6gVcw", "name": IssueLabel.PENDING.value, "description": "", "color": "5319e7"}
@@ -223,6 +224,7 @@ def test_the_subissue_slice_spec_documents_is_read_by_the_program_as_the_slice_i
     assert children[0].intention, "the documented subissue carries no `INTENCION:` the program can read"
     assert children[0].criteria, "the documented subissue carries no `ACEPTACION:` the program can read"
     assert children[0].signal, "the documented subissue carries no `SENAL:` the program can read"
+    assert children[0].excludes, "the documented subissue carries no `EXCLUYE:` the program can read"
     assert children[0].label is IssueLabel.PENDING
     assert children[0].run is None, (
         "the documented subissue body already carries an execution state block, which is the machine's"
@@ -242,7 +244,8 @@ def test_the_labelled_lines_of_a_subissue_are_the_same_in_the_example_the_rules_
     written = set(_LABELLED_LINE_WRITTEN.findall(_spec_example(_SUBISSUE_EXAMPLE)))
     assert written == _SUBISSUE_LINES, (
         f"the example under `{_SUBISSUE_EXAMPLE}` writes {sorted(written)}, and a subissue body carries "
-        f"{sorted(_SUBISSUE_LINES)}: the intention, the criteria, the signal and the target repo"
+        f"{sorted(_SUBISSUE_LINES)}: the intention, the criteria, the signal, what is excluded and the "
+        f"target repo"
     )
 
     demanded = set(_LABELLED_LINE_NAMED.findall(_spec_prose(_HARD_RULES)))
@@ -521,6 +524,42 @@ def test_the_program_does_not_grant_the_judge_what_its_own_rubric_says_he_does_n
 
     assert "Bash" not in _granted_tools(), (
         f"the argv grants {sorted(_granted_tools())}, and its own rubric tells the judge it has no `Bash`"
+    )
+
+
+def test_the_rubric_names_excludes_as_the_input_that_tells_planned_scaffolding_from_speculation() -> None:
+    """Item 5 flags "comportamiento que ningun criterio pidio" as a finding, and `EXCLUYE` is what a
+
+    slice writes down when a future slice is already planned to consume that scaffolding. Without the
+    rubric naming it in that item, the judge has no way to tell "the spec already decided this is out of
+    scope" from "the implementer built something nobody asked for", and would flag planned scaffolding
+    as a speculative feature.
+    """
+    rubric = _program_rubric()
+    assert "Contrasta esto contra el `EXCLUYE`" in rubric, (
+        "the program's rubric no longer tells the judge to contrast item 5's speculative-behaviour check "
+        "against `EXCLUYE`, so planned scaffolding a slice declared out of scope would be flagged as if "
+        "nobody had asked for it"
+    )
+    assert "`EXCLUYE` tampoco cubra" in rubric, (
+        "the program's rubric no longer excludes what `EXCLUYE` names from item 5's FAIL condition"
+    )
+
+
+def test_the_rubric_lists_excludes_among_the_inputs_that_can_arrive_empty() -> None:
+    """`EXCLUYE` travels the same fail-soft path as `SENAL`: a slice that never declares one parses to
+
+    an empty field, not an error. Without the rubric saying so, the judge reading an empty `EXCLUYE`
+    line has no way to tell "nothing was declared out of scope" from "the input never reached me", and
+    the two need different verdicts (see the paragraph on reporting missing inputs).
+    """
+    rubric = _program_rubric()
+    assert "Cinco de esos campos pueden llegarte vacios" in rubric, (
+        "the program's rubric still says four fields can arrive empty, but `EXCLUYE` joined `SENAL` on "
+        "the same fail-soft path and needs to be counted among them"
+    )
+    assert "el `EXCLUYE`" in rubric, (
+        "the program's rubric no longer names `EXCLUYE` among the inputs that can arrive empty"
     )
 
 

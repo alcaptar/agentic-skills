@@ -70,6 +70,7 @@ class JudgeInvocation(HarnessInvocation):
                 f"- ruta del repo: {review.worktree}",
                 *PriorArtBlock.of(review.prior_art),
                 f"- senal: {review.signal}",
+                f"- excluye: {review.excludes}",
                 *CountedLines.of("criterios de aceptacion", review.criteria),
                 *CitedSources.of(
                     "fuentes de convencion", reader=self.reader, worktree=review.worktree, sources=review.sources

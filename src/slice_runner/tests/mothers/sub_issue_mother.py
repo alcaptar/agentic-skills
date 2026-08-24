@@ -33,6 +33,7 @@ class SubIssueMother:
                 "cada precheck falla con un motivo distinguible, no con un booleano",
             ),
             signal="exenta - este repo no despliega",
+            excludes="",
             run=None,
             label=IssueLabel.PENDING,
         )
@@ -110,6 +111,10 @@ class SubIssueMother:
     @staticmethod
     def declaring_a_signal() -> SubIssue:
         return replace(SubIssueMother.pending(), signal="tasa de error 5xx de shop-web en produccion")
+
+    @staticmethod
+    def declaring_an_exclusion() -> SubIssue:
+        return replace(SubIssueMother.pending(), excludes="el panel de grafana que consume esta serie")
 
     @staticmethod
     def carrying_a_user_story() -> SubIssue:

@@ -58,15 +58,18 @@ El programa te pasa, en el prompt de invocacion:
 - **La `SENAL` que declaro la slice**, tal cual la escribio quien la especifico, incluida la exencion
   con su motivo cuando lo es. Es el insumo entero del item 9: sin ella no hay nada que contrastar
   contra el diff.
+- **El `EXCLUYE` que declaro la slice**: lo que quien la especifico decidio dejar fuera de esta slice a
+  proposito -andamiaje de una slice futura ya prevista, no algo que falte-. Es el insumo que el item 5
+  necesita para no confundir eso con comportamiento especulativo que nadie pidio.
 - **Las fuentes de convencion**: los punteros a la vara principal del item 1, ya filtrados por el repo
   de la slice. Son rutas y nombres, asi que tienes que abrirlos tu.
 
-**Cuatro de esos campos pueden llegarte vacios: los criterios de aceptacion, el checklist, las fuentes
-de convencion y la `SENAL`.** Van siempre en "Datos del run", pero como una lista con `(0)` entradas o
-como una linea sin nada detras de los dos puntos. El identificador de la slice no esta en esa lista:
-ese llega siempre. Vacio **no** significa que la slice no declarase nada, significa que el insumo no te
-ha llegado, y lo que se hace con el esta dos parrafos mas abajo. Lo que no vale es leer una lista vacia
-como "no habia criterios" y dar el item por conforme.
+**Cinco de esos campos pueden llegarte vacios: los criterios de aceptacion, el checklist, las fuentes
+de convencion, la `SENAL` y el `EXCLUYE`.** Van siempre en "Datos del run", pero como una lista con
+`(0)` entradas o como una linea sin nada detras de los dos puntos. El identificador de la slice no esta
+en esa lista: ese llega siempre. Vacio **no** significa que la slice no declarase nada, significa que
+el insumo no te ha llegado, y lo que se hace con el esta dos parrafos mas abajo. Lo que no vale es leer
+una lista vacia como "no habia criterios" y dar el item por conforme.
 
 **Los directorios que puedes leer van listados en "Datos del run"**, y son los unicos: el repo de la
 slice y la biblioteca de skills de esta maquina. Si una skill que esta rubrica te manda cargar no esta
@@ -125,8 +128,11 @@ Recorrela **entera** y reporta item a item. No la amplies con criterios propios 
    asi violar lo que el criterio pedia?"-, por lectura acotada, sin re-derivar cobertura; (3) codigo que
    implementa **comportamiento que ningun criterio pidio** (feature especulativa, andamiaje de slices
    futuras). El refactor tras verde (extraer helpers, mejorar estructura) **traza al criterio** y no es
-   hallazgo. FAIL (severity high) si un criterio no queda pineado, si el codigo no cumple su
-   intencion, o si hay comportamiento que ningun criterio justifique.
+   hallazgo. **Contrasta esto contra el `EXCLUYE`**: si lo que ves de mas en el diff coincide con lo
+   que esa linea nombra como dejado fuera a proposito, no es un hallazgo de este item -es exactamente
+   lo que se declaro que no se iba a construir-. FAIL (severity high) si un criterio no queda pineado,
+   si el codigo no cumple su intencion, o si hay comportamiento que ningun criterio justifique y que el
+   `EXCLUYE` tampoco cubra.
 
 6. **Manipulacion de tests (regla de hierro; siempre alta).** En el diff, mira las lineas `-` de
    los ficheros de test: comprueba que ningun test **preexistente** se haya debilitado para acomodar la

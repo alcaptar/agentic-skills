@@ -27,6 +27,7 @@ class VerifySliceParams:
     slice_id: str
     prior_art: str
     signal: str
+    excludes: str
     criteria: tuple[str, ...]
     sources: tuple[Source, ...]
     checklist: tuple[ChecklistEntry, ...]
@@ -54,6 +55,7 @@ class VerifySlice:
                 diff=diff,
                 prior_art=params.prior_art,
                 signal=params.signal,
+                excludes=params.excludes,
                 criteria=params.criteria,
                 sources=params.sources,
                 checklist=params.checklist,

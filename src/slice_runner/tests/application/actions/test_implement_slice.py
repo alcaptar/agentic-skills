@@ -87,6 +87,15 @@ class TestImplementSlice:
             subissue.signal,
         )
 
+    def test_what_the_slice_declares_as_excluded_travels_to_the_assignment_too(
+        self, action: ImplementSlice, implementer: Mock
+    ) -> None:
+        subissue = SubIssueMother.declaring_an_exclusion()
+
+        action.execute(self._params(subissue=subissue))
+
+        assert self._assigned(implementer).excludes == subissue.excludes
+
     def test_the_yardstick_and_the_controls_come_from_the_parent_because_the_slice_declares_neither(
         self, action: ImplementSlice, implementer: Mock
     ) -> None:

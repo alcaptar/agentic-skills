@@ -282,6 +282,34 @@ class TestReadingTheChildren:
         assert by_slice["slice-01"].intention == "hoy no hay forma de medir el formato nuevo sin crearlo"
         assert by_slice["slice-01"].signal == "exenta - spike de medicion"
 
+    def test_the_excludes_line_of_the_body_becomes_the_subissue_excludes(self) -> None:
+        with_excludes = [
+            {
+                "number": 1,
+                "title": "slice-01 (x): y",
+                "body": "INTENCION: z\nEXCLUYE: el panel de grafana que consume esta serie\n",
+                "labels": [],
+                "state": "OPEN",
+            }
+        ]
+
+        children = GhRunRepository(call=GhCallDoubles.wired(self._process(children=with_excludes))).read_children(
+            repo=_REPO, parent=43, expected=1
+        )
+
+        assert children[0].excludes == "el panel de grafana que consume esta serie"
+
+    def test_a_body_without_excludes_reads_it_as_empty_because_that_is_the_shape_of_an_already_created_subissue(
+        self,
+    ) -> None:
+        children = GhRunRepository(call=GhCallDoubles.wired(self._process())).read_children(
+            repo=_REPO, parent=43, expected=2
+        )
+
+        by_slice = {child.slice_id.canonical: child for child in children}
+        assert by_slice["slice-01"].excludes == ""
+        assert by_slice["slice-01"].signal == "exenta - spike de medicion"
+
     def test_a_body_that_declares_none_of_them_reads_as_empty_instead_of_refusing_to_be_read(self) -> None:
         bodiless = [{"number": 1, "title": "slice-01 (a): no prose at all", "body": "", "labels": [], "state": "OPEN"}]
 
@@ -289,7 +317,12 @@ class TestReadingTheChildren:
             repo=_REPO, parent=43, expected=1
         )
 
-        assert (children[0].intention, children[0].criteria, children[0].signal) == ("", (), "")
+        assert (children[0].intention, children[0].criteria, children[0].signal, children[0].excludes) == (
+            "",
+            (),
+            "",
+            "",
+        )
 
     def test_a_body_with_no_state_block_reads_as_no_run_yet(self) -> None:
         children = GhRunRepository(call=GhCallDoubles.wired(self._process())).read_children(

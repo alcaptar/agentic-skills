@@ -116,7 +116,7 @@ Una feature = **un issue padre** + **una subissue por slice**. Un solo formato, 
 |---|---|
 | Issue padre | `## Intencion`, `## Lo que ya existe`, `## Fuentes de convencion` y `## Controles`, los dos ultimos por repo, mas `## Historia de usuario` si la feature tiene una -y entonces tambien la clave delante de su titulo y la etiqueta `origen:<clave>`-. Las slices son sus subissues, y la barra de progreso la calcula GitHub |
 | Titulo de la subissue | `slice-NN (name): titulo`, con la clave de la historia de usuario delante si el padre la declara; de ahi sale el orden de ejecucion, y de `name` sale la rama (con la clave delante del numero cuando la hay: `slice/AS-255-NN-name`) y el scope del commit |
-| Cuerpo de la subissue | Las lineas de la slice: `REPO:`, `INTENCION:`, `ACEPTACION:`, `SENAL:` |
+| Cuerpo de la subissue | Las lineas de la slice: `REPO:`, `INTENCION:`, `ACEPTACION:`, `SENAL:`, `EXCLUYE:` |
 | Etiqueta de la subissue | El estado macro, que arranca en `estado:pendiente`, mas `origen:<clave>` si el padre declara historia de usuario |
 
 ### El issue padre
@@ -173,6 +173,7 @@ INTENCION: hoy el stock se queda en negativo y nadie se entera hasta que una tie
 ACEPTACION: la alerta dispara con stock negativo sostenido 10m y no con un negativo aislado
 ACEPTACION: la alerta sale con severidad critical y apunta al runbook de stock
 SENAL: prometheus min_over_time(application_stock_actual[10m]) < 0 dispara la alerta en 15m post-deploy; critical
+EXCLUYE: el panel de Grafana que visualiza esta misma serie va en su propia slice, detras de esta
 ```
 
 ### Reglas duras
@@ -312,6 +313,11 @@ SENAL: prometheus min_over_time(application_stock_actual[10m]) < 0 dispara la al
   ventana ni assert); `SENAL: prometheus rate(application_stock_ajustado_total[5m]) > 0 en 10m
   post-deploy; critical` si. Si la senal hay que **construirla**, su emision entra ademas como criterio
   de aceptacion normal (el test de emision): la emision se verifica pre-merge, el valor vivo post-deploy.
+- El cuerpo lleva una linea `EXCLUYE:` con **lo que esta slice deja fuera de su alcance a proposito**:
+  andamiaje de una slice futura ya prevista, no algo que falte. Es obligatoria siempre, sin ausencia
+  silenciosa: si de verdad no hay nada que excluir, se declara con `EXCLUYE: nada - <motivo>`, igual
+  que `SENAL: exenta - <motivo>`. Es lo que le permite al verificador de slice-runner distinguir
+  comportamiento especulativo (que bloquea) de lo que la spec ya decidio dejar para otra slice (que no).
 - Linea `REPO: <org>/<repo>` cuando la slice se implementa en otro repo (alerta, panel). Ausente = el
   repo del padre. Toda slice con `REPO:` exige la subseccion de fuentes **y de controles** de su repo.
 - Una feature de **una sola slice** = un padre con una sola subissue.
@@ -554,6 +560,10 @@ trabajo. Ofrece corregirlas. Checklist:
   aplica la escalera de `references/observabilidad.md` con la persona y anade la linea. La `SENAL` debe
   ser **refutable**: nombra la serie, la ventana y el assert; si dice "se monitoriza" o "no empeora",
   reescribela.
+- **Ninguna slice sin `EXCLUYE:`, y ninguna `EXCLUYE: nada` sin motivo escrito.** Si falta (p. ej. un
+  issue anterior a este mecanismo), **es la desviacion a corregir**: pregunta a la persona que decidio
+  dejar fuera al cortar esta slice -si de verdad nada, la exencion lleva motivo- y anade la linea,
+  reportandola como `slice-NN (#numero)`, en el cuerpo.
 - **Cadena de observabilidad**: si alguna slice emite una senal nueva relevante, comprueba que hay slice
   de alerta (y de panel si aporta) **con su `REPO:`** y **detras** de la que emite la serie, o que la
   ausencia es una decision explicita. Nunca alerta/panel en la misma slice que la metrica.
