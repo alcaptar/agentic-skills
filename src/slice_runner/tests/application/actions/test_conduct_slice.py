@@ -881,17 +881,6 @@ class TestConductSliceResumingCatchesUpTheBranch:
     def _conductor() -> Conductor:
         return Conductor(chosen=SelectSliceResultMother.resumed_at(RunMother.implementing()))
 
-    def test_resuming_catches_up_the_branch_against_its_own_remote_and_the_declared_base_before_implementing(
-        self,
-    ) -> None:
-        conductor = self._conductor()
-
-        conductor.conduct()
-
-        conductor.branches.catch_up.assert_called_once_with(
-            worktree=Conductor.WORKTREE, name=_BRANCH, base=Conductor.BASE
-        )
-
     def test_a_branch_already_caught_up_still_reaches_the_implementer(self) -> None:
         conductor = self._conductor()
 

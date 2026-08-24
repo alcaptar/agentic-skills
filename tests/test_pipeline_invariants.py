@@ -242,12 +242,12 @@ def test_the_scan_counts_as_uncapped_every_way_of_launching_a_process_not_only_s
 _CONDUCT_SLICE = "src/slice_runner/application/actions/conduct_slice.py"
 
 _KNOWN_NOT_HARNESS_WRITING = {
-    ("_branches", "catch_up"),
     ("_branches", "create"),
     ("_branches", "exists"),
     ("_budgets", "cost_exhausted"),
     ("_budgets", "exhausted"),
     ("_budgets", "wait_exhausted"),
+    ("_catch_up", "execute"),
     ("_clock", "sleep"),
     ("_close", "execute"),
     ("_deliver", "execute"),

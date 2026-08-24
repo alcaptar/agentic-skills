@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 from unittest.mock import Mock, create_autospec
 
+from slice_runner.application.actions.catch_up_branch import CatchUpBranch
 from slice_runner.application.actions.close_parent import CloseParent
 from slice_runner.application.actions.conduct_slice import (
     ConductSlice,
@@ -154,6 +155,7 @@ class Conductor:
                 read_ci=ReadCiStatus(ci=self.ci, forum=self.forum),
                 read_pull_request=ReadPullRequestStatus(forum=self.forum),
                 seek_alignment=SeekAlignment(understanding=self.understanding, repository=self.repository),
+                catch_up=CatchUpBranch(branches=self.branches),
             ),
             ports=ConductSlicePorts(
                 repository=self.repository,

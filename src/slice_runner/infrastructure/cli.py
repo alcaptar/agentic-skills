@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
+from slice_runner.application.actions.catch_up_branch import CatchUpBranch
 from slice_runner.application.actions.close_parent import CloseParent
 from slice_runner.application.actions.conduct_slice import (
     ConductSlice,
@@ -605,6 +606,7 @@ class Cli:
                     ),
                     repository=repository,
                 ),
+                catch_up=CatchUpBranch(branches=branches),
             ),
             ports=ConductSlicePorts(
                 repository=repository,
