@@ -6,8 +6,8 @@ import pytest
 
 from slice_runner.domain.alignment import Alignment
 from slice_runner.domain.exceptions import InvalidUnderstandingReportError
-from slice_runner.domain.step import Step
 from slice_runner.infrastructure.claude_understanding import ClaudeUnderstanding
+from slice_runner.infrastructure.harness_invocation_runner import HarnessInvocationRunner
 from slice_runner.infrastructure.harness_telemetry import HarnessTelemetry
 from slice_runner.tests.doubles import (
     RecordedProcess,
@@ -16,9 +16,7 @@ from slice_runner.tests.doubles import (
     RecordedToolUseRecorder,
     RecordedTrace,
     RecordedTurnLog,
-    StreamingProcess,
 )
-from slice_runner.tests.mothers.harness_call_spend_mother import HarnessCallSpendMother
 from slice_runner.tests.mothers.harness_spend_mother import HarnessSpendMother
 from slice_runner.tests.mothers.judge_output_mother import HarnessEnvelopeMother
 from slice_runner.tests.mothers.parent_issue_mother import ParentIssueMother
@@ -35,25 +33,18 @@ _RECORDED = "implementer-two-paths"
 
 class Writing:
     @staticmethod
-    def understood(
-        process: Process,
-        *,
-        trace: RecordedTrace | None = None,
-        turns: RecordedTurnLog | None = None,
-        spend_log: RecordedSpendLog | None = None,
-        tool_uses: RecordedToolUseRecorder | None = None,
-        alignment: Alignment | None = None,
-    ) -> Understanding:
-        return ClaudeUnderstanding(
+    def understood(process: Process, *, alignment: Alignment | None = None) -> Understanding:
+        calls = HarnessInvocationRunner(
             process=process,
             telemetry=HarnessTelemetry(
-                trace=trace or RecordedTrace(),
-                turns=turns or RecordedTurnLog(),
-                spend_log=spend_log or RecordedSpendLog(),
-                tool_uses=tool_uses or RecordedToolUseRecorder(),
+                trace=RecordedTrace(),
+                turns=RecordedTurnLog(),
+                spend_log=RecordedSpendLog(),
+                tool_uses=RecordedToolUseRecorder(),
             ),
-            reader=RecordedSourceReader(),
-        ).write(
+        )
+
+        return ClaudeUnderstanding(calls=calls, reader=RecordedSourceReader()).write(
             subissue=SubIssueMother.pending(),
             parent=ParentIssueMother.with_sources_and_controls(),
             repo=UnderstandingInvocationMother.REPO,
@@ -131,86 +122,3 @@ class TestWhatTheCallIsAllowedToReturn:
             Writing.understood(Writing.carrying(blank))
 
         assert rejection.value.spend == HarnessSpendMother.of_the_implementer_call()
-
-
-class TestWhereTheConversationCanBeFound:
-    def test_the_session_the_call_ran_under_is_written_down_under_the_slice_and_the_understand_step(self) -> None:
-        trace = RecordedTrace()
-
-        Writing.understood(Writing.carrying(UnderstandingReportMother.valid()), trace=trace)
-
-        assert [(call.slice_id, call.step, call.session) for call in trace.calls] == [
-            (
-                SubIssueMother.pending().slice_id.canonical,
-                Step.UNDERSTAND,
-                HarnessEnvelopeMother.SESSION_OF_THE_IMPLEMENTER,
-            )
-        ]
-
-    def test_a_call_whose_report_is_rejected_is_traced_too_because_that_conversation_is_the_one_to_read(self) -> None:
-        trace = RecordedTrace()
-        blank = UnderstandingReportMother.valid() | {"summary": "   "}
-
-        with pytest.raises(InvalidUnderstandingReportError):
-            Writing.understood(Writing.carrying(blank), trace=trace)
-
-        assert [call.session for call in trace.calls] == [HarnessEnvelopeMother.SESSION_OF_THE_IMPLEMENTER]
-
-
-class TestTheSpendLogOfTheCall:
-    def test_the_session_and_what_it_spent_are_written_down(self) -> None:
-        spend_log = RecordedSpendLog()
-
-        Writing.understood(Writing.carrying(UnderstandingReportMother.valid()), spend_log=spend_log)
-
-        assert spend_log.calls == [HarnessCallSpendMother.of_the_implementer()]
-
-    def test_a_call_whose_report_is_rejected_still_leaves_its_spend_behind(self) -> None:
-        spend_log = RecordedSpendLog()
-        blank = UnderstandingReportMother.valid() | {"summary": "   "}
-
-        with pytest.raises(InvalidUnderstandingReportError):
-            Writing.understood(Writing.carrying(blank), spend_log=spend_log)
-
-        assert [call.session for call in spend_log.calls] == [HarnessEnvelopeMother.SESSION_OF_THE_IMPLEMENTER]
-
-
-class TestTheToolUseRecordingOfTheCall:
-    def test_the_recorder_is_asked_for_the_slice_step_session_and_worktree_of_the_call(self) -> None:
-        tool_uses = RecordedToolUseRecorder()
-
-        Writing.understood(Writing.carrying(UnderstandingReportMother.valid()), tool_uses=tool_uses)
-
-        assert [(call.slice_id, call.step, call.session, call.worktree) for call in tool_uses.calls] == [
-            (
-                SubIssueMother.pending().slice_id.canonical,
-                Step.UNDERSTAND,
-                HarnessEnvelopeMother.SESSION_OF_THE_IMPLEMENTER,
-                UnderstandingInvocationMother.WORKTREE,
-            )
-        ]
-
-    def test_a_call_whose_report_is_rejected_is_recorded_too_because_that_conversation_is_the_one_to_read(
-        self,
-    ) -> None:
-        tool_uses = RecordedToolUseRecorder()
-        blank = UnderstandingReportMother.valid() | {"summary": "   "}
-
-        with pytest.raises(InvalidUnderstandingReportError):
-            Writing.understood(Writing.carrying(blank), tool_uses=tool_uses)
-
-        assert [call.session for call in tool_uses.calls] == [HarnessEnvelopeMother.SESSION_OF_THE_IMPLEMENTER]
-
-
-class TestTheTurnsObservedWhileTheCallIsInFlight:
-    def test_every_tool_use_of_a_real_streamed_call_is_observed_labelled_with_the_understand_step(self) -> None:
-        process = StreamingProcess(HarnessEnvelopeMother.streamed())
-        turns = RecordedTurnLog()
-
-        with pytest.raises(InvalidUnderstandingReportError):
-            Writing.understood(process, turns=turns)
-
-        assert [(turn.slice_id, turn.step, turn.number, turn.tool) for turn in turns.turns] == [
-            (SubIssueMother.pending().slice_id.canonical, Step.UNDERSTAND, 1, "Write"),
-            (SubIssueMother.pending().slice_id.canonical, Step.UNDERSTAND, 2, "StructuredOutput"),
-        ]

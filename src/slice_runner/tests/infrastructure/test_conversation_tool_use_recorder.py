@@ -13,6 +13,7 @@ from slice_runner.infrastructure.claude_implementer import ClaudeImplementer
 from slice_runner.infrastructure.claude_understanding import ClaudeUnderstanding
 from slice_runner.infrastructure.claude_verifier import ClaudeVerifier
 from slice_runner.infrastructure.conversation_tool_use_recorder import ConversationToolUseRecorder
+from slice_runner.infrastructure.harness_invocation_runner import HarnessInvocationRunner
 from slice_runner.infrastructure.harness_telemetry import HarnessTelemetry
 from slice_runner.infrastructure.local_conversation_log import LocalConversationLog
 from slice_runner.infrastructure.local_tool_use_log import LocalToolUseLog
@@ -174,6 +175,10 @@ class TestARunThatCallsAllThreeStepsOfTheHarness(WithTheToolUseLogOutOfTheRealHo
             "session_id": cls._SESSION
         }
 
+    @staticmethod
+    def _calls(process: RecordedProcess, *, telemetry: HarnessTelemetry) -> HarnessInvocationRunner:
+        return HarnessInvocationRunner(process=process, telemetry=telemetry)
+
     @classmethod
     def _run_all_three(cls, tmp_path: Path) -> None:
         ConversationTranscriptMother.written_under(tmp_path, worktree=cls._WORKTREE)
@@ -184,8 +189,7 @@ class TestARunThatCallsAllThreeStepsOfTheHarness(WithTheToolUseLogOutOfTheRealHo
         reader = RecordedSourceReader()
 
         ClaudeUnderstanding(
-            process=RecordedProcess(cls._envelope(UnderstandingReportMother.valid())),
-            telemetry=telemetry,
+            calls=cls._calls(RecordedProcess(cls._envelope(UnderstandingReportMother.valid())), telemetry=telemetry),
             reader=reader,
         ).write(
             subissue=SubIssueMother.pending(),
@@ -195,15 +199,14 @@ class TestARunThatCallsAllThreeStepsOfTheHarness(WithTheToolUseLogOutOfTheRealHo
             alignment=Alignment(),
         )
         ClaudeImplementer(
-            process=RecordedProcess(
-                HarnessEnvelopeMother.recorded("implementer-two-paths") | {"session_id": cls._SESSION}
+            calls=cls._calls(
+                RecordedProcess(HarnessEnvelopeMother.recorded("implementer-two-paths") | {"session_id": cls._SESSION}),
+                telemetry=telemetry,
             ),
-            telemetry=telemetry,
             reader=reader,
         ).implement(AssignmentMother.of_the_first_round())
         ClaudeVerifier(
-            process=RecordedProcess(cls._envelope(JudgeVerdictMother.passing())),
-            telemetry=telemetry,
+            calls=cls._calls(RecordedProcess(cls._envelope(JudgeVerdictMother.passing())), telemetry=telemetry),
             reader=reader,
         ).verify(JudgeMother.adversarial(), replace(SliceUnderReviewMother.of_the_slice(), worktree=cls._WORKTREE))
 
