@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, ClassVar
 
 from slice_runner.infrastructure.cited_sources import CitedSources
 from slice_runner.infrastructure.counted_lines import CountedLines
+from slice_runner.infrastructure.harness_invocation_runner import HarnessInvocation
 from slice_runner.infrastructure.prior_art_block import PriorArtBlock
 from slice_runner.infrastructure.report_payload import ImplementationReportPayload
 from slice_runner.infrastructure.slice_implementer_brief import SliceImplementerBrief
@@ -19,7 +20,7 @@ if TYPE_CHECKING:
 
 
 @dataclass(frozen=True, kw_only=True, slots=True)
-class ImplementerInvocation:
+class ImplementerInvocation(HarnessInvocation):
     EXECUTABLE: ClassVar[str] = "claude"
     MODEL: ClassVar[str] = "sonnet"
 

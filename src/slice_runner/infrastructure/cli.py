@@ -85,6 +85,7 @@ from slice_runner.infrastructure.git_branches import GitBranches
 from slice_runner.infrastructure.git_command_failed_error import GitCommandFailedError
 from slice_runner.infrastructure.git_diff_reader import GitDiffReader
 from slice_runner.infrastructure.git_workspace import GitWorkspace
+from slice_runner.infrastructure.harness_invocation_runner import HarnessInvocationRunner
 from slice_runner.infrastructure.harness_telemetry import HarnessTelemetry
 from slice_runner.infrastructure.implementer_invocation import ImplementerInvocation
 from slice_runner.infrastructure.judge_invocation import JudgeInvocation
@@ -560,6 +561,15 @@ class Cli:
         workspace = GitWorkspace(process=self._process)
         machine = StateMachine(budgets=self._budgets)
         reader = ProcessSourceReader(process=self._process, budgets=self._budgets)
+        calls = HarnessInvocationRunner(
+            process=self._process,
+            telemetry=HarnessTelemetry(
+                trace=LocalCallTrace(clock=clock),
+                turns=StderrTurnLog(),
+                spend_log=LocalCallSpendLog(clock=clock),
+                tool_uses=self._tool_uses(),
+            ),
+        )
 
         return ConductSlice(
             use_cases=ConductSliceUseCases(
@@ -567,16 +577,7 @@ class Cli:
                 reopen=ReopenSlice(repository=repository, machine=machine),
                 prechecks=RunPrechecks(branches=branches, forum=forum, sources=reader),
                 implement=ImplementSlice(
-                    implementer=ClaudeImplementer(
-                        process=self._process,
-                        telemetry=HarnessTelemetry(
-                            trace=LocalCallTrace(clock=clock),
-                            turns=StderrTurnLog(),
-                            spend_log=LocalCallSpendLog(clock=clock),
-                            tool_uses=self._tool_uses(),
-                        ),
-                        reader=reader,
-                    ),
+                    implementer=ClaudeImplementer(calls=calls, reader=reader),
                     reader=GitDiffReader(process=self._process),
                 ),
                 stage=StageSlice(workspace=workspace),
@@ -594,16 +595,7 @@ class Cli:
                 read_ci=ReadCiStatus(ci=GhCi(call=gh_call), forum=forum),
                 read_pull_request=ReadPullRequestStatus(forum=forum),
                 seek_alignment=SeekAlignment(
-                    understanding=ClaudeUnderstanding(
-                        process=self._process,
-                        telemetry=HarnessTelemetry(
-                            trace=LocalCallTrace(clock=clock),
-                            turns=StderrTurnLog(),
-                            spend_log=LocalCallSpendLog(clock=clock),
-                            tool_uses=self._tool_uses(),
-                        ),
-                        reader=reader,
-                    ),
+                    understanding=ClaudeUnderstanding(calls=calls, reader=reader),
                     repository=repository,
                 ),
                 catch_up=CatchUpBranch(branches=branches),
@@ -634,12 +626,14 @@ class Cli:
         return VerifySlice(
             reader=GitDiffReader(process=self._process),
             verifier=ClaudeVerifier(
-                process=self._process,
-                telemetry=HarnessTelemetry(
-                    trace=LocalCallTrace(clock=used),
-                    turns=StderrTurnLog(),
-                    spend_log=LocalCallSpendLog(clock=used),
-                    tool_uses=self._tool_uses(),
+                calls=HarnessInvocationRunner(
+                    process=self._process,
+                    telemetry=HarnessTelemetry(
+                        trace=LocalCallTrace(clock=used),
+                        turns=StderrTurnLog(),
+                        spend_log=LocalCallSpendLog(clock=used),
+                        tool_uses=self._tool_uses(),
+                    ),
                 ),
                 reader=ProcessSourceReader(process=self._process, budgets=self._budgets),
             ),
