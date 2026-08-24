@@ -22,7 +22,7 @@ if TYPE_CHECKING:
 @dataclass(frozen=True, kw_only=True, slots=True)
 class UnderstandingInvocation(HarnessInvocation):
     EXECUTABLE: ClassVar[str] = "claude"
-    MODEL: ClassVar[str] = "sonnet"
+    MODEL: ClassVar[str] = "opus"
 
     subissue: SubIssue
     parent: ParentIssue
