@@ -527,22 +527,26 @@ def test_the_program_does_not_grant_the_judge_what_its_own_rubric_says_he_does_n
     )
 
 
-def test_the_rubric_names_excludes_as_the_input_that_tells_planned_scaffolding_from_speculation() -> None:
-    """Item 5 flags "comportamiento que ningun criterio pidio" as a finding, and `EXCLUYE` is what a
+def test_the_rubric_reads_excludes_as_a_prohibition_and_never_as_a_permission() -> None:
+    """`EXCLUYE` is what the spec wrote down as deliberately out of this slice's scope, and the
 
-    slice writes down when a future slice is already planned to consume that scaffolding. Without the
-    rubric naming it in that item, the judge has no way to tell "the spec already decided this is out of
-    scope" from "the implementer built something nobody asked for", and would flag planned scaffolding
-    as a speculative feature.
+    implementer's brief tells it not to build what that line names. So item 5 has to fail a diff that
+    builds it anyway: read as a permission, the line would have the judge wave through exactly what the
+    other half of the pipeline forbids, and the two prompts would contradict each other on the same
+    input.
     """
     rubric = _program_rubric()
     assert "Contrasta esto contra el `EXCLUYE`" in rubric, (
         "the program's rubric no longer tells the judge to contrast item 5's speculative-behaviour check "
-        "against `EXCLUYE`, so planned scaffolding a slice declared out of scope would be flagged as if "
-        "nobody had asked for it"
+        "against `EXCLUYE`, so what the spec forbade would be judged as if nobody had ever written it down"
     )
-    assert "`EXCLUYE` tampoco cubra" in rubric, (
-        "the program's rubric no longer excludes what `EXCLUYE` names from item 5's FAIL condition"
+    assert "el diff construye lo que el `EXCLUYE` prohibia" in rubric, (
+        "the program's rubric no longer fails a diff that builds what `EXCLUYE` declared out of scope, so "
+        "the line stopped being a prohibition for the judge while it still is one for the implementer"
+    )
+    assert "`EXCLUYE` tampoco cubra" not in rubric, (
+        "the program's rubric exempts from item 5's FAIL condition what `EXCLUYE` names, which reads the "
+        "line as a list of permissions: it is a list of prohibitions"
     )
 
 

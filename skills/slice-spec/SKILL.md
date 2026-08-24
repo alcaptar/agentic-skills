@@ -316,8 +316,9 @@ EXCLUYE: el panel de Grafana que visualiza esta misma serie va en su propia slic
 - El cuerpo lleva una linea `EXCLUYE:` con **lo que esta slice deja fuera de su alcance a proposito**:
   andamiaje de una slice futura ya prevista, no algo que falte. Es obligatoria siempre, sin ausencia
   silenciosa: si de verdad no hay nada que excluir, se declara con `EXCLUYE: nada - <motivo>`, igual
-  que `SENAL: exenta - <motivo>`. Es lo que le permite al verificador de slice-runner distinguir
-  comportamiento especulativo (que bloquea) de lo que la spec ya decidio dejar para otra slice (que no).
+  que `SENAL: exenta - <motivo>`. Es una **prohibicion que viaja a los dos agentes**: el implementador
+  no construye lo que nombra, y el verificador bloquea si aparece en el diff, citando la linea en vez de
+  tener que argumentar que sobra.
 - Linea `REPO: <org>/<repo>` cuando la slice se implementa en otro repo (alerta, panel). Ausente = el
   repo del padre. Toda slice con `REPO:` exige la subseccion de fuentes **y de controles** de su repo.
 - Una feature de **una sola slice** = un padre con una sola subissue.

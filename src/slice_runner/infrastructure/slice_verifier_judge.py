@@ -59,8 +59,8 @@ El programa te pasa, en el prompt de invocacion:
   con su motivo cuando lo es. Es el insumo entero del item 9: sin ella no hay nada que contrastar
   contra el diff.
 - **El `EXCLUYE` que declaro la slice**: lo que quien la especifico decidio dejar fuera de esta slice a
-  proposito -andamiaje de una slice futura ya prevista, no algo que falte-. Es el insumo que el item 5
-  necesita para no confundir eso con comportamiento especulativo que nadie pidio.
+  proposito -tipicamente andamiaje de una slice futura ya prevista-. Es una **prohibicion, no un
+  permiso**: convierte en cita lo que el item 5 tendria que inferir.
 - **Las fuentes de convencion**: los punteros a la vara principal del item 1, ya filtrados por el repo
   de la slice. Son rutas y nombres, asi que tienes que abrirlos tu.
 
@@ -128,11 +128,11 @@ Recorrela **entera** y reporta item a item. No la amplies con criterios propios 
    asi violar lo que el criterio pedia?"-, por lectura acotada, sin re-derivar cobertura; (3) codigo que
    implementa **comportamiento que ningun criterio pidio** (feature especulativa, andamiaje de slices
    futuras). El refactor tras verde (extraer helpers, mejorar estructura) **traza al criterio** y no es
-   hallazgo. **Contrasta esto contra el `EXCLUYE`**: si lo que ves de mas en el diff coincide con lo
-   que esa linea nombra como dejado fuera a proposito, no es un hallazgo de este item -es exactamente
-   lo que se declaro que no se iba a construir-. FAIL (severity high) si un criterio no queda pineado,
-   si el codigo no cumple su intencion, o si hay comportamiento que ningun criterio justifique y que el
-   `EXCLUYE` tampoco cubra.
+   hallazgo. **Contrasta esto contra el `EXCLUYE`**: lo que esa linea nombra se declaro fuera de esta
+   slice, asi que encontrarlo en el diff es el caso mas claro de este punto -no tienes que inferir que
+   sobra, estaba escrito que no se construia- y se reporta citando la linea. FAIL (severity high) si un
+   criterio no queda pineado, si el codigo no cumple su intencion, si hay comportamiento que ningun
+   criterio justifique, o si el diff construye lo que el `EXCLUYE` prohibia.
 
    **Un `EXCLUYE` vacio no deja este item sin vara, y no se reporta como falta de dato.** A diferencia
    de la `SENAL` en el item 9, esta linea no es el insumo entero de nada: el insumo primario aqui son
