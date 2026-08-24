@@ -12,6 +12,14 @@ same reason: it pins that every call which writes with the harness discards and 
 The sixth pins the fifth's own mechanism: a `self._x.y(...)` the scan has never seen counts as
 harness-writing by default, so a step added later on a brand new port turns the suite red instead
 of passing by omission the way naming only the three known calls would have.
+The seventh scans the whole tracked tree, test tree included, for a role adapter that calls the
+harness process on its own instead of through `HarnessInvocationRunner`, the piece that registers
+its trace, spend and tool-use. The eighth and ninth pin that mechanism the same way the sixth does:
+a shape the scan has never seen, and a path neither exemption list has ever named, both count as
+unregistered by default. The tenth pins the seventh's scope: it must reach outside
+`src/slice_runner/infrastructure/`, where the rule mostly already holds, or a future narrowing
+there would pass by construction instead of by having covered anything. The eleventh guards the
+noise list itself against going stale the way `_UNSCANNED` already does above.
 """
 
 from __future__ import annotations
@@ -378,3 +386,173 @@ def test_a_self_call_not_named_safe_is_treated_as_harness_writing_even_if_the_sc
     )
 
     assert _harness_writing_calls(source) == (2, [7])
+
+
+def _launches_something_shaped_like_the_harness(node: ast.Call) -> bool:
+    return (
+        isinstance(node.func, ast.Attribute)
+        and node.func.attr == "run"
+        and {"stdin", "cwd"}.issubset({keyword.arg for keyword in node.keywords})
+    )
+
+
+def _harness_shaped_launches(source: str) -> list[int]:
+    """Lines calling `something.run(...)` with both `stdin=` and `cwd=`, the shape every call into
+    the harness takes -- and also the shape of any other call through this program's `Process`
+    port, which is why the exemption lists below exist.
+    """
+    tree = ast.parse(source)
+
+    return sorted(
+        node.lineno
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call) and _launches_something_shaped_like_the_harness(node)
+    )
+
+
+def test_the_scan_treats_a_role_adapter_shape_it_has_never_seen_as_unregistered_by_default() -> None:
+    """Naming what does NOT count, instead of what does, is what makes a role adapter added later
+    fall on the unsafe side by default. This source is not in the tree and matches neither
+    exemption list, so nothing here recognizes it -- and it is still caught.
+    """
+    source = "\n".join(
+        [
+            "class ANewRoleAdapter:",
+            "    def act(self):",
+            "        return self._harness.run(['claude'], stdin='prompt', cwd='/worktree')",
+        ]
+    )
+
+    assert _harness_shaped_launches(source) == [3]
+
+
+def test_a_path_neither_exemption_list_has_ever_named_is_treated_as_unregistered_by_default() -> None:
+    """The inversion has two halves: an unseen shape (above) is one, an unseen path is the other.
+    Naming what does NOT count, instead of what does, is what makes a role adapter added at a path
+    neither list has ever named fall on the unsafe side by default, same as `ANewRoleAdapter` above.
+    """
+    source = "\n".join(
+        [
+            "class ANewRoleAdapter:",
+            "    def act(self):",
+            "        return self._harness.run(['claude'], stdin='prompt', cwd='/worktree')",
+        ]
+    )
+
+    assert _unregistered_lines("src/slice_runner/infrastructure/a_new_role_adapter.py", source) == [3]
+
+
+_HARNESS_REGISTRAR = "src/slice_runner/infrastructure/harness_invocation_runner.py"
+
+_HARNESS_SHAPED_LAUNCH_NOISE = {
+    "src/slice_runner/infrastructure/local_control_runner.py": "runs lint/tests/types through `sh -c`, not the harness",
+    "src/slice_runner/infrastructure/process_source_reader.py": (
+        "reads a declared source through `cat`, not the harness"
+    ),
+    "src/slice_runner/tests/infrastructure/test_local_process.py": (
+        "exercises `LocalProcess.run` with a `cwd` on purpose, as a test of that port itself"
+    ),
+    "src/slice_runner/tests/doubles.py": (
+        "doubles the `Process` port and forwards to `Real.process()`, never the harness on its own"
+    ),
+    "tests/test_install.py": "runs `make install-skills`, not the harness",
+    "tests/test_sample_output.py": "runs `ruff` against a copy of the smoke fixture, not the harness",
+}
+"""Structural noise of the signal, named instead of guessed.
+
+The shape this scan keys on -- a call to `.run(...)` with `stdin=` and `cwd=` together -- is how
+every invocation of a subprocess through this program's `Process` port looks, harness or not: it
+detects a process, not the harness specifically. There will always be legitimate calls shaped
+exactly like the one this exists to catch, so this list does not expire the way the debt list does
+-- what grows it is a new legitimate caller of `Process.run`, not a migration.
+"""
+
+_HARNESS_SHAPED_LAUNCH_DEBT = {
+    "src/slice_runner/infrastructure/claude_deploy_watch.py": (
+        "invokes the real harness outside a slice run's cycle -- it runs after the merge, once the "
+        "run is already closed and `Step` has no member for that moment -- and its migration onto "
+        "HarnessInvocationRunner is slice-03 of this feature (#369)"
+    ),
+}
+"""Consented debt with an expiry, unlike the list above: this entry is a real, unregistered call to
+the harness, kept out of this check on purpose until the issue named next to it lands. An entry is
+removed when it migrates, never because the scan stopped seeing it.
+"""
+
+_SCANNED_FOR_HARNESS_SHAPED_LAUNCHES = _tracked("*.py")
+
+_HARNESS_SHAPED_LAUNCH_EXEMPT = {_HARNESS_REGISTRAR, *_HARNESS_SHAPED_LAUNCH_NOISE, *_HARNESS_SHAPED_LAUNCH_DEBT}
+
+
+def _unregistered_lines(path: str, source: str) -> list[int]:
+    """Lines of `source` shaped like a harness launch, unless `path` is named exempt.
+
+    The exemption check is by path, not by source: a shape the scan has never seen still counts as
+    unregistered even at a path that has never been added to either list, which is what the meta-test
+    right above exercises without needing a broken tree to prove it.
+    """
+    return [] if path in _HARNESS_SHAPED_LAUNCH_EXEMPT else _harness_shaped_launches(source)
+
+
+def test_no_role_adapter_launches_the_harness_process_without_going_through_the_registrar() -> None:
+    """`architecture.md`: a business rule is written once, and `HarnessInvocationRunner` is the one
+    place that writes the trace, the spend and the tool-use record of a call to the harness.
+    Nothing today stops a role adapter from building its own call and skipping that registrar --
+    `ClaudeDeployWatch.watch` already does, unmeasured -- so this scans every tracked `.py` file,
+    test tree included, for the shape every such call takes.
+    """
+    unregistered = {
+        path: lines
+        for path in _SCANNED_FOR_HARNESS_SHAPED_LAUNCHES
+        if (lines := _unregistered_lines(path, _read(_ROOT / path)))
+    }
+
+    assert not unregistered, (
+        "these launch a process shaped like the harness (`stdin=` and `cwd=` together) without going "
+        "through HarnessInvocationRunner:\n"
+        + "\n".join(
+            f"  {path}: line(s) {', '.join(str(line) for line in lines)}"
+            for path, lines in sorted(unregistered.items())
+        )
+    )
+
+
+_ROLE_ADAPTERS_DIRECTORY = "src/slice_runner/infrastructure/"
+
+
+def test_the_scans_scope_reaches_launches_outside_where_role_adapters_already_comply() -> None:
+    """The scope is the whole tree, test tree included: a check that only ever looked at
+    `src/slice_runner/infrastructure/` -- where the rule mostly already holds -- would have
+    nothing left to catch outside it and pass by construction, not by having covered anything.
+    Every noise entry above lives outside that directory, so this is not hypothetical.
+    """
+    caught_outside_it = {
+        path
+        for path in _SCANNED_FOR_HARNESS_SHAPED_LAUNCHES
+        if not path.startswith(_ROLE_ADAPTERS_DIRECTORY) and _harness_shaped_launches(_read(_ROOT / path))
+    }
+
+    assert caught_outside_it, (
+        "no harness-shaped launch exists outside src/slice_runner/infrastructure/, so narrowing the "
+        "scan's scope to that directory would pass with nothing left to catch"
+    )
+
+
+def test_every_harness_shaped_launch_noise_entry_still_calls_something_shaped_like_the_harness() -> None:
+    """The same liveness check `_UNSCANNED` gets above, applied to this list.
+
+    Without it, a noise entry that stops calling anything shaped like the harness -- because the
+    call moved, was renamed, or was removed -- stays exempt forever, and a real unregistered call
+    to the harness added at that same path afterwards would pass in silence: exactly the failure
+    mode the rest of this file measures.
+    """
+    for path, reason in _HARNESS_SHAPED_LAUNCH_NOISE.items():
+        assert path in _SCANNED_FOR_HARNESS_SHAPED_LAUNCHES, (
+            f"the noise entry `{path}` ({reason}) is no longer tracked; drop it from "
+            f"_HARNESS_SHAPED_LAUNCH_NOISE instead of leaving a stale exemption"
+        )
+        assert _harness_shaped_launches(_read(_ROOT / path)), (
+            f"the noise entry `{path}` ({reason}) no longer calls anything shaped like the harness; "
+            f"drop it from _HARNESS_SHAPED_LAUNCH_NOISE instead of leaving a stale exemption that "
+            f"silently widens the check"
+        )
