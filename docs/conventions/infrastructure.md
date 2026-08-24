@@ -157,21 +157,9 @@ importar**: un smoke que solo importe el módulo lo da por bueno. Lo evita
   política que ningún criterio pidió**, y un adaptador que decide política es antipatrón declarado de esta
   misma capa. Cuando se cierre, se cierra **decidiendo la política**, no capturando el `OSError` a
   escondidas.
-- **Un adaptador que invoca el harness agrupa su telemetria en un objeto**, por el mismo motivo declarado
-  para agrupar dependencias en `docs/conventions/application.md`, y solo la telemetria: lo que cada
-  adaptador usa por su cuenta sigue listado suelto. **La línea, para que no se amplie por precedente:**
-  esto es de los adaptadores que invocan el harness y dejan constancia de la llamada.
-- **El rastro de una llamada lo escribe el adaptador que la hace, no el caso de uso**, y se anexa en
-  cuanto la respuesta parsea y **antes** de entrar en el bloque que la mide. Dos motivos, y el segundo es
-  el que cierra la decisión:
-
-  1. **El único sitio que ve la respuesta de todas las llamadas es el adaptador.** Una llamada que muere
-     dentro del bloque que mide es justo la conversación que se quiere leer, y en aplicación no queda
-     nada de ella.
-  2. **Al caso de uso ya no le cabe, y eso dice lo mismo.** Con un puerto más suelto la firma salta el
-     tope del linter, y empaquetarle los argumentos es del conductor y solo de el (ver
-     `docs/conventions/application.md`). Que el linter lo cace ahi es la señal de que escribir el rastro
-     es de la capa que ve la respuesta, no de la que orquesta.
+- **El rastro de una llamada lo escribe la capa que ve la respuesta, no la que orquesta**, y se anexa
+  **antes** de entrar en el bloque que la mide: una llamada que muere dentro de ese bloque es justo la
+  conversación que se quiere leer, y en aplicación no queda nada de ella.
 
   Consecuencia aceptada: una respuesta que **no** parsea no deja rastro -no hay identificador que
   escribir-. Por eso el identificador de sesión es campo **obligatorio** y no opcional: una llamada sin
