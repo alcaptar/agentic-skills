@@ -71,6 +71,7 @@ class ImplementerInvocation(HarnessInvocation):
                 f"- intencion: {assignment.intention}",
                 *PriorArtBlock.of(assignment.prior_art),
                 f"- senal: {assignment.signal}",
+                f"- excluye: {assignment.excludes}",
                 *CountedLines.of("criterios de aceptacion", assignment.criteria),
                 *CitedSources.of(
                     "fuentes de convencion",

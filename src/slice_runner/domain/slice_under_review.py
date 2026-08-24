@@ -18,6 +18,7 @@ class SliceUnderReview:
     diff: SliceDiff
     prior_art: str
     signal: str
+    excludes: str
     criteria: tuple[str, ...]
     sources: tuple[Source, ...]
     checklist: tuple[ChecklistEntry, ...]

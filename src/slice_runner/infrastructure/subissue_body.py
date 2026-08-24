@@ -15,6 +15,7 @@ _REPO_LINE = re.compile(r"^REPO\s*:\s*(.+?)\s*$", re.IGNORECASE | re.MULTILINE)
 _INTENTION_LINE = re.compile(r"^INTENCION\s*:\s*(.+?)\s*$", re.IGNORECASE | re.MULTILINE)
 _CRITERION_LINE = re.compile(r"^ACEPTACION\s*:\s*(.+?)\s*$", re.IGNORECASE | re.MULTILINE)
 _SIGNAL_LINE = re.compile(r"^SENAL\s*:\s*(.+?)\s*$", re.IGNORECASE | re.MULTILINE)
+_EXCLUDES_LINE = re.compile(r"^EXCLUYE\s*:\s*(.+?)\s*$", re.IGNORECASE | re.MULTILINE)
 _STATE_BLOCK = re.compile(r"<!-- slice-runner:estado\n(.*?)\n-->", re.DOTALL)
 
 
@@ -24,6 +25,7 @@ class ParsedSubissueBody:
     intention: str
     criteria: tuple[str, ...]
     signal: str
+    excludes: str
     run: Run | None
 
 
@@ -35,6 +37,7 @@ class SubissueBody:
             intention=cls._first(_INTENTION_LINE, body) or "",
             criteria=tuple(_CRITERION_LINE.findall(body)),
             signal=cls._first(_SIGNAL_LINE, body) or "",
+            excludes=cls._first(_EXCLUDES_LINE, body) or "",
             run=cls._run(body),
         )
 

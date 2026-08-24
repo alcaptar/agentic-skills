@@ -207,6 +207,7 @@ class TestTheSliceDataThatTravelsWithTheBrief(Calling):
             "- ruta del repo: /repos/agentic-skills\n"
             "- intencion: hoy nada evita reimplementar una slice ya entregada\n"
             "- senal: exenta - este repo no despliega\n"
+            "- excluye: \n"
             "- criterios de aceptacion (2):\n"
             "  - antes de tocar codigo comprueba que la subissue no este ya cerrada\n"
             "  - cada precheck falla con un motivo distinguible, no con un booleano\n"
@@ -216,6 +217,11 @@ class TestTheSliceDataThatTravelsWithTheBrief(Calling):
             "- controles del repo (1):\n"
             "  - lint: make linting\n"
             "- hallazgos de la vuelta anterior: ninguno, esta es la primera"
+        )
+
+    def test_a_slice_that_declares_something_excluded_carries_it_in_the_excluye_line(self) -> None:
+        assert "- excluye: el panel de grafana que consume esta serie\n" in self._sent(
+            AssignmentMother.of_a_slice_that_excludes_something()
         )
 
     def test_a_slice_with_a_user_story_names_the_slice_by_its_canonical_identifier_not_the_bare_ordinal(self) -> None:
@@ -329,6 +335,23 @@ class TestWhatTheBriefSaysAboutWhoRunsTheControls:
 
     def test_it_still_forbids_tuning_the_control_commands_now_that_it_says_who_runs_them(self) -> None:
         assert "no se cambian ni se afinan para que pasen" in self._said()
+
+
+class TestWhatTheBriefSaysAboutExcludes:
+    @staticmethod
+    def _said() -> str:
+        return " ".join(SliceImplementerBrief.TEXT.split())
+
+    def test_it_tells_the_implementer_not_to_build_what_the_line_names_as_out_of_scope(self) -> None:
+        assert "quien corto esta slice decidio dejar fuera de su alcance a proposito: no lo construyas" in self._said()
+
+    def test_it_tells_the_implementer_to_declare_a_necessary_exclusion_as_left_out_instead_of_building_it(
+        self,
+    ) -> None:
+        assert (
+            "resulta necesario para cumplir un criterio de aceptacion, declaralo en `left_out` en vez de "
+            "construirlo por tu cuenta" in self._said()
+        )
 
 
 class TestThePendingReviewsThatTravelWithTheBrief(Calling):

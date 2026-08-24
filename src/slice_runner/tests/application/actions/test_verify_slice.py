@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 from unittest.mock import Mock, create_autospec
@@ -137,6 +138,15 @@ class TestVerifySlice:
             _PARAMS.sources,
             _PARAMS.checklist,
         )
+
+    def test_what_the_slice_declares_as_excluded_travels_to_the_judge_too(
+        self, action: VerifySlice, verifier: Mock
+    ) -> None:
+        params = replace(_PARAMS, excludes="el panel de grafana que consume esta serie")
+
+        action.execute(params)
+
+        assert self._reviewed(verifier).excludes == params.excludes
 
     def test_the_verification_comes_back_without_being_reinterpreted(self, action: VerifySlice, verifier: Mock) -> None:
         expected = VerificationMother.failing_after_a_denied_read()

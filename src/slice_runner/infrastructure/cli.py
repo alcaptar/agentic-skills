@@ -667,6 +667,7 @@ class Cli:
             slice_id=slice_id,
             prior_art="",
             signal="",
+            excludes="",
             criteria=(),
             sources=(),
             checklist=(),

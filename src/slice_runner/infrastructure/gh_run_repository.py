@@ -372,6 +372,7 @@ class GhRunRepository(RunRepository):
             intention=parsed.intention,
             criteria=parsed.criteria,
             signal=parsed.signal,
+            excludes=parsed.excludes,
             run=parsed.run,
             label=cls._label_of(payload.labels),
         )

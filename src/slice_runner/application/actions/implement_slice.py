@@ -50,6 +50,7 @@ class ImplementSlice:
             prior_art=params.parent.prior_art,
             criteria=params.subissue.criteria,
             signal=params.subissue.signal,
+            excludes=params.subissue.excludes,
             sources=params.parent.sources,
             controls=params.parent.controls,
             findings=params.findings,

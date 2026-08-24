@@ -116,6 +116,7 @@ class TestWhatTravelsOnStandardInput:
             "- repo: alcaptar/agentic-skills\n"
             "- ruta del repo: /repos/project\n"
             "- senal: exenta - este repo no despliega\n"
+            "- excluye: \n"
             "- criterios de aceptacion (2):\n"
             "  - antes de tocar codigo comprueba que la subissue no este ya cerrada\n"
             "  - cada precheck falla con un motivo distinguible, no con un booleano\n"
@@ -131,6 +132,14 @@ class TestWhatTravelsOnStandardInput:
             "  - /repos/project\n"
             "  - /toolbox/skills\n"
         ) in JudgeInvocation(judge=_JUDGE, review=review, reader=_READER).text
+
+    def test_a_slice_that_declared_something_excluded_carries_it_in_the_excluye_line(self) -> None:
+        review = SliceUnderReviewMother.of_the_slice(excludes="el panel de grafana que consume esta serie")
+
+        assert (
+            "- excluye: el panel de grafana que consume esta serie\n"
+            in JudgeInvocation(judge=_JUDGE, review=review, reader=_READER).text
+        )
 
     def test_a_slice_with_a_user_story_names_the_slice_by_its_canonical_identifier_not_the_bare_ordinal(self) -> None:
         review = SliceUnderReviewMother.of_the_slice(slice_id=SliceUnderReviewMother.SLICE_ID_WITH_A_USER_STORY)

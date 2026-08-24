@@ -22,6 +22,7 @@ class Assignment:
     prior_art: str
     criteria: tuple[str, ...]
     signal: str
+    excludes: str
     sources: tuple[Source, ...]
     controls: Controls
     findings: tuple[Finding, ...] = ()
