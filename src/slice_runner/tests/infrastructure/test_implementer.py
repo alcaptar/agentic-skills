@@ -7,8 +7,8 @@ import pytest
 
 from slice_runner.domain.exceptions import InvalidImplementationReportError, PermissionDeniedError
 from slice_runner.domain.path_kind import PathKind
-from slice_runner.domain.step import Step
 from slice_runner.infrastructure.claude_implementer import ClaudeImplementer
+from slice_runner.infrastructure.harness_invocation_runner import HarnessInvocationRunner
 from slice_runner.infrastructure.harness_telemetry import HarnessTelemetry
 from slice_runner.infrastructure.implementer_invocation import ImplementerInvocation
 from slice_runner.infrastructure.slice_implementer_brief import SliceImplementerBrief
@@ -23,7 +23,6 @@ from slice_runner.tests.doubles import (
     StreamingProcess,
 )
 from slice_runner.tests.mothers.assignment_mother import AssignmentMother
-from slice_runner.tests.mothers.harness_call_spend_mother import HarnessCallSpendMother
 from slice_runner.tests.mothers.harness_spend_mother import HarnessSpendMother
 from slice_runner.tests.mothers.judge_output_mother import HarnessEnvelopeMother
 from slice_runner.tests.mothers.pull_request_review_comment_mother import PullRequestReviewCommentMother
@@ -36,19 +35,31 @@ if TYPE_CHECKING:
 _RECORDED = "implementer-two-paths"
 
 
-class OneRound:
+class Calling:
     @staticmethod
-    def implemented(process: Process) -> Implementation:
-        return ClaudeImplementer(
+    def _calls(
+        process: Process,
+        *,
+        trace: RecordedTrace | None = None,
+        tool_uses: RecordedToolUseRecorder | None = None,
+    ) -> HarnessInvocationRunner:
+        return HarnessInvocationRunner(
             process=process,
             telemetry=HarnessTelemetry(
-                trace=RecordedTrace(),
+                trace=trace or RecordedTrace(),
                 turns=RecordedTurnLog(),
                 spend_log=RecordedSpendLog(),
-                tool_uses=RecordedToolUseRecorder(),
+                tool_uses=tool_uses or RecordedToolUseRecorder(),
             ),
-            reader=RecordedSourceReader(),
-        ).implement(AssignmentMother.of_the_first_round())
+        )
+
+
+class OneRound(Calling):
+    @classmethod
+    def implemented(cls, process: Process) -> Implementation:
+        return ClaudeImplementer(calls=cls._calls(process), reader=RecordedSourceReader()).implement(
+            AssignmentMother.of_the_first_round()
+        )
 
 
 class TestHowTheImplementerIsInvoked:
@@ -124,55 +135,62 @@ class TestHowTheImplementerIsInvoked:
         )
 
 
-class TestWhereTheProcessRuns:
+class TestWhereTheProcessRuns(Calling):
     def test_the_worktree_becomes_the_working_directory_of_the_process_and_not_only_prompt_text(self) -> None:
         process = RecordedProcess(HarnessEnvelopeMother.recorded(_RECORDED))
 
-        ClaudeImplementer(
-            process=process,
-            telemetry=HarnessTelemetry(
-                trace=RecordedTrace(),
-                turns=RecordedTurnLog(),
-                spend_log=RecordedSpendLog(),
-                tool_uses=RecordedToolUseRecorder(),
-            ),
-            reader=RecordedSourceReader(),
-        ).implement(AssignmentMother.of_the_first_round())
+        ClaudeImplementer(calls=self._calls(process), reader=RecordedSourceReader()).implement(
+            AssignmentMother.of_the_first_round()
+        )
 
         assert process.cwd == AssignmentMother.WORKTREE
 
     def test_the_harness_is_invoked_exactly_once_because_a_retry_is_a_decision_of_whoever_orchestrates(self) -> None:
         process = RecordedProcess(HarnessEnvelopeMother.recorded(_RECORDED))
 
-        ClaudeImplementer(
-            process=process,
-            telemetry=HarnessTelemetry(
-                trace=RecordedTrace(),
-                turns=RecordedTurnLog(),
-                spend_log=RecordedSpendLog(),
-                tool_uses=RecordedToolUseRecorder(),
-            ),
-            reader=RecordedSourceReader(),
-        ).implement(AssignmentMother.of_the_first_round())
+        ClaudeImplementer(calls=self._calls(process), reader=RecordedSourceReader()).implement(
+            AssignmentMother.of_the_first_round()
+        )
 
         assert process.calls == 1
 
 
-class TestTheSliceDataThatTravelsWithTheBrief:
-    @staticmethod
-    def _sent(assignment: Assignment) -> str:
-        process = RecordedProcess(HarnessEnvelopeMother.recorded(_RECORDED))
+class TestTheCallSubjectComesFromTheAssignmentsOwnFields(Calling):
+    def test_the_trace_carries_the_assignments_own_repo_issue_and_slice_id_and_not_a_crossed_field(self) -> None:
+        trace = RecordedTrace()
+        assignment = AssignmentMother.of_the_first_round()
 
         ClaudeImplementer(
-            process=process,
-            telemetry=HarnessTelemetry(
-                trace=RecordedTrace(),
-                turns=RecordedTurnLog(),
-                spend_log=RecordedSpendLog(),
-                tool_uses=RecordedToolUseRecorder(),
-            ),
+            calls=self._calls(RecordedProcess(HarnessEnvelopeMother.recorded(_RECORDED)), trace=trace),
             reader=RecordedSourceReader(),
         ).implement(assignment)
+
+        recorded = trace.calls[0]
+        assert (recorded.repo, recorded.issue, recorded.slice_id) == (
+            assignment.repo,
+            assignment.issue,
+            assignment.slice_id,
+        )
+
+    def test_the_tool_use_recording_carries_the_assignments_own_worktree_and_slice_id(self) -> None:
+        tool_uses = RecordedToolUseRecorder()
+        assignment = AssignmentMother.of_the_first_round()
+
+        ClaudeImplementer(
+            calls=self._calls(RecordedProcess(HarnessEnvelopeMother.recorded(_RECORDED)), tool_uses=tool_uses),
+            reader=RecordedSourceReader(),
+        ).implement(assignment)
+
+        recorded = tool_uses.calls[0]
+        assert (recorded.worktree, recorded.slice_id) == (assignment.worktree, assignment.slice_id)
+
+
+class TestTheSliceDataThatTravelsWithTheBrief(Calling):
+    @classmethod
+    def _sent(cls, assignment: Assignment) -> str:
+        process = RecordedProcess(HarnessEnvelopeMother.recorded(_RECORDED))
+
+        ClaudeImplementer(calls=cls._calls(process), reader=RecordedSourceReader()).implement(assignment)
 
         return process.stdin
 
@@ -243,21 +261,12 @@ class TestTheSliceDataThatTravelsWithTheBrief:
         assert "murio sin informe legible" not in self._sent(AssignmentMother.of_the_first_round())
 
 
-class TestTheAgreedUnderstandingThatTravelsWithTheBrief:
-    @staticmethod
-    def _sent(assignment: Assignment) -> str:
+class TestTheAgreedUnderstandingThatTravelsWithTheBrief(Calling):
+    @classmethod
+    def _sent(cls, assignment: Assignment) -> str:
         process = RecordedProcess(HarnessEnvelopeMother.recorded(_RECORDED))
 
-        ClaudeImplementer(
-            process=process,
-            telemetry=HarnessTelemetry(
-                trace=RecordedTrace(),
-                turns=RecordedTurnLog(),
-                spend_log=RecordedSpendLog(),
-                tool_uses=RecordedToolUseRecorder(),
-            ),
-            reader=RecordedSourceReader(),
-        ).implement(assignment)
+        ClaudeImplementer(calls=cls._calls(process), reader=RecordedSourceReader()).implement(assignment)
 
         return process.stdin
 
@@ -287,21 +296,12 @@ class TestTheAgreedUnderstandingThatTravelsWithTheBrief:
         assert AssignmentMother.PLAN_PIECE in sent
 
 
-class TestTheRetryInstructionThatTravelsWithTheBrief:
-    @staticmethod
-    def _sent(assignment: Assignment) -> str:
+class TestTheRetryInstructionThatTravelsWithTheBrief(Calling):
+    @classmethod
+    def _sent(cls, assignment: Assignment) -> str:
         process = RecordedProcess(HarnessEnvelopeMother.recorded(_RECORDED))
 
-        ClaudeImplementer(
-            process=process,
-            telemetry=HarnessTelemetry(
-                trace=RecordedTrace(),
-                turns=RecordedTurnLog(),
-                spend_log=RecordedSpendLog(),
-                tool_uses=RecordedToolUseRecorder(),
-            ),
-            reader=RecordedSourceReader(),
-        ).implement(assignment)
+        ClaudeImplementer(calls=cls._calls(process), reader=RecordedSourceReader()).implement(assignment)
 
         return process.stdin
 
@@ -331,21 +331,12 @@ class TestWhatTheBriefSaysAboutWhoRunsTheControls:
         assert "no se cambian ni se afinan para que pasen" in self._said()
 
 
-class TestThePendingReviewsThatTravelWithTheBrief:
-    @staticmethod
-    def _sent(assignment: Assignment) -> str:
+class TestThePendingReviewsThatTravelWithTheBrief(Calling):
+    @classmethod
+    def _sent(cls, assignment: Assignment) -> str:
         process = RecordedProcess(HarnessEnvelopeMother.recorded(_RECORDED))
 
-        ClaudeImplementer(
-            process=process,
-            telemetry=HarnessTelemetry(
-                trace=RecordedTrace(),
-                turns=RecordedTurnLog(),
-                spend_log=RecordedSpendLog(),
-                tool_uses=RecordedToolUseRecorder(),
-            ),
-            reader=RecordedSourceReader(),
-        ).implement(assignment)
+        ClaudeImplementer(calls=cls._calls(process), reader=RecordedSourceReader()).implement(assignment)
 
         return process.stdin
 
@@ -422,263 +413,13 @@ class TestTheReportOfARecordedCall:
 
         assert report.spend == HarnessSpendMother.of_the_implementer_call()
 
-
-class TestTheTraceOfTheCall:
-    def test_the_session_the_call_ran_under_is_written_down_under_the_slice_and_the_step_it_served(self) -> None:
-        process = RecordedProcess(HarnessEnvelopeMother.recorded(_RECORDED))
-        trace = RecordedTrace()
-
-        ClaudeImplementer(
-            process=process,
-            telemetry=HarnessTelemetry(
-                trace=trace,
-                turns=RecordedTurnLog(),
-                spend_log=RecordedSpendLog(),
-                tool_uses=RecordedToolUseRecorder(),
-            ),
-            reader=RecordedSourceReader(),
-        ).implement(AssignmentMother.of_the_first_round())
-
-        assert [(call.slice_id, call.step, call.session) for call in trace.calls] == [
-            ("slice-05", Step.IMPLEMENT, HarnessEnvelopeMother.SESSION_OF_THE_IMPLEMENTER)
-        ]
-
-    def test_a_call_whose_report_is_rejected_is_traced_too_because_that_conversation_is_the_one_to_read(self) -> None:
-        process = RecordedProcess(HarnessEnvelopeMother.denying_a_read_over(_RECORDED))
-        trace = RecordedTrace()
-
-        with pytest.raises(PermissionDeniedError):
-            ClaudeImplementer(
-                process=process,
-                telemetry=HarnessTelemetry(
-                    trace=trace,
-                    turns=RecordedTurnLog(),
-                    spend_log=RecordedSpendLog(),
-                    tool_uses=RecordedToolUseRecorder(),
-                ),
-                reader=RecordedSourceReader(),
-            ).implement(AssignmentMother.of_the_first_round())
-
-        assert [call.session for call in trace.calls] == [HarnessEnvelopeMother.SESSION_OF_THE_IMPLEMENTER]
-
-
-class TestTheRunTheCallIsTracedUnder:
-    def test_the_trace_and_the_spend_log_both_carry_the_repo_and_the_issue_of_the_assignment(self) -> None:
-        process = RecordedProcess(HarnessEnvelopeMother.recorded(_RECORDED))
-        trace = RecordedTrace()
-        spend_log = RecordedSpendLog()
-
-        ClaudeImplementer(
-            process=process,
-            telemetry=HarnessTelemetry(
-                trace=trace,
-                turns=RecordedTurnLog(),
-                spend_log=spend_log,
-                tool_uses=RecordedToolUseRecorder(),
-            ),
-            reader=RecordedSourceReader(),
-        ).implement(AssignmentMother.of_the_first_round())
-
-        assert [(call.repo, call.issue) for call in trace.calls] == [(AssignmentMother.REPO, 45)]
-        assert [(call.repo, call.issue) for call in spend_log.calls] == [(AssignmentMother.REPO, 45)]
-
-
-class TestTheSpendLogOfTheCall:
-    def test_the_session_and_what_it_spent_are_written_down_regardless_of_the_slice_or_the_step(self) -> None:
-        process = RecordedProcess(HarnessEnvelopeMother.recorded(_RECORDED))
-        spend_log = RecordedSpendLog()
-
-        ClaudeImplementer(
-            process=process,
-            telemetry=HarnessTelemetry(
-                trace=RecordedTrace(),
-                turns=RecordedTurnLog(),
-                spend_log=spend_log,
-                tool_uses=RecordedToolUseRecorder(),
-            ),
-            reader=RecordedSourceReader(),
-        ).implement(AssignmentMother.of_the_first_round())
-
-        assert spend_log.calls == [HarnessCallSpendMother.of_the_implementer()]
-
-    def test_a_call_whose_report_is_rejected_still_leaves_its_spend_behind(self) -> None:
-        process = RecordedProcess(HarnessEnvelopeMother.denying_a_read_over(_RECORDED))
-        spend_log = RecordedSpendLog()
-
-        with pytest.raises(PermissionDeniedError):
-            ClaudeImplementer(
-                process=process,
-                telemetry=HarnessTelemetry(
-                    trace=RecordedTrace(),
-                    turns=RecordedTurnLog(),
-                    spend_log=spend_log,
-                    tool_uses=RecordedToolUseRecorder(),
-                ),
-                reader=RecordedSourceReader(),
-            ).implement(AssignmentMother.of_the_first_round())
-
-        assert [call.session for call in spend_log.calls] == [HarnessEnvelopeMother.SESSION_OF_THE_IMPLEMENTER]
-
-
-class TestTheToolUseRecordingOfTheCall:
-    def test_the_recorder_is_asked_for_the_slice_step_session_and_worktree_of_the_call(self) -> None:
-        process = RecordedProcess(HarnessEnvelopeMother.recorded(_RECORDED))
-        tool_uses = RecordedToolUseRecorder()
-
-        ClaudeImplementer(
-            process=process,
-            telemetry=HarnessTelemetry(
-                trace=RecordedTrace(),
-                turns=RecordedTurnLog(),
-                spend_log=RecordedSpendLog(),
-                tool_uses=tool_uses,
-            ),
-            reader=RecordedSourceReader(),
-        ).implement(AssignmentMother.of_the_first_round())
-
-        assert [(call.slice_id, call.step, call.session, call.worktree) for call in tool_uses.calls] == [
-            (
-                "slice-05",
-                Step.IMPLEMENT,
-                HarnessEnvelopeMother.SESSION_OF_THE_IMPLEMENTER,
-                AssignmentMother.WORKTREE,
-            )
-        ]
-
-    def test_a_call_whose_report_is_rejected_is_recorded_too_because_that_conversation_is_the_one_to_read(
-        self,
-    ) -> None:
-        process = RecordedProcess(HarnessEnvelopeMother.denying_a_read_over(_RECORDED))
-        tool_uses = RecordedToolUseRecorder()
-
-        with pytest.raises(PermissionDeniedError):
-            ClaudeImplementer(
-                process=process,
-                telemetry=HarnessTelemetry(
-                    trace=RecordedTrace(),
-                    turns=RecordedTurnLog(),
-                    spend_log=RecordedSpendLog(),
-                    tool_uses=tool_uses,
-                ),
-                reader=RecordedSourceReader(),
-            ).implement(AssignmentMother.of_the_first_round())
-
-        assert [call.session for call in tool_uses.calls] == [HarnessEnvelopeMother.SESSION_OF_THE_IMPLEMENTER]
-
-
-class TestTheTurnsObservedWhileTheCallIsInFlight:
-    def test_every_tool_use_of_a_real_streamed_call_is_observed_in_order_with_the_tool_and_its_target(self) -> None:
-        process = StreamingProcess(HarnessEnvelopeMother.streamed())
-        turns = RecordedTurnLog()
-
-        ClaudeImplementer(
-            process=process,
-            telemetry=HarnessTelemetry(
-                trace=RecordedTrace(),
-                turns=turns,
-                spend_log=RecordedSpendLog(),
-                tool_uses=RecordedToolUseRecorder(),
-            ),
-            reader=RecordedSourceReader(),
-        ).implement(AssignmentMother.of_the_first_round())
-
-        assert [(turn.slice_id, turn.step, turn.number, turn.tool, turn.target) for turn in turns.turns] == [
-            ("slice-05", Step.IMPLEMENT, 1, "Write", "/private/tmp/stream-capture2/repo/hello.py"),
-            ("slice-05", Step.IMPLEMENT, 2, "StructuredOutput", None),
-        ]
-
-    def test_thinking_and_text_blocks_are_not_observed_because_they_name_no_tool(self) -> None:
-        process = StreamingProcess(HarnessEnvelopeMother.streamed())
-        turns = RecordedTurnLog()
-
-        ClaudeImplementer(
-            process=process,
-            telemetry=HarnessTelemetry(
-                trace=RecordedTrace(),
-                turns=turns,
-                spend_log=RecordedSpendLog(),
-                tool_uses=RecordedToolUseRecorder(),
-            ),
-            reader=RecordedSourceReader(),
-        ).implement(AssignmentMother.of_the_first_round())
-
-        assert len(turns.turns) == 2
-
-    def test_lines_that_are_not_an_assistant_turn_are_not_observed(self) -> None:
-        process = StreamingProcess('{"type":"system","subtype":"init"}\n' + HarnessEnvelopeMother.streamed())
-        turns = RecordedTurnLog()
-
-        ClaudeImplementer(
-            process=process,
-            telemetry=HarnessTelemetry(
-                trace=RecordedTrace(),
-                turns=turns,
-                spend_log=RecordedSpendLog(),
-                tool_uses=RecordedToolUseRecorder(),
-            ),
-            reader=RecordedSourceReader(),
-        ).implement(AssignmentMother.of_the_first_round())
-
-        assert len(turns.turns) == 2
-
     def test_a_background_task_that_ends_after_the_result_does_not_bury_it(self) -> None:
         process = StreamingProcess(HarnessEnvelopeMother.streamed_then_a_background_task_ends())
 
-        implementation = ClaudeImplementer(
-            process=process,
-            telemetry=HarnessTelemetry(
-                trace=RecordedTrace(),
-                turns=RecordedTurnLog(),
-                spend_log=RecordedSpendLog(),
-                tool_uses=RecordedToolUseRecorder(),
-            ),
-            reader=RecordedSourceReader(),
-        ).implement(AssignmentMother.of_the_first_round())
+        implementation = OneRound.implemented(process)
 
         assert implementation.paths
         assert implementation.spend.cost_usd > 0
-
-    def test_a_line_that_is_not_json_at_all_is_skipped_instead_of_raising(self) -> None:
-        process = StreamingProcess("not json\n" + HarnessEnvelopeMother.streamed())
-        turns = RecordedTurnLog()
-
-        ClaudeImplementer(
-            process=process,
-            telemetry=HarnessTelemetry(
-                trace=RecordedTrace(),
-                turns=turns,
-                spend_log=RecordedSpendLog(),
-                tool_uses=RecordedToolUseRecorder(),
-            ),
-            reader=RecordedSourceReader(),
-        ).implement(AssignmentMother.of_the_first_round())
-
-        assert len(turns.turns) == 2
-
-    def test_a_tool_use_block_whose_shape_this_program_cannot_read_is_skipped_instead_of_aborting_the_call(
-        self,
-    ) -> None:
-        unreadable = json.dumps(
-            {
-                "type": "assistant",
-                "message": {"content": [{"type": "tool_use", "id": "x", "name": "Write", "input": "not-a-dict"}]},
-            }
-        )
-        process = StreamingProcess(unreadable + "\n" + HarnessEnvelopeMother.streamed())
-        turns = RecordedTurnLog()
-
-        ClaudeImplementer(
-            process=process,
-            telemetry=HarnessTelemetry(
-                trace=RecordedTrace(),
-                turns=turns,
-                spend_log=RecordedSpendLog(),
-                tool_uses=RecordedToolUseRecorder(),
-            ),
-            reader=RecordedSourceReader(),
-        ).implement(AssignmentMother.of_the_first_round())
-
-        assert len(turns.turns) == 2
 
 
 class TestANonEmptyPermissionDenialsFailsTheCall:

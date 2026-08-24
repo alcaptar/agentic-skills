@@ -16,6 +16,7 @@ from slice_runner.domain.gh_retry_policy import GhRetryPolicy
 from slice_runner.domain.harness_spend import HarnessSpend
 from slice_runner.domain.source_reader import SourceReader
 from slice_runner.infrastructure.gh_call import GhCall
+from slice_runner.infrastructure.harness_invocation_runner import HarnessInvocation
 from slice_runner.infrastructure.judge_invocation import JudgeInvocation
 from slice_runner.infrastructure.process import (
     Process,
@@ -240,6 +241,25 @@ class RealExceptTheJudge(Process):
         self.calls += 1
 
         return ProcessOutput(code=0, stdout=json.dumps(self._judge_output), stderr="")
+
+
+class FixedInvocation(HarnessInvocation):
+    def __init__(self, *, argv: list[str] | None = None, text: str = "prompt", cwd: str = "/repo") -> None:
+        self._argv = argv if argv is not None else ["claude"]
+        self._text = text
+        self._cwd = cwd
+
+    @property
+    def argv(self) -> list[str]:
+        return self._argv
+
+    @property
+    def text(self) -> str:
+        return self._text
+
+    @property
+    def cwd(self) -> str:
+        return self._cwd
 
 
 class RecordedTrace(CallTrace):
