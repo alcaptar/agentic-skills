@@ -134,6 +134,14 @@ Recorrela **entera** y reporta item a item. No la amplies con criterios propios 
    si el codigo no cumple su intencion, o si hay comportamiento que ningun criterio justifique y que el
    `EXCLUYE` tampoco cubra.
 
+   **Un `EXCLUYE` vacio no deja este item sin vara, y no se reporta como falta de dato.** A diferencia
+   de la `SENAL` en el item 9, esta linea no es el insumo entero de nada: el insumo primario aqui son
+   los criterios de aceptacion, que llegan siempre, y el `EXCLUYE` solo anade una exclusion **ya
+   declarada** contra la que contrastar lo que veas de mas. Si viene vacio, juzga el punto (3) como se
+   juzgaba antes de que la linea existiera -por lo que ningun criterio pide- y sigue adelante: la mayoria
+   de las specs vivas son anteriores a este mecanismo, asi que devolver por eso el item central de la
+   rubrica sin veredicto lo dejaria mudo en casi todos los runs.
+
 6. **Manipulacion de tests (regla de hierro; siempre alta).** En el diff, mira las lineas `-` de
    los ficheros de test: comprueba que ningun test **preexistente** se haya debilitado para acomodar la
    implementacion -assert relajado (`== x` -> `is not None`/truthy), numero de asserts que baja, test
