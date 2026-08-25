@@ -216,7 +216,7 @@ veredicto como JSON por salida estandar y **cualquier motivo por el que no haya 
 error, nunca mezclados. Ademas escribe: cada verificacion anexa una linea a
 `~/.claude/slice-runner/log/verdicts.jsonl` -o al equivalente bajo `CLAUDE_CONFIG_DIR`- con el repo y el
 issue del run, el identificador de la slice, la ronda de verificacion -empieza en 1 y sube una por cada
-veredicto de la misma slice, la lleve o no el conductor de un run-, el identificador de sesion de la
+veredicto de la misma slice-, el identificador de sesion de la
 llamada que lo produjo, el veredicto entero, su conteo por severidad y cuando se escribio; el diff juzgado
 se anexa aparte, a `~/.claude/slice-runner/log/diffs.jsonl`, unido a su fila por el mismo identificador de
 slice y la misma marca de tiempo -es lo que pesa, y separarlo es lo que deja contar hallazgos sin
