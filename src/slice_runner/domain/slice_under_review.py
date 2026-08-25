@@ -19,6 +19,7 @@ class SliceUnderReview:
     prior_art: str
     signal: str
     excludes: str
+    replaces: str
     criteria: tuple[str, ...]
     sources: tuple[Source, ...]
     checklist: tuple[ChecklistEntry, ...]

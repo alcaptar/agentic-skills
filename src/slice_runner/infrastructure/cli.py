@@ -668,6 +668,7 @@ class Cli:
             prior_art="",
             signal="",
             excludes="",
+            replaces="",
             criteria=(),
             sources=(),
             checklist=(),

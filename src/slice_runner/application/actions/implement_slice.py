@@ -51,6 +51,7 @@ class ImplementSlice:
             criteria=params.subissue.criteria,
             signal=params.subissue.signal,
             excludes=params.subissue.excludes,
+            replaces=params.subissue.replaces,
             sources=params.parent.sources,
             controls=params.parent.controls,
             findings=params.findings,
