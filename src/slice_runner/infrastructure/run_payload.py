@@ -21,6 +21,7 @@ class RunPayload(ContractModel):
     understanding_pending: bool = False
     previous_call_died: bool = False
     catching_up_the_branch: bool = False
+    resolved_a_conflict: bool = False
     control_retries: Spent = 0
     hygiene_retries: Spent = 0
     verify_retries: Spent = 0
@@ -49,6 +50,7 @@ class RunPayload(ContractModel):
             understanding_pending=run.understanding_pending,
             previous_call_died=run.previous_call_died,
             catching_up_the_branch=run.catching_up_the_branch,
+            resolved_a_conflict=run.resolved_a_conflict,
             control_retries=run.control_retries,
             hygiene_retries=run.hygiene_retries,
             verify_retries=run.verify_retries,
@@ -72,6 +74,7 @@ class RunPayload(ContractModel):
             understanding_pending=self.understanding_pending,
             previous_call_died=self.previous_call_died,
             catching_up_the_branch=self.catching_up_the_branch,
+            resolved_a_conflict=self.resolved_a_conflict,
             control_retries=self.control_retries,
             hygiene_retries=self.hygiene_retries,
             verify_retries=self.verify_retries,

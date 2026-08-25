@@ -283,16 +283,17 @@ class ConductSlice:
         if caught_up.spend is not None:
             progress = replace(progress, spends=(*progress.spends, caught_up.spend))
         if caught_up.outcome is not Outcome.DONE:
-            return self._blocked_by_a_catch_up_conflict(progress)
+            return self._blocked_by_a_catch_up_conflict(
+                replace(progress, conflict_block_cause=caught_up.conflict_block_cause)
+            )
         if caught_up.resolved_a_conflict:
             progress = replace(progress, run=replace(progress.run, resolved_a_conflict=True))
 
         return self._conducting(progress)
 
     def _blocked_by_a_catch_up_conflict(self, progress: ConductSliceProgress) -> ConductSliceResult:
-        marked = replace(progress, conflict_block_cause=ConflictBlockCause.TREE_STILL_CONFLICTED)
-        transition = self._machine.after(marked.run, Outcome.CONFLICTING)
-        closed = self._recorded(marked, transition)
+        transition = self._machine.after(progress.run, Outcome.CONFLICTING)
+        closed = self._recorded(progress, transition)
 
         return self._closing(closed, transition.state)
 
@@ -493,11 +494,9 @@ class ConductSlice:
                 SteppedSlice(progress=discarded, outcome=Outcome.DISCARDED), call=rejection.spend
             )
 
-        updated = progress
+        updated = replace(progress, conflict_block_cause=caught_up.conflict_block_cause)
         if caught_up.resolved_a_conflict:
             updated = replace(updated, run=replace(updated.run, resolved_a_conflict=True))
-        if caught_up.outcome in (Outcome.FAILED, Outcome.HYGIENE_REJECTED):
-            updated = replace(updated, conflict_block_cause=ConflictBlockCause.TREE_STILL_CONFLICTED)
 
         if caught_up.spend is None:
             return SteppedSlice(progress=updated, outcome=caught_up.outcome)

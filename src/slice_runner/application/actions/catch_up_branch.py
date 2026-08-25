@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from slice_runner.domain.branch_catch_up_outcome import BranchCatchUpOutcome
+from slice_runner.domain.conflict_block_cause import ConflictBlockCause
 from slice_runner.domain.merge_conflict import MergeConflict
 from slice_runner.domain.outcome import Outcome
 from slice_runner.domain.staged_hygiene import StagedHygiene
@@ -32,6 +33,7 @@ class CatchUpBranchResult:
     outcome: Outcome
     spend: HarnessSpend | None = None
     resolved_a_conflict: bool = False
+    conflict_block_cause: ConflictBlockCause | None = None
 
 
 class CatchUpBranch:
@@ -62,11 +64,19 @@ class CatchUpBranch:
         offences = StagedHygiene.of(staged=touched, declared=caught_up.conflicted_paths)
         if offences:
             self._branches.abort_merge(worktree=params.worktree)
-            return CatchUpBranchResult(outcome=Outcome.HYGIENE_REJECTED, spend=resolution.spend)
+            return CatchUpBranchResult(
+                outcome=Outcome.HYGIENE_REJECTED,
+                spend=resolution.spend,
+                conflict_block_cause=ConflictBlockCause.TREE_STILL_CONFLICTED,
+            )
 
         if self._branches.has_leftover_conflict_markers(worktree=params.worktree, paths=caught_up.conflicted_paths):
             self._branches.abort_merge(worktree=params.worktree)
-            return CatchUpBranchResult(outcome=Outcome.FAILED, spend=resolution.spend)
+            return CatchUpBranchResult(
+                outcome=Outcome.FAILED,
+                spend=resolution.spend,
+                conflict_block_cause=ConflictBlockCause.TREE_STILL_CONFLICTED,
+            )
 
         self._workspace.stage(worktree=params.worktree, paths=caught_up.conflicted_paths)
         self._branches.conclude_merge(worktree=params.worktree)

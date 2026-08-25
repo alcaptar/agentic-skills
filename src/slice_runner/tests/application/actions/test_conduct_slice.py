@@ -918,6 +918,22 @@ class TestConductSliceResumingCatchesUpTheBranch:
         assert conductor.closed.state is RunState.BLOCKED_CI_CONFLICT
         assert conductor.closed.conflict_block_cause is ConflictBlockCause.TREE_STILL_CONFLICTED
 
+    def test_a_resolver_call_that_dies_before_conducting_closes_without_inventing_a_tree_conflict_cause(
+        self,
+    ) -> None:
+        conductor = self._conductor()
+        conductor.branches.catch_up.return_value = BranchCatchUp(
+            outcome=BranchCatchUpOutcome.CONFLICTING, conflicted_paths=("shared.txt",)
+        )
+        died = InvalidResolutionReportError("the resolver's report could not be parsed")
+        died.spend = HarnessSpendMother.of_the_catch_up_call()
+        conductor.resolver.resolve.side_effect = died
+
+        result = conductor.conduct()
+
+        assert result.state is RunState.BLOCKED_CI_CONFLICT
+        assert conductor.closed.conflict_block_cause is None
+
     def test_a_branch_that_no_longer_exists_is_never_asked_to_catch_up(self) -> None:
         conductor = self._conductor()
         conductor.branches.exists.return_value = False
@@ -1003,6 +1019,19 @@ class TestConductSliceResolvesAConflictAtTheCatchUpStep:
         conductor.conduct()
 
         assert conductor.closed.conflict_block_cause is ConflictBlockCause.TREE_STILL_CONFLICTED
+
+    def test_a_tree_that_recovers_on_a_retry_does_not_carry_the_earlier_rounds_cause_into_the_merged_run(self) -> None:
+        conductor = self._conductor(budgets=Budgets(catch_up_retries=1))
+        conductor.branches.catch_up.side_effect = [
+            BranchCatchUp(outcome=BranchCatchUpOutcome.CONFLICTING, conflicted_paths=("shared.txt",)),
+            BranchCatchUp(outcome=BranchCatchUpOutcome.CAUGHT_UP),
+        ]
+        conductor.branches.has_leftover_conflict_markers.return_value = True
+
+        result = conductor.conduct()
+
+        assert result.state is RunState.MERGED
+        assert conductor.closed.conflict_block_cause is None
 
     def test_the_resolver_touching_a_file_outside_the_conflict_also_retries_until_the_budget_is_spent(self) -> None:
         conductor = self._conductor(budgets=Budgets(catch_up_retries=1))

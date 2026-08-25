@@ -874,6 +874,7 @@ class TestTheTransitionOfEveryPair:
                 "understanding_pending": False,
                 "previous_call_died": False,
                 "catching_up_the_branch": False,
+                "resolved_a_conflict": False,
                 "control_retries": 1,
                 "hygiene_retries": 0,
                 "verify_retries": 0,

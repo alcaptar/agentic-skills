@@ -10,6 +10,7 @@ from slice_runner.application.actions.catch_up_branch import CatchUpBranch, Catc
 from slice_runner.domain.branch_catch_up import BranchCatchUp
 from slice_runner.domain.branch_catch_up_outcome import BranchCatchUpOutcome
 from slice_runner.domain.branches import Branches
+from slice_runner.domain.conflict_block_cause import ConflictBlockCause
 from slice_runner.domain.conflict_resolver import ConflictResolver
 from slice_runner.domain.outcome import Outcome
 from slice_runner.domain.resolution import Resolution
@@ -142,6 +143,16 @@ class TestAFileOutsideTheConflictIsRejected(TestCatchUpBranch):
 
         assert result.spend == HarnessSpendMother.of_the_catch_up_call()
 
+    def test_touching_a_clean_file_names_the_tree_as_still_conflicted_instead_of_leaving_the_conductor_to_guess(
+        self, action: CatchUpBranch, branches: Mock
+    ) -> None:
+        self._conflicting(branches=branches)
+        branches.paths_touched_since_the_merge_attempt.return_value = ("shared.txt", "clean.txt")
+
+        result = action.execute(self._params())
+
+        assert result.conflict_block_cause is ConflictBlockCause.TREE_STILL_CONFLICTED
+
 
 class TestATreeStillConflictedAfterTheResolverIsRejected(TestCatchUpBranch):
     def test_leftover_conflict_markers_are_rejected_instead_of_concluding_the_merge(
@@ -165,6 +176,16 @@ class TestATreeStillConflictedAfterTheResolverIsRejected(TestCatchUpBranch):
         assert branches.abort_merge.call_count == 1
         assert branches.conclude_merge.call_count == 0
 
+    def test_leftover_conflict_markers_name_the_tree_as_still_conflicted_instead_of_leaving_the_conductor_to_guess(
+        self, action: CatchUpBranch, branches: Mock
+    ) -> None:
+        self._conflicting(branches=branches)
+        branches.has_leftover_conflict_markers.return_value = True
+
+        result = action.execute(self._params())
+
+        assert result.conflict_block_cause is ConflictBlockCause.TREE_STILL_CONFLICTED
+
 
 class TestAConflictTheResolverFixedCleanly(TestCatchUpBranch):
     def test_it_concludes_the_merge_by_staging_exactly_the_conflicted_paths(
@@ -186,6 +207,15 @@ class TestAConflictTheResolverFixedCleanly(TestCatchUpBranch):
         result = action.execute(self._params())
 
         assert (result.outcome, result.resolved_a_conflict) == (Outcome.DONE, True)
+
+    def test_it_reports_no_conflict_block_cause_once_the_tree_is_resolved(
+        self, action: CatchUpBranch, branches: Mock
+    ) -> None:
+        self._conflicting(branches=branches)
+
+        result = action.execute(self._params())
+
+        assert result.conflict_block_cause is None
 
     def test_it_carries_what_the_resolver_spent(self, action: CatchUpBranch, branches: Mock) -> None:
         self._conflicting(branches=branches)

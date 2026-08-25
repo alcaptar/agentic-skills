@@ -62,7 +62,7 @@ _SUB1_BODY = (
     "\n"
     "<!-- slice-runner:estado\n"
     '{"step": "await-ci", "corrected": "", "understanding_pending": false, '
-    '"previous_call_died": false, "catching_up_the_branch": false, "control_retries": 1, '
+    '"previous_call_died": false, "catching_up_the_branch": false, "resolved_a_conflict": false, "control_retries": 1, '
     '"hygiene_retries": 0, "verify_retries": 0, '
     '"correction_retries": 0, "ci_retries": 0, "catch_up_retries": 0, "indeterminate_ticks": 2, '
     '"verify_discards": 0, '
@@ -455,6 +455,30 @@ class TestReadingTheChildren:
 
         assert children[0].run == RunMother.about_to_ask_the_ci()
 
+    def test_a_state_block_with_resolved_a_conflict_reads_it_back_so_a_dead_reinvocation_does_not_forget(
+        self,
+    ) -> None:
+        with_a_resolved_conflict = [
+            {
+                "number": 1,
+                "title": "slice-01 (x): y",
+                "body": (
+                    "INTENCION: z\n\n"
+                    "<!-- slice-runner:estado\n"
+                    '{"step": "run-controls", "catching_up_the_branch": true, "resolved_a_conflict": true}\n'
+                    "-->\n"
+                ),
+                "labels": [],
+                "state": "OPEN",
+            }
+        ]
+
+        children = GhRunRepository(
+            call=GhCallDoubles.wired(self._process(children=with_a_resolved_conflict))
+        ).read_children(repo=_REPO, parent=43, expected=1)
+
+        assert children[0].run == RunMother.at_catch_up_having_resolved_a_conflict()
+
     def test_a_state_block_with_a_requested_change_reads_back_its_anchored_comments_with_file_and_line(self) -> None:
         with_requested_changes = [
             {
@@ -639,7 +663,7 @@ class TestWritingTheExecutionStateBlock:
             "\n"
             "<!-- slice-runner:estado\n"
             '{"step": "implement", "corrected": "", "understanding_pending": false, '
-            '"previous_call_died": false, "catching_up_the_branch": false, '
+            '"previous_call_died": false, "catching_up_the_branch": false, "resolved_a_conflict": false, '
             '"control_retries": 0, "hygiene_retries": 0, "verify_retries": 0, '
             '"correction_retries": 0, "ci_retries": 0, "catch_up_retries": 0, "indeterminate_ticks": 0, '
             '"verify_discards": 0, '
@@ -659,6 +683,19 @@ class TestWritingTheExecutionStateBlock:
         assert block is not None
         assert json.loads(block.group(1))["previous_call_died"] is True
 
+    def test_a_run_that_resolved_a_conflict_writes_it_as_true_so_a_dead_reinvocation_does_not_forget(
+        self,
+    ) -> None:
+        process = self._process(body=_SUB2_BODY)
+
+        GhRunRepository(call=GhCallDoubles.wired(process)).write_run(
+            repo=_OTHER_REPO, issue=44, run=RunMother.at_catch_up_having_resolved_a_conflict()
+        )
+
+        block = re.search(r"<!-- slice-runner:estado\n(.*?)\n-->", process.calls[1].stdin, re.DOTALL)
+        assert block is not None
+        assert json.loads(block.group(1))["resolved_a_conflict"] is True
+
     def test_a_body_that_already_has_a_block_gets_only_the_block_replaced(self) -> None:
         process = self._process(body=_SUB1_BODY)
 
@@ -674,7 +711,7 @@ class TestWritingTheExecutionStateBlock:
             "\n"
             "<!-- slice-runner:estado\n"
             '{"step": "await-merge", "corrected": "", "understanding_pending": false, '
-            '"previous_call_died": false, "catching_up_the_branch": false, '
+            '"previous_call_died": false, "catching_up_the_branch": false, "resolved_a_conflict": false, '
             '"control_retries": 0, "hygiene_retries": 0, "verify_retries": 0, '
             '"correction_retries": 0, "ci_retries": 0, "catch_up_retries": 0, "indeterminate_ticks": 0, '
             '"verify_discards": 0, '
@@ -733,7 +770,7 @@ class TestWritingTheExecutionStateBlock:
             "\n"
             "<!-- slice-runner:estado\n"
             '{"step": "verify", "corrected": "", "understanding_pending": false, '
-            '"previous_call_died": false, "catching_up_the_branch": false, '
+            '"previous_call_died": false, "catching_up_the_branch": false, "resolved_a_conflict": false, '
             '"control_retries": 0, "hygiene_retries": 0, "verify_retries": 0, '
             '"correction_retries": 0, "ci_retries": 0, "catch_up_retries": 0, "indeterminate_ticks": 0, '
             '"verify_discards": 0, '
