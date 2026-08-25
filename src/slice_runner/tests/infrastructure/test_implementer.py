@@ -208,6 +208,7 @@ class TestTheSliceDataThatTravelsWithTheBrief(Calling):
             "- intencion: hoy nada evita reimplementar una slice ya entregada\n"
             "- senal: exenta - este repo no despliega\n"
             "- excluye: \n"
+            "- sustituye: \n"
             "- criterios de aceptacion (2):\n"
             "  - antes de tocar codigo comprueba que la subissue no este ya cerrada\n"
             "  - cada precheck falla con un motivo distinguible, no con un booleano\n"
@@ -222,6 +223,11 @@ class TestTheSliceDataThatTravelsWithTheBrief(Calling):
     def test_a_slice_that_declares_something_excluded_carries_it_in_the_excluye_line(self) -> None:
         assert "- excluye: el panel de grafana que consume esta serie\n" in self._sent(
             AssignmentMother.of_a_slice_that_excludes_something()
+        )
+
+    def test_a_slice_that_declares_something_it_replaces_carries_it_in_the_sustituye_line(self) -> None:
+        assert "- sustituye: si - el adaptador viejo; apagando el flag\n" in self._sent(
+            AssignmentMother.of_a_slice_that_replaces_something()
         )
 
     def test_a_slice_with_a_user_story_names_the_slice_by_its_canonical_identifier_not_the_bare_ordinal(self) -> None:
@@ -352,6 +358,20 @@ class TestWhatTheBriefSaysAboutExcludes:
             "resulta necesario para cumplir un criterio de aceptacion, declaralo en `left_out` en vez de "
             "construirlo por tu cuenta" in self._said()
         )
+
+
+class TestWhatTheBriefSaysAboutReplaces:
+    @staticmethod
+    def _said() -> str:
+        return " ".join(SliceImplementerBrief.TEXT.split())
+
+    def test_it_tells_the_implementer_to_apply_the_pattern_the_line_declares(self) -> None:
+        assert "aplicalo tal como lo declara la linea" in self._said()
+
+    def test_it_tells_the_implementer_to_declare_a_different_pattern_as_left_out_instead_of_changing_it(
+        self,
+    ) -> None:
+        assert "no lo cambies por tu cuenta: implementa el que la linea pide y declaralo en `left_out`" in self._said()
 
 
 class TestThePendingReviewsThatTravelWithTheBrief(Calling):

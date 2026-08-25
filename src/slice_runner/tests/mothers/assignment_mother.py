@@ -43,6 +43,7 @@ class AssignmentMother:
             criteria=subissue.criteria,
             signal=subissue.signal,
             excludes=subissue.excludes,
+            replaces=subissue.replaces,
             sources=parent.sources,
             controls=parent.controls,
         )
@@ -54,6 +55,10 @@ class AssignmentMother:
     @classmethod
     def of_a_slice_that_excludes_something(cls) -> Assignment:
         return replace(cls.of_the_first_round(), excludes="el panel de grafana que consume esta serie")
+
+    @classmethod
+    def of_a_slice_that_replaces_something(cls) -> Assignment:
+        return replace(cls.of_the_first_round(), replaces="si - el adaptador viejo; apagando el flag")
 
     @classmethod
     def of_a_second_round(cls) -> Assignment:

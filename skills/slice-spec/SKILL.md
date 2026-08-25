@@ -116,7 +116,7 @@ Una feature = **un issue padre** + **una subissue por slice**. Un solo formato, 
 |---|---|
 | Issue padre | `## Intencion`, `## Lo que ya existe`, `## Fuentes de convencion` y `## Controles`, los dos ultimos por repo, mas `## Historia de usuario` si la feature tiene una -y entonces tambien la clave delante de su titulo y la etiqueta `origen:<clave>`-. Las slices son sus subissues, y la barra de progreso la calcula GitHub |
 | Titulo de la subissue | `slice-NN (name): titulo`, con la clave de la historia de usuario delante si el padre la declara; de ahi sale el orden de ejecucion, y de `name` sale la rama (con la clave delante del numero cuando la hay: `slice/AS-255-NN-name`) y el scope del commit |
-| Cuerpo de la subissue | Las lineas de la slice: `REPO:`, `INTENCION:`, `ACEPTACION:`, `SENAL:`, `EXCLUYE:` |
+| Cuerpo de la subissue | Las lineas de la slice: `REPO:`, `INTENCION:`, `ACEPTACION:`, `SENAL:`, `EXCLUYE:`, `SUSTITUYE:` |
 | Etiqueta de la subissue | El estado macro, que arranca en `estado:pendiente`, mas `origen:<clave>` si el padre declara historia de usuario |
 
 ### El issue padre
@@ -174,6 +174,7 @@ ACEPTACION: la alerta dispara con stock negativo sostenido 10m y no con un negat
 ACEPTACION: la alerta sale con severidad critical y apunta al runbook de stock
 SENAL: prometheus min_over_time(application_stock_actual[10m]) < 0 dispara la alerta en 15m post-deploy; critical
 EXCLUYE: el panel de Grafana que visualiza esta misma serie va en su propia slice, detras de esta
+SUSTITUYE: no
 ```
 
 ### Reglas duras
@@ -319,6 +320,13 @@ EXCLUYE: el panel de Grafana que visualiza esta misma serie va en su propia slic
   que `SENAL: exenta - <motivo>`. Es una **prohibicion que viaja a los dos agentes**: el implementador
   no construye lo que nombra, y el verificador bloquea si aparece en el diff, citando la linea en vez de
   tener que argumentar que sobra.
+- El cuerpo lleva una linea `SUSTITUYE:` que dice **si el diff sustituye comportamiento que ya vive en
+  produccion**, con la forma `SUSTITUYE: no` o `SUSTITUYE: si - <que sustituye>; <como se vuelve atras
+  sin redeploy>`. Es obligatoria siempre y **sin figura de exencion**: a diferencia de `EXCLUYE:` y de
+  `SENAL:`, aqui no hay `nada`/`exenta` posible, porque la pregunta -¿esto reemplaza algo vivo?- siempre
+  tiene una respuesta, aunque sea que no. Con `si`, las dos mitades son obligatorias: nombrar que se
+  sustituye sin decir como se vuelve atras deja al verificador de slice-runner sin el mecanismo que el
+  item de patron de rollout exige ver en el diff.
 - Linea `REPO: <org>/<repo>` cuando la slice se implementa en otro repo (alerta, panel). Ausente = el
   repo del padre. Toda slice con `REPO:` exige la subseccion de fuentes **y de controles** de su repo.
 - Una feature de **una sola slice** = un padre con una sola subissue.
@@ -565,6 +573,13 @@ trabajo. Ofrece corregirlas. Checklist:
   issue anterior a este mecanismo), **es la desviacion a corregir**: pregunta a la persona que decidio
   dejar fuera al cortar esta slice -si de verdad nada, la exencion lleva motivo- y anade la linea,
   reportandola como `slice-NN (#numero)`, en el cuerpo.
+- **Ninguna slice sin `SUSTITUYE:`, y ninguna `SUSTITUYE: si` sin las dos mitades.** Si falta (p. ej.
+  un issue anterior a este mecanismo), **es la desviacion a corregir**: pregunta a la persona si el
+  diff de esta slice sustituye comportamiento que ya vive en produccion y anade la linea con la forma
+  `no` o `si - <que sustituye>; <como se vuelve atras sin redeploy>`, reportandola como
+  `slice-NN (#numero)`, en el cuerpo. Un `SUSTITUYE: si` que no nombra las dos mitades -que sustituye,
+  como se vuelve atras- es la misma desviacion: sin el mecanismo de vuelta atras el verificador de
+  slice-runner no tiene contra que exigirlo.
 - **Cadena de observabilidad**: si alguna slice emite una senal nueva relevante, comprueba que hay slice
   de alerta (y de panel si aporta) **con su `REPO:`** y **detras** de la que emite la serie, o que la
   ausencia es una decision explicita. Nunca alerta/panel en la misma slice que la metrica.

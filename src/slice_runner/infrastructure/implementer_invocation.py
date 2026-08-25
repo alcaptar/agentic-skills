@@ -72,6 +72,7 @@ class ImplementerInvocation(HarnessInvocation):
                 *PriorArtBlock.of(assignment.prior_art),
                 f"- senal: {assignment.signal}",
                 f"- excluye: {assignment.excludes}",
+                f"- sustituye: {assignment.replaces}",
                 *CountedLines.of("criterios de aceptacion", assignment.criteria),
                 *CitedSources.of(
                     "fuentes de convencion",

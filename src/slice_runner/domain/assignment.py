@@ -23,6 +23,7 @@ class Assignment:
     criteria: tuple[str, ...]
     signal: str
     excludes: str
+    replaces: str
     sources: tuple[Source, ...]
     controls: Controls
     findings: tuple[Finding, ...] = ()

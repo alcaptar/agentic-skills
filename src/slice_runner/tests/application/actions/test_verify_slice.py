@@ -148,6 +148,15 @@ class TestVerifySlice:
 
         assert self._reviewed(verifier).excludes == params.excludes
 
+    def test_what_the_slice_declares_it_replaces_travels_to_the_judge_too(
+        self, action: VerifySlice, verifier: Mock
+    ) -> None:
+        params = replace(_PARAMS, replaces="si - el adaptador viejo; apagando el flag")
+
+        action.execute(params)
+
+        assert self._reviewed(verifier).replaces == params.replaces
+
     def test_the_verification_comes_back_without_being_reinterpreted(self, action: VerifySlice, verifier: Mock) -> None:
         expected = VerificationMother.failing_after_a_denied_read()
         verifier.verify.return_value = expected

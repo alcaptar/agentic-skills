@@ -356,6 +356,7 @@ INTENCION: sin el, la regla vive repartida y cada llamador la olvida a su manera
 ACEPTACION: Cantidad(0) y Cantidad(-1) lanzan ValueError; Cantidad(1) es valida.
 SENAL: exenta - value object interno sin efecto observable en produccion
 EXCLUYE: el endpoint que consume este value object, que es la slice-02 de detras
+SUSTITUYE: no
 ```
 
 Y la subissue `#44`, con titulo `slice-02 (rechazar-cantidad-negativa): El endpoint devuelve 422`:
@@ -365,6 +366,7 @@ INTENCION: hoy la API acepta la cantidad negativa y corrompe el stock
 ACEPTACION: POST /pedidos con cantidad -1 devuelve 422 y no crea el pedido.
 SENAL: contador orders_rejected_total{reason="invalid_quantity"}
 EXCLUYE: nada - la feature completa (value object y endpoint) entra en estas dos slices
+SUSTITUYE: si - la aceptacion de cantidades negativas en POST /pedidos; flag que la reactiva sin redeploy
 ```
 
 **2. Ejecutar la primera slice**

@@ -71,6 +71,7 @@ class JudgeInvocation(HarnessInvocation):
                 *PriorArtBlock.of(review.prior_art),
                 f"- senal: {review.signal}",
                 f"- excluye: {review.excludes}",
+                f"- sustituye: {review.replaces}",
                 *CountedLines.of("criterios de aceptacion", review.criteria),
                 *CitedSources.of(
                     "fuentes de convencion", reader=self.reader, worktree=review.worktree, sources=review.sources

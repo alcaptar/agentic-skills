@@ -22,6 +22,7 @@ class SubIssue:
     criteria: tuple[str, ...]
     signal: str
     excludes: str
+    replaces: str
     run: Run | None
     label: IssueLabel | None
 
