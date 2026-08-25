@@ -22,10 +22,16 @@ class TestEveryDurableLogDeclaresASchemaAProgramCanRead:
         assert {"ts", "repo", "issue", "slice_id", "name", "veredicto", "ci"} <= required
 
     def test_the_corpus_verdict_schema_requires_the_slice_and_the_verdict_the_judge_gave(self) -> None:
-        assert self._required(CorpusVerdictPayload.json_schema()) == {"slice_id", "verdict", "severity_counts"}
+        assert self._required(CorpusVerdictPayload.json_schema()) == {
+            "slice_id",
+            "verify_round",
+            "session",
+            "verdict",
+            "severity_counts",
+        }
 
     def test_the_corpus_diff_schema_requires_the_slice_and_the_diff_that_was_judged(self) -> None:
-        assert self._required(CorpusDiffPayload.json_schema()) == {"slice_id", "diff"}
+        assert self._required(CorpusDiffPayload.json_schema()) == {"slice_id", "verify_round", "session", "diff"}
 
     def test_none_of_the_five_schemas_leaves_a_reference_unresolved(self) -> None:
         for payload in (

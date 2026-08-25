@@ -32,6 +32,8 @@ class SeverityCountPayload(ContractModel):
 
 class CorpusVerdictPayload(ContractModel):
     slice_id: str
+    verify_round: int
+    session: str
     verdict: VerdictPayload
     severity_counts: SeverityCountPayload
     repo: str | None = None
@@ -47,6 +49,8 @@ class CorpusVerdictPayload(ContractModel):
         return cls.model_validate(
             {
                 "slice_id": entry.slice_id,
+                "verify_round": entry.verify_round,
+                "session": entry.session,
                 "verdict": VerdictPayload.from_domain(entry.verdict),
                 "severity_counts": SeverityCountPayload.from_domain(entry.verdict),
                 "repo": entry.repo,

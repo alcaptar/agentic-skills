@@ -53,6 +53,7 @@ class VerifySliceParamsMother:
             worktree=SliceUnderReviewMother.WORKTREE,
             base=cls.BASE,
             slice_id=SliceUnderReviewMother.SLICE_ID,
+            verify_round=1,
             signal=SliceUnderReviewMother.signal(),
             excludes=SliceUnderReviewMother.excludes(),
             replaces=SliceUnderReviewMother.replaces(),
@@ -137,37 +138,44 @@ class JudgeMother:
 
 class VerificationMother:
     DENIED_READ: ClassVar[str] = "Read /toolbox/skills/x.md"
+    SESSION: ClassVar[str] = "e3f6a3d0-1c8a-4a7b-9c2e-5f6a7b8c9d0e"
 
-    @staticmethod
-    def passing() -> Verification:
+    @classmethod
+    def passing(cls) -> Verification:
         return Verification(
             verdict=VerdictMother.passing(),
             spend=HarnessSpendMother.of_the_judge_call(),
             diff_stats=SliceDiffMother.STATS,
+            session=cls.SESSION,
         )
 
-    @staticmethod
-    def vetoing(verdict: Verdict) -> Verification:
+    @classmethod
+    def vetoing(cls, verdict: Verdict) -> Verification:
         return Verification(
-            verdict=verdict, spend=HarnessSpendMother.of_the_judge_call(), diff_stats=SliceDiffMother.STATS
+            verdict=verdict,
+            spend=HarnessSpendMother.of_the_judge_call(),
+            diff_stats=SliceDiffMother.STATS,
+            session=cls.SESSION,
         )
 
-    @staticmethod
-    def ordering_corrections(*findings: Finding) -> Verification:
+    @classmethod
+    def ordering_corrections(cls, *findings: Finding) -> Verification:
         return Verification(
             verdict=VerdictMother.passing_with(*findings),
             spend=HarnessSpendMother.of_the_judge_call(),
             diff_stats=SliceDiffMother.STATS,
+            session=cls.SESSION,
         )
 
-    @staticmethod
-    def approving_with_accepted_debt(*findings: Finding) -> Verification:
+    @classmethod
+    def approving_with_accepted_debt(cls, *findings: Finding) -> Verification:
         chosen = findings or (FindingMother.low_severity(),)
 
         return Verification(
             verdict=VerdictMother.passing_with(*chosen),
             spend=HarnessSpendMother.of_the_judge_call(),
             diff_stats=SliceDiffMother.STATS,
+            session=cls.SESSION,
         )
 
     @classmethod
@@ -176,5 +184,6 @@ class VerificationMother:
             verdict=VerdictMother.failing(),
             spend=HarnessSpendMother.of_the_judge_call(),
             diff_stats=SliceDiffMother.STATS,
+            session=cls.SESSION,
             denied_reads=(cls.DENIED_READ,),
         )

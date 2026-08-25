@@ -209,6 +209,7 @@ class GhConversationMother:
             "indeterminate_ticks": run.indeterminate_ticks,
             "verify_discards": run.verify_discards,
             "control_rounds_logged": run.control_rounds_logged,
+            "verify_rounds_logged": run.verify_rounds_logged,
         }
 
         return f"<!-- slice-runner:estado\n{json.dumps(state)}\n-->"

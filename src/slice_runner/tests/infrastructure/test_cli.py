@@ -865,6 +865,7 @@ class TestTheTransitionOfEveryPair:
                 "understand_discards": 0,
                 "implement_discards": 0,
                 "control_rounds_logged": 1,
+                "verify_rounds_logged": 0,
                 "last_reviewed_id": 0,
                 "requested_changes": [],
             },
@@ -1459,6 +1460,39 @@ class TestTheControlLogsOfARetriedRound(BlindToTheToolboxOfThisMachine):
         slice_dir = tmp_path / "logs" / GhConversationMother.SLICE
         assert (slice_dir / "round-2" / "lint.log").exists()
         assert not (slice_dir / "round-1").exists()
+
+
+class TestTheVerifyRoundOfARetriedVerdict(BlindToTheToolboxOfThisMachine):
+    @staticmethod
+    def _invocation() -> RunInvocation:
+        return RunInvocation(
+            children=GhConversationMother.the_slice_resumed_at(
+                RunMother.judging_with_one_verify_round_already_logged()
+            ),
+            answers=(
+                Answer(to=("git", "rev-parse"), code=0),
+                Answer(to=("git", "fetch"), code=0),
+                Answer(to=("git", "rev-list", "--count"), stdout="0\n"),
+                Answer(to=("git", "diff", "--cached", "--name-only"), stdout="hello.py\n"),
+                Answer(to=("git", "diff", "--cached", "--numstat"), stdout="1\t0\thello.py\n"),
+                Answer(to=("git", "diff", "--cached"), stdout="diff --git a/hello.py b/hello.py\n"),
+                Answer(
+                    to=(JudgeInvocation.EXECUTABLE, "--add-dir"),
+                    stdout=json.dumps(HarnessEnvelopeMother.carrying(JudgeVerdictMother.failing())),
+                ),
+            ),
+        )
+
+    def test_a_round_already_counted_in_the_resumed_state_is_read_back_so_the_verdict_is_not_recorded_as_round_one(
+        self, tmp_path: Path
+    ) -> None:
+        invocation = self._invocation()
+
+        invocation.conduct(logs=tmp_path / "logs", budgets=Budgets(verify_retries=0))
+
+        ledger = tmp_path / "no-toolbox" / "slice-runner" / "log" / "verdicts.jsonl"
+        recorded = [json.loads(line) for line in ledger.read_text(encoding="utf-8").splitlines()]
+        assert [entry["verify_round"] for entry in recorded] == [2]
 
 
 class TestWhenTheRunStaysOpen:

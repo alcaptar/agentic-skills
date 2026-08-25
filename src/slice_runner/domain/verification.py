@@ -14,4 +14,5 @@ class Verification:
     verdict: Verdict
     spend: HarnessSpend
     diff_stats: DiffStats
+    session: str
     denied_reads: tuple[str, ...] = field(default=())

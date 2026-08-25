@@ -41,6 +41,10 @@ class RunMother:
         return Run(step=Step.VERIFY)
 
     @staticmethod
+    def judging_with_one_verify_round_already_logged() -> Run:
+        return Run(step=Step.VERIFY, verify_rounds_logged=1)
+
+    @staticmethod
     def about_to_ask_the_ci() -> Run:
         return Run(step=Step.AWAIT_CI)
 

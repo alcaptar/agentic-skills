@@ -177,6 +177,22 @@ class TestVerifySlice:
             VerdictMother.passing(),
         )
 
+    def test_the_recorded_pair_carries_the_verify_round_that_was_asked_for_and_not_a_reinterpreted_one(
+        self, action: VerifySlice, corpus: Mock
+    ) -> None:
+        params = replace(_PARAMS, verify_round=2)
+
+        action.execute(params)
+
+        assert self._recorded(corpus).verify_round == 2
+
+    def test_the_recorded_pair_carries_the_session_the_verification_came_back_with(
+        self, action: VerifySlice, corpus: Mock
+    ) -> None:
+        action.execute(_PARAMS)
+
+        assert self._recorded(corpus).session == VerificationMother.SESSION
+
     def test_a_vetoed_verification_is_recorded_too_because_the_corpus_is_not_only_the_clean_pairs(
         self, action: VerifySlice, corpus: Mock, verifier: Mock
     ) -> None:

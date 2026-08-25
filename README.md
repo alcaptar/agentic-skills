@@ -215,13 +215,16 @@ Juzga **lo que hay staged** contra el branch-point de la base -que es lo que ser
 veredicto como JSON por salida estandar y **cualquier motivo por el que no haya veredicto** por salida de
 error, nunca mezclados. Ademas escribe: cada verificacion anexa una linea a
 `~/.claude/slice-runner/log/verdicts.jsonl` -o al equivalente bajo `CLAUDE_CONFIG_DIR`- con el repo y el
-issue del run, el identificador de la slice, el veredicto entero, su conteo por severidad y cuando se
-escribio; el diff juzgado se anexa aparte, a `~/.claude/slice-runner/log/diffs.jsonl`, unido a su fila por
-el mismo identificador de slice y la misma marca de tiempo -es lo que pesa, y separarlo es lo que deja
-contar hallazgos sin cargarlo-. Los dos son un registro append-only, y viven **fuera del repo** para que
-ningun `git add` de la slice se los lleve a la pull request. Un `verify` suelto -invocado sin que `run`
-este conduciendo ningun issue- escribe esas filas con el repo vacio y el issue a `0`: no hay identidad real
-que registrar fuera de un run conducido.
+issue del run, el identificador de la slice, la ronda de verificacion -empieza en 1 y sube una por cada
+veredicto de la misma slice-, el identificador de sesion de la
+llamada que lo produjo, el veredicto entero, su conteo por severidad y cuando se escribio; el diff juzgado
+se anexa aparte, a `~/.claude/slice-runner/log/diffs.jsonl`, unido a su fila por el mismo identificador de
+slice y la misma marca de tiempo -es lo que pesa, y separarlo es lo que deja contar hallazgos sin
+cargarlo-. Los dos son un registro append-only, y viven **fuera del repo** para que ningun `git add` de la
+slice se los lleve a la pull request. Un `verify` suelto -invocado sin que `run` este conduciendo ningun
+issue- escribe esas filas con el repo vacio, el issue a `0` y la ronda siempre a `1`: no hay identidad real
+que registrar fuera de un run conducido. El identificador de sesion es lo que une esa fila con la suya de
+`calls.jsonl` sin reconstruir el orden por marca de tiempo ni adivinar por proximidad de minuto.
 
 Y **cada llamada al harness** -la que entiende, la que implementa y la que juzga- anexa su linea a
 `~/.claude/slice-runner/log/calls.jsonl`, con el repo y el issue del run, la slice, el paso que servia, el
@@ -293,7 +296,8 @@ echo '{"run": {"step": "run-controls", "control_retries": 2}, "outcome": "failed
  "previous_call_died": false, "catching_up_the_branch": false, "control_retries": 2,
  "hygiene_retries": 0, "verify_retries": 0, "correction_retries": 0, "ci_retries": 0, "catch_up_retries": 0,
  "indeterminate_ticks": 0, "verify_discards": 0, "understand_discards": 0, "implement_discards": 0,
- "control_rounds_logged": 1, "last_reviewed_id": 0, "requested_changes": []}, "state": "blocked-controls",
+ "control_rounds_logged": 1, "verify_rounds_logged": 0, "last_reviewed_id": 0, "requested_changes": []},
+ "state": "blocked-controls",
  "wait_seconds": 0}
 ```
 

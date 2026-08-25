@@ -142,6 +142,7 @@ class SteppedSlice:
     progress: ConductSliceProgress
     outcome: Outcome
     call_died: bool = False
+    verdict_recorded: bool = False
 
 
 @dataclass(frozen=True, kw_only=True, slots=True)
@@ -410,7 +411,12 @@ class ConductSlice:
             stepped = self._stepping(progress)
             if isinstance(stepped, HaltedSlice):
                 return self._ending(stepped.progress, stepped.halt)
-            transition = self._machine.after(stepped.progress.run, stepped.outcome, call_died=stepped.call_died)
+            transition = self._machine.after(
+                stepped.progress.run,
+                stepped.outcome,
+                call_died=stepped.call_died,
+                verdict_recorded=stepped.verdict_recorded,
+            )
             progress = self._recorded(stepped.progress, transition)
             if transition.state is not RunState.OPEN:
                 return self._closing(progress, transition.state)
@@ -545,6 +551,7 @@ class ConductSlice:
                     worktree=progress.params.worktree,
                     base=f"origin/{progress.params.base}",
                     slice_id=progress.subissue.slice_id.canonical,
+                    verify_round=progress.run.verify_round_in_progress,
                     prior_art=progress.parent.prior_art,
                     signal=progress.subissue.signal,
                     excludes=progress.subissue.excludes,
@@ -567,7 +574,9 @@ class ConductSlice:
             verdicts=(*progress.verdicts, verification.verdict),
             diff_stats=verification.diff_stats,
         )
-        stepped = SteppedSlice(progress=judged, outcome=Outcome.of_the_verdict(verification.verdict))
+        stepped = SteppedSlice(
+            progress=judged, outcome=Outcome.of_the_verdict(verification.verdict), verdict_recorded=True
+        )
         if verification.verdict.ruling is Ruling.PASS:
             return stepped
 
