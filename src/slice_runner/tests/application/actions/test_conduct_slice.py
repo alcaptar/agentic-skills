@@ -10,15 +10,18 @@ from slice_runner.application.actions.close_parent import CloseParentParams
 from slice_runner.application.actions.reopen_slice import ReopenSliceParams, ReopenSliceResult
 from slice_runner.domain.alignment_response import AlignmentResponse
 from slice_runner.domain.alignment_response_kind import AlignmentResponseKind
+from slice_runner.domain.branch_catch_up import BranchCatchUp
 from slice_runner.domain.branch_catch_up_outcome import BranchCatchUpOutcome
 from slice_runner.domain.budgets import Budgets
 from slice_runner.domain.ci_indeterminate_cause import CiIndeterminateCause
 from slice_runner.domain.ci_status import CiStatus
+from slice_runner.domain.conflict_block_cause import ConflictBlockCause
 from slice_runner.domain.discard_cause import DiscardCause
 from slice_runner.domain.event_status import EventStatus
 from slice_runner.domain.exceptions import (
     CiCommandFailedError,
     DirtyIndexError,
+    InvalidResolutionReportError,
     MissingBranchError,
     NoPullRequestError,
     NoSliceLeftError,
@@ -552,7 +555,7 @@ class TestConductSliceClosingAMergeMissedBetweenInvocations:
         self,
     ) -> None:
         dangling = SubIssueMother.dangling()
-        models = RoleModels(understand="opus", implement="opus", verify="opus")
+        models = RoleModels(understand="opus", implement="opus", verify="opus", catch_up="opus")
         conductor = self._conductor(dangling=(dangling,), models=models)
 
         conductor.conduct()
@@ -888,25 +891,32 @@ class TestConductSliceResumingCatchesUpTheBranch:
 
         assert conductor.implement.execute.call_count == 1
 
-    def test_a_conflicting_catch_up_closes_the_run_before_spending_any_call_on_the_harness(self) -> None:
+    def test_an_unresolvable_conflict_closes_the_run_without_ever_reaching_the_implementer_or_the_judge(self) -> None:
         conductor = self._conductor()
-        conductor.branches.catch_up.return_value = BranchCatchUpOutcome.CONFLICTING
+        conductor.branches.catch_up.return_value = BranchCatchUp(
+            outcome=BranchCatchUpOutcome.CONFLICTING, conflicted_paths=("shared.txt",)
+        )
+        conductor.branches.has_leftover_conflict_markers.return_value = True
 
         result = conductor.conduct()
 
         assert result.state is RunState.BLOCKED_CI_CONFLICT
         assert (conductor.implement.execute.call_count, conductor.verify.execute.call_count) == (0, 0)
 
-    def test_a_conflicting_catch_up_writes_the_conflict_label_and_records_the_closed_row(self) -> None:
+    def test_an_unresolvable_conflict_writes_the_conflict_label_and_records_the_closed_row(self) -> None:
         conductor = self._conductor()
-        conductor.branches.catch_up.return_value = BranchCatchUpOutcome.CONFLICTING
+        conductor.branches.catch_up.return_value = BranchCatchUp(
+            outcome=BranchCatchUpOutcome.CONFLICTING, conflicted_paths=("shared.txt",)
+        )
+        conductor.branches.has_leftover_conflict_markers.return_value = True
 
         conductor.conduct()
 
         conductor.repository.write_label.assert_called_once_with(
             repo=Conductor.REPO, issue=_SUBISSUE, remove=IssueLabel.IN_PROGRESS, add=IssueLabel.BLOCKED_CI_CONFLICT
         )
-        assert conductor.metrics.record.call_args.args[0].state is RunState.BLOCKED_CI_CONFLICT
+        assert conductor.closed.state is RunState.BLOCKED_CI_CONFLICT
+        assert conductor.closed.conflict_block_cause is ConflictBlockCause.TREE_STILL_CONFLICTED
 
     def test_a_branch_that_no_longer_exists_is_never_asked_to_catch_up(self) -> None:
         conductor = self._conductor()
@@ -930,6 +940,133 @@ class TestConductSliceResumingCatchesUpTheBranch:
         conductor.conduct()
 
         assert conductor.branches.catch_up.call_count == 0
+
+    def test_a_run_already_at_the_catch_up_step_is_never_pre_checked_before_conducting(self) -> None:
+        conductor = Conductor(chosen=SelectSliceResultMother.resumed_at(RunMother.at_catch_up()))
+
+        conductor.conduct()
+
+        assert conductor.branches.catch_up.call_count == 1
+
+
+class TestConductSliceResolvesAConflictAtTheCatchUpStep:
+    @staticmethod
+    def _conductor(*, budgets: Budgets | None = None) -> Conductor:
+        return Conductor(chosen=SelectSliceResultMother.resumed_at(RunMother.at_catch_up()), budgets=budgets)
+
+    def test_a_clean_catch_up_never_calls_the_resolver(self) -> None:
+        conductor = self._conductor()
+
+        conductor.conduct()
+
+        assert conductor.resolver.resolve.call_count == 0
+
+    def test_a_conflicting_catch_up_calls_the_resolver_exactly_once(self) -> None:
+        conductor = self._conductor()
+        conductor.branches.catch_up.return_value = BranchCatchUp(
+            outcome=BranchCatchUpOutcome.CONFLICTING, conflicted_paths=("shared.txt",)
+        )
+
+        conductor.conduct()
+
+        assert conductor.resolver.resolve.call_count == 1
+
+    def test_a_conflict_the_resolver_fixed_moves_on_to_run_the_controls(self) -> None:
+        conductor = self._conductor()
+        conductor.branches.catch_up.return_value = BranchCatchUp(
+            outcome=BranchCatchUpOutcome.CONFLICTING, conflicted_paths=("shared.txt",)
+        )
+
+        result = conductor.conduct()
+
+        assert (result.state, result.step) == (RunState.MERGED, Step.AWAIT_MERGE)
+
+    def test_a_tree_still_conflicted_after_the_resolver_retries_until_the_budget_is_spent(self) -> None:
+        conductor = self._conductor(budgets=Budgets(catch_up_retries=2))
+        conductor.branches.catch_up.return_value = BranchCatchUp(
+            outcome=BranchCatchUpOutcome.CONFLICTING, conflicted_paths=("shared.txt",)
+        )
+        conductor.branches.has_leftover_conflict_markers.return_value = True
+
+        result = conductor.conduct()
+
+        assert conductor.branches.catch_up.call_count == 3
+        assert result.state is RunState.BLOCKED_CI_CONFLICT
+
+    def test_a_tree_still_conflicted_once_the_budget_is_spent_names_the_tree_as_the_cause(self) -> None:
+        conductor = self._conductor(budgets=Budgets(catch_up_retries=1))
+        conductor.branches.catch_up.return_value = BranchCatchUp(
+            outcome=BranchCatchUpOutcome.CONFLICTING, conflicted_paths=("shared.txt",)
+        )
+        conductor.branches.has_leftover_conflict_markers.return_value = True
+
+        conductor.conduct()
+
+        assert conductor.closed.conflict_block_cause is ConflictBlockCause.TREE_STILL_CONFLICTED
+
+    def test_the_resolver_touching_a_file_outside_the_conflict_also_retries_until_the_budget_is_spent(self) -> None:
+        conductor = self._conductor(budgets=Budgets(catch_up_retries=1))
+        conductor.branches.catch_up.return_value = BranchCatchUp(
+            outcome=BranchCatchUpOutcome.CONFLICTING, conflicted_paths=("shared.txt",)
+        )
+        conductor.branches.paths_touched_since_the_merge_attempt.return_value = ("shared.txt", "clean.txt")
+
+        result = conductor.conduct()
+
+        assert result.state is RunState.BLOCKED_CI_CONFLICT
+
+    def test_a_resolver_call_that_dies_is_discarded_and_retried_instead_of_killing_the_run(self) -> None:
+        conductor = self._conductor()
+        conductor.branches.catch_up.return_value = BranchCatchUp(
+            outcome=BranchCatchUpOutcome.CONFLICTING, conflicted_paths=("shared.txt",)
+        )
+        died = InvalidResolutionReportError("the resolver's report could not be parsed")
+        died.spend = HarnessSpendMother.of_the_catch_up_call()
+        conductor.resolver.resolve.side_effect = [died, conductor.resolver.resolve.return_value]
+
+        result = conductor.conduct()
+
+        assert conductor.resolver.resolve.call_count == 2
+        assert result.state is RunState.MERGED
+
+    def test_controls_failing_after_resolving_a_conflict_closes_immediately_instead_of_repaying_the_implementer(
+        self,
+    ) -> None:
+        conductor = Conductor(
+            chosen=SelectSliceResultMother.resumed_at(RunMother.at_catch_up_having_resolved_a_conflict())
+        )
+        conductor.controls.run.return_value = ControlOutcomeMother.red()
+
+        result = conductor.conduct()
+
+        assert conductor.implement.execute.call_count == 0
+        assert result.state is RunState.BLOCKED_CI_CONFLICT
+
+    def test_controls_failing_after_resolving_a_conflict_names_the_controls_as_the_cause(self) -> None:
+        conductor = Conductor(
+            chosen=SelectSliceResultMother.resumed_at(RunMother.at_catch_up_having_resolved_a_conflict())
+        )
+        conductor.controls.run.return_value = ControlOutcomeMother.red()
+
+        conductor.conduct()
+
+        assert conductor.closed.conflict_block_cause is ConflictBlockCause.CONTROLS_FAILED
+
+    def test_controls_failing_after_the_implementer_worked_again_following_a_resumed_catch_up_spends_a_mechanical_retry(
+        self,
+    ) -> None:
+        conductor = Conductor(
+            chosen=SelectSliceResultMother.resumed_at(RunMother.implementing()), budgets=Budgets(control_retries=0)
+        )
+        conductor.branches.catch_up.return_value = BranchCatchUp(
+            outcome=BranchCatchUpOutcome.CONFLICTING, conflicted_paths=("shared.txt",)
+        )
+        conductor.controls.run.return_value = ControlOutcomeMother.red()
+
+        result = conductor.conduct()
+
+        assert conductor.implement.execute.call_count == 1
+        assert result.state is RunState.BLOCKED_CONTROLS
 
 
 class _ResumedAwaitingTheCi:
@@ -1229,7 +1366,7 @@ class TestConductSliceOnTheHappyPath:
         )
 
     def test_the_durable_row_carries_the_budgets_and_the_models_this_invocation_ran_with(self) -> None:
-        models = RoleModels(understand="opus", implement="opus", verify="opus")
+        models = RoleModels(understand="opus", implement="opus", verify="opus", catch_up="opus")
         conductor = Conductor(
             chosen=SelectSliceResultMother.resumed_at(RunMother.implementing()),
             budgets=Budgets(slice_cost_usd=99.0),

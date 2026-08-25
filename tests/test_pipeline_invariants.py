@@ -247,7 +247,6 @@ _KNOWN_NOT_HARNESS_WRITING = {
     ("_budgets", "cost_exhausted"),
     ("_budgets", "exhausted"),
     ("_budgets", "wait_exhausted"),
-    ("_catch_up", "execute"),
     ("_clock", "sleep"),
     ("_close", "execute"),
     ("_deliver", "execute"),
@@ -351,9 +350,10 @@ def test_no_call_that_writes_with_the_harness_in_conduct_slice_escapes_the_disca
         f"{_CONDUCT_SLICE} calls the harness at line(s) {', '.join(str(line) for line in unguarded)} "
         f"without discarding and retrying a MeasuredCallError, unlike every other harness-writing call"
     )
-    assert total == 3, (
-        f"{_CONDUCT_SLICE} calls the harness {total} time(s) to write with it, expected exactly 3 "
-        f"(understand, implement, verify): a call added or removed here changes what this pins"
+    assert total == 5, (
+        f"{_CONDUCT_SLICE} calls the harness {total} time(s) to write with it, expected exactly 5 "
+        f"(understand, implement, verify, and catch-up's two call sites): a call added or removed here "
+        f"changes what this pins"
     )
 
 

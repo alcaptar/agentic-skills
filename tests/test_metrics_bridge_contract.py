@@ -14,11 +14,13 @@ from datetime import UTC, datetime
 
 import metrics
 from slice_runner.domain.ci_indeterminate_cause import CiIndeterminateCause
+from slice_runner.domain.conflict_block_cause import ConflictBlockCause
 from slice_runner.domain.role_models import RoleModels
 from slice_runner.domain.step import Step
 from slice_runner.infrastructure.metrics_entry_payload import (
     DurableCi,
     DurableCiIndeterminateCause,
+    DurableConflictBlockCause,
     DurableDiscardCause,
     DurableVerdict,
     MetricsEntryPayload,
@@ -46,6 +48,10 @@ def test_the_durable_vocabulary_the_program_writes_is_the_one_metrics_py_reads()
         "ci_indeterminada_causa": (
             {str(c) for c in DurableCiIndeterminateCause},
             {str(c) for c in metrics.CausaCiIndeterminada},
+        ),
+        "conflicto_causa": (
+            {str(c) for c in DurableConflictBlockCause},
+            {str(c) for c in metrics.CausaConflicto},
         ),
     }
 
@@ -79,11 +85,16 @@ def test_the_row_the_program_writes_is_one_metrics_py_can_still_read() -> None:
 
 
 def test_the_model_the_judge_ran_with_reaches_the_row_so_a_verdict_can_be_traced_to_what_measured_it() -> None:
-    models = RoleModels(understand="sonnet", implement="sonnet", verify="opus")
+    models = RoleModels(understand="sonnet", implement="sonnet", verify="opus", catch_up="opus")
     closed = ClosedSliceMother.merged_with_config(models=models)
     row = MetricsEntryPayload.from_domain(closed, ts=datetime(2026, 8, 10, tzinfo=UTC).isoformat()).to_contract()
 
-    assert row["models_by_role"] == {"understand": "sonnet", "implement": "sonnet", "verify": "opus"}
+    assert row["models_by_role"] == {
+        "understand": "sonnet",
+        "implement": "sonnet",
+        "verify": "opus",
+        "catch_up": "opus",
+    }
 
 
 def test_a_row_that_discards_the_judge_is_read_with_the_cause_metrics_py_knows() -> None:
@@ -111,3 +122,12 @@ def test_a_row_that_closes_ci_indeterminate_is_read_with_the_cause_metrics_py_kn
     fila = metrics.Fila.from_row(row)
 
     assert fila.ci_indeterminada_causa == metrics.CausaCiIndeterminada.COMANDO_FALLIDO
+
+
+def test_a_row_that_closes_blocked_on_a_conflict_is_read_with_the_cause_metrics_py_knows() -> None:
+    closed = ClosedSliceMother.blocked_conflict_because_of(ConflictBlockCause.TREE_STILL_CONFLICTED)
+    row = MetricsEntryPayload.from_domain(closed, ts=datetime(2026, 8, 10, tzinfo=UTC).isoformat()).to_contract()
+
+    fila = metrics.Fila.from_row(row)
+
+    assert fila.conflicto_causa == metrics.CausaConflicto.ARBOL_SIGUE_EN_CONFLICTO

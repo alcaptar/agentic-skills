@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Self
 
 from slice_runner.domain.ci_indeterminate_cause import CiIndeterminateCause
+from slice_runner.domain.conflict_block_cause import ConflictBlockCause
 from slice_runner.domain.discard_cause import DiscardCause
 from slice_runner.domain.run_state import RunState
 from slice_runner.domain.step import Step
@@ -81,6 +82,7 @@ class ClosedSliceRecordPayload(ContractModel):
     implement_discards: int
     discarded_call: DiscardedCallPayload | None = None
     ci_indeterminate_cause: CiIndeterminateCause | None = None
+    conflict_block_cause: ConflictBlockCause | None = None
     spend: RecordedSpendPayload | None = None
     variant: str | None = None
     models: tuple[str, ...] = ()
@@ -113,6 +115,7 @@ class ClosedSliceRecordPayload(ContractModel):
                 if record.discarded_call is not None
                 else None,
                 "ci_indeterminate_cause": record.ci_indeterminate_cause,
+                "conflict_block_cause": record.conflict_block_cause,
                 "spend": RecordedSpendPayload.from_domain(record.spend) if record.spend is not None else None,
                 "variant": record.variant,
                 "models": record.models,

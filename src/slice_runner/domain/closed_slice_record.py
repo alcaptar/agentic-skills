@@ -7,6 +7,7 @@ if TYPE_CHECKING:
     from datetime import datetime
 
     from slice_runner.domain.ci_indeterminate_cause import CiIndeterminateCause
+    from slice_runner.domain.conflict_block_cause import ConflictBlockCause
     from slice_runner.domain.diff_stats import DiffStats
     from slice_runner.domain.discarded_call import DiscardedCall
     from slice_runner.domain.recorded_spend import RecordedSpend
@@ -34,6 +35,7 @@ class ClosedSliceRecord:
     implement_discards: int
     discarded_call: DiscardedCall | None
     ci_indeterminate_cause: CiIndeterminateCause | None
+    conflict_block_cause: ConflictBlockCause | None
     spend: RecordedSpend | None
     variant: str | None
     models: tuple[str, ...]

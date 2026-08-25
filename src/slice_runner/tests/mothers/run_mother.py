@@ -45,6 +45,14 @@ class RunMother:
         return Run(step=Step.AWAIT_CI)
 
     @staticmethod
+    def at_catch_up() -> Run:
+        return Run(step=Step.CATCH_UP)
+
+    @staticmethod
+    def at_catch_up_having_resolved_a_conflict() -> Run:
+        return Run(step=Step.RUN_CONTROLS, catching_up_the_branch=True, resolved_a_conflict=True)
+
+    @staticmethod
     def awaiting_ci() -> Run:
         return Run(step=Step.AWAIT_CI, control_retries=1, indeterminate_ticks=2)
 

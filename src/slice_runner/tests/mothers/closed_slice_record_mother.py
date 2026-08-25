@@ -10,6 +10,7 @@ from slice_runner.domain.severity_count import SeverityCount
 
 if TYPE_CHECKING:
     from slice_runner.domain.ci_indeterminate_cause import CiIndeterminateCause
+    from slice_runner.domain.conflict_block_cause import ConflictBlockCause
     from slice_runner.domain.diff_stats import DiffStats
     from slice_runner.domain.discarded_call import DiscardedCall
 
@@ -78,6 +79,10 @@ class ClosedSliceRecordMother:
         return cls._record(RunState.BLOCKED_CI_INDETERMINATE, ci_indeterminate_cause=cause)
 
     @classmethod
+    def blocked_conflict_because_of(cls, cause: ConflictBlockCause | None) -> ClosedSliceRecord:
+        return cls._record(RunState.BLOCKED_CI_CONFLICT, conflict_block_cause=cause)
+
+    @classmethod
     def _record(
         cls,
         state: RunState,
@@ -92,6 +97,7 @@ class ClosedSliceRecordMother:
         verify_retries: int = 0,
         discarded_call: DiscardedCall | None = None,
         ci_indeterminate_cause: CiIndeterminateCause | None = None,
+        conflict_block_cause: ConflictBlockCause | None = None,
         understand_discards: int = 0,
         implement_discards: int = 0,
     ) -> ClosedSliceRecord:
@@ -114,6 +120,7 @@ class ClosedSliceRecordMother:
             implement_discards=implement_discards,
             discarded_call=discarded_call,
             ci_indeterminate_cause=ci_indeterminate_cause,
+            conflict_block_cause=conflict_block_cause,
             spend=spend,
             variant="programa",
             models=("claude-sonnet-5",),

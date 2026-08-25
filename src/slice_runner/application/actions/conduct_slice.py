@@ -18,6 +18,7 @@ from slice_runner.application.queries.read_ci_status import ReadCiStatusParams
 from slice_runner.application.queries.read_pull_request_status import ReadPullRequestStatusParams
 from slice_runner.application.queries.run_prechecks import RunPrechecksParams
 from slice_runner.application.queries.select_slice import SelectSliceParams
+from slice_runner.domain.conflict_block_cause import ConflictBlockCause
 from slice_runner.domain.discarded_call import DiscardedCall
 from slice_runner.domain.exceptions import (
     DirtyIndexError,
@@ -114,6 +115,7 @@ class ConductSliceProgress:
     waited_seconds: int = 0
     discarded_call: DiscardedCall | None = None
     ci_indeterminate_cause: CiIndeterminateCause | None = None
+    conflict_block_cause: ConflictBlockCause | None = None
     diff_stats: DiffStats | None = None
 
     @property
@@ -270,24 +272,41 @@ class ConductSlice:
 
     @staticmethod
     def _already_delivered(step: Step) -> bool:
-        return step is Step.AWAIT_CI or step is Step.AWAIT_MERGE
+        return step is Step.AWAIT_CI or step is Step.AWAIT_MERGE or step is Step.CATCH_UP
 
     def _caught_up_before_conducting(self, progress: ConductSliceProgress) -> ConductSliceResult:
-        caught_up = self._catch_up.execute(
-            CatchUpBranchParams(
-                worktree=progress.params.worktree, branch=progress.subissue.branch, base=progress.params.base
-            )
-        )
-        if caught_up.outcome is Outcome.CONFLICTING:
+        try:
+            caught_up = self._catch_up.execute(self._catch_up_params(progress))
+        except MeasuredCallError as rejection:
+            return self._blocked_by_a_catch_up_conflict(self._discarding(progress, rejection))
+
+        if caught_up.spend is not None:
+            progress = replace(progress, spends=(*progress.spends, caught_up.spend))
+        if caught_up.outcome is not Outcome.DONE:
             return self._blocked_by_a_catch_up_conflict(progress)
+        if caught_up.resolved_a_conflict:
+            progress = replace(progress, run=replace(progress.run, resolved_a_conflict=True))
 
         return self._conducting(progress)
 
     def _blocked_by_a_catch_up_conflict(self, progress: ConductSliceProgress) -> ConductSliceResult:
-        transition = self._machine.after(progress.run, Outcome.CONFLICTING)
-        closed = self._recorded(progress, transition)
+        marked = replace(progress, conflict_block_cause=ConflictBlockCause.TREE_STILL_CONFLICTED)
+        transition = self._machine.after(marked.run, Outcome.CONFLICTING)
+        closed = self._recorded(marked, transition)
 
         return self._closing(closed, transition.state)
+
+    @staticmethod
+    def _catch_up_params(progress: ConductSliceProgress) -> CatchUpBranchParams:
+        return CatchUpBranchParams(
+            repo=progress.params.repo,
+            issue=progress.subissue.number,
+            slice_id=progress.subissue.slice_id.canonical,
+            worktree=progress.params.worktree,
+            branch=progress.subissue.branch,
+            base=progress.params.base,
+            sources=progress.parent.sources,
+        )
 
     def _recreating_the_branch(self, progress: ConductSliceProgress) -> ConductSliceResult:
         self._branches.create(
@@ -465,13 +484,27 @@ class ConductSlice:
                 return self._asking_for_the_merge(progress)
 
     def _catching_up_the_branch(self, progress: ConductSliceProgress) -> SteppedSlice:
-        caught_up = self._catch_up.execute(
-            CatchUpBranchParams(
-                worktree=progress.params.worktree, branch=progress.subissue.branch, base=progress.params.base
-            )
-        )
+        try:
+            caught_up = self._catch_up.execute(self._catch_up_params(progress))
+        except MeasuredCallError as rejection:
+            discarded = self._discarding(progress, rejection)
 
-        return SteppedSlice(progress=progress, outcome=caught_up.outcome)
+            return self._within_budget(
+                SteppedSlice(progress=discarded, outcome=Outcome.DISCARDED), call=rejection.spend
+            )
+
+        updated = progress
+        if caught_up.resolved_a_conflict:
+            updated = replace(updated, run=replace(updated.run, resolved_a_conflict=True))
+        if caught_up.outcome in (Outcome.FAILED, Outcome.HYGIENE_REJECTED):
+            updated = replace(updated, conflict_block_cause=ConflictBlockCause.TREE_STILL_CONFLICTED)
+
+        if caught_up.spend is None:
+            return SteppedSlice(progress=updated, outcome=caught_up.outcome)
+
+        updated = replace(updated, spends=(*updated.spends, caught_up.spend))
+
+        return self._within_budget(SteppedSlice(progress=updated, outcome=caught_up.outcome), call=caught_up.spend)
 
     def _implementing(self, progress: ConductSliceProgress) -> SteppedSlice:
         if self._budgets.exhausted(progress.spend):
@@ -507,6 +540,7 @@ class ConductSlice:
             paths=implementation.paths,
             debt=implementation.left_out,
             spends=(*progress.spends, implementation.spend),
+            run=replace(progress.run, resolved_a_conflict=False),
         )
 
         return self._within_budget(SteppedSlice(progress=implemented, outcome=Outcome.DONE), call=implementation.spend)
@@ -531,7 +565,11 @@ class ConductSlice:
             )
         )
 
-        return SteppedSlice(progress=replace(round_progress, control_logs=ran.red_logs), outcome=ran.outcome)
+        stepped_progress = replace(round_progress, control_logs=ran.red_logs)
+        if ran.outcome is Outcome.FAILED and stepped_progress.run.resolved_a_conflict:
+            stepped_progress = replace(stepped_progress, conflict_block_cause=ConflictBlockCause.CONTROLS_FAILED)
+
+        return SteppedSlice(progress=stepped_progress, outcome=ran.outcome)
 
     def _judging(self, progress: ConductSliceProgress) -> SteppedSlice:
         if self._budgets.exhausted(progress.spend):
@@ -738,6 +776,7 @@ class ConductSlice:
                 findings_of_the_last_round=progress.findings_of_the_last_round,
                 discarded_call=progress.discarded_call,
                 ci_indeterminate_cause=progress.ci_indeterminate_cause,
+                conflict_block_cause=progress.conflict_block_cause,
                 debt=progress.debt,
                 diff_stats=progress.diff_stats,
             )

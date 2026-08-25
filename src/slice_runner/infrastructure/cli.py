@@ -67,12 +67,14 @@ from slice_runner.domain.halt import Halt
 from slice_runner.domain.role_models import RoleModels
 from slice_runner.domain.state_machine import StateMachine
 from slice_runner.domain.step import Step
+from slice_runner.infrastructure.claude_conflict_resolver import ClaudeConflictResolver
 from slice_runner.infrastructure.claude_implementer import ClaudeImplementer
 from slice_runner.infrastructure.claude_understanding import ClaudeUnderstanding
 from slice_runner.infrastructure.claude_verifier import ClaudeVerifier
 from slice_runner.infrastructure.closed_slice_metrics_view import ClosedSliceMetricsView
 from slice_runner.infrastructure.closed_slice_record_payload import ClosedSliceRecordPayload
 from slice_runner.infrastructure.conducted_slice_payload import ConductedSlicePayload
+from slice_runner.infrastructure.conflict_resolver_invocation import ConflictResolverInvocation
 from slice_runner.infrastructure.conversation_report import ConversationReport
 from slice_runner.infrastructure.conversation_tool_use_recorder import ConversationToolUseRecorder
 from slice_runner.infrastructure.exit_code import ExitCode
@@ -598,7 +600,11 @@ class Cli:
                     understanding=ClaudeUnderstanding(calls=calls, reader=reader),
                     repository=repository,
                 ),
-                catch_up=CatchUpBranch(branches=branches),
+                catch_up=CatchUpBranch(
+                    branches=branches,
+                    workspace=workspace,
+                    resolver=ClaudeConflictResolver(calls=calls, reader=reader),
+                ),
             ),
             ports=ConductSlicePorts(
                 repository=repository,
@@ -614,6 +620,7 @@ class Cli:
                 understand=UnderstandingInvocation.MODEL,
                 implement=ImplementerInvocation.MODEL,
                 verify=JudgeInvocation.MODEL,
+                catch_up=ConflictResolverInvocation.MODEL,
             ),
         )
 

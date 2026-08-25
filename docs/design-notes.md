@@ -854,6 +854,29 @@ existe, no que una afirmacion sobre el codigo siga siendo cierta, y por diseno n
 con arbol es lo que este repo evita en el otro sentido-. Lo unico que baja el riesgo es la regla de esta
 nota: no escribir la afirmacion.
 
+## El resolutor de conflictos no estrena presupuesto ni ruta de reintento
+
+Cuando `CATCH_UP` deja de ser "git no pudo, cierra" y pasa a "invoca a un agente para resolver", dos
+decisiones no las sostiene ningun linter ni ningun test de contrato.
+
+**Por que comparte `catch_up_retries` en vez de un numero propio.** Un presupuesto nuevo -"cuantas veces
+se reintenta la resolucion"- seria un numero que nadie ha medido, justo lo que
+`docs/conventions/domain.md` rechaza como preferencia disfrazada de regla. El contador que ya existia
+media exactamente lo mismo desde el otro lado: cuantas veces vale la pena volver a intentar poner la
+rama al dia antes de rendirse. Que la causa del intento sea ahora "el arbol sigue en conflicto tras
+resolver" en vez de "la integracion continua ve un choque" no cambia la pregunta que el numero contesta,
+asi que estrenar uno seria dividir sin motivo un mismo tope en dos relojes que podrian desincronizarse.
+
+**Por que unos controles rojos tras resolver cierran en vez de volver al implementador.** El camino
+normal de un control en rojo -`_retrying_a_mechanical_failure`- asume que lo que fallo es el codigo de
+la slice, y que reinvocar al implementador con el log delante puede arreglarlo. Esa asuncion se rompe
+cuando el round que fallo es el de una fusion resuelta por el agente de conflictos: el diff que se acaba
+de medir no es el trabajo del implementador, es una mezcla de dos ramas que el implementador nunca vio.
+Mandarlo a corregir algo que no escribio, con un log que describe un choque de fusion y no un bug suyo,
+no tiene ningun motivo para funcionar mejor la segunda vez. Por eso `run.resolved_a_conflict` corta el
+ciclo antes de gastar `control_retries`: cierra `bloqueada:conflicto` con la causa `controles-fallaron`,
+y una persona decide si la resolucion estaba mal o si el control detecto algo real.
+
 ## Roadmap de autonomia (pendiente)
 
 Estado actual: **Nivel 1** — una slice por invocación, todo bajo control manual. Subir de nivel solo cuando el anterior sea fiable; el cuello de botella nunca es implementar, es la calidad del gate de verificación.

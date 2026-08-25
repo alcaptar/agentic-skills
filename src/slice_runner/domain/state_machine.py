@@ -37,18 +37,11 @@ class StateMachine:
 
     def _after_a_catch_up_conflict(self, run: Run) -> Transition:
         match run.step:
-            case (
-                Step.UNDERSTAND
-                | Step.IMPLEMENT
-                | Step.RUN_CONTROLS
-                | Step.VERIFY
-                | Step.OPEN_PULL_REQUEST
-                | Step.CATCH_UP
-            ):
+            case Step.UNDERSTAND | Step.IMPLEMENT | Step.RUN_CONTROLS | Step.VERIFY | Step.OPEN_PULL_REQUEST:
                 return self._closed(run, RunState.BLOCKED_CI_CONFLICT)
             case Step.AWAIT_CI:
                 return self._retrying_a_catch_up(run)
-            case Step.AWAIT_MERGE:
+            case Step.CATCH_UP | Step.AWAIT_MERGE:
                 self._impossible(run, Outcome.CONFLICTING)
 
     def _retrying_a_catch_up(self, run: Run) -> Transition:
@@ -101,7 +94,7 @@ class StateMachine:
             case IssueLabel.BLOCKED_CI_INDETERMINATE:
                 return replace(run, indeterminate_ticks=0)
             case IssueLabel.BLOCKED_CI_CONFLICT:
-                return replace(run, catch_up_retries=0, indeterminate_ticks=0)
+                return replace(run, catch_up_retries=0, indeterminate_ticks=0, resolved_a_conflict=False)
 
     def _after_the_step_of(self, run: Run, outcome: Outcome, *, call_died: bool) -> Transition:
         match run.step:
@@ -145,10 +138,17 @@ class StateMachine:
                 return self._after_asking_for_the_merge(run, outcome)
 
     def _after_catching_up_the_branch(self, run: Run, outcome: Outcome) -> Transition:
-        if outcome is Outcome.DONE:
-            return self._moving_to(replace(run, catching_up_the_branch=True), Step.RUN_CONTROLS)
-
-        self._impossible(run, outcome)
+        match outcome:
+            case Outcome.DONE:
+                return self._moving_to(replace(run, catching_up_the_branch=True), Step.RUN_CONTROLS)
+            case Outcome.FAILED | Outcome.HYGIENE_REJECTED:
+                return self._retrying_a_catch_up(run)
+            case Outcome.DISCARDED:
+                return self._moving_to(run, Step.CATCH_UP)
+            case Outcome.CALL_NOT_MEASURED:
+                return self._closed(run, RunState.ABORTED_UNMEASURED_CALL)
+            case _:
+                self._impossible(run, outcome)
 
     def _after_the_alignment_pause(self, run: Run, outcome: Outcome, *, call_died: bool) -> Transition:
         match outcome:
@@ -203,6 +203,8 @@ class StateMachine:
         return self._moving_to(run, Step.VERIFY)
 
     def _retrying_a_mechanical_failure(self, run: Run) -> Transition:
+        if run.resolved_a_conflict:
+            return self._closed(run, RunState.BLOCKED_CI_CONFLICT)
         if run.control_retries < self.budgets.control_retries:
             return self._moving_to(
                 replace(run, control_retries=run.control_retries + 1, catching_up_the_branch=False), Step.IMPLEMENT
@@ -247,7 +249,7 @@ class StateMachine:
 
     def _after_the_pull_request(self, run: Run, outcome: Outcome) -> Transition:
         if outcome is Outcome.DONE:
-            return self._moving_to(replace(run, catching_up_the_branch=False), Step.AWAIT_CI)
+            return self._moving_to(replace(run, catching_up_the_branch=False, resolved_a_conflict=False), Step.AWAIT_CI)
 
         self._impossible(run, outcome)
 

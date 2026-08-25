@@ -28,6 +28,7 @@ from slice_runner.application.queries.run_prechecks import RunPrechecks
 from slice_runner.application.queries.select_slice import SelectSlice
 from slice_runner.domain.alignment_response import AlignmentResponse
 from slice_runner.domain.alignment_response_kind import AlignmentResponseKind
+from slice_runner.domain.branch_catch_up import BranchCatchUp
 from slice_runner.domain.branch_catch_up_outcome import BranchCatchUpOutcome
 from slice_runner.domain.branches import Branches
 from slice_runner.domain.budgets import Budgets
@@ -36,6 +37,7 @@ from slice_runner.domain.call_trace import CallTrace
 from slice_runner.domain.ci import Ci
 from slice_runner.domain.ci_status import CiStatus
 from slice_runner.domain.clock import Clock
+from slice_runner.domain.conflict_resolver import ConflictResolver
 from slice_runner.domain.control_runner import ControlRunner
 from slice_runner.domain.deploy_watch import DeployWatch
 from slice_runner.domain.event_log import EventLog
@@ -44,12 +46,15 @@ from slice_runner.domain.metrics_log import MetricsLog
 from slice_runner.domain.precheck_outcome import PrecheckOutcome
 from slice_runner.domain.precheck_result import PrecheckResult
 from slice_runner.domain.pull_request_writer import PullRequestWriter
+from slice_runner.domain.resolution import Resolution
 from slice_runner.domain.role_models import RoleModels
 from slice_runner.domain.run_repository import RunRepository
 from slice_runner.domain.state_machine import StateMachine
 from slice_runner.domain.understanding_writer import UnderstandingWriter
+from slice_runner.domain.workspace import Workspace
 from slice_runner.tests.doubles import RecordedSpendLog
 from slice_runner.tests.mothers.control_outcome_mother import ControlOutcomeMother
+from slice_runner.tests.mothers.harness_spend_mother import HarnessSpendMother
 from slice_runner.tests.mothers.implementation_mother import ImplementationMother
 from slice_runner.tests.mothers.pull_request_status_mother import PullRequestStatusMother
 from slice_runner.tests.mothers.understanding_mother import UnderstandingMother
@@ -75,7 +80,9 @@ class Conductor:
     UNDERSTANDING: ClassVar[str] = UnderstandingMother.TEXT
     NOW: ClassVar[datetime] = datetime(2024, 1, 1, tzinfo=UTC)
 
-    MODELS: ClassVar[RoleModels] = RoleModels(understand="sonnet", implement="sonnet", verify="sonnet")
+    MODELS: ClassVar[RoleModels] = RoleModels(
+        understand="sonnet", implement="sonnet", verify="sonnet", catch_up="sonnet"
+    )
 
     def __init__(
         self, *, chosen: SelectSliceResult, budgets: Budgets | None = None, models: RoleModels | None = None
@@ -94,7 +101,12 @@ class Conductor:
         self.repository.read_alignment_response.return_value = AlignmentResponse(kind=AlignmentResponseKind.NOT_YET)
         self.repository.read_understanding.return_value = self.UNDERSTANDING
         self.branches: Mock = create_autospec(Branches, spec_set=True, instance=True)
-        self.branches.catch_up.return_value = BranchCatchUpOutcome.CAUGHT_UP
+        self.branches.catch_up.return_value = BranchCatchUp(outcome=BranchCatchUpOutcome.CAUGHT_UP)
+        self.branches.paths_touched_since_the_merge_attempt.return_value = ()
+        self.branches.has_leftover_conflict_markers.return_value = False
+        self.workspace: Mock = create_autospec(Workspace, spec_set=True, instance=True)
+        self.resolver: Mock = create_autospec(ConflictResolver, spec_set=True, instance=True)
+        self.resolver.resolve.return_value = Resolution(spend=HarnessSpendMother.of_the_catch_up_call())
         self.controls: Mock = create_autospec(ControlRunner, spec_set=True, instance=True)
         self.controls.run.return_value = ControlOutcomeMother.green()
         self.ci: Mock = create_autospec(Ci, spec_set=True, instance=True)
@@ -155,7 +167,7 @@ class Conductor:
                 read_ci=ReadCiStatus(ci=self.ci, forum=self.forum),
                 read_pull_request=ReadPullRequestStatus(forum=self.forum),
                 seek_alignment=SeekAlignment(understanding=self.understanding, repository=self.repository),
-                catch_up=CatchUpBranch(branches=self.branches),
+                catch_up=CatchUpBranch(branches=self.branches, workspace=self.workspace, resolver=self.resolver),
             ),
             ports=ConductSlicePorts(
                 repository=self.repository,

@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, ClassVar, Self
 from pydantic import AliasChoices, Field
 
 from slice_runner.domain.ci_indeterminate_cause import CiIndeterminateCause
+from slice_runner.domain.conflict_block_cause import ConflictBlockCause
 from slice_runner.domain.discard_cause import DiscardCause
 from slice_runner.domain.discarded_call import DiscardedCall
 from slice_runner.domain.exceptions import RunNotClosedError
@@ -77,6 +78,26 @@ class DurableCiIndeterminateCause(StrEnum):
                 return CiIndeterminateCause.COMMAND_FAILED
             case DurableCiIndeterminateCause.UNREADABLE_RESPONSE:
                 return CiIndeterminateCause.UNREADABLE_RESPONSE
+
+
+class DurableConflictBlockCause(StrEnum):
+    TREE_STILL_CONFLICTED = "arbol-sigue-en-conflicto"
+    CONTROLS_FAILED = "controles-fallaron"
+
+    @classmethod
+    def of(cls, cause: ConflictBlockCause) -> DurableConflictBlockCause:
+        match cause:
+            case ConflictBlockCause.TREE_STILL_CONFLICTED:
+                return cls.TREE_STILL_CONFLICTED
+            case ConflictBlockCause.CONTROLS_FAILED:
+                return cls.CONTROLS_FAILED
+
+    def to_domain(self) -> ConflictBlockCause:
+        match self:
+            case DurableConflictBlockCause.TREE_STILL_CONFLICTED:
+                return ConflictBlockCause.TREE_STILL_CONFLICTED
+            case DurableConflictBlockCause.CONTROLS_FAILED:
+                return ConflictBlockCause.CONTROLS_FAILED
 
 
 @dataclass(frozen=True, kw_only=True, slots=True)
@@ -218,6 +239,7 @@ class MetricsEntryPayload(ContractModel):
     harness: HarnessMeasurementPayload | None = None
     discarded_call: DiscardedCallPayload | None = Field(alias="descartes", default=None)
     ci_indeterminate_cause: DurableCiIndeterminateCause | None = Field(alias="ci_indeterminada_causa", default=None)
+    conflict_block_cause: DurableConflictBlockCause | None = Field(alias="conflicto_causa", default=None)
     models: list[str] | None = Field(alias="modelos", default=None)
     variant: str = Field(alias="variante")
     debt: int
@@ -270,6 +292,9 @@ class MetricsEntryPayload(ContractModel):
                 else None,
                 "ci_indeterminada_causa": DurableCiIndeterminateCause.of(closed.ci_indeterminate_cause)
                 if closed.ci_indeterminate_cause
+                else None,
+                "conflicto_causa": DurableConflictBlockCause.of(closed.conflict_block_cause)
+                if closed.conflict_block_cause
                 else None,
                 "modelos": list(spend.models) or None,
                 "variante": cls.VARIANT,

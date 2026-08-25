@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from slice_runner.domain.ci_indeterminate_cause import CiIndeterminateCause
+from slice_runner.domain.conflict_block_cause import ConflictBlockCause
 from slice_runner.domain.diff_stats import DiffStats
 from slice_runner.infrastructure.closed_slice_record_payload import ClosedSliceRecordPayload
 from slice_runner.tests.mothers.closed_slice_record_mother import ClosedSliceRecordMother
@@ -73,6 +74,13 @@ class TestTheContractEmittedForOneClosedSlice:
         contract = ClosedSliceRecordPayload.from_domain(record).to_contract()
 
         assert contract["ci_indeterminate_cause"] == "command-failed"
+
+    def test_the_cause_a_conflict_stayed_blocked_travels_in_the_domains_own_english_vocabulary(self) -> None:
+        record = ClosedSliceRecordMother.blocked_conflict_because_of(ConflictBlockCause.TREE_STILL_CONFLICTED)
+
+        contract = ClosedSliceRecordPayload.from_domain(record).to_contract()
+
+        assert contract["conflict_block_cause"] == "tree-still-conflicted"
 
     def test_the_discards_of_the_understanding_and_the_implementation_calls_travel_next_to_verifys(self) -> None:
         record = ClosedSliceRecordMother.merged_after_discarding_harness_calls(

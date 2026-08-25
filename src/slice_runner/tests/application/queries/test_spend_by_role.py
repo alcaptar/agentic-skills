@@ -91,3 +91,16 @@ class TestAddingUpWhatEachRoleSpentAcrossASetOfSlices:
 
         by_step = {entry.step: entry.spend for entry in result}
         assert by_step[Step.IMPLEMENT] == HarnessSpend.nothing()
+
+    def test_what_the_conflict_resolver_spent_is_tracked_under_its_own_step_and_not_folded_into_another_role(
+        self, trace: Mock, spend_log: Mock
+    ) -> None:
+        trace.calls_of.return_value = (HarnessCallMother.of_the_conflict_resolver(),)
+        spend_log.spend_of.side_effect = None
+        spend_log.spend_of.return_value = HarnessSpendMother.of_the_catch_up_call()
+        query = SpendByRole(trace=trace, spend_log=spend_log)
+
+        result = query.execute(_PARAMS)
+
+        by_step = {entry.step: entry.spend for entry in result}
+        assert by_step == {Step.CATCH_UP: HarnessSpendMother.of_the_catch_up_call()}

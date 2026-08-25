@@ -20,6 +20,7 @@ class HarnessCallMother:
     SESSION_OF_THE_DISCARDED_UNDERSTANDING: ClassVar[str] = "1c2d3e4f-5a6b-4c7d-8e9f-0a1b2c3d4e50"
     SESSION_OF_THE_DISCARDED_IMPLEMENTER: ClassVar[str] = "2c3d4e5f-6a7b-4c8d-9e0f-1a2b3c4d5e61"
     SESSION_OF_THE_DISCARDED_VERDICT: ClassVar[str] = "3c4d5e6f-7a8b-4c9d-0e1f-2a3b4c5d6e72"
+    SESSION_OF_THE_CONFLICT_RESOLVER: ClassVar[str] = "4c5d6e7f-8a9b-4c0d-1e2f-3a4b5c6d7e83"
 
     @classmethod
     def of_the_implementer(cls) -> HarnessCall:
@@ -65,6 +66,16 @@ class HarnessCallMother:
             slice_id=cls.SLICE_ID,
             step=Step.VERIFY,
             session=cls.SESSION_OF_THE_DISCARDED_VERDICT,
+        )
+
+    @classmethod
+    def of_the_conflict_resolver(cls) -> HarnessCall:
+        return HarnessCall(
+            repo=cls.REPO,
+            issue=cls.ISSUE,
+            slice_id=cls.SLICE_ID,
+            step=Step.CATCH_UP,
+            session=cls.SESSION_OF_THE_CONFLICT_RESOLVER,
         )
 
     @classmethod

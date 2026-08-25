@@ -11,6 +11,7 @@ if TYPE_CHECKING:
     from slice_runner.domain.call_spend_log import CallSpendLog
     from slice_runner.domain.call_trace import CallTrace
     from slice_runner.domain.ci_indeterminate_cause import CiIndeterminateCause
+    from slice_runner.domain.conflict_block_cause import ConflictBlockCause
     from slice_runner.domain.diff_stats import DiffStats
     from slice_runner.domain.discarded_call import DiscardedCall
     from slice_runner.domain.finding import Finding
@@ -35,6 +36,7 @@ class RecordClosureParams:
     findings_of_the_last_round: tuple[Finding, ...] = field(default=())
     discarded_call: DiscardedCall | None = None
     ci_indeterminate_cause: CiIndeterminateCause | None = None
+    conflict_block_cause: ConflictBlockCause | None = None
     debt: tuple[str, ...] = field(default=())
     diff_stats: DiffStats | None = None
 
@@ -65,6 +67,7 @@ class RecordClosure:
                 findings_of_the_last_round=params.findings_of_the_last_round,
                 discarded_call=params.discarded_call,
                 ci_indeterminate_cause=params.ci_indeterminate_cause,
+                conflict_block_cause=params.conflict_block_cause,
                 debt=params.debt,
                 diff_stats=params.diff_stats,
             )

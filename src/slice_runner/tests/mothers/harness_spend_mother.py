@@ -45,3 +45,9 @@ class HarnessSpendMother:
     @staticmethod
     def of_a_call_that_cost_nothing() -> HarnessSpend:
         return HarnessSpend(calls=1, models=("claude-haiku-4-5-20251001",))
+
+    @staticmethod
+    def of_the_catch_up_call() -> HarnessSpend:
+        return HarnessSpend(
+            cost_usd=0.098765, turns=4, duration_ms=18420, calls=1, models=("claude-sonnet-5",), cache_read_tokens=8123
+        )

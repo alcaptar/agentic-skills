@@ -11,6 +11,7 @@ from slice_runner.tests.mothers.run_mother import RunMother
 
 if TYPE_CHECKING:
     from slice_runner.domain.ci_indeterminate_cause import CiIndeterminateCause
+    from slice_runner.domain.conflict_block_cause import ConflictBlockCause
     from slice_runner.domain.diff_stats import DiffStats
     from slice_runner.domain.discarded_call import DiscardedCall
     from slice_runner.domain.finding import Finding
@@ -24,7 +25,9 @@ class ClosedSliceMother:
     SLICE_ID: ClassVar[str] = "slice-07"
     NAME: ClassVar[str] = "controles-como-puerto"
     BUDGETS: ClassVar[Budgets] = Budgets()
-    MODELS: ClassVar[RoleModels] = RoleModels(understand="sonnet", implement="sonnet", verify="sonnet")
+    MODELS: ClassVar[RoleModels] = RoleModels(
+        understand="sonnet", implement="sonnet", verify="sonnet", catch_up="sonnet"
+    )
 
     @classmethod
     def merged(cls) -> ClosedSlice:
@@ -79,6 +82,10 @@ class ClosedSliceMother:
         return cls._closed(RunState.BLOCKED_CI_INDETERMINATE, ci_indeterminate_cause=cause)
 
     @classmethod
+    def blocked_conflict_because_of(cls, cause: ConflictBlockCause | None) -> ClosedSlice:
+        return cls._closed(RunState.BLOCKED_CI_CONFLICT, conflict_block_cause=cause)
+
+    @classmethod
     def merged_leaving_out(cls, *debt: str) -> ClosedSlice:
         return cls._closed(RunState.MERGED, debt=debt)
 
@@ -109,6 +116,7 @@ class ClosedSliceMother:
         findings_of_the_last_round: tuple[Finding, ...] | None = None,
         discarded_call: DiscardedCall | None = None,
         ci_indeterminate_cause: CiIndeterminateCause | None = None,
+        conflict_block_cause: ConflictBlockCause | None = None,
         debt: tuple[str, ...] = (),
         diff_stats: DiffStats | None = None,
     ) -> ClosedSlice:
@@ -126,6 +134,7 @@ class ClosedSliceMother:
             findings_of_the_last_round=findings if findings_of_the_last_round is None else findings_of_the_last_round,
             discarded_call=discarded_call,
             ci_indeterminate_cause=ci_indeterminate_cause,
+            conflict_block_cause=conflict_block_cause,
             debt=debt,
             diff_stats=diff_stats,
         )

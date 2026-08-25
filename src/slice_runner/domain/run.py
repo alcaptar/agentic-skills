@@ -17,6 +17,7 @@ class Run:
     understanding_pending: bool = False
     previous_call_died: bool = False
     catching_up_the_branch: bool = False
+    resolved_a_conflict: bool = False
     control_retries: int = 0
     hygiene_retries: int = 0
     verify_retries: int = 0

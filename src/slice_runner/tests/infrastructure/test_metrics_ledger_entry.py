@@ -7,6 +7,7 @@ import pytest
 
 from slice_runner.domain.budgets import Budgets
 from slice_runner.domain.ci_indeterminate_cause import CiIndeterminateCause
+from slice_runner.domain.conflict_block_cause import ConflictBlockCause
 from slice_runner.domain.diff_stats import DiffStats
 from slice_runner.domain.exceptions import UnreadableMetricsLogError
 from slice_runner.domain.role_models import RoleModels
@@ -131,6 +132,17 @@ class TestReadingBackARowThisProgramWrote:
 
         assert record is not None
         assert record.ci_indeterminate_cause is CiIndeterminateCause.COMMAND_FAILED
+
+    def test_the_cause_a_conflict_stayed_blocked_is_read_back_as_the_domain_value_it_came_from(self) -> None:
+        row = MetricsEntryPayload.from_domain(
+            ClosedSliceMother.blocked_conflict_because_of(ConflictBlockCause.CONTROLS_FAILED),
+            ts=_STAMP.isoformat(),
+        ).to_contract()
+
+        record = MetricsLedgerEntry.read(row)
+
+        assert record is not None
+        assert record.conflict_block_cause is ConflictBlockCause.CONTROLS_FAILED
 
     def test_the_budgets_and_the_models_by_role_travel_untouched_as_the_raw_snapshot_they_were_written_with(
         self,
@@ -257,7 +269,7 @@ class TestToleratingHistory:
         assert record.budgets == asdict(budgets)
 
     def test_the_old_spanish_key_for_models_by_role_is_still_read_into_the_same_field(self) -> None:
-        models = RoleModels(understand="haiku", implement="opus", verify="haiku")
+        models = RoleModels(understand="haiku", implement="opus", verify="haiku", catch_up="haiku")
         row = MetricsEntryPayload.from_domain(
             ClosedSliceMother.merged_with_config(models=models), ts=_STAMP.isoformat()
         ).to_contract()
@@ -266,7 +278,12 @@ class TestToleratingHistory:
         record = MetricsLedgerEntry.read(row)
 
         assert record is not None
-        assert record.models_by_role == {"understand": "haiku", "implement": "opus", "verify": "haiku"}
+        assert record.models_by_role == {
+            "understand": "haiku",
+            "implement": "opus",
+            "verify": "haiku",
+            "catch_up": "haiku",
+        }
 
     def test_a_row_without_a_timestamp_cannot_be_placed_in_a_range_and_is_skipped(self) -> None:
         row = MetricsEntryPayload.from_domain(ClosedSliceMother.merged(), ts=_STAMP.isoformat()).to_contract()

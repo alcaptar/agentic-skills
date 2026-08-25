@@ -128,6 +128,21 @@ class CausaCiIndeterminada(StrEnum):
     RESPUESTA_NO_LEGIBLE = "respuesta-no-legible"
 
 
+class CausaConflicto(StrEnum):
+    """Por que el run cerro `bloqueada:conflicto` sin resolverse.
+
+    `ARBOL_SIGUE_EN_CONFLICTO` es el arbol que sigue con ficheros en conflicto -o con higiene
+    rechazada- tras agotar los reintentos de puesta al dia; `CONTROLES_FALLARON` es una resolucion
+    que dejo el arbol limpio pero cuyo resultado no paso los controles. Se separan por el mismo
+    motivo que `CausaCiIndeterminada`: cada una se arregla mirando un sitio distinto.
+
+    El campo es opcional: el historico anterior a esta slice no lo trae.
+    """
+
+    ARBOL_SIGUE_EN_CONFLICTO = "arbol-sigue-en-conflicto"
+    CONTROLES_FALLARON = "controles-fallaron"
+
+
 _VEREDICTO_VIEJO = "bloqueada-puertas"
 _REINTENTOS_CONTROLES_VIEJO = "reintentos_puertas"
 """Formas viejas escritas en el log durable, de cuando los controles se llamaban "puertas".
@@ -252,6 +267,7 @@ class Fila:
     tokens_cache: float | None
     descartes_verify_causa: CausaDescarte | None
     ci_indeterminada_causa: CausaCiIndeterminada | None
+    conflicto_causa: CausaConflicto | None
     modelos: tuple[str, ...]
     variante: str | None
 
@@ -278,6 +294,7 @@ class Fila:
             tokens_cache=_opcional(harness, "tokens_cache"),
             descartes_verify_causa=_causa_de_verify(row, descartes),
             ci_indeterminada_causa=_causa(row, "ci_indeterminada_causa", vocabulario=CausaCiIndeterminada),
+            conflicto_causa=_causa(row, "conflicto_causa", vocabulario=CausaConflicto),
             modelos=_lista_str(row, "modelos"),
             variante=_texto_opcional(row, "variante"),
         )

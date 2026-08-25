@@ -18,12 +18,14 @@ from slice_runner.infrastructure.metrics_entry_payload import (
     DurableCi,
     DurableCiIndeterminateCause,
     DurableClosure,
+    DurableConflictBlockCause,
     DurableVerdict,
     HarnessMeasurementPayload,
 )
 
 if TYPE_CHECKING:
     from slice_runner.domain.ci_indeterminate_cause import CiIndeterminateCause
+    from slice_runner.domain.conflict_block_cause import ConflictBlockCause
     from slice_runner.domain.discarded_call import DiscardedCall
 
 _IGNORED_LEGACY_KEYS = ("duracion_s", "coste_tokens", "descartes_verify_causa")
@@ -55,6 +57,7 @@ class MetricsLedgerRowPayload(ContractModel):
     implement_discards: int = 0
     discarded_call: DiscardedCallPayload | None = Field(alias="descartes", default=None)
     ci_indeterminate_cause: DurableCiIndeterminateCause | None = Field(alias="ci_indeterminada_causa", default=None)
+    conflict_block_cause: DurableConflictBlockCause | None = Field(alias="conflicto_causa", default=None)
     harness: HarnessMeasurementPayload | None = None
     variant: str | None = Field(alias="variante", default=None)
     models: list[str] | None = Field(alias="modelos", default=None)
@@ -106,6 +109,7 @@ class MetricsLedgerEntry:
             implement_discards=payload.implement_discards,
             discarded_call=cls._discarded_call(payload),
             ci_indeterminate_cause=cls._ci_indeterminate_cause(payload.ci_indeterminate_cause),
+            conflict_block_cause=cls._conflict_block_cause(payload.conflict_block_cause),
             spend=cls._spend(payload.harness) if payload.harness is not None else None,
             variant=payload.variant,
             models=tuple(payload.models or ()),
@@ -130,6 +134,10 @@ class MetricsLedgerEntry:
 
     @staticmethod
     def _ci_indeterminate_cause(cause: DurableCiIndeterminateCause | None) -> CiIndeterminateCause | None:
+        return cause.to_domain() if cause is not None else None
+
+    @staticmethod
+    def _conflict_block_cause(cause: DurableConflictBlockCause | None) -> ConflictBlockCause | None:
         return cause.to_domain() if cause is not None else None
 
     @staticmethod

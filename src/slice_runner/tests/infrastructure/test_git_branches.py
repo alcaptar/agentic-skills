@@ -240,7 +240,7 @@ class TestGitBranchesCatchingUpTheBranch:
             worktree=str(repo), name=self._SLICE_BRANCH, base=Git.BASE_BRANCH
         )
 
-        assert outcome is BranchCatchUpOutcome.CAUGHT_UP
+        assert outcome.outcome is BranchCatchUpOutcome.CAUGHT_UP
         assert Git.run(repo, "rev-parse", "HEAD").strip() == Git.run(elsewhere, "rev-parse", self._SLICE_BRANCH).strip()
 
     def test_a_base_that_gained_commits_since_the_branch_was_born_is_merged_into_the_branch(
@@ -256,7 +256,7 @@ class TestGitBranchesCatchingUpTheBranch:
             worktree=str(repo), name=self._SLICE_BRANCH, base=Git.BASE_BRANCH
         )
 
-        assert outcome is BranchCatchUpOutcome.CAUGHT_UP
+        assert outcome.outcome is BranchCatchUpOutcome.CAUGHT_UP
         Git.run(repo, "merge-base", "--is-ancestor", base_gain, "HEAD")
 
     def test_a_commit_the_branch_already_had_keeps_its_own_identifier_after_catching_up(self, tmp_path: Path) -> None:
@@ -273,7 +273,7 @@ class TestGitBranchesCatchingUpTheBranch:
             worktree=str(repo), name=self._SLICE_BRANCH, base=Git.BASE_BRANCH
         )
 
-        assert outcome is BranchCatchUpOutcome.CAUGHT_UP
+        assert outcome.outcome is BranchCatchUpOutcome.CAUGHT_UP
         assert Git.run(repo, "rev-parse", local_commit).strip() == local_commit
         Git.run(repo, "merge-base", "--is-ancestor", local_commit, "HEAD")
         Git.run(repo, "merge-base", "--is-ancestor", remote_commit, "HEAD")
@@ -299,9 +299,7 @@ class TestGitBranchesCatchingUpTheBranch:
 
         return repo, remote
 
-    def test_files_left_conflicting_close_the_merge_instead_of_leaving_the_worktree_half_merged(
-        self, tmp_path: Path
-    ) -> None:
+    def test_files_left_conflicting_leave_the_merge_in_progress_instead_of_aborting_it(self, tmp_path: Path) -> None:
         repo, _ = self._repo_with_a_conflicting_edit_pushed_from_elsewhere(tmp_path)
         (repo / "shared.txt").write_text("from the worktree\n")
         Git.run(repo, "commit", "-am", "edited locally")
@@ -310,9 +308,9 @@ class TestGitBranchesCatchingUpTheBranch:
             worktree=str(repo), name=self._SLICE_BRANCH, base=Git.BASE_BRANCH
         )
 
-        assert outcome is BranchCatchUpOutcome.CONFLICTING
-        assert Git.run(repo, "status", "--porcelain").strip() == ""
-        assert not (repo / ".git" / "MERGE_HEAD").exists()
+        assert outcome.outcome is BranchCatchUpOutcome.CONFLICTING
+        assert outcome.conflicted_paths == ("shared.txt",)
+        assert (repo / ".git" / "MERGE_HEAD").exists()
 
     def test_a_branch_that_is_already_up_to_date_with_both_remotes_gains_no_merge_commit_and_makes_no_merge_call(
         self, tmp_path: Path
@@ -323,7 +321,7 @@ class TestGitBranchesCatchingUpTheBranch:
 
         outcome = GitBranches(process=spy).catch_up(worktree=str(repo), name=self._SLICE_BRANCH, base=Git.BASE_BRANCH)
 
-        assert outcome is BranchCatchUpOutcome.CAUGHT_UP
+        assert outcome.outcome is BranchCatchUpOutcome.CAUGHT_UP
         assert Git.run(repo, "rev-parse", "HEAD").strip() == before
         assert not spy.invoked("merge")
 
@@ -350,7 +348,7 @@ class TestGitBranchesCatchingUpTheBranch:
             worktree=str(repo), name=self._SLICE_BRANCH, base=Git.BASE_BRANCH
         )
 
-        assert outcome is BranchCatchUpOutcome.CAUGHT_UP
+        assert outcome.outcome is BranchCatchUpOutcome.CAUGHT_UP
         Git.run(repo, "merge-base", "--is-ancestor", base_gain, "HEAD")
 
     def test_a_branch_never_pushed_to_its_own_remote_and_already_at_the_base_makes_no_merge_call(
@@ -362,7 +360,7 @@ class TestGitBranchesCatchingUpTheBranch:
 
         outcome = GitBranches(process=spy).catch_up(worktree=str(repo), name=self._SLICE_BRANCH, base=Git.BASE_BRANCH)
 
-        assert outcome is BranchCatchUpOutcome.CAUGHT_UP
+        assert outcome.outcome is BranchCatchUpOutcome.CAUGHT_UP
         assert Git.run(repo, "rev-parse", "HEAD").strip() == before
         assert not spy.invoked("merge")
 
@@ -397,7 +395,7 @@ class TestGitBranchesCatchingUpTheBranch:
             worktree=str(repo), name=self._SLICE_BRANCH, base=Git.BASE_BRANCH
         )
 
-        assert outcome is BranchCatchUpOutcome.CAUGHT_UP
+        assert outcome.outcome is BranchCatchUpOutcome.CAUGHT_UP
 
     def test_a_machine_wide_commit_gpgsign_setting_with_no_usable_key_does_not_report_a_conflict(
         self, tmp_path: Path
@@ -410,4 +408,112 @@ class TestGitBranchesCatchingUpTheBranch:
             worktree=str(repo), name=self._SLICE_BRANCH, base=Git.BASE_BRANCH
         )
 
-        assert outcome is BranchCatchUpOutcome.CAUGHT_UP
+        assert outcome.outcome is BranchCatchUpOutcome.CAUGHT_UP
+
+
+@pytest.mark.integration
+class TestGitBranchesResolvingAConflict:
+    _SLICE_BRANCH = "slice/22-la-rama-se-pone-al-dia"
+
+    @staticmethod
+    def _repo_with_a_conflict_in_progress(tmp_path: Path, *, base_also_edits_a_clean_file: bool = False) -> Path:
+        remote = tmp_path / "remote.git"
+        Git.run(tmp_path, "init", "--bare", str(remote))
+        repo = Git.init_repo(tmp_path / "repo")
+        (repo / "shared.txt").write_text("base\n")
+        (repo / "clean.txt").write_text("clean\n")
+        Git.run(repo, "add", "shared.txt", "clean.txt")
+        Git.run(repo, "commit", "-m", "base")
+        Git.run(repo, "remote", "add", "origin", str(remote))
+        Git.run(repo, "push", "-u", "origin", Git.BASE_BRANCH)
+        Git.run(repo, "switch", "-c", TestGitBranchesResolvingAConflict._SLICE_BRANCH, f"origin/{Git.BASE_BRANCH}")
+        (repo / "shared.txt").write_text("from the branch\n")
+        Git.run(repo, "commit", "-am", "branch edit")
+        Git.run(repo, "push", "-u", "origin", TestGitBranchesResolvingAConflict._SLICE_BRANCH)
+        Git.run(repo, "switch", Git.BASE_BRANCH)
+        (repo / "shared.txt").write_text("from the base\n")
+        if base_also_edits_a_clean_file:
+            (repo / "clean.txt").write_text("edited cleanly by the base\n")
+        Git.run(repo, "commit", "-am", "base edit")
+        Git.run(repo, "push")
+        Git.run(repo, "switch", TestGitBranchesResolvingAConflict._SLICE_BRANCH)
+        GitBranches(process=Real.process()).catch_up(
+            worktree=str(repo), name=TestGitBranchesResolvingAConflict._SLICE_BRANCH, base=Git.BASE_BRANCH
+        )
+
+        return repo
+
+    def test_leftover_conflict_markers_are_detected_before_anything_is_fixed(self, tmp_path: Path) -> None:
+        repo = self._repo_with_a_conflict_in_progress(tmp_path)
+
+        assert GitBranches(process=Real.process()).has_leftover_conflict_markers(
+            worktree=str(repo), paths=("shared.txt",)
+        )
+
+    def test_a_file_rewritten_without_markers_reports_no_leftover_markers(self, tmp_path: Path) -> None:
+        repo = self._repo_with_a_conflict_in_progress(tmp_path)
+        (repo / "shared.txt").write_text("resolved\n")
+
+        assert not GitBranches(process=Real.process()).has_leftover_conflict_markers(
+            worktree=str(repo), paths=("shared.txt",)
+        )
+
+    def test_a_resolution_with_a_trailing_whitespace_error_and_no_markers_reports_no_leftover_markers(
+        self, tmp_path: Path
+    ) -> None:
+        repo = self._repo_with_a_conflict_in_progress(tmp_path)
+        (repo / "shared.txt").write_text("resolved \n")
+
+        assert not GitBranches(process=Real.process()).has_leftover_conflict_markers(
+            worktree=str(repo), paths=("shared.txt",)
+        )
+
+    def test_only_the_conflicted_file_appears_as_touched_before_anyone_edits_a_clean_file(self, tmp_path: Path) -> None:
+        repo = self._repo_with_a_conflict_in_progress(tmp_path)
+
+        assert GitBranches(process=Real.process()).paths_touched_since_the_merge_attempt(worktree=str(repo)) == (
+            "shared.txt",
+        )
+
+    def test_a_clean_file_edited_alongside_the_conflicted_one_shows_up_as_touched_too(self, tmp_path: Path) -> None:
+        repo = self._repo_with_a_conflict_in_progress(tmp_path)
+        (repo / "clean.txt").write_text("touched by the resolver\n")
+
+        touched = set(GitBranches(process=Real.process()).paths_touched_since_the_merge_attempt(worktree=str(repo)))
+
+        assert touched == {"shared.txt", "clean.txt"}
+
+    def test_a_file_the_base_merged_cleanly_on_its_own_does_not_appear_as_touched(self, tmp_path: Path) -> None:
+        repo = self._repo_with_a_conflict_in_progress(tmp_path, base_also_edits_a_clean_file=True)
+
+        assert GitBranches(process=Real.process()).paths_touched_since_the_merge_attempt(worktree=str(repo)) == (
+            "shared.txt",
+        )
+
+    def test_a_brand_new_untracked_file_created_by_the_resolver_also_shows_up_as_touched(self, tmp_path: Path) -> None:
+        repo = self._repo_with_a_conflict_in_progress(tmp_path)
+        (repo / "invented.txt").write_text("a file nobody declared\n")
+
+        touched = set(GitBranches(process=Real.process()).paths_touched_since_the_merge_attempt(worktree=str(repo)))
+
+        assert touched == {"shared.txt", "invented.txt"}
+
+    def test_concluding_the_merge_after_staging_the_resolved_file_commits_it(self, tmp_path: Path) -> None:
+        repo = self._repo_with_a_conflict_in_progress(tmp_path)
+        (repo / "shared.txt").write_text("resolved\n")
+        Git.run(repo, "add", "shared.txt")
+
+        GitBranches(process=Real.process()).conclude_merge(worktree=str(repo))
+
+        assert not (repo / ".git" / "MERGE_HEAD").exists()
+        assert Git.run(repo, "status", "--porcelain").strip() == ""
+        assert (repo / "shared.txt").read_text() == "resolved\n"
+
+    def test_aborting_the_merge_restores_the_conflicted_file_to_its_pre_merge_content(self, tmp_path: Path) -> None:
+        repo = self._repo_with_a_conflict_in_progress(tmp_path)
+
+        GitBranches(process=Real.process()).abort_merge(worktree=str(repo))
+
+        assert not (repo / ".git" / "MERGE_HEAD").exists()
+        assert Git.run(repo, "status", "--porcelain").strip() == ""
+        assert (repo / "shared.txt").read_text() == "from the branch\n"
