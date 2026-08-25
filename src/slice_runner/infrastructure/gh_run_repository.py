@@ -373,6 +373,7 @@ class GhRunRepository(RunRepository):
             criteria=parsed.criteria,
             signal=parsed.signal,
             excludes=parsed.excludes,
+            replaces=parsed.replaces,
             run=parsed.run,
             label=cls._label_of(payload.labels),
         )

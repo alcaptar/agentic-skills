@@ -96,16 +96,15 @@ parent and twelve subissues, a deviation without its location is one the person 
 Nothing else in the tree states it, so the anchors travel with the sentence.
 """
 
-_SUBISSUE_LINES = frozenset({"REPO", "INTENCION", "ACEPTACION", "SENAL", "EXCLUYE"})
-"""The five labelled lines a subissue body carries, written down instead of derived from the example.
+_SUBISSUE_LINES = frozenset({"REPO", "INTENCION", "ACEPTACION", "SENAL", "EXCLUYE", "SUSTITUYE"})
+"""The six labelled lines a subissue body carries, written down instead of derived from the example.
 
-Only one of them has a consumer in the program: `REPO:`, which `SubissueBody` reads, and which the test
-above measures against it. Nothing in production reads `INTENCION:`, `ACEPTACION:`, `SENAL:` or
-`EXCLUYE:` yet -- they travel as prose to the implementer and to `deploy-watch` -- so there is no second
-surface to compare the set against, and deriving it from the very example under test approves whatever
-the example happens to say: drop `SENAL:` from the three regions at once and all three sets still match.
-So the set is an external claim about the prose, with its reason next to it, like
-`_CONFIRMATION_ANCHORS`.
+`REPO:`, `SENAL:`, `EXCLUYE:` and `SUSTITUYE:` all have a consumer in the program now, read by
+`SubissueBody` and measured by the tests above and below. `INTENCION:` and `ACEPTACION:` travel as prose
+to the implementer and to `deploy-watch`, with no second surface to compare the set against, and
+deriving it from the very example under test approves whatever the example happens to say: drop
+`SENAL:` from the three regions at once and all three sets still match. So the set is an external claim
+about the prose, with its reason next to it, like `_CONFIRMATION_ANCHORS`.
 """
 
 
@@ -194,12 +193,12 @@ def test_the_subissue_slice_spec_documents_is_read_by_the_program_as_the_slice_i
     block is absent: it belongs to the machine, so a documented body that already carried one would have
     the skill writing a run that never happened.
 
-    The five labelled lines are asserted, not just `REPO:`, because all five now have a consumer: the
-    intention, the criteria, the signal and what is excluded travel into the prompts of the implementer
-    and of the judge. Parsing them is fail-soft by design -- a line the parser does not recognise is not
-    an error, it is an empty field -- so a rename on one side alone would leave both agents working with
-    an empty yardstick and nothing at all would break. `_SUBISSUE_LINES` already claims the example
-    writes the five; this is what checks the program reads the five.
+    The six labelled lines are asserted, not just `REPO:`, because all six now have a consumer: the
+    intention, the criteria, the signal, what is excluded and what is replaced travel into the prompts
+    of the implementer and of the judge. Parsing them is fail-soft by design -- a line the parser does
+    not recognise is not an error, it is an empty field -- so a rename on one side alone would leave both
+    agents working with an empty yardstick and nothing at all would break. `_SUBISSUE_LINES` already
+    claims the example writes the six; this is what checks the program reads the six.
     """
     title = _documented_subissue_title()
     label = {"id": "LA_kwDOThEBoM8AAAACu6gVcw", "name": IssueLabel.PENDING.value, "description": "", "color": "5319e7"}
@@ -225,6 +224,7 @@ def test_the_subissue_slice_spec_documents_is_read_by_the_program_as_the_slice_i
     assert children[0].criteria, "the documented subissue carries no `ACEPTACION:` the program can read"
     assert children[0].signal, "the documented subissue carries no `SENAL:` the program can read"
     assert children[0].excludes, "the documented subissue carries no `EXCLUYE:` the program can read"
+    assert children[0].replaces, "the documented subissue carries no `SUSTITUYE:` the program can read"
     assert children[0].label is IssueLabel.PENDING
     assert children[0].run is None, (
         "the documented subissue body already carries an execution state block, which is the machine's"
@@ -350,6 +350,33 @@ def test_validate_reports_the_missing_user_story_key_with_its_rule_and_location(
     assert not missing, (
         f"the `validate` mode of {_rel(_SPEC)} no longer states {missing}: a parent declaring a user "
         f"story whose subissue titles do not carry it needs to be caught and reported with its location"
+    )
+
+
+_REPLACES_VALIDATE_ANCHORS = (
+    "Ninguna slice sin `SUSTITUYE:`, y ninguna `SUSTITUYE: si` sin las dos mitades",
+    "es la misma desviacion: sin el mecanismo de vuelta atras",
+)
+"""Anchors for the checklist item that catches a missing `SUSTITUYE:` and an incomplete `SUSTITUYE: si`.
+
+Same kind of claim as `_USER_STORY_VALIDATE_ANCHORS`: the two halves of this bullet -- the line missing
+entirely, and a `si` that names only one of the two things it owes -- are both prose with no second
+surface to compare against, so this pins the sentence that reports each one instead of a vocabulary.
+"""
+
+
+def test_validate_reports_a_missing_replaces_line_and_an_incomplete_si_declaration() -> None:
+    """`validate` has to catch both a subissue without `SUSTITUYE:` and one whose `si` skips a half.
+
+    A `SUSTITUYE: si` that names what it replaces but not how to roll it back leaves the judge's rollout
+    item with nothing to demand from the diff, which is the exact failure mode the line exists to close.
+    """
+    prose = " ".join(_spec_prose(_VALIDATE).split())
+
+    missing = [anchor for anchor in _REPLACES_VALIDATE_ANCHORS if anchor not in prose]
+    assert not missing, (
+        f"the `validate` mode of {_rel(_SPEC)} no longer states {missing}: a subissue missing "
+        f"`SUSTITUYE:` or declaring `SUSTITUYE: si` without both halves needs to be caught and reported"
     )
 
 
@@ -558,12 +585,72 @@ def test_the_rubric_lists_excludes_among_the_inputs_that_can_arrive_empty() -> N
     the two need different verdicts (see the paragraph on reporting missing inputs).
     """
     rubric = _program_rubric()
-    assert "Cinco de esos campos pueden llegarte vacios" in rubric, (
-        "the program's rubric still says four fields can arrive empty, but `EXCLUYE` joined `SENAL` on "
-        "the same fail-soft path and needs to be counted among them"
+    assert "Seis de esos campos pueden llegarte vacios" in rubric, (
+        "the program's rubric still says five fields can arrive empty, but `SUSTITUYE` joined `EXCLUYE` "
+        "and `SENAL` on the same fail-soft path and needs to be counted among them"
     )
     assert "el `EXCLUYE`" in rubric, (
         "the program's rubric no longer names `EXCLUYE` among the inputs that can arrive empty"
+    )
+    assert "el `SUSTITUYE`" in rubric, (
+        "the program's rubric no longer names `SUSTITUYE` among the inputs that can arrive empty"
+    )
+
+
+def test_the_rubric_demands_the_rollback_mechanism_when_the_slice_declares_it_replaces_something() -> None:
+    """`SUSTITUYE: si` names the mechanism; item 2 has to fail a diff that does not bring it back.
+
+    Without this, a slice that declares it replaces live behaviour could still land as an in-place swap
+    with no way back except a redeploy -- exactly the anti-pattern `slicing.md` names, now with a
+    declared line the judge has no excuse to skip.
+    """
+    rubric = " ".join(_program_rubric().split())
+    assert "SUSTITUYE: si" in rubric, (
+        "the program's rubric no longer contrasts item 2 against a `SUSTITUYE: si` declaration"
+    )
+    assert "el mecanismo de vuelta atras que la linea nombra" in rubric, (
+        "the program's rubric no longer demands the diff bring back the rollback mechanism the "
+        "`SUSTITUYE: si` line names"
+    )
+    assert "Si no esta, es **FAIL (severity high)**, citando la linea de `SUSTITUYE`" in rubric, (
+        "the program's rubric demands the rollback mechanism but no longer blocks with severity high "
+        "when it is missing from the diff"
+    )
+
+
+def test_the_rubric_treats_a_declared_no_replacement_as_refutable_against_the_diff() -> None:
+    """`SUSTITUYE: no` is a claim about the diff, not an exemption from item 2.
+
+    A slice that declares it replaces nothing but whose diff changes behaviour that already existed in
+    production is exactly the silent in-place swap the line exists to catch; treating the declaration as
+    true by default would make it decoration.
+    """
+    rubric = " ".join(_program_rubric().split())
+    assert "SUSTITUYE: no" in rubric, "the program's rubric no longer contrasts item 2 against `SUSTITUYE: no`"
+    assert "el diff cambia comportamiento que ya existia" in rubric, (
+        "the program's rubric no longer fails a `SUSTITUYE: no` slice whose diff changes behaviour that "
+        "already existed in production"
+    )
+    assert (
+        "en produccion pese a la declaracion, es **FAIL (severity high)**, citando la linea y el cambio "
+        "que la contradice" in rubric
+    ), (
+        "the program's rubric treats a contradicted `SUSTITUYE: no` as refutable but no longer blocks "
+        "with severity high when the diff proves it wrong"
+    )
+
+
+def test_the_rubric_judges_rollout_as_before_when_replaces_is_empty_and_not_as_missing_data() -> None:
+    """An empty `SUSTITUYE` is every spec written before this line existed, not a missing input.
+
+    Same shape as the `EXCLUYE` paragraph right above: the item still has its general trigger to fall
+    back on, so a judge reading an empty line has no reason to return "sin veredicto por falta de dato"
+    on the item that is the whole reason this rubric calls out the pattern as a recurrent failure.
+    """
+    rubric = " ".join(_program_rubric().split())
+    assert "Si viene vacio, juzga el patron de rollout" in rubric, (
+        "the program's rubric no longer tells the judge how to treat an empty `SUSTITUYE`: derive the "
+        "rollout item from the general trigger instead of reporting it as missing data"
     )
 
 

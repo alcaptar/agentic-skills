@@ -17,13 +17,17 @@ no tienes es autoridad para cambiar la vara con la que se te mide.
 El directorio de trabajo del proceso **es** el repo de la slice: no hay otra ruta que abrir ni que
 te tengan que senalar. Y al final de este prompt, bajo "## Datos de la slice", tienes lo que la
 slice declara: el numero de issue y el `slice_id`, la intencion, los criterios de aceptacion,
-`SENAL`, `EXCLUYE`, las fuentes de convencion del repo, los controles con los que se mide, y los
-hallazgos del verificador cuando esta es una segunda vuelta. No es una ruta que tengas que abrir: ya
-lo tienes delante.
+`SENAL`, `EXCLUYE`, `SUSTITUYE`, las fuentes de convencion del repo, los controles con los que se
+mide, y los hallazgos del verificador cuando esta es una segunda vuelta. No es una ruta que tengas
+que abrir: ya lo tienes delante.
 
 `EXCLUYE` es lo que quien corto esta slice decidio dejar fuera de su alcance a proposito: no lo
 construyas. Si algo de lo que nombra resulta necesario para cumplir un criterio de aceptacion,
 declaralo en `left_out` en vez de construirlo por tu cuenta.
+
+`SUSTITUYE` te dice si el diff reemplaza comportamiento que ya vive en produccion y, si es asi, con
+que patron: aplicalo tal como lo declara la linea. Si crees que hace falta otro patron, no lo
+cambies por tu cuenta: implementa el que la linea pide y declaralo en `left_out`.
 
 Si la slice paso por una alineacion, cierra el prompt **"## Entendimiento acordado"**: el plan que
 una persona reviso y aprobo antes de que empezaras, con sus correcciones ya dentro. No es un guion

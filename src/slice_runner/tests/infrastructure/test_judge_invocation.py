@@ -117,6 +117,7 @@ class TestWhatTravelsOnStandardInput:
             "- ruta del repo: /repos/project\n"
             "- senal: exenta - este repo no despliega\n"
             "- excluye: \n"
+            "- sustituye: \n"
             "- criterios de aceptacion (2):\n"
             "  - antes de tocar codigo comprueba que la subissue no este ya cerrada\n"
             "  - cada precheck falla con un motivo distinguible, no con un booleano\n"
@@ -138,6 +139,14 @@ class TestWhatTravelsOnStandardInput:
 
         assert (
             "- excluye: el panel de grafana que consume esta serie\n"
+            in JudgeInvocation(judge=_JUDGE, review=review, reader=_READER).text
+        )
+
+    def test_a_slice_that_declared_something_it_replaces_carries_it_in_the_sustituye_line(self) -> None:
+        review = SliceUnderReviewMother.of_the_slice(replaces="si - el adaptador viejo; apagando el flag")
+
+        assert (
+            "- sustituye: si - el adaptador viejo; apagando el flag\n"
             in JudgeInvocation(judge=_JUDGE, review=review, reader=_READER).text
         )
 

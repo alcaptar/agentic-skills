@@ -176,6 +176,12 @@ Lo que si es del troceo:
 
 Ademas de validar cada slice contra los criterios, valida el **conjunto**:
 
+- **Prevuelo de sustitucion** — antes de dar cada slice por buena, pregunta si sustituye comportamiento
+  que ya vive en produccion. Si la respuesta es si, el mecanismo va por **Parallel changes** (ver
+  "Mecanismos de slicing seguro"), salvo que aplique alguna de las excepciones que ese mismo bullet
+  nombra para sustituir en el sitio. Es la pregunta que hoy se acaba haciendo cuando la slice ya esta
+  implementada y partirla en expand y contract cuesta rehacerla; hacerla aqui, con el corte todavia
+  abierto, es gratis.
 - **Test de despriorizacion** (Lawrence) — un buen set de slices tiene **al menos una que podrias
   tirar o posponer** sin perder el core. Si no puedes despriorizar ninguna, probablemente cortaste
   por trocear (horizontal disfrazado) en vez de por valor. Es el mejor detector de "slices sin

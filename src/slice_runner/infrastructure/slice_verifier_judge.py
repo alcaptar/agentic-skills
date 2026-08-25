@@ -61,15 +61,18 @@ El programa te pasa, en el prompt de invocacion:
 - **El `EXCLUYE` que declaro la slice**: lo que quien la especifico decidio dejar fuera de esta slice a
   proposito -tipicamente andamiaje de una slice futura ya prevista-. Es una **prohibicion, no un
   permiso**: convierte en cita lo que el item 5 tendria que inferir.
+- **El `SUSTITUYE` que declaro la slice**: si el diff sustituye comportamiento que ya vivia en
+  produccion y, si es asi, con que mecanismo se puede volver atras sin redeploy. Convierte en cita lo
+  que el item 2 tendria que inferir mirando si el diff toca contrato publico, cuando la linea trae dato.
 - **Las fuentes de convencion**: los punteros a la vara principal del item 1, ya filtrados por el repo
   de la slice. Son rutas y nombres, asi que tienes que abrirlos tu.
 
-**Cinco de esos campos pueden llegarte vacios: los criterios de aceptacion, el checklist, las fuentes
-de convencion, la `SENAL` y el `EXCLUYE`.** Van siempre en "Datos del run", pero como una lista con
-`(0)` entradas o como una linea sin nada detras de los dos puntos. El identificador de la slice no esta
-en esa lista: ese llega siempre. Vacio **no** significa que la slice no declarase nada, significa que
-el insumo no te ha llegado, y lo que se hace con el esta dos parrafos mas abajo. Lo que no vale es leer
-una lista vacia como "no habia criterios" y dar el item por conforme.
+**Seis de esos campos pueden llegarte vacios: los criterios de aceptacion, el checklist, las fuentes
+de convencion, la `SENAL`, el `EXCLUYE` y el `SUSTITUYE`.** Van siempre en "Datos del run", pero como
+una lista con `(0)` entradas o como una linea sin nada detras de los dos puntos. El identificador de la
+slice no esta en esa lista: ese llega siempre. Vacio **no** significa que la slice no declarase nada,
+significa que el insumo no te ha llegado, y lo que se hace con el esta dos parrafos mas abajo. Lo que no
+vale es leer una lista vacia como "no habia criterios" y dar el item por conforme.
 
 **Los directorios que puedes leer van listados en "Datos del run"**, y son los unicos: el repo de la
 slice y la biblioteca de skills de esta maquina. Si una skill que esta rubrica te manda cargar no esta
@@ -95,16 +98,29 @@ Recorrela **entera** y reporta item a item. No la amplies con criterios propios 
    **ganan las convenciones del repo**.
 
 2. **Patron de rollout/entrega correcto (no solo bien implementado).** Caso concreto del item anterior,
-   aparte por ser un fallo recurrente. No basta con que el patron elegido este bien ejecutado y sea
-   coherente consigo mismo: comprueba que **es el patron que la convencion del repo prescribe para este
-   tipo de cambio**. Disparador general: si el cambio toca la **firma/constructor/contrato publico** de
-   una accion o caso de uso, la convencion suele exigir un patron distinto (duplicar la accion /
-   expand-contract) que si solo cambia logica interna (gatear en el metodo). Deriva el criterio de las
-   fuentes de convencion que recibes (p. ej. una skill `duplicate-action`/`deprecate-*` o reglas de
-   delivery/testing), **no** de como quedo una slice anterior: el codigo ya mergeado es circunstancia,
-   no regla. Si el patron no encaja con lo que pide la convencion para este cambio, es **FAIL
-   (severity high)**, citando regla + path. Este es el check que un verificador que solo mira la
-   implementacion deja pasar.
+   aparte por ser un fallo recurrente: el check que un verificador que solo mira la implementacion deja
+   pasar. No basta con que el patron elegido este bien ejecutado y sea coherente consigo mismo: comprueba
+   que **es el patron que la convencion del repo prescribe para este tipo de cambio**. Disparador
+   general: si el cambio toca la **firma/constructor/contrato publico** de una accion o caso de uso, la
+   convencion suele exigir un patron distinto (duplicar la accion / expand-contract) que si solo cambia
+   logica interna (gatear en el metodo). Deriva el criterio de las fuentes de convencion que recibes
+   (p. ej. una skill `duplicate-action`/`deprecate-*` o reglas de delivery/testing), **no** de como quedo
+   una slice anterior: el codigo ya mergeado es circunstancia, no regla. Si el patron no encaja con lo que
+   pide la convencion para este cambio, es **FAIL (severity high)**, citando regla + path.
+
+   Ademas, contrastalo contra el `SUSTITUYE` que declaro la slice en vez de dejar que el disparador
+   general de arriba adivine solo si el diff toca contrato publico:
+
+   - **`SUSTITUYE: si - <que sustituye>; <como se vuelve atras sin redeploy>`**: el diff tiene que traer,
+     ademas del patron que exige la convencion, **el mecanismo de vuelta atras que la linea nombra**
+     (flag, dual-write, doble lectura, o lo que sea que declaro). Si no esta, es **FAIL (severity
+     high)**, citando la linea de `SUSTITUYE` y su ausencia en el diff.
+   - **`SUSTITUYE: no`**: es una afirmacion refutable contra el diff, no una exencion del check general
+     de arriba. Si el diff cambia comportamiento que ya existia en produccion pese a la declaracion, es
+     **FAIL (severity high)**, citando la linea y el cambio que la contradice.
+   - **`SUSTITUYE` vacio**: es toda spec anterior a esta linea. Si viene vacio, juzga el patron de
+     rollout como se juzgaba antes de que la linea existiera -por el disparador general de arriba- y no
+     lo reportes como falta de dato.
 
 3. **Boundaries.** Nucleo sin infra, DI correcta, DTOs (Pydantic) en boundaries.
 

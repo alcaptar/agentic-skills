@@ -55,6 +55,7 @@ class VerifySliceParamsMother:
             slice_id=SliceUnderReviewMother.SLICE_ID,
             signal=SliceUnderReviewMother.signal(),
             excludes=SliceUnderReviewMother.excludes(),
+            replaces=SliceUnderReviewMother.replaces(),
             prior_art="",
             criteria=SliceUnderReviewMother.criteria(),
             sources=SliceUnderReviewMother.sources(),
@@ -78,6 +79,7 @@ class SliceUnderReviewMother:
         text: str | None = None,
         slice_id: str | None = None,
         excludes: str | None = None,
+        replaces: str | None = None,
     ) -> SliceUnderReview:
         return SliceUnderReview(
             slice_id=slice_id or cls.SLICE_ID,
@@ -87,6 +89,7 @@ class SliceUnderReviewMother:
             diff=SliceDiffMother.of_the_slice(files=files, text=text),
             signal=cls.signal(),
             excludes=excludes if excludes is not None else cls.excludes(),
+            replaces=replaces if replaces is not None else cls.replaces(),
             prior_art="",
             criteria=cls.criteria(),
             sources=cls.sources(),
@@ -100,6 +103,10 @@ class SliceUnderReviewMother:
     @staticmethod
     def excludes() -> str:
         return SubIssueMother.pending().excludes
+
+    @staticmethod
+    def replaces() -> str:
+        return SubIssueMother.pending().replaces
 
     @staticmethod
     def criteria() -> tuple[str, ...]:

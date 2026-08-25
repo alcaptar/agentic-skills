@@ -34,6 +34,7 @@ class SubIssueMother:
             ),
             signal="exenta - este repo no despliega",
             excludes="",
+            replaces="",
             run=None,
             label=IssueLabel.PENDING,
         )
@@ -115,6 +116,10 @@ class SubIssueMother:
     @staticmethod
     def declaring_an_exclusion() -> SubIssue:
         return replace(SubIssueMother.pending(), excludes="el panel de grafana que consume esta serie")
+
+    @staticmethod
+    def declaring_a_replacement() -> SubIssue:
+        return replace(SubIssueMother.pending(), replaces="si - el adaptador viejo; apagando el flag")
 
     @staticmethod
     def carrying_a_user_story() -> SubIssue:
