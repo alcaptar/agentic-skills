@@ -1622,6 +1622,29 @@ class TestConductSliceWhenTheJudgeSpeaks:
     def _conductor(*, budgets: Budgets | None = None) -> Conductor:
         return Conductor(chosen=SelectSliceResultMother.resumed_at(RunMother.judging()), budgets=budgets)
 
+    def test_two_verifications_of_the_same_run_are_asked_for_round_one_and_round_two_in_order(self) -> None:
+        conductor = self._conductor(budgets=Budgets(verify_retries=1))
+        conductor.verify.execute.side_effect = [
+            VerificationMother.vetoing(VerdictMother.failing()),
+            VerificationMother.passing(),
+        ]
+
+        conductor.conduct()
+
+        rounds = [call.args[0].verify_round for call in conductor.verify.execute.call_args_list]
+        assert rounds == [1, 2]
+
+    def test_a_discarded_verdict_asks_the_retry_for_the_same_round_it_discarded_because_nothing_got_recorded(
+        self,
+    ) -> None:
+        conductor = self._conductor()
+        conductor.verify.execute.side_effect = [RejectionMother.incoherent_verdict(), VerificationMother.passing()]
+
+        conductor.conduct()
+
+        rounds = [call.args[0].verify_round for call in conductor.verify.execute.call_args_list]
+        assert rounds == [1, 1]
+
     def test_a_veto_sends_the_findings_it_raised_to_the_implementation_that_has_to_fix_them(self) -> None:
         raised = FindingMother.without_line()
         conductor = self._conductor(budgets=Budgets(verify_retries=1))
@@ -1784,6 +1807,7 @@ class TestConductSliceWhenTheCostOfTheSliceRunsOut:
         assert recorded.discarded_call is not None
         assert recorded.discarded_call.step is Step.VERIFY
         assert recorded.discarded_call.cause is DiscardCause.INCOHERENT_VERDICT
+        assert recorded.run.verify_rounds_logged == 0
 
     def test_discard_after_discard_of_the_implementation_closes_the_run_and_writes_its_label(self) -> None:
         conductor = Conductor(
@@ -1815,6 +1839,16 @@ class TestConductSliceWhenTheCostOfTheSliceRunsOut:
 
         assert conductor.verify.execute.call_count == 2
         assert result.state is RunState.MERGED
+
+    def test_a_veto_that_exhausts_the_budget_still_counts_the_round_whose_row_was_already_written(self) -> None:
+        conductor = self._judging(budgets=Budgets(slice_cost_usd=0.01))
+        conductor.verify.execute.return_value = VerificationMother.vetoing(VerdictMother.failing())
+
+        result = conductor.conduct()
+
+        assert result.state is RunState.ABORTED_BUDGET
+        recorded = conductor.metrics.record.call_args.args[0]
+        assert recorded.run.verify_rounds_logged == 1
 
     def test_a_call_the_harness_never_measured_closes_the_run_instead_of_spinning_for_a_cost_nobody_can_add_up(
         self,

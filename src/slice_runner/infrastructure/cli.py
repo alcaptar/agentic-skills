@@ -665,6 +665,7 @@ class Cli:
             worktree=worktree,
             base=base,
             slice_id=slice_id,
+            verify_round=1,
             prior_art="",
             signal="",
             excludes="",

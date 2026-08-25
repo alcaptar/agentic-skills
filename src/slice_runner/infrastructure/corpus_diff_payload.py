@@ -11,6 +11,8 @@ if TYPE_CHECKING:
 
 class CorpusDiffPayload(ContractModel):
     slice_id: str
+    verify_round: int
+    session: str
     diff: str
     repo: str | None = None
     issue: int | None = None
@@ -25,6 +27,8 @@ class CorpusDiffPayload(ContractModel):
         return cls.model_validate(
             {
                 "slice_id": entry.slice_id,
+                "verify_round": entry.verify_round,
+                "session": entry.session,
                 "diff": entry.diff.text,
                 "repo": entry.repo,
                 "issue": entry.issue,

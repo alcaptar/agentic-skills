@@ -28,6 +28,7 @@ class Run:
     understand_discards: int = 0
     implement_discards: int = 0
     control_rounds_logged: int = 0
+    verify_rounds_logged: int = 0
     last_reviewed_id: int = 0
     requested_changes: tuple[RequestedChange, ...] = ()
     spend: HarnessSpend = field(default_factory=HarnessSpend.nothing)
@@ -35,6 +36,10 @@ class Run:
     @property
     def correcting_review(self) -> bool:
         return bool(self.requested_changes)
+
+    @property
+    def verify_round_in_progress(self) -> int:
+        return self.verify_rounds_logged + 1
 
     @property
     def implement_retries(self) -> int:

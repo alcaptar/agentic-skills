@@ -20,9 +20,15 @@ if TYPE_CHECKING:
 class StateMachine:
     budgets: Budgets
 
-    def after(self, run: Run, outcome: Outcome, *, call_died: bool = False) -> Transition:
+    def after(
+        self, run: Run, outcome: Outcome, *, call_died: bool = False, verdict_recorded: bool = False
+    ) -> Transition:
         if outcome is Outcome.OVER_BUDGET:
-            return self._closed(self._marking_a_dead_call(run, call_died), RunState.ABORTED_BUDGET)
+            closing = self._marking_a_dead_call(run, call_died)
+            if verdict_recorded:
+                closing = self._logged_a_verify_round(closing)
+
+            return self._closed(closing, RunState.ABORTED_BUDGET)
         if outcome is Outcome.CONFLICTING:
             return self._after_a_catch_up_conflict(run)
 
@@ -221,17 +227,21 @@ class StateMachine:
     def _after_the_judge(self, run: Run, outcome: Outcome, *, call_died: bool) -> Transition:
         match outcome:
             case Outcome.DONE:
-                return self._moving_to(run, Step.OPEN_PULL_REQUEST)
+                return self._moving_to(self._logged_a_verify_round(run), Step.OPEN_PULL_REQUEST)
             case Outcome.DISCARDED:
                 return self._moving_to(replace(run, verify_discards=run.verify_discards + 1), Step.VERIFY)
             case Outcome.CORRECTIONS_ORDERED:
-                return self._correcting_what_does_not_block(run)
+                return self._correcting_what_does_not_block(self._logged_a_verify_round(run))
             case Outcome.FAILED:
-                return self._retrying_a_veto(run)
+                return self._retrying_a_veto(self._logged_a_verify_round(run))
             case Outcome.CALL_NOT_MEASURED:
                 return self._closed(self._marking_a_dead_call(run, call_died), RunState.ABORTED_UNMEASURED_CALL)
             case _:
                 self._impossible(run, outcome)
+
+    @staticmethod
+    def _logged_a_verify_round(run: Run) -> Run:
+        return replace(run, verify_rounds_logged=run.verify_rounds_logged + 1)
 
     def _correcting_what_does_not_block(self, run: Run) -> Transition:
         if run.correction_retries < self.budgets.correction_retries:

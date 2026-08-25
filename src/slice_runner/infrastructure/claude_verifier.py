@@ -37,5 +37,6 @@ class ClaudeVerifier(Verifier):
             verdict=verdict,
             spend=envelope.to_domain(),
             diff_stats=review.diff.stats,
+            session=envelope.session_id,
             denied_reads=tuple(denial.denied_action for denial in envelope.permission_denials),
         )

@@ -32,6 +32,7 @@ class RunPayload(ContractModel):
     understand_discards: Spent = 0
     implement_discards: Spent = 0
     control_rounds_logged: Spent = 0
+    verify_rounds_logged: Spent = 0
     last_reviewed_id: Spent = 0
     requested_changes: list[RequestedChangePayload] = Field(default_factory=list)
     spend: SpendPayload | None = None
@@ -60,6 +61,7 @@ class RunPayload(ContractModel):
             understand_discards=run.understand_discards,
             implement_discards=run.implement_discards,
             control_rounds_logged=run.control_rounds_logged,
+            verify_rounds_logged=run.verify_rounds_logged,
             last_reviewed_id=run.last_reviewed_id,
             requested_changes=[RequestedChangePayload.from_domain(change) for change in run.requested_changes],
             spend=SpendPayload.from_domain(run.spend) if run.spend.measured else None,
@@ -83,6 +85,7 @@ class RunPayload(ContractModel):
             understand_discards=self.understand_discards,
             implement_discards=self.implement_discards,
             control_rounds_logged=self.control_rounds_logged,
+            verify_rounds_logged=self.verify_rounds_logged,
             last_reviewed_id=self.last_reviewed_id,
             requested_changes=tuple(payload.to_domain() for payload in self.requested_changes),
             spend=self.spend.to_domain() if self.spend is not None else HarnessSpend.nothing(),

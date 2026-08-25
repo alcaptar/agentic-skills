@@ -64,6 +64,8 @@ class TestTheRecordThatIsWritten(WithTheCorpusOutOfTheRealHome):
                 "repo": CorpusEntryMother.REPO,
                 "issue": CorpusEntryMother.ISSUE,
                 "slice_id": CorpusEntryMother.SLICE_ID,
+                "verify_round": CorpusEntryMother.VERIFY_ROUND,
+                "session": CorpusEntryMother.SESSION,
                 "verdict": {"ruling": "PASS", "findings": []},
                 "severity_counts": {"high": 0, "medium": 0, "low": 0},
                 "ts": _STAMP.isoformat(),
@@ -81,6 +83,8 @@ class TestTheRecordThatIsWritten(WithTheCorpusOutOfTheRealHome):
                 "diff": SliceDiffMother.TEXT,
                 "repo": CorpusEntryMother.REPO,
                 "issue": CorpusEntryMother.ISSUE,
+                "verify_round": CorpusEntryMother.VERIFY_ROUND,
+                "session": CorpusEntryMother.SESSION,
                 "ts": _STAMP.isoformat(),
             }
         ]
