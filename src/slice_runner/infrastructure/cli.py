@@ -68,6 +68,7 @@ from slice_runner.domain.halt import Halt
 from slice_runner.domain.role_models import RoleModels
 from slice_runner.domain.state_machine import StateMachine
 from slice_runner.domain.step import Step
+from slice_runner.infrastructure.branches_without_catch_up import BranchesWithoutCatchUp
 from slice_runner.infrastructure.claude_implementer import ClaudeImplementer
 from slice_runner.infrastructure.claude_understanding import ClaudeUnderstanding
 from slice_runner.infrastructure.claude_verifier import ClaudeVerifier
@@ -600,7 +601,7 @@ class Cli:
                     understanding=ClaudeUnderstanding(calls=calls, reader=reader),
                     repository=repository,
                 ),
-                catch_up=CatchUpBranch(branches=branches),
+                catch_up=CatchUpBranch(branches=BranchesWithoutCatchUp(branches=branches)),
             ),
             ports=ConductSlicePorts(
                 repository=repository,
