@@ -26,6 +26,7 @@ from slice_runner.infrastructure.judge_invocation import JudgeInvocation
 from slice_runner.infrastructure.local_call_spend_log import LocalCallSpendLog
 from slice_runner.infrastructure.local_call_trace import LocalCallTrace
 from slice_runner.infrastructure.local_metrics_log import LocalMetricsLog
+from slice_runner.infrastructure.metrics_entry_payload import MetricsEntryPayload
 from slice_runner.infrastructure.reset_comment import ResetComment
 from slice_runner.infrastructure.system_clock import SystemClock
 from slice_runner.infrastructure.understanding_invocation import UnderstandingInvocation
@@ -35,6 +36,7 @@ from slice_runner.tests.doubles import Answer, AnsweringByArgv, RealExceptTheJud
 from slice_runner.tests.git_repo import Git
 from slice_runner.tests.mothers.closed_slice_mother import ClosedSliceMother
 from slice_runner.tests.mothers.conversation_transcript_mother import ConversationTranscriptMother
+from slice_runner.tests.mothers.discarded_call_mother import DiscardedCallMother
 from slice_runner.tests.mothers.gh_conversation_mother import GhConversationMother
 from slice_runner.tests.mothers.gh_response_mother import GhResponseMother
 from slice_runner.tests.mothers.harness_call_spend_mother import HarnessCallSpendMother
@@ -48,6 +50,7 @@ from slice_runner.tests.run_invocation import RunInvocation
 
 if TYPE_CHECKING:
     from slice_runner.domain.call_spend_log import HarnessCallSpend
+    from slice_runner.domain.closed_slice import ClosedSlice
     from slice_runner.domain.run import Run
 
 _SLICE = "slice-01"
@@ -706,6 +709,38 @@ class TestTheCommandThatEmitsClosedSliceMetrics:
     def _closed() -> None:
         LocalMetricsLog(clock=SystemClock()).record(ClosedSliceMother.merged())
 
+    @staticmethod
+    def _record(closed: ClosedSlice) -> None:
+        LocalMetricsLog(clock=SystemClock()).record(closed)
+
+    @staticmethod
+    def _row_for(closed: ClosedSlice, *, issue: int) -> dict[str, object]:
+        row = MetricsEntryPayload.from_domain(
+            closed,
+            ts=datetime(2026, 8, 10, tzinfo=UTC).isoformat(),
+        ).to_contract()
+        row["issue"] = issue
+        row["slice_id"] = f"slice-{issue}"
+        return row
+
+    @staticmethod
+    def _append_row(row: dict[str, object]) -> None:
+        ledger = ClaudeConfig.root().joinpath(*LocalMetricsLog.LEDGER)
+        ledger.parent.mkdir(parents=True, exist_ok=True)
+        with ledger.open("a", encoding="utf-8") as fh:
+            fh.write(f"{json.dumps(row)}\n")
+
+    @staticmethod
+    def _emitted(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> list[str]:
+        code = Cli.metrics(
+            repo=None,
+            since=datetime(2000, 1, 1, tzinfo=UTC),
+            until=datetime(2100, 1, 1, tzinfo=UTC),
+            out=tmp_path / "view.html",
+        )
+        assert code == ExitCode.OK
+        return capsys.readouterr().out.strip().splitlines()
+
     def test_a_closed_slice_is_printed_as_one_json_line_and_the_view_is_written_to_the_path_given(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
@@ -720,7 +755,7 @@ class TestTheCommandThatEmitsClosedSliceMetrics:
         )
 
         assert code == ExitCode.OK
-        printed = json.loads(capsys.readouterr().out)
+        printed = json.loads(capsys.readouterr().out.strip().splitlines()[0])
         assert (printed["repo"], printed["slice_id"], printed["state"]) == (
             ClosedSliceMother.REPO,
             ClosedSliceMother.SLICE_ID,
@@ -729,7 +764,7 @@ class TestTheCommandThatEmitsClosedSliceMetrics:
         assert out.exists()
         assert "slice-runner metrics" in out.read_text(encoding="utf-8")
 
-    def test_a_window_with_nothing_closed_writes_the_view_but_prints_nothing(
+    def test_a_window_with_nothing_closed_still_prints_the_summary_line_with_zero_samples(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
         out = tmp_path / "view.html"
@@ -742,8 +777,136 @@ class TestTheCommandThatEmitsClosedSliceMetrics:
         )
 
         assert code == ExitCode.OK
-        assert capsys.readouterr().out == ""
+        summary = json.loads(capsys.readouterr().out.strip())
+        assert summary["samples"] == 0
+        assert summary["rates"]["first_attempt"] == {"samples": 0}
         assert out.exists()
+
+    def test_the_verifier_fail_rate_counts_only_slices_the_judge_vetoed(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        self._record(ClosedSliceMother.closed_as_for_issue(RunState.BLOCKED_VERIFY, issue=101))
+        self._record(ClosedSliceMother.closed_as_for_issue(RunState.MERGED, issue=102))
+
+        summary = json.loads(self._emitted(tmp_path, capsys)[-1])
+
+        assert summary["rates"]["verifier_fail"] == {"value": 50.0, "samples": 2}
+
+    def test_the_blocked_by_controls_rate_does_not_count_a_verifier_veto(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        self._record(ClosedSliceMother.closed_as_for_issue(RunState.BLOCKED_CONTROLS, issue=201))
+        self._record(ClosedSliceMother.closed_as_for_issue(RunState.BLOCKED_VERIFY, issue=202))
+        self._record(ClosedSliceMother.closed_as_for_issue(RunState.MERGED, issue=203))
+
+        summary = json.loads(self._emitted(tmp_path, capsys)[-1])
+
+        assert summary["rates"]["blocked_by_controls"] == {"value": 33.3, "samples": 3}
+
+    def test_the_first_attempt_rate_excludes_a_slice_that_needed_a_retry_of_controls_or_ci(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        self._record(ClosedSliceMother.merged_after_retrying_controls_and_ci(control_retries=1, ci_retries=0))
+        self._record(ClosedSliceMother.closed_as_for_issue(RunState.MERGED, issue=ClosedSliceMother.ISSUE + 1))
+
+        summary = json.loads(self._emitted(tmp_path, capsys)[-1])
+
+        assert summary["rates"]["first_attempt"] == {"value": 50.0, "samples": 2}
+
+    def test_the_implement_retries_rate_is_the_mean_of_every_way_back_to_that_step(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        self._record(ClosedSliceMother.merged_after_retrying_controls_and_ci(control_retries=1, ci_retries=3))
+        self._record(ClosedSliceMother.closed_as_for_issue(RunState.MERGED, issue=ClosedSliceMother.ISSUE + 1))
+
+        summary = json.loads(self._emitted(tmp_path, capsys)[-1])
+
+        assert summary["rates"]["implement_retries"] == {"value": 2.0, "samples": 2}
+
+    def test_the_ci_red_rate_counts_only_slices_closed_with_a_red_check(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        self._record(ClosedSliceMother.closed_as_for_issue(RunState.BLOCKED_CI_RED, issue=301))
+        self._record(ClosedSliceMother.closed_as_for_issue(RunState.MERGED, issue=302))
+
+        summary = json.loads(self._emitted(tmp_path, capsys)[-1])
+
+        assert summary["rates"]["ci_red"] == {"value": 50.0, "samples": 2}
+
+    def test_a_record_declaring_two_models_is_counted_in_both_of_their_groups(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        self._record(
+            ClosedSliceMother.merged_measuring(
+                HarnessSpendMother.of_the_implementer_call(), HarnessSpendMother.of_the_judge_call()
+            )
+        )
+
+        summary = json.loads(self._emitted(tmp_path, capsys)[-1])
+
+        labels = {group["label"] for group in summary["by_model"]}
+        assert labels == {"claude-sonnet-5", "claude-haiku-4-5-20251001"}
+        assert all(group["rates"]["first_attempt"]["samples"] == 1 for group in summary["by_model"])
+
+    def test_a_row_declaring_neither_model_nor_variant_is_grouped_as_unknown_instead_of_disappearing(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        row = self._row_for(ClosedSliceMother.merged_measuring_nothing(), issue=401)
+        del row["variante"]
+        self._append_row(row)
+
+        summary = json.loads(self._emitted(tmp_path, capsys)[-1])
+
+        assert {group["label"] for group in summary["by_model"]} == {"unknown"}
+        assert {group["label"] for group in summary["by_variant"]} == {"unknown"}
+
+    def test_the_spend_averages_only_count_the_records_that_measured_something(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        self._record(ClosedSliceMother.merged_measuring(HarnessSpendMother.of_the_implementer_call()))
+        self._append_row(self._row_for(ClosedSliceMother.merged_measuring_nothing(), issue=501))
+
+        summary = json.loads(self._emitted(tmp_path, capsys)[-1])
+
+        assert summary["spend"]["cost_usd"] == {
+            "value": round(HarnessSpendMother.of_the_implementer_call().cost_usd, 2),
+            "samples": 1,
+        }
+
+    def test_the_discards_by_cause_only_count_rows_that_declare_a_cause(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        self._record(ClosedSliceMother.merged_discarding_because_of(DiscardedCallMother.of_a_failed_call()))
+        self._append_row(
+            self._row_for(
+                ClosedSliceMother.merged_discarding_because_of(DiscardedCallMother.of_an_incoherent_verdict()),
+                issue=601,
+            )
+        )
+        self._append_row(self._row_for(ClosedSliceMother.merged(), issue=602))
+
+        summary = json.loads(self._emitted(tmp_path, capsys)[-1])
+
+        tallies = {tally["cause"]: tally["count"] for tally in summary["discards_by_cause"]}
+        assert tallies == {"failed-call": 1, "incoherent-verdict": 1}
+        assert all(tally["samples"] == 2 for tally in summary["discards_by_cause"])
+
+    def test_the_summary_line_names_its_top_level_keys_literally(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        self._closed()
+
+        summary = json.loads(self._emitted(tmp_path, capsys)[-1])
+
+        assert set(summary) == {"samples", "rates", "spend", "discards_by_cause", "by_model", "by_variant"}
+        assert set(summary["rates"]) == {
+            "verifier_fail",
+            "blocked_by_controls",
+            "first_attempt",
+            "implement_retries",
+            "ci_red",
+        }
+        assert set(summary["spend"]) == {"cost_usd", "turns", "duration_ms", "cache_read_tokens"}
 
     def test_a_corrupt_line_in_the_call_trace_exits_with_a_usage_error_instead_of_a_stack_dump(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
@@ -801,7 +964,7 @@ class TestTheCommandThatEmitsClosedSliceMetrics:
         )
 
         assert code == ExitCode.OK
-        printed = json.loads(capsys.readouterr().out)
+        printed = json.loads(capsys.readouterr().out.strip().splitlines()[0])
         assert printed["repo"] == ClosedSliceMother.REPO
         assert out.exists()
 
@@ -813,7 +976,8 @@ class TestTheCommandThatEmitsClosedSliceMetrics:
         code = Cli.main(["metrics", "--repo", ClosedSliceMother.REPO, "--out", str(tmp_path / "view.html")])
 
         assert code == ExitCode.OK
-        assert json.loads(capsys.readouterr().out)["repo"] == ClosedSliceMother.REPO
+        printed = json.loads(capsys.readouterr().out.strip().splitlines()[0])
+        assert printed["repo"] == ClosedSliceMother.REPO
 
     def test_the_out_path_has_no_default_because_a_guessed_one_hides_the_view(
         self, capsys: pytest.CaptureFixture[str]

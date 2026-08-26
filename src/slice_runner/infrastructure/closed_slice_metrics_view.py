@@ -3,10 +3,14 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from datetime import datetime
-
+    from slice_runner.application.queries.list_closed_slices import ListClosedSlicesParams
+    from slice_runner.domain.closed_slice_metrics import ClosedSliceMetrics
     from slice_runner.domain.closed_slice_record import ClosedSliceRecord
+    from slice_runner.domain.grouped_metrics import GroupedMetrics
+    from slice_runner.domain.measurement import Measurement
     from slice_runner.domain.role_spend import RoleSpend
+    from slice_runner.domain.slice_rates import SliceRates
+    from slice_runner.domain.spend_averages import SpendAverages
 
 
 class ClosedSliceMetricsView:
@@ -17,16 +21,16 @@ class ClosedSliceMetricsView:
     def rendered(
         cls,
         *,
-        repo: str | None,
-        since: datetime,
-        until: datetime,
+        scope: ListClosedSlicesParams,
         records: tuple[ClosedSliceRecord, ...],
         role_spend: tuple[RoleSpend, ...],
+        metrics: ClosedSliceMetrics,
     ) -> str:
         return (
             '<!doctype html><html><head><meta charset="utf-8"><title>slice-runner metrics</title></head><body>'
-            f"{cls._header(repo=repo, since=since, until=until, records=records)}"
+            f"{cls._header(scope=scope, records=records)}"
             f"{cls._gaps()}"
+            f"{cls._rates_section(metrics)}"
             f"{cls._duplicates(records)}"
             f"{cls._cost_against_size(records)}"
             f"{cls._spend_by_role(role_spend)}"
@@ -35,11 +39,12 @@ class ClosedSliceMetricsView:
         )
 
     @staticmethod
-    def _header(*, repo: str | None, since: datetime, until: datetime, records: tuple[ClosedSliceRecord, ...]) -> str:
-        scope = repo or "every repo"
+    def _header(*, scope: ListClosedSlicesParams, records: tuple[ClosedSliceRecord, ...]) -> str:
+        named_repo = scope.repo or "every repo"
         return (
             f"<section><h1>slice-runner metrics</h1>"
-            f"<p>{scope}, from {since.isoformat()} to {until.isoformat()}: {len(records)} closed slice(s)</p>"
+            f"<p>{named_repo}, from {scope.since.isoformat()} to {scope.until.isoformat()}: "
+            f"{len(records)} closed slice(s)</p>"
             "</section>"
         )
 
@@ -142,3 +147,67 @@ class ClosedSliceMetricsView:
     @staticmethod
     def _scaled(value: float, widest: float, span: int) -> float:
         return round((value / widest) * span, 2)
+
+    @classmethod
+    def _rates_section(cls, metrics: ClosedSliceMetrics) -> str:
+        return (
+            "<section><h2>rates</h2>"
+            f"<ul>{cls._rate_rows(metrics.rates)}</ul>"
+            f"<ul>{cls._spend_rows(metrics.spend)}</ul>"
+            f"<ul>{cls._discard_rows(metrics)}</ul>"
+            f"{cls._grouped_section('by model', 'model', metrics.by_model)}"
+            f"{cls._grouped_section('by variant', 'variant', metrics.by_variant)}"
+            "</section>"
+        )
+
+    @classmethod
+    def _rate_rows(cls, rates: SliceRates) -> str:
+        named = (
+            ("verifier_fail", rates.verifier_fail),
+            ("blocked_by_controls", rates.blocked_by_controls),
+            ("first_attempt", rates.first_attempt),
+            ("implement_retries", rates.implement_retries),
+            ("ci_red", rates.ci_red),
+        )
+        return "".join(
+            f'<li data-rate="{name}" data-samples="{measurement.samples}">{name}: {cls._measurement(measurement)}</li>'
+            for name, measurement in named
+        )
+
+    @classmethod
+    def _spend_rows(cls, spend: SpendAverages) -> str:
+        named = (
+            ("cost_usd", spend.cost_usd),
+            ("turns", spend.turns),
+            ("duration_ms", spend.duration_ms),
+            ("cache_read_tokens", spend.cache_read_tokens),
+        )
+        return "".join(
+            f'<li data-spend="{name}" data-samples="{measurement.samples}">{name}: {cls._measurement(measurement)}</li>'
+            for name, measurement in named
+        )
+
+    @staticmethod
+    def _discard_rows(metrics: ClosedSliceMetrics) -> str:
+        return "".join(
+            f'<li data-cause="{tally.label}" data-count="{tally.count}" data-samples="{tally.samples}">'
+            f"{tally.label}: {tally.count}</li>"
+            for tally in metrics.discards.tallies
+        )
+
+    @classmethod
+    def _grouped_section(cls, title: str, group_kind: str, groups: tuple[GroupedMetrics, ...]) -> str:
+        rows = "".join(
+            f'<li data-group="{group_kind}" data-label="{group.label}">'
+            f"{group.label}: first attempt {cls._measurement(group.rates.first_attempt)}, "
+            f"cost {cls._measurement(group.spend.cost_usd)}</li>"
+            for group in groups
+        )
+        return f"<h3>{title}</h3><ul>{rows}</ul>"
+
+    @staticmethod
+    def _measurement(measurement: Measurement) -> str:
+        if measurement.value is None:
+            return f"no data ({measurement.samples} samples)"
+
+        return f"{measurement.value} ({measurement.samples} samples)"

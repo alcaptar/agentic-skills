@@ -10,11 +10,10 @@ Each test here extracts a vocabulary from one surface and compares it against th
 than asserting that a given sentence is present. Rewording that keeps both sides in step passes;
 changing one side alone fails. That is the only drift these tests exist to catch.
 
-Three other kinds of contract used to live in this file and do not any more:
+Two other kinds of contract used to live in this file and do not any more:
 `test_domain_vocabulary_contracts.py` holds the two that compare two vocabularies of the program's
-own domain with no document in between, `test_metrics_bridge_contract.py` holds the two that are
-the last bridge with `metrics.py`, and `test_pipeline_invariants.py` holds the six that scan the
-tree instead of comparing two copies of the same prose.
+own domain with no document in between, and `test_pipeline_invariants.py` holds the six that scan
+the tree instead of comparing two copies of the same prose.
 """
 
 from __future__ import annotations

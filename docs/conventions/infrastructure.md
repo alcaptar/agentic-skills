@@ -177,14 +177,7 @@ importar**: un smoke que solo importe el módulo lo da por bueno. Lo evita
   un payload de frontera que traduce el dominio a las claves del log. **No delega esa escritura en un
   script fuera de su paquete**: sería una dependencia fisica con código que no es referencia.
 
-  Consecuencia aceptada: el vocabulario del cierre existe dos veces -en ingles dentro del programa y con
-  las palabras del log en la frontera-, con un `match` exhaustivo entre las dos, y la duplicación la
-  **mide** un contrato que compara los conjuntos de ambos lados y pasa la fila por el lector real del
-  script. Una clave renombrada solo se veria al cerrar una slice, que es justo el momento en que un fallo
-  pierde la fila.
-
-  **Solo lo que ese script lee por clave literal se queda en castellano; el resto habla el idioma del
-  código.** El lado que **relee** el log tolera las dos formas con `validation_alias`, para que una fila
+  El lado que **relee** el log tolera las dos formas con `validation_alias`, para que una fila
   ya escrita con la forma vieja se siga agregando.
 
   **Desviación declarada: la clave legacy de un campo que crecio a value object con varios campos

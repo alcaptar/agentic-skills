@@ -37,6 +37,7 @@ from slice_runner.application.queries.show_feature_status import ShowFeatureStat
 from slice_runner.application.queries.spend_by_role import SpendByRole, SpendByRoleParams
 from slice_runner.application.queries.spend_of_step import SpendOfStep, SpendOfStepParams
 from slice_runner.domain.budgets import Budgets
+from slice_runner.domain.closed_slice_metrics import ClosedSliceMetrics
 from slice_runner.domain.exceptions import (
     BranchMismatchError,
     ConversationNotFoundError,
@@ -70,6 +71,7 @@ from slice_runner.domain.step import Step
 from slice_runner.infrastructure.claude_implementer import ClaudeImplementer
 from slice_runner.infrastructure.claude_understanding import ClaudeUnderstanding
 from slice_runner.infrastructure.claude_verifier import ClaudeVerifier
+from slice_runner.infrastructure.closed_slice_metrics_payload import ClosedSliceMetricsPayload
 from slice_runner.infrastructure.closed_slice_metrics_view import ClosedSliceMetricsView
 from slice_runner.infrastructure.closed_slice_record_payload import ClosedSliceRecordPayload
 from slice_runner.infrastructure.conducted_slice_payload import ConductedSlicePayload
@@ -356,10 +358,9 @@ class Cli:
     @classmethod
     def metrics(cls, *, repo: str | None, since: datetime, until: datetime, out: Path) -> int:
         clock = SystemClock()
+        scope = ListClosedSlicesParams(repo=repo, since=since, until=until)
         try:
-            records = ListClosedSlices(metrics_log=LocalMetricsLog(clock=clock)).execute(
-                ListClosedSlicesParams(repo=repo, since=since, until=until)
-            )
+            records = ListClosedSlices(metrics_log=LocalMetricsLog(clock=clock)).execute(scope)
             role_spend = SpendByRole(
                 trace=LocalCallTrace(clock=clock), spend_log=LocalCallSpendLog(clock=clock)
             ).execute(SpendByRoleParams(records=records))
@@ -369,9 +370,10 @@ class Cli:
         for record in records:
             print(json.dumps(ClosedSliceRecordPayload.from_domain(record).to_contract(), ensure_ascii=False))
 
-        view = ClosedSliceMetricsView.rendered(
-            repo=repo, since=since, until=until, records=records, role_spend=role_spend
-        )
+        metrics = ClosedSliceMetrics.of(records)
+        print(json.dumps(ClosedSliceMetricsPayload.from_domain(metrics).to_contract(), ensure_ascii=False))
+
+        view = ClosedSliceMetricsView.rendered(scope=scope, records=records, role_spend=role_spend, metrics=metrics)
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_text(view, encoding="utf-8")
 
