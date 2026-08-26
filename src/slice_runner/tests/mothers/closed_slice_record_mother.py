@@ -78,6 +78,10 @@ class ClosedSliceRecordMother:
         return cls._record(RunState.BLOCKED_CI_INDETERMINATE, ci_indeterminate_cause=cause)
 
     @classmethod
+    def merged_declaring_no_model_and_no_variant(cls) -> ClosedSliceRecord:
+        return cls._record(RunState.MERGED, variant=None, models=())
+
+    @classmethod
     def _record(
         cls,
         state: RunState,
@@ -94,6 +98,8 @@ class ClosedSliceRecordMother:
         ci_indeterminate_cause: CiIndeterminateCause | None = None,
         understand_discards: int = 0,
         implement_discards: int = 0,
+        variant: str | None = "programa",
+        models: tuple[str, ...] = ("claude-sonnet-5",),
     ) -> ClosedSliceRecord:
         return ClosedSliceRecord(
             ts=ts or cls.TS,
@@ -115,8 +121,8 @@ class ClosedSliceRecordMother:
             discarded_call=discarded_call,
             ci_indeterminate_cause=ci_indeterminate_cause,
             spend=spend,
-            variant="programa",
-            models=("claude-sonnet-5",),
+            variant=variant,
+            models=models,
             debt=0,
             diff=diff,
             budgets={},

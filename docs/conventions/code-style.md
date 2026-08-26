@@ -41,7 +41,8 @@ ve.
 - Siempre al inicio del fichero, **nunca** dentro de funciones, metodos o clases.
 - Agrupados: (1) stdlib, (2) terceros, (3) módulos del proyecto. Separados por línea en blanco. Lo
   ordena `I` (isort) en `ruff`, y `known-first-party` declara los scripts que se importan por nombre
-  (`metrics`, `discover_conventions`...) para que no se mezclen con las dependencias de terceros.
+  (`discover_conventions`, `discover_controles`...) para que no se mezclen con las dependencias de
+  terceros.
 - Los imports usados solo en anotaciones van en un bloque `if TYPE_CHECKING:` al final del bloque,
   con el mismo orden interno. El bloque solo se introduce si hay imports que sean solo-tipos.
 

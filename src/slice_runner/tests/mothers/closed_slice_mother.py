@@ -87,8 +87,19 @@ class ClosedSliceMother:
         return cls._closed(RunState.MERGED, diff_stats=stats)
 
     @classmethod
+    def merged_measuring_the_diff_and_spend(cls, stats: DiffStats, *spends: HarnessSpend) -> ClosedSlice:
+        return cls._closed(RunState.MERGED, diff_stats=stats, spends=spends)
+
+    @classmethod
     def merged_with_config(cls, *, budgets: Budgets | None = None, models: RoleModels | None = None) -> ClosedSlice:
         return cls._closed(RunState.MERGED, budgets=budgets, models=models)
+
+    @classmethod
+    def merged_after_retrying_controls_and_ci(cls, *, control_retries: int, ci_retries: int) -> ClosedSlice:
+        return cls._closed(
+            RunState.MERGED,
+            run=RunMother.merged_after_retrying_controls_and_ci(control_retries=control_retries, ci_retries=ci_retries),
+        )
 
     @classmethod
     def aborted_over_budget(cls, budgets: Budgets, *, spend: HarnessSpend | None = None) -> ClosedSlice:

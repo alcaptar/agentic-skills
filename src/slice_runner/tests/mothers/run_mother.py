@@ -139,6 +139,10 @@ class RunMother:
         return Run(step=Step.VERIFY, spend=spend)
 
     @staticmethod
+    def merged_after_retrying_controls_and_ci(*, control_retries: int, ci_retries: int) -> Run:
+        return Run(step=Step.AWAIT_MERGE, control_retries=control_retries, ci_retries=ci_retries)
+
+    @staticmethod
     def that_went_back_for_every_reason() -> Run:
         return Run(
             step=Step.AWAIT_MERGE,

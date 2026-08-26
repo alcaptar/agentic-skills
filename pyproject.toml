@@ -65,7 +65,6 @@ known-first-party = [
     "deploy_core",
     "discover_controles",
     "discover_conventions",
-    "metrics",
     "slice_runner",
 ]
 

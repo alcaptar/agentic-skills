@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from slice_runner.domain.run_state import RunState
+
 if TYPE_CHECKING:
     from datetime import datetime
 
@@ -10,7 +12,6 @@ if TYPE_CHECKING:
     from slice_runner.domain.diff_stats import DiffStats
     from slice_runner.domain.discarded_call import DiscardedCall
     from slice_runner.domain.recorded_spend import RecordedSpend
-    from slice_runner.domain.run_state import RunState
     from slice_runner.domain.severity_count import SeverityCount
 
 
@@ -41,3 +42,12 @@ class ClosedSliceRecord:
     diff: DiffStats | None
     budgets: dict[str, object]
     models_by_role: dict[str, object]
+
+    @property
+    def first_attempt(self) -> bool:
+        return (
+            self.state == RunState.MERGED
+            and self.implement_retries == 0
+            and self.control_retries == 0
+            and self.ci_retries == 0
+        )

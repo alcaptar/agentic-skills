@@ -18,6 +18,7 @@ from slice_runner.domain.run_state import RunState
 from slice_runner.domain.severity import Severity
 from slice_runner.infrastructure.claude_config import ClaudeConfig
 from slice_runner.infrastructure.local_metrics_log import LocalMetricsLog
+from slice_runner.infrastructure.metrics_entry_payload import MetricsEntryPayload
 from slice_runner.tests.mothers.closed_slice_mother import ClosedSliceMother
 from slice_runner.tests.mothers.discarded_call_mother import DiscardedCallMother
 from slice_runner.tests.mothers.harness_spend_mother import HarnessSpendMother
@@ -460,6 +461,29 @@ class TestReadingBackTheClosedSlices(WithTheLedgerOutOfTheRealHome):
         )
 
         assert [record.repo for record in found] == [ClosedSliceMother.REPO]
+
+    def test_a_slice_measuring_spend_models_variant_and_diff_is_read_back_with_all_of_it_and_not_only_its_state(
+        self, tmp_path: Path
+    ) -> None:
+        stats = DiffStats(files_changed=4, lines_added=51, lines_deleted=9)
+        implementer_spend = HarnessSpendMother.of_the_implementer_call()
+        judge_spend = HarnessSpendMother.of_the_judge_call()
+        closed = ClosedSliceMother.merged_measuring_the_diff_and_spend(stats, implementer_spend, judge_spend)
+        log = LocalMetricsLog(clock=self.frozen_at())
+
+        log.record(closed)
+
+        found = log.closed_slices(
+            repo=None, since=datetime(2000, 1, 1, tzinfo=UTC), until=datetime(2100, 1, 1, tzinfo=UTC)
+        )
+
+        assert len(found) == 1
+        record = found[0]
+        assert record.variant == MetricsEntryPayload.VARIANT
+        assert set(record.models) == {*implementer_spend.models, *judge_spend.models}
+        assert record.spend is not None
+        assert record.spend.cost_usd == closed.spend.cost_usd
+        assert record.diff == stats
 
     def test_a_line_that_is_not_json_is_refused_instead_of_being_skipped_in_silence(self, tmp_path: Path) -> None:
         log = LocalMetricsLog(clock=self.frozen_at())

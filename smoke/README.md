@@ -172,7 +172,7 @@ ejecutarse -intencion, criterios, controles, fuentes- y guarda el proposito de l
 Dos reglas mas para los cuatro. **Una provocacion por run**: si siembras dos a la vez no sabras cual de los
 dos frenos actuo, y el segundo no llega a ejercitarse porque el primero para el loop. Y **mira el issue,
 no la conversacion**: el rastro que cuenta es el que sobrevive al cierre de la sesion -el motivo escrito
-en la linea de la slice y el registro de `metrics.py`-, asi que si el orquestador lo narro en prosa pero
+en la linea de la slice y el registro durable que escribe el programa el mismo (`metrics.jsonl`)-, asi que si el orquestador lo narro en prosa pero
 no lo escribio, el camino no esta validado.
 
 El quinto motivo, `sin-subagentes`, no se provoca desde la fixture: depende de que el entorno vete la
