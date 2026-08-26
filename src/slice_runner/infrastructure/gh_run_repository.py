@@ -13,6 +13,7 @@ from slice_runner.domain.run_repository import RunRepository
 from slice_runner.domain.slice_identity import SliceIdentity
 from slice_runner.domain.sub_issue import SubIssue
 from slice_runner.infrastructure.automation_mark import AutomationMark
+from slice_runner.infrastructure.catch_up_conflict_comment import CatchUpConflictComment
 from slice_runner.infrastructure.gh_body_payload import GhBodyPayload
 from slice_runner.infrastructure.gh_comments_payload import GhCommentPayload, GhCommentsPayload
 from slice_runner.infrastructure.gh_parent_view_payload import GhParentViewPayload
@@ -269,6 +270,13 @@ class GhRunRepository(RunRepository):
         self._run(
             ["gh", "issue", "comment", str(issue), "--repo", repo, "--body-file", "-"],
             stdin=VetoFindingsComment.rendered(findings),
+            safe_to_repeat=False,
+        )
+
+    def publish_catch_up_conflict(self, *, repo: str, issue: int, paths: tuple[str, ...]) -> None:
+        self._run(
+            ["gh", "issue", "comment", str(issue), "--repo", repo, "--body-file", "-"],
+            stdin=CatchUpConflictComment.rendered(paths),
             safe_to_repeat=False,
         )
 

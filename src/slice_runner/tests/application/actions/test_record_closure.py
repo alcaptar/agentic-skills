@@ -201,6 +201,30 @@ class TestWhichSpendsCount:
         assert written.spends == (free_call,)
 
 
+class TestPublishingTheCatchUpConflict:
+    def test_a_closure_by_conflict_with_paths_publishes_them(self) -> None:
+        closer = _Closer()
+        paths = ("shared.txt", "src/module.py")
+
+        closer.close(state=RunState.BLOCKED_CI_CONFLICT, conflicting_paths=paths)
+
+        closer.repository.publish_catch_up_conflict.assert_called_once_with(repo=_REPO, issue=_ISSUE, paths=paths)
+
+    def test_a_closure_by_conflict_with_no_paths_publishes_nothing(self) -> None:
+        closer = _Closer()
+
+        closer.close(state=RunState.BLOCKED_CI_CONFLICT, conflicting_paths=())
+
+        closer.repository.publish_catch_up_conflict.assert_not_called()
+
+    def test_a_closure_in_another_state_never_publishes_even_if_conflicting_paths_arrived(self) -> None:
+        closer = _Closer()
+
+        closer.close(state=RunState.MERGED, conflicting_paths=("shared.txt",))
+
+        closer.repository.publish_catch_up_conflict.assert_not_called()
+
+
 class TestPublishingTheVetoFindings:
     def test_a_closure_by_veto_with_findings_of_the_last_round_publishes_them(self) -> None:
         closer = _Closer()

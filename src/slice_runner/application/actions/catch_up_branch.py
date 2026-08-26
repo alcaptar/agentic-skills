@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from slice_runner.domain.outcome import Outcome
@@ -19,6 +19,7 @@ class CatchUpBranchParams:
 @dataclass(frozen=True, kw_only=True, slots=True)
 class CatchUpBranchResult:
     outcome: Outcome
+    conflicting_paths: tuple[str, ...] = field(default=())
 
 
 class CatchUpBranch:
@@ -26,6 +27,8 @@ class CatchUpBranch:
         self._branches = branches
 
     def execute(self, params: CatchUpBranchParams) -> CatchUpBranchResult:
-        outcome = self._branches.catch_up(worktree=params.worktree, name=params.branch, base=params.base)
+        caught_up = self._branches.catch_up(worktree=params.worktree, name=params.branch, base=params.base)
 
-        return CatchUpBranchResult(outcome=Outcome.of_the_catch_up(outcome))
+        return CatchUpBranchResult(
+            outcome=Outcome.of_the_catch_up(caught_up.outcome), conflicting_paths=caught_up.conflicting_paths
+        )

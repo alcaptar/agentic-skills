@@ -240,7 +240,8 @@ class TestGitBranchesCatchingUpTheBranch:
             worktree=str(repo), name=self._SLICE_BRANCH, base=Git.BASE_BRANCH
         )
 
-        assert outcome is BranchCatchUpOutcome.CAUGHT_UP
+        assert outcome.outcome is BranchCatchUpOutcome.CAUGHT_UP
+        assert outcome.conflicting_paths == ()
         assert Git.run(repo, "rev-parse", "HEAD").strip() == Git.run(elsewhere, "rev-parse", self._SLICE_BRANCH).strip()
 
     def test_a_base_that_gained_commits_since_the_branch_was_born_is_merged_into_the_branch(
@@ -256,7 +257,7 @@ class TestGitBranchesCatchingUpTheBranch:
             worktree=str(repo), name=self._SLICE_BRANCH, base=Git.BASE_BRANCH
         )
 
-        assert outcome is BranchCatchUpOutcome.CAUGHT_UP
+        assert outcome.outcome is BranchCatchUpOutcome.CAUGHT_UP
         Git.run(repo, "merge-base", "--is-ancestor", base_gain, "HEAD")
 
     def test_a_commit_the_branch_already_had_keeps_its_own_identifier_after_catching_up(self, tmp_path: Path) -> None:
@@ -273,7 +274,7 @@ class TestGitBranchesCatchingUpTheBranch:
             worktree=str(repo), name=self._SLICE_BRANCH, base=Git.BASE_BRANCH
         )
 
-        assert outcome is BranchCatchUpOutcome.CAUGHT_UP
+        assert outcome.outcome is BranchCatchUpOutcome.CAUGHT_UP
         assert Git.run(repo, "rev-parse", local_commit).strip() == local_commit
         Git.run(repo, "merge-base", "--is-ancestor", local_commit, "HEAD")
         Git.run(repo, "merge-base", "--is-ancestor", remote_commit, "HEAD")
@@ -310,9 +311,20 @@ class TestGitBranchesCatchingUpTheBranch:
             worktree=str(repo), name=self._SLICE_BRANCH, base=Git.BASE_BRANCH
         )
 
-        assert outcome is BranchCatchUpOutcome.CONFLICTING
+        assert outcome.outcome is BranchCatchUpOutcome.CONFLICTING
         assert Git.run(repo, "status", "--porcelain").strip() == ""
         assert not (repo / ".git" / "MERGE_HEAD").exists()
+
+    def test_files_left_conflicting_report_the_paths_git_marked_as_unmerged(self, tmp_path: Path) -> None:
+        repo, _ = self._repo_with_a_conflicting_edit_pushed_from_elsewhere(tmp_path)
+        (repo / "shared.txt").write_text("from the worktree\n")
+        Git.run(repo, "commit", "-am", "edited locally")
+
+        outcome = GitBranches(process=Real.process()).catch_up(
+            worktree=str(repo), name=self._SLICE_BRANCH, base=Git.BASE_BRANCH
+        )
+
+        assert outcome.conflicting_paths == ("shared.txt",)
 
     def test_a_branch_that_is_already_up_to_date_with_both_remotes_gains_no_merge_commit_and_makes_no_merge_call(
         self, tmp_path: Path
@@ -323,7 +335,7 @@ class TestGitBranchesCatchingUpTheBranch:
 
         outcome = GitBranches(process=spy).catch_up(worktree=str(repo), name=self._SLICE_BRANCH, base=Git.BASE_BRANCH)
 
-        assert outcome is BranchCatchUpOutcome.CAUGHT_UP
+        assert outcome.outcome is BranchCatchUpOutcome.CAUGHT_UP
         assert Git.run(repo, "rev-parse", "HEAD").strip() == before
         assert not spy.invoked("merge")
 
@@ -350,7 +362,7 @@ class TestGitBranchesCatchingUpTheBranch:
             worktree=str(repo), name=self._SLICE_BRANCH, base=Git.BASE_BRANCH
         )
 
-        assert outcome is BranchCatchUpOutcome.CAUGHT_UP
+        assert outcome.outcome is BranchCatchUpOutcome.CAUGHT_UP
         Git.run(repo, "merge-base", "--is-ancestor", base_gain, "HEAD")
 
     def test_a_branch_never_pushed_to_its_own_remote_and_already_at_the_base_makes_no_merge_call(
@@ -362,7 +374,7 @@ class TestGitBranchesCatchingUpTheBranch:
 
         outcome = GitBranches(process=spy).catch_up(worktree=str(repo), name=self._SLICE_BRANCH, base=Git.BASE_BRANCH)
 
-        assert outcome is BranchCatchUpOutcome.CAUGHT_UP
+        assert outcome.outcome is BranchCatchUpOutcome.CAUGHT_UP
         assert Git.run(repo, "rev-parse", "HEAD").strip() == before
         assert not spy.invoked("merge")
 
@@ -397,7 +409,7 @@ class TestGitBranchesCatchingUpTheBranch:
             worktree=str(repo), name=self._SLICE_BRANCH, base=Git.BASE_BRANCH
         )
 
-        assert outcome is BranchCatchUpOutcome.CAUGHT_UP
+        assert outcome.outcome is BranchCatchUpOutcome.CAUGHT_UP
 
     def test_a_machine_wide_commit_gpgsign_setting_with_no_usable_key_does_not_report_a_conflict(
         self, tmp_path: Path
@@ -410,4 +422,4 @@ class TestGitBranchesCatchingUpTheBranch:
             worktree=str(repo), name=self._SLICE_BRANCH, base=Git.BASE_BRANCH
         )
 
-        assert outcome is BranchCatchUpOutcome.CAUGHT_UP
+        assert outcome.outcome is BranchCatchUpOutcome.CAUGHT_UP

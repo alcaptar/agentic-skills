@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from slice_runner.domain.branch_catch_up import BranchCatchUp
 from slice_runner.domain.branch_catch_up_outcome import BranchCatchUpOutcome
 from slice_runner.domain.branches import Branches
 from slice_runner.domain.exceptions import UnresolvableBaseError
@@ -41,13 +42,15 @@ class GitBranches(Branches):
 
         return int(output.stdout.strip())
 
-    def catch_up(self, *, worktree: str, name: str, base: str) -> BranchCatchUpOutcome:
+    def catch_up(self, *, worktree: str, name: str, base: str) -> BranchCatchUp:
         self._fetch(worktree)
         for ref in (f"origin/{name}", f"origin/{base}"):
-            if self._behind(worktree, ref) and not self._merged(worktree, ref):
-                return BranchCatchUpOutcome.CONFLICTING
+            if self._behind(worktree, ref):
+                merging = self._merging(worktree, ref)
+                if merging.outcome is BranchCatchUpOutcome.CONFLICTING:
+                    return merging
 
-        return BranchCatchUpOutcome.CAUGHT_UP
+        return BranchCatchUp.caught_up()
 
     def _behind(self, worktree: str, ref: str) -> bool:
         if not self._ref_exists(worktree, ref):
@@ -70,17 +73,26 @@ class GitBranches(Branches):
 
         raise GitCommandFailedError.from_command(argv, output)
 
-    def _merged(self, worktree: str, ref: str) -> bool:
+    def _merging(self, worktree: str, ref: str) -> BranchCatchUp:
         argv = ["git", "-C", worktree, "-c", "merge.ff=true", "-c", "commit.gpgsign=false", "merge", "--no-edit", ref]
         output = self._process.run(argv, stdin="")
         if output.code == 0:
-            return True
+            return BranchCatchUp.caught_up()
         if not self._merge_in_progress(worktree):
             raise GitCommandFailedError.from_command(argv, output)
 
+        conflicting = BranchCatchUp.conflicting(paths=self._conflicting_paths(worktree))
         self._abort_merge(worktree)
 
-        return False
+        return conflicting
+
+    def _conflicting_paths(self, worktree: str) -> tuple[str, ...]:
+        argv = ["git", "-C", worktree, "diff", "--name-only", "--diff-filter=U"]
+        output = self._process.run(argv, stdin="")
+        if output.code != 0:
+            raise GitCommandFailedError.from_command(argv, output)
+
+        return tuple(output.stdout.splitlines())
 
     def _merge_in_progress(self, worktree: str) -> bool:
         argv = ["git", "-C", worktree, "rev-parse", "--verify", "--quiet", "MERGE_HEAD"]

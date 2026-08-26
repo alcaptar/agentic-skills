@@ -29,6 +29,7 @@ from slice_runner.domain.slice_identity import SliceIdentity
 from slice_runner.domain.source import Source, SourceKind
 from slice_runner.domain.step import Step
 from slice_runner.infrastructure.automation_mark import AutomationMark
+from slice_runner.infrastructure.catch_up_conflict_comment import CatchUpConflictComment
 from slice_runner.infrastructure.gh_run_repository import GhCommandFailedError, GhRunRepository
 from slice_runner.infrastructure.malformed_response_comment import MalformedResponseComment
 from slice_runner.infrastructure.process import ProcessOutput
@@ -1595,6 +1596,43 @@ class TestPublishingTheVetoFindings:
         with pytest.raises(GhCommandFailedError, match="HTTP 422"):
             GhRunRepository(call=GhCallDoubles.wired(process)).publish_findings(
                 repo=_REPO, issue=45, findings=(FindingMother.without_line(),)
+            )
+
+
+class TestPublishingTheCatchUpConflict:
+    def test_the_call_is_a_comment_carrying_the_conflicting_paths_as_stdin(self) -> None:
+        process = ScriptedProcess(ProcessOutput(code=0, stdout="", stderr=""))
+        paths = ("shared.txt", "src/module.py")
+
+        GhRunRepository(call=GhCallDoubles.wired(process)).publish_catch_up_conflict(repo=_REPO, issue=45, paths=paths)
+
+        assert process.calls[0].argv == ["gh", "issue", "comment", "45", "--repo", _REPO, "--body-file", "-"]
+        assert process.calls[0].stdin == CatchUpConflictComment.rendered(paths)
+
+    def test_the_comment_names_every_conflicting_path(self) -> None:
+        process = ScriptedProcess(ProcessOutput(code=0, stdout="", stderr=""))
+        paths = ("shared.txt", "src/module.py")
+
+        GhRunRepository(call=GhCallDoubles.wired(process)).publish_catch_up_conflict(repo=_REPO, issue=45, paths=paths)
+
+        assert "shared.txt" in process.calls[0].stdin
+        assert "src/module.py" in process.calls[0].stdin
+
+    def test_the_comment_carries_the_visible_automation_mark(self) -> None:
+        process = ScriptedProcess(ProcessOutput(code=0, stdout="", stderr=""))
+
+        GhRunRepository(call=GhCallDoubles.wired(process)).publish_catch_up_conflict(
+            repo=_REPO, issue=45, paths=("shared.txt",)
+        )
+
+        assert AutomationMark.TEXT in process.calls[0].stdin
+
+    def test_a_non_zero_exit_raises_with_the_stderr_it_carried(self) -> None:
+        process = ScriptedProcess(ProcessOutput(code=1, stdout="", stderr="HTTP 422: Unprocessable Entity"))
+
+        with pytest.raises(GhCommandFailedError, match="HTTP 422"):
+            GhRunRepository(call=GhCallDoubles.wired(process)).publish_catch_up_conflict(
+                repo=_REPO, issue=45, paths=("shared.txt",)
             )
 
 

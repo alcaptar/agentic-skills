@@ -115,6 +115,7 @@ class ConductSliceProgress:
     discarded_call: DiscardedCall | None = None
     ci_indeterminate_cause: CiIndeterminateCause | None = None
     diff_stats: DiffStats | None = None
+    conflicting_paths: tuple[str, ...] = field(default=())
 
     @property
     def spend(self) -> HarnessSpend:
@@ -279,7 +280,9 @@ class ConductSlice:
             )
         )
         if caught_up.outcome is Outcome.CONFLICTING:
-            return self._blocked_by_a_catch_up_conflict(progress)
+            return self._blocked_by_a_catch_up_conflict(
+                replace(progress, conflicting_paths=caught_up.conflicting_paths)
+            )
 
         return self._conducting(progress)
 
@@ -470,8 +473,12 @@ class ConductSlice:
                 worktree=progress.params.worktree, branch=progress.subissue.branch, base=progress.params.base
             )
         )
+        if caught_up.outcome is not Outcome.CONFLICTING:
+            return SteppedSlice(progress=progress, outcome=caught_up.outcome)
 
-        return SteppedSlice(progress=progress, outcome=caught_up.outcome)
+        return SteppedSlice(
+            progress=replace(progress, conflicting_paths=caught_up.conflicting_paths), outcome=caught_up.outcome
+        )
 
     def _implementing(self, progress: ConductSliceProgress) -> SteppedSlice:
         if self._budgets.exhausted(progress.spend):
@@ -741,6 +748,7 @@ class ConductSlice:
                 ci_indeterminate_cause=progress.ci_indeterminate_cause,
                 debt=progress.debt,
                 diff_stats=progress.diff_stats,
+                conflicting_paths=progress.conflicting_paths,
             )
         )
         if state is RunState.MERGED:
