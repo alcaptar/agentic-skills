@@ -654,6 +654,56 @@ def test_the_rubric_judges_rollout_as_before_when_replaces_is_empty_and_not_as_m
     )
 
 
+def test_the_rubric_reads_an_empty_list_of_prior_findings_as_the_first_round_not_missing_data() -> None:
+    """An empty list here means round one, the opposite of what emptiness means for the six fields above.
+
+    Without this the judge has no way to tell "nothing survived from last time" from "this input never
+    reached me", and the paragraph right above already claims the second reading for six other fields:
+    the two would collide on the same rubric if this one were not called out apart from them.
+    """
+    rubric = " ".join(_program_rubric().split())
+    assert "La lista de hallazgos de la ronda anterior vacia no es lo mismo que un insumo que no llego." in rubric, (
+        "the program's rubric no longer distinguishes an empty prior-findings list from a missing input"
+    )
+    assert "esta es la primera verificacion de la slice" in rubric, (
+        "the program's rubric no longer tells the judge that an empty prior-findings list means this "
+        "is the first verification of the slice"
+    )
+
+
+def test_the_rubric_demands_a_verdict_on_every_prior_finding_with_a_reason_to_retire_one() -> None:
+    """Every previous finding needs a fate, and retiring one without saying why is the silent U-turn
+
+    this whole slice exists to close: 12 of 32 followable highs evaporated across a round with nobody
+    saying why, and each one cost a round of implementation plus one of verification.
+    """
+    rubric = " ".join(_program_rubric().split())
+    assert "pronunciate sobre **cada uno**" in rubric, (
+        "the program's rubric no longer demands a verdict on every finding of the previous round"
+    )
+    for fate in ("**corregido**", "**sigue**", "**retirado**"):
+        assert fate in rubric, f"the program's rubric no longer offers {fate} as a fate for a prior finding"
+    assert "el `detail` del veredicto tiene que decir por que" in rubric, (
+        "the program's rubric no longer demands a written reason in `detail` when a prior finding is retired"
+    )
+
+
+def test_the_rubric_treats_prior_findings_as_precedent_and_not_as_a_yardstick_to_drag_along() -> None:
+    """Keeping a finding alive means re-citing it against the current diff, not repeating last round's
+
+    citation as if nothing had moved: what changed between rounds may have shifted the line or fixed
+    the file halfway, and dragging the old citation forward would report something no longer true.
+    """
+    rubric = " ".join(_program_rubric().split())
+    assert "Son antecedente, no vara." in rubric, (
+        "the program's rubric no longer declares prior findings a precedent instead of a yardstick"
+    )
+    assert "vuelve a citarlo contra el diff de esta ronda" in rubric, (
+        "the program's rubric no longer requires re-citing a finding that still stands against the "
+        "current diff instead of dragging the old citation forward"
+    )
+
+
 _SKILL_ORDER_RE = re.compile(r"(?:corre|carga)[^.]*?`([a-z][a-z0-9-]{4,})`", re.IGNORECASE)
 
 

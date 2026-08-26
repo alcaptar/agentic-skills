@@ -1634,6 +1634,21 @@ class TestConductSliceWhenTheJudgeSpeaks:
         rounds = [call.args[0].verify_round for call in conductor.verify.execute.call_args_list]
         assert rounds == [1, 2]
 
+    def test_the_first_verification_carries_no_prior_findings_and_the_second_carries_what_the_first_raised(
+        self,
+    ) -> None:
+        raised = FindingMother.without_line()
+        conductor = self._conductor(budgets=Budgets(verify_retries=1))
+        conductor.verify.execute.side_effect = [
+            VerificationMother.vetoing(VerdictMother.failing(raised)),
+            VerificationMother.passing(),
+        ]
+
+        conductor.conduct()
+
+        carried = [call.args[0].prior_findings for call in conductor.verify.execute.call_args_list]
+        assert carried == [(), (raised,)]
+
     def test_a_discarded_verdict_asks_the_retry_for_the_same_round_it_discarded_because_nothing_got_recorded(
         self,
     ) -> None:

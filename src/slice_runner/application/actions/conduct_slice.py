@@ -559,6 +559,7 @@ class ConductSlice:
                     criteria=progress.subissue.criteria,
                     sources=progress.parent.sources,
                     checklist=progress.chosen.checklist,
+                    prior_findings=progress.findings_of_the_last_round,
                 )
             )
         except MeasuredCallError as rejection:

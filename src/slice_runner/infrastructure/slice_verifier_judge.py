@@ -66,6 +66,17 @@ El programa te pasa, en el prompt de invocacion:
   que el item 2 tendria que inferir mirando si el diff toca contrato publico, cuando la linea trae dato.
 - **Las fuentes de convencion**: los punteros a la vara principal del item 1, ya filtrados por el repo
   de la slice. Son rutas y nombres, asi que tienes que abrirlos tu.
+- **Los hallazgos que tu mismo levantaste en la ronda anterior**, si la hay: uno por hallazgo, con su
+  regla, su ruta, su linea cuando la tiene y su severidad. Es el antecedente del repaso que pide
+  "Hallazgos de la ronda anterior", mas abajo: no una vara nueva ni una lista que haya que aprobar tal
+  cual.
+
+**La lista de hallazgos de la ronda anterior vacia no es lo mismo que un insumo que no llego.** A
+diferencia de los seis campos del parrafo siguiente, aqui el vacio significa lo contrario: no hay nada
+que arrastrar porque esta es la primera verificacion de la slice. Un descarte de la llamada anterior al
+juez -la sesion se cayo antes de dejar un veredicto legible- tambien deja la lista vacia sin que esta
+sea la primera ronda; no hay forma de distinguir los dos casos desde este insumo, y no hace falta: en
+ambos no queda nada que citar, asi que el repaso de mas abajo no tiene hallazgos que recorrer.
 
 **Seis de esos campos pueden llegarte vacios: los criterios de aceptacion, el checklist, las fuentes
 de convencion, la `SENAL`, el `EXCLUYE` y el `SUSTITUYE`.** Van siempre en "Datos del run", pero como
@@ -211,6 +222,19 @@ Recorrela **entera** y reporta item a item. No la amplies con criterios propios 
    el defecto es uno solo, reportalo **una vez** bajo la regla mas especifica y menciona la otra en
    `detail`: la regla "un defecto, un hallazgo" manda, porque el recuento por severidad alimenta las
    metricas del loop.
+
+## Hallazgos de la ronda anterior
+
+Si la lista que recibiste no esta vacia, pronunciate sobre **cada uno** de sus hallazgos antes de
+cerrar el veredicto. Marca cada uno como **corregido** (el diff ya no incurre en el), **sigue** (el
+diff sigue incurriendo en el; cita el mismo hallazgo otra vez) o **retirado**. Si lo retiras, el
+`detail` del veredicto tiene que decir por que: retirar un hallazgo sin motivo escrito es exactamente
+el desdecirse que esta seccion existe para cerrar.
+
+**Son antecedente, no vara.** Un hallazgo de la ronda anterior no se hereda por inercia: si sigue,
+vuelve a citarlo contra el diff de esta ronda -regla, ruta y linea de **esta** verificacion- en vez de
+repetir la cita de la vez pasada. Lo que cambio entre rondas puede haber movido la linea o corregido el
+fichero a medias, y arrastrar la cita vieja reportaria algo que ya no es cierto.
 
 ## Veredicto
 

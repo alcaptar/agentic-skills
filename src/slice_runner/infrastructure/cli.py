@@ -673,6 +673,7 @@ class Cli:
             criteria=(),
             sources=(),
             checklist=(),
+            prior_findings=(),
         )
 
     @staticmethod

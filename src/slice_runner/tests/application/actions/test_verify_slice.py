@@ -13,7 +13,7 @@ from slice_runner.domain.diff_reader import DiffReader
 from slice_runner.domain.exceptions import DiffNotReadableError
 from slice_runner.domain.skill_library import SkillLibrary
 from slice_runner.domain.verifier import Verifier
-from slice_runner.tests.mothers.verdict_mother import VerdictMother
+from slice_runner.tests.mothers.verdict_mother import FindingMother, VerdictMother
 from slice_runner.tests.mothers.verification_mother import (
     JudgeMother,
     SliceDiffMother,
@@ -156,6 +156,16 @@ class TestVerifySlice:
         action.execute(params)
 
         assert self._reviewed(verifier).replaces == params.replaces
+
+    def test_the_findings_the_previous_round_raised_travel_to_the_judge_too(
+        self, action: VerifySlice, verifier: Mock
+    ) -> None:
+        findings = (FindingMother.with_line(), FindingMother.without_line())
+        params = replace(_PARAMS, prior_findings=findings)
+
+        action.execute(params)
+
+        assert self._reviewed(verifier).prior_findings == findings
 
     def test_the_verification_comes_back_without_being_reinterpreted(self, action: VerifySlice, verifier: Mock) -> None:
         expected = VerificationMother.failing_after_a_denied_read()

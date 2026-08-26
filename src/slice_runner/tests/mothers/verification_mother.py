@@ -61,6 +61,7 @@ class VerifySliceParamsMother:
             criteria=SliceUnderReviewMother.criteria(),
             sources=SliceUnderReviewMother.sources(),
             checklist=SliceUnderReviewMother.checklist(),
+            prior_findings=(),
         )
 
 
@@ -81,6 +82,7 @@ class SliceUnderReviewMother:
         slice_id: str | None = None,
         excludes: str | None = None,
         replaces: str | None = None,
+        prior_findings: tuple[Finding, ...] | None = None,
     ) -> SliceUnderReview:
         return SliceUnderReview(
             slice_id=slice_id or cls.SLICE_ID,
@@ -95,6 +97,7 @@ class SliceUnderReviewMother:
             criteria=cls.criteria(),
             sources=cls.sources(),
             checklist=cls.checklist(),
+            prior_findings=prior_findings if prior_findings is not None else (),
         )
 
     @staticmethod
