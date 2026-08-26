@@ -388,6 +388,12 @@ SUSTITUYE: no
      gobierna los criterios de cada slice -nombra el cambio de produccion que lo haria fallar-, y
      **declara que esa vara se aplico**.
 
+   **Y que quepa de un vistazo**: una linea por pieza y una por criterio, **no un informe**. Es la
+   misma vara con la que el paso 1b acota su busqueda, y aqui pesa mas, porque lo que no se puede
+   escanear se aprueba a ojo -y un gate que se aprueba a ojo no caza nada, que es justo lo que este
+   paso existe para evitar-. Si no cabe, la senal no es escribir mas pequeno: es que el corte abarca
+   demasiado y hay que volver al diseno.
+
    Estos criterios de feature **no se escriben en el issue padre**: seria un tercer sitio diciendo lo
    mismo que ya dicen las subissues, y derivaria en cuanto una slice cambie -el mismo motivo por el
    que **"el padre no repite las slices"**-. Viven en esta conversacion, y de aqui los reparte el paso

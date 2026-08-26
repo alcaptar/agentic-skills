@@ -81,13 +81,18 @@ is the whole safety of the step. Nothing else in the tree states it, so this is 
 prose rather than a comparison; reword the sentence and the anchors move with it.
 """
 
-_UNDERSTANDING_ANCHORS = ("el fichero existe no cumple", "declara que esa vara se aplico")
+_UNDERSTANDING_ANCHORS = ("el fichero existe no cumple", "declara que esa vara se aplico", "no un informe")
 """Same kind of claim as `_CONFIRMATION_ANCHORS`, for the pause that publishes what got understood.
 
-Neither half has a second surface to compare against: step `1b` confirms pointers -- a path, an
+None of the three has a second surface to compare against: step `1b` confirms pointers -- a path, an
 issue number -- never whether the behaviour behind them was understood, and the feature's
 acceptance criteria are confirmed here and never written to the parent issue. So this is a claim
-about the prose, and rewording either half moves its anchor with it.
+about the prose, and rewording any of them moves its anchor with it.
+
+The third one is what keeps the other two from decaying into a gate nobody reads. `check-alignment`
+asks for the understanding to be succinct so it stays scannable, and this repo has already paid for
+what happens otherwise: an understanding whose whole body said `test` went through the downstream
+gate. An unscannable pause gets waved through, and a pause that gets waved through catches nothing.
 """
 
 _EXISTING_PIECE_ANCHORS = ("que hace hoy esa pieza", "una ruta que existe deja de cumplir")
@@ -471,7 +476,8 @@ def test_the_step_between_the_repo_search_and_the_slicing_publishes_what_it_unde
     missing = [anchor for anchor in _UNDERSTANDING_ANCHORS if anchor not in step]
     assert not missing, (
         f"step `1c.` of {_rel(_SPEC)} no longer states {missing}: nothing else in the tree confirms that "
-        f"the code was understood or proposes the feature's acceptance criteria before cutting"
+        f"the code was understood, proposes the feature's acceptance criteria before cutting, or keeps "
+        f"the pause short enough to be read instead of waved through"
     )
 
 
