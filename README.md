@@ -213,11 +213,11 @@ uv run slice-runner verify --repo . --base master --slice slice-01
 Juzga **lo que hay staged** contra el branch-point de la base -que es lo que sera el commit-, emite el
 veredicto como JSON por salida estandar y **cualquier motivo por el que no haya veredicto** por salida de
 error, nunca mezclados. Ademas escribe: cada verificacion anexa una linea a
-`~/.claude/slice-runner/log/verdicts.jsonl` -o al equivalente bajo `CLAUDE_CONFIG_DIR`- con el repo y el
+`~/.claude/slice-runner/runs/verdicts.jsonl` -o al equivalente bajo `CLAUDE_CONFIG_DIR`- con el repo y el
 issue del run, el identificador de la slice, la ronda de verificacion -empieza en 1 y sube una por cada
 veredicto de la misma slice-, el identificador de sesion de la
 llamada que lo produjo, el veredicto entero, su conteo por severidad y cuando se escribio; el diff juzgado
-se anexa aparte, a `~/.claude/slice-runner/log/diffs.jsonl`, unido a su fila por el mismo identificador de
+se anexa aparte, a `~/.claude/slice-runner/runs/diffs.jsonl`, unido a su fila por el mismo identificador de
 slice y la misma marca de tiempo -es lo que pesa, y separarlo es lo que deja contar hallazgos sin
 cargarlo-. Los dos son un registro append-only, y viven **fuera del repo** para que ningun `git add` de la
 slice se los lleve a la pull request. Un `verify` suelto -invocado sin que `run` este conduciendo ningun
@@ -233,14 +233,16 @@ una fila nunca se puede confundir con la de otro run. Es lo que permite abrir la
 concreta -viven en `~/.claude/projects/`, una por sesion- sin adivinar por marcas de tiempo entre decenas de
 ficheros. Tambien append-only y tambien fuera del repo, y por el mismo motivo.
 
-Los cuatro almacenes durables del programa -`metrics.jsonl`, `calls.jsonl`, `spend.jsonl` y el par
-`verdicts.jsonl`/`diffs.jsonl`- comparten el mismo patron de nombre,
-`~/.claude/slice-runner/<directorio>/<concepto>.jsonl`. Estan migrando uno a uno a un directorio comun,
-`runs/`, que es donde ya vive `calls.jsonl`; los otros tres siguen bajo `log/` hasta que les llegue su turno.
-Cada uno declara su esquema con un
-`json_schema()` propio (`HarnessCallPayload`, `CallSpendPayload`, `MetricsEntryPayload`,
-`CorpusVerdictPayload`, `CorpusDiffPayload`), asi que que campos trae una fila se puede preguntar a un
-programa en vez de abrir el fichero.
+Los siete almacenes durables del programa -`metrics.jsonl`, `calls.jsonl`, `spend.jsonl`, el par
+`verdicts.jsonl`/`diffs.jsonl` y el par `tool-uses.jsonl`/`unrecorded-tool-uses.jsonl`- comparten el mismo
+patron de nombre, `~/.claude/slice-runner/runs/<concepto>.jsonl`, y lo comparten porque pasan por la misma
+pieza (`DurableLedger`): un adaptador solo le da su nombre y el payload de su fila, y es la pieza la que
+compone la ruta, crea el directorio si falta y anexa. Los ficheros de las dos generaciones anteriores
+-bajo `log/` y `trace/`- no se leen ni se escriben mas: quedan como archivo, sin moverse ni borrarse. Los
+siete declaran su esquema con un `json_schema()` propio (`HarnessCallPayload`, `CallSpendPayload`,
+`MetricsEntryPayload`, `CorpusVerdictPayload`, `CorpusDiffPayload`, `CallToolUsePayload`,
+`UnrecordedCallToolUsePayload`), asi que que campos trae esa fila se puede preguntar a un programa en vez de
+abrir el fichero.
 
 `read` es quien la abre:
 

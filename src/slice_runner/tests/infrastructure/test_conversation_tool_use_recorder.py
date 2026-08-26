@@ -40,7 +40,7 @@ _SLICE_ID = "slice-05"
 
 
 class WrittenToolUses:
-    LEDGER: tuple[str, ...] = ("slice-runner", "trace", "tool-uses.jsonl")
+    LEDGER: tuple[str, ...] = ("slice-runner", "runs", "tool-uses.jsonl")
 
     @classmethod
     def records_under(cls, root: Path) -> list[dict[str, object]]:
@@ -98,7 +98,7 @@ class TestARecordedConversation(WithTheToolUseLogOutOfTheRealHome):
 
 
 class WrittenUnrecordedToolUses:
-    LEDGER: tuple[str, ...] = ("slice-runner", "trace", "unrecorded-tool-uses.jsonl")
+    LEDGER: tuple[str, ...] = ("slice-runner", "runs", "unrecorded-tool-uses.jsonl")
 
     @classmethod
     def records_under(cls, root: Path) -> list[dict[str, object]]:

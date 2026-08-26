@@ -1,9 +1,8 @@
 from __future__ import annotations
 
-import json
 from typing import TYPE_CHECKING, ClassVar
 
-from slice_runner.infrastructure.claude_config import ClaudeConfig
+from slice_runner.infrastructure.durable_ledger import DurableLedger
 from slice_runner.infrastructure.tool_use_log import ToolUseLog
 from slice_runner.infrastructure.tool_use_payload import CallToolUsePayload, UnrecordedCallToolUsePayload
 
@@ -12,22 +11,17 @@ if TYPE_CHECKING:
 
 
 class LocalToolUseLog(ToolUseLog):
-    LEDGER: ClassVar[tuple[str, ...]] = ("slice-runner", "trace", "tool-uses.jsonl")
-    UNRECORDED_LEDGER: ClassVar[tuple[str, ...]] = ("slice-runner", "trace", "unrecorded-tool-uses.jsonl")
+    LEDGER: ClassVar[str] = "tool-uses"
+    UNRECORDED_LEDGER: ClassVar[str] = "unrecorded-tool-uses"
 
-    def record(self, call: HarnessCallToolUse) -> None:
-        self._appended(self.LEDGER, json.dumps(CallToolUsePayload.from_call(call).to_contract(), ensure_ascii=False))
-
-    def record_unrecorded(self, call: UnrecordedCallToolUse) -> None:
-        self._appended(
-            self.UNRECORDED_LEDGER,
-            json.dumps(UnrecordedCallToolUsePayload.from_call(call).to_contract(), ensure_ascii=False),
+    def __init__(self) -> None:
+        self._uses: DurableLedger[CallToolUsePayload] = DurableLedger(name=self.LEDGER, row=CallToolUsePayload)
+        self._unrecorded: DurableLedger[UnrecordedCallToolUsePayload] = DurableLedger(
+            name=self.UNRECORDED_LEDGER, row=UnrecordedCallToolUsePayload
         )
 
-    @staticmethod
-    def _appended(ledger_path: tuple[str, ...], line: str) -> None:
-        ledger = ClaudeConfig.root().joinpath(*ledger_path)
-        ledger.parent.mkdir(parents=True, exist_ok=True)
+    def record(self, call: HarnessCallToolUse) -> None:
+        self._uses.append(CallToolUsePayload.from_call(call))
 
-        with ledger.open("a", encoding="utf-8") as trace:
-            trace.write(f"{line}\n")
+    def record_unrecorded(self, call: UnrecordedCallToolUse) -> None:
+        self._unrecorded.append(UnrecordedCallToolUsePayload.from_call(call))

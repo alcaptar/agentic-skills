@@ -12,11 +12,19 @@ same reason: it pins that every call which writes with the harness discards and 
 The sixth pins the fifth's own mechanism: a `self._x.y(...)` the scan has never seen counts as
 harness-writing by default, so a step added later on a brand new port turns the suite red instead
 of passing by omission the way naming only the three known calls would have.
+
+The seventh scans every module of the program for a durable store composing its own path instead
+of asking `DurableLedger` for one: a call to `ClaudeConfig.root()`, a `*.jsonl` literal, or the
+segments `log`/`trace` cited next to `slice-runner` in the same path expression. It is not a list of
+the stores that exist today -a well-formed new one that only names `DurableLedger` never trips it-,
+which is what the eighth, its meta-test, proves against synthetic source: without it, a scan that
+finds nothing and one that is broken read the same.
 """
 
 from __future__ import annotations
 
 import ast
+import fnmatch
 import re
 import tomllib
 from typing import TYPE_CHECKING
@@ -378,3 +386,153 @@ def test_a_self_call_not_named_safe_is_treated_as_harness_writing_even_if_the_sc
     )
 
     assert _harness_writing_calls(source) == (2, [7])
+
+
+_NOT_A_DURABLE_STORE = {
+    "src/slice_runner/infrastructure/durable_ledger.py": "es la pieza comun: compone la ruta bajo runs/ para los demas",
+    "src/slice_runner/infrastructure/claude_config.py": (
+        "resuelve la raiz de configuracion de la herramienta, no un almacen"
+    ),
+    "src/slice_runner/infrastructure/local_conversation_log.py": (
+        "lee la transcripcion que escribe el harness bajo projects/, no una fila que este programa anexa"
+    ),
+    "src/slice_runner/infrastructure/local_plugin_registry.py": (
+        "lee settings.json de la herramienta, no un log append-only"
+    ),
+    "src/slice_runner/infrastructure/local_skill_library.py": (
+        "resuelve rutas de skills bajo la raiz de configuracion, no un log append-only"
+    ),
+}
+"""What is exempt from the scan below, each for a reason about what the module IS.
+
+Not a list of the durable stores that exist today: a store that never composes its own path -- it
+only asks `DurableLedger` for one by name -- never trips the scan and needs no entry here.
+"""
+
+
+def _is_claude_config_root_call(node: ast.AST) -> bool:
+    return (
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "root"
+        and isinstance(node.func.value, ast.Name)
+        and node.func.value.id == "ClaudeConfig"
+    )
+
+
+def _is_a_jsonl_literal(value: object) -> bool:
+    return isinstance(value, str) and fnmatch.fnmatch(value, "*.jsonl")
+
+
+def _div_chain_string_literals(node: ast.AST) -> list[str]:
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Div):
+        return _div_chain_string_literals(node.left) + _div_chain_string_literals(node.right)
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return [node.value]
+    return []
+
+
+def _cites_a_retired_segment_next_to_slice_runner(literals: list[str]) -> bool:
+    return "slice-runner" in literals and ("log" in literals or "trace" in literals)
+
+
+def _composes_its_own_durable_store_path(source: str) -> bool:
+    """A module trips this by calling `ClaudeConfig.root()`, writing a `*.jsonl` literal, or citing
+
+    `log`/`trace` next to `slice-runner` in the same tuple, list, set, or `/` chain -- the three
+    shapes every durable store composed its own path with before it went through `DurableLedger`.
+    """
+    for node in ast.walk(ast.parse(source)):
+        if _is_claude_config_root_call(node):
+            return True
+        if isinstance(node, ast.Constant) and _is_a_jsonl_literal(node.value):
+            return True
+        if isinstance(node, ast.Tuple | ast.List | ast.Set):
+            literals = [elt.value for elt in node.elts if isinstance(elt, ast.Constant) and isinstance(elt.value, str)]
+            if _cites_a_retired_segment_next_to_slice_runner(literals):
+                return True
+        if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Div):
+            if _cites_a_retired_segment_next_to_slice_runner(_div_chain_string_literals(node)):
+                return True
+
+    return False
+
+
+@pytest.mark.integration
+def test_no_durable_store_composes_its_own_path_instead_of_asking_the_shared_ledger_for_one() -> None:
+    """`infrastructure.md`: durable stores live under one directory and one naming pattern.
+
+    Not hypothetical: before this test existed, four stores kept composing `("slice-runner", "log",
+    "<name>.jsonl")` by hand next to the three that already went through `DurableLedger`, and nothing
+    here would have caught an eighth store being born the same way outside the pattern.
+    """
+    candidates = [path for path in _tracked("src/slice_runner/*.py") if not path.startswith("src/slice_runner/tests/")]
+
+    for exempt, reason in _NOT_A_DURABLE_STORE.items():
+        assert exempt in candidates, (
+            f"the exemption `{exempt}` ({reason}) is gone; drop it from _NOT_A_DURABLE_STORE "
+            f"instead of leaving a stale exemption that silently widens the check"
+        )
+
+    offending = [
+        path
+        for path in candidates
+        if path not in _NOT_A_DURABLE_STORE and _composes_its_own_durable_store_path(_read(_ROOT / path))
+    ]
+
+    assert not offending, "these modules compose their own durable-store path instead of asking `DurableLedger`:\n" + (
+        "\n".join(f"  {path}" for path in offending)
+    )
+
+
+def test_the_scan_catches_every_shape_a_module_could_compose_its_own_durable_store_path_with() -> None:
+    """A scan that finds nothing and a scan that is broken read the same without this.
+
+    A well-formed new store that only names `DurableLedger` by constructor keyword must stay
+    invisible to the scan -- turning this into a list of today's stores is exactly what the
+    acceptance criteria this pins forbids.
+    """
+    calling_root = "\n".join(
+        [
+            "from slice_runner.infrastructure.claude_config import ClaudeConfig",
+            "class Foo:",
+            "    def elsewhere(self, name):",
+            '        return ClaudeConfig.root() / "elsewhere" / name',
+        ]
+    )
+    naming_a_jsonl_literal = 'LEDGER = "metrics.jsonl"'
+    naming_a_jsonl_literal_through_an_f_string = "\n".join(
+        [
+            "class Foo:",
+            "    def path(self, name):",
+            '        return f"{name}.jsonl"',
+        ]
+    )
+    citing_log_next_to_slice_runner = "\n".join(
+        [
+            "class Foo:",
+            "    def path(self, root):",
+            '        return root / "slice-runner" / "log"',
+        ]
+    )
+    citing_trace_next_to_slice_runner_in_a_tuple = "\n".join(
+        [
+            "class Foo:",
+            '    SEGMENTS = ("slice-runner", "trace")',
+        ]
+    )
+    a_well_formed_new_store = "\n".join(
+        [
+            "from slice_runner.infrastructure.durable_ledger import DurableLedger",
+            "class Foo:",
+            "    def __init__(self):",
+            '        self._ledger = DurableLedger(name="foo", row=FooPayload)',
+        ]
+    )
+
+    assert _composes_its_own_durable_store_path(calling_root)
+    assert _composes_its_own_durable_store_path(naming_a_jsonl_literal)
+    assert _composes_its_own_durable_store_path(naming_a_jsonl_literal_through_an_f_string)
+    assert _composes_its_own_durable_store_path(citing_log_next_to_slice_runner)
+    assert _composes_its_own_durable_store_path(citing_trace_next_to_slice_runner_in_a_tuple)
+    assert not _composes_its_own_durable_store_path(a_well_formed_new_store)

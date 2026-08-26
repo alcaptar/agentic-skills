@@ -16,7 +16,7 @@ class LocalCallTrace(CallTrace):
 
     def __init__(self, *, clock: Clock) -> None:
         self._clock = clock
-        self._ledger = DurableLedger(name=self.LEDGER, row=HarnessCallPayload)
+        self._ledger: DurableLedger[HarnessCallPayload] = DurableLedger(name=self.LEDGER, row=HarnessCallPayload)
 
     def record(self, call: HarnessCall) -> None:
         payload = HarnessCallPayload.from_call(call, ts=self._clock.now().isoformat())
@@ -25,13 +25,13 @@ class LocalCallTrace(CallTrace):
     def sessions_of(self, *, repo: str, issue: int, slice_id: str, step: Step) -> tuple[str, ...]:
         return tuple(
             call.session
-            for call in self._ledger.rows()
+            for call in self._ledger.rows(HarnessCallPayload)
             if call.repo == repo and call.issue == issue and call.slice_id == slice_id and call.step == step
         )
 
     def calls_of(self, *, repo: str, issue: int, slice_id: str) -> tuple[HarnessCall, ...]:
         return tuple(
             HarnessCall(repo=repo, issue=issue, slice_id=slice_id, step=call.step, session=call.session)
-            for call in self._ledger.rows()
+            for call in self._ledger.rows(HarnessCallPayload)
             if call.repo == repo and call.issue == issue and call.slice_id == slice_id
         )

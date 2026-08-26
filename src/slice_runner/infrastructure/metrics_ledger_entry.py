@@ -10,8 +10,8 @@ from slice_runner.domain.diff_stats import DiffStats
 from slice_runner.domain.exceptions import UnreadableMetricsLogError
 from slice_runner.domain.recorded_spend import RecordedSpend
 from slice_runner.domain.severity_count import SeverityCount
-from slice_runner.infrastructure.contract_model import ContractModel
 from slice_runner.infrastructure.corpus_verdict_payload import SeverityCountPayload
+from slice_runner.infrastructure.durable_ledger import ReadableLedgerRow
 from slice_runner.infrastructure.metrics_entry_payload import (
     DiffStatsPayload,
     DiscardedCallPayload,
@@ -29,7 +29,8 @@ if TYPE_CHECKING:
 _IGNORED_LEGACY_KEYS = ("duracion_s", "coste_tokens", "descartes_verify_causa")
 
 
-class MetricsLedgerRowPayload(ContractModel):
+class MetricsLedgerRowPayload(ReadableLedgerRow):
+    UNREADABLE: ClassVar[type[ValueError]] = UnreadableMetricsLogError
     LEGACY_VERDICT: ClassVar[str] = "bloqueada-puertas"
 
     ts: str | None = None
@@ -71,18 +72,15 @@ class MetricsLedgerRowPayload(ContractModel):
         return DurableVerdict.BLOCKED_CONTROLS if value == cls.LEGACY_VERDICT else value
 
     @classmethod
-    def from_row(cls, row: dict[str, object]) -> Self:
-        projected = {key: value for key, value in row.items() if key not in _IGNORED_LEGACY_KEYS}
+    def from_dict(cls, data: dict[str, object]) -> Self:
+        projected = {key: value for key, value in data.items() if key not in _IGNORED_LEGACY_KEYS}
 
-        return cls._validated(
-            projected, "the metrics log line is not one this program wrote", UnreadableMetricsLogError
-        )
+        return cls._validated(projected, "the metrics log line is not one this program wrote", cls.UNREADABLE)
 
 
 class MetricsLedgerEntry:
     @classmethod
-    def read(cls, row: dict[str, object]) -> ClosedSliceRecord | None:
-        payload = MetricsLedgerRowPayload.from_row(row)
+    def of(cls, payload: MetricsLedgerRowPayload) -> ClosedSliceRecord | None:
         ts = cls._timestamp(payload.ts)
         if ts is None or payload.verdict is None or payload.ci is None:
             return None

@@ -57,6 +57,7 @@ runtime-evaluated-base-classes = [
     "pydantic.BaseModel",
     "slice_runner.infrastructure.contract_model.ContractModel",
     "slice_runner.infrastructure.durable_ledger.LedgerRow",
+    "slice_runner.infrastructure.durable_ledger.ReadableLedgerRow",
     "slice_runner.infrastructure.open_vocabulary_model.OpenVocabularyModel",
 ]
 

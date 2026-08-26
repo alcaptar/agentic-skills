@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Self
+from typing import TYPE_CHECKING, ClassVar, Self
 
 from slice_runner.domain.exceptions import UnreadableCallSpendLogError
-from slice_runner.infrastructure.contract_model import ContractModel
+from slice_runner.infrastructure.durable_ledger import ReadableLedgerRow
 from slice_runner.infrastructure.json_schema import JsonSchema
 from slice_runner.infrastructure.spend_payload import SpendPayload
 
@@ -11,7 +11,9 @@ if TYPE_CHECKING:
     from slice_runner.domain.call_spend_log import HarnessCallSpend
 
 
-class CallSpendPayload(ContractModel):
+class CallSpendPayload(ReadableLedgerRow):
+    UNREADABLE: ClassVar[type[ValueError]] = UnreadableCallSpendLogError
+
     session: str
     spend: SpendPayload
     repo: str | None = None
@@ -30,4 +32,4 @@ class CallSpendPayload(ContractModel):
 
     @classmethod
     def from_dict(cls, data: dict[str, object]) -> Self:
-        return cls._validated(data, "the spend log line is not one this program wrote", UnreadableCallSpendLogError)
+        return cls._validated(data, "the spend log line is not one this program wrote", cls.UNREADABLE)

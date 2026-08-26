@@ -5,8 +5,15 @@ from typing import TYPE_CHECKING
 
 import pytest
 
+from slice_runner.domain.step import Step
+from slice_runner.domain.unrecorded_conversation_cause import UnrecordedConversationCause
+from slice_runner.infrastructure import local_tool_use_log
 from slice_runner.infrastructure.claude_config import ClaudeConfig
+from slice_runner.infrastructure.durable_ledger import DurableLedger
 from slice_runner.infrastructure.local_tool_use_log import LocalToolUseLog
+from slice_runner.infrastructure.tool_use_log import UnrecordedCallToolUse
+from slice_runner.infrastructure.tool_use_payload import CallToolUsePayload, UnrecordedCallToolUsePayload
+from slice_runner.tests.infrastructure.stub_ledger import WiredStubLedgers
 from slice_runner.tests.mothers.harness_call_tool_use_mother import HarnessCallToolUseMother
 
 if TYPE_CHECKING:
@@ -16,7 +23,7 @@ if TYPE_CHECKING:
 class WrittenToolUses:
     @staticmethod
     def records_under(root: Path) -> list[dict[str, object]]:
-        ledger = root / "slice-runner" / "trace" / "tool-uses.jsonl"
+        ledger = root / "slice-runner" / "runs" / "tool-uses.jsonl"
 
         return [json.loads(line) for line in ledger.read_text(encoding="utf-8").splitlines()]
 
@@ -64,4 +71,55 @@ class TestWhereTheLogLives:
 
         LocalToolUseLog().record(HarnessCallToolUseMother.of_the_implementer())
 
-        assert (tmp_path / "never-used-before" / "slice-runner" / "trace" / "tool-uses.jsonl").exists()
+        assert (tmp_path / "never-used-before" / "slice-runner" / "runs" / "tool-uses.jsonl").exists()
+
+    def test_the_ledger_paths_are_composed_under_runs_and_not_under_the_retired_trace_directory(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
+
+        uses = DurableLedger(name=LocalToolUseLog.LEDGER, row=CallToolUsePayload).path()
+        unrecorded = DurableLedger(name=LocalToolUseLog.UNRECORDED_LEDGER, row=UnrecordedCallToolUsePayload).path()
+
+        assert uses == tmp_path / "slice-runner" / "runs" / "tool-uses.jsonl"
+        assert unrecorded == tmp_path / "slice-runner" / "runs" / "unrecorded-tool-uses.jsonl"
+
+
+class TestTheAdapterOwnsOnlyItsNameAndItsPayload:
+    def test_recording_a_call_reaches_only_the_uses_ledger_and_writes_no_file(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
+        created = WiredStubLedgers.on(local_tool_use_log, monkeypatch)
+
+        LocalToolUseLog().record(HarnessCallToolUseMother.of_the_implementer())
+
+        uses_stub, unrecorded_stub = created
+        assert (uses_stub.name, uses_stub.row) == (LocalToolUseLog.LEDGER, CallToolUsePayload)
+        assert (unrecorded_stub.name, unrecorded_stub.row) == (
+            LocalToolUseLog.UNRECORDED_LEDGER,
+            UnrecordedCallToolUsePayload,
+        )
+        assert len(uses_stub.appended) == 1
+        assert unrecorded_stub.appended == []
+        assert not (tmp_path / "slice-runner").exists()
+
+    def test_recording_an_unrecorded_call_reaches_only_the_unrecorded_ledger_and_writes_no_file(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
+        created = WiredStubLedgers.on(local_tool_use_log, monkeypatch)
+
+        LocalToolUseLog().record_unrecorded(
+            UnrecordedCallToolUse(
+                slice_id=HarnessCallToolUseMother.SLICE_ID,
+                step=Step.IMPLEMENT,
+                session="never-recorded",
+                cause=UnrecordedConversationCause.NOT_FOUND,
+            )
+        )
+
+        uses_stub, unrecorded_stub = created
+        assert uses_stub.appended == []
+        assert len(unrecorded_stub.appended) == 1
+        assert not (tmp_path / "slice-runner").exists()
