@@ -37,16 +37,23 @@ class RunInvocation:
         base: str = GhConversationMother.BASE,
         slice_id: str | None = None,
         budgets: Budgets | None = None,
+        issue: int = GhConversationMother.ISSUE,
     ) -> int:
         return Cli(process=self.process, budgets=budgets or Budgets()).run(
-            self.params(logs=logs, base=base, slice_id=slice_id)
+            self.params(logs=logs, base=base, slice_id=slice_id, issue=issue)
         )
 
     @staticmethod
-    def params(*, logs: Path, base: str = GhConversationMother.BASE, slice_id: str | None = None) -> ConductSliceParams:
+    def params(
+        *,
+        logs: Path,
+        base: str = GhConversationMother.BASE,
+        slice_id: str | None = None,
+        issue: int = GhConversationMother.ISSUE,
+    ) -> ConductSliceParams:
         return ConductSliceParams(
             repo=GhConversationMother.REPO,
-            issue=GhConversationMother.ISSUE,
+            issue=issue,
             worktree=GhConversationMother.WORKTREE,
             base=base,
             logs=logs,
