@@ -35,6 +35,8 @@ from slice_runner.domain.call_trace import CallTrace
 from slice_runner.domain.ci import Ci
 from slice_runner.domain.ci_status import CiStatus
 from slice_runner.domain.clock import Clock
+from slice_runner.domain.conflict_resolution import ConflictResolution
+from slice_runner.domain.conflict_resolver import ConflictResolver
 from slice_runner.domain.control_runner import ControlRunner
 from slice_runner.domain.deploy_watch import DeployWatch
 from slice_runner.domain.event_log import EventLog
@@ -47,9 +49,11 @@ from slice_runner.domain.role_models import RoleModels
 from slice_runner.domain.run_repository import RunRepository
 from slice_runner.domain.state_machine import StateMachine
 from slice_runner.domain.understanding_writer import UnderstandingWriter
+from slice_runner.domain.workspace import Workspace
 from slice_runner.tests.doubles import RecordedSpendLog
 from slice_runner.tests.mothers.branch_catch_up_mother import BranchCatchUpMother
 from slice_runner.tests.mothers.control_outcome_mother import ControlOutcomeMother
+from slice_runner.tests.mothers.harness_spend_mother import HarnessSpendMother
 from slice_runner.tests.mothers.implementation_mother import ImplementationMother
 from slice_runner.tests.mothers.pull_request_status_mother import PullRequestStatusMother
 from slice_runner.tests.mothers.understanding_mother import UnderstandingMother
@@ -75,7 +79,7 @@ class Conductor:
     UNDERSTANDING: ClassVar[str] = UnderstandingMother.TEXT
     NOW: ClassVar[datetime] = datetime(2024, 1, 1, tzinfo=UTC)
 
-    MODELS: ClassVar[RoleModels] = RoleModels(understand="sonnet", implement="sonnet", verify="sonnet")
+    MODELS: ClassVar[RoleModels] = RoleModels(understand="sonnet", implement="sonnet", verify="sonnet", resolve="opus")
 
     def __init__(
         self, *, chosen: SelectSliceResult, budgets: Budgets | None = None, models: RoleModels | None = None
@@ -95,6 +99,10 @@ class Conductor:
         self.repository.read_understanding.return_value = self.UNDERSTANDING
         self.branches: Mock = create_autospec(Branches, spec_set=True, instance=True)
         self.branches.catch_up.return_value = BranchCatchUpMother.caught_up()
+        self.branches.changed_paths.return_value = ()
+        self.workspace: Mock = create_autospec(Workspace, spec_set=True, instance=True)
+        self.resolver: Mock = create_autospec(ConflictResolver, spec_set=True, instance=True)
+        self.resolver.resolve.return_value = ConflictResolution(spend=HarnessSpendMother.of_a_call_that_cost_nothing())
         self.controls: Mock = create_autospec(ControlRunner, spec_set=True, instance=True)
         self.controls.run.return_value = ControlOutcomeMother.green()
         self.ci: Mock = create_autospec(Ci, spec_set=True, instance=True)
@@ -155,7 +163,7 @@ class Conductor:
                 read_ci=ReadCiStatus(ci=self.ci, forum=self.forum),
                 read_pull_request=ReadPullRequestStatus(forum=self.forum),
                 seek_alignment=SeekAlignment(understanding=self.understanding, repository=self.repository),
-                catch_up=CatchUpBranch(branches=self.branches),
+                catch_up=CatchUpBranch(branches=self.branches, workspace=self.workspace, resolver=self.resolver),
             ),
             ports=ConductSlicePorts(
                 repository=self.repository,

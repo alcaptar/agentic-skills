@@ -73,7 +73,24 @@ class GitBranches(Branches):
 
         raise GitCommandFailedError.from_command(argv, output)
 
+    def conclude_merge(self, *, worktree: str) -> None:
+        argv = ["git", "-C", worktree, "-c", "commit.gpgsign=false", "commit", "--no-edit"]
+        output = self._process.run(argv, stdin="")
+        if output.code != 0:
+            raise GitCommandFailedError.from_command(argv, output)
+
+    def abort_merge(self, *, worktree: str) -> None:
+        self._abort_merge(worktree)
+
+    def changed_paths(self, *, worktree: str) -> tuple[str, ...]:
+        cached = self._names(worktree, "diff", "--cached", "--name-only")
+        unstaged = self._names(worktree, "diff", "--name-only")
+        untracked = self._names(worktree, "ls-files", "--others", "--exclude-standard")
+
+        return tuple(sorted({*cached, *unstaged, *untracked}))
+
     def _merging(self, worktree: str, ref: str) -> BranchCatchUp:
+        dirty_before_merge = self.changed_paths(worktree=worktree)
         argv = ["git", "-C", worktree, "-c", "merge.ff=true", "-c", "commit.gpgsign=false", "merge", "--no-edit", ref]
         output = self._process.run(argv, stdin="")
         if output.code == 0:
@@ -83,10 +100,11 @@ class GitBranches(Branches):
 
         try:
             conflicting_paths = self._conflicting_paths(worktree)
-        finally:
+        except Exception:
             self._abort_merge(worktree)
+            raise
 
-        return BranchCatchUp.conflicting(paths=conflicting_paths)
+        return BranchCatchUp.conflicting(paths=conflicting_paths, dirty_before_merge=dirty_before_merge)
 
     def _conflicting_paths(self, worktree: str) -> tuple[str, ...]:
         argv = ["git", "-C", worktree, "-c", "core.quotePath=false", "diff", "--name-only", "--diff-filter=U"]
@@ -95,6 +113,14 @@ class GitBranches(Branches):
             raise GitCommandFailedError.from_command(argv, output)
 
         return tuple(output.stdout.splitlines())
+
+    def _names(self, worktree: str, *args: str) -> tuple[str, ...]:
+        argv = ["git", "-C", worktree, *args]
+        output = self._process.run(argv, stdin="")
+        if output.code != 0:
+            raise GitCommandFailedError.from_command(argv, output)
+
+        return tuple(line for line in output.stdout.splitlines() if line.strip())
 
     def _merge_in_progress(self, worktree: str) -> bool:
         argv = ["git", "-C", worktree, "rev-parse", "--verify", "--quiet", "MERGE_HEAD"]

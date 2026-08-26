@@ -7,12 +7,14 @@ import pytest
 
 from slice_runner.domain.alignment import Alignment
 from slice_runner.domain.budgets import Budgets
+from slice_runner.infrastructure.conflict_resolver_invocation import ConflictResolverInvocation
 from slice_runner.infrastructure.implementer_invocation import ImplementerInvocation
 from slice_runner.infrastructure.judge_invocation import JudgeInvocation
 from slice_runner.infrastructure.process_source_reader import ProcessSourceReader
 from slice_runner.infrastructure.understanding_invocation import UnderstandingInvocation
 from slice_runner.tests.doubles import RecordedSourceReader
 from slice_runner.tests.mothers.assignment_mother import AssignmentMother
+from slice_runner.tests.mothers.merge_conflict_mother import MergeConflictMother
 from slice_runner.tests.mothers.parent_issue_mother import ParentIssueMother
 from slice_runner.tests.mothers.sub_issue_mother import SubIssueMother
 from slice_runner.tests.mothers.verification_mother import JudgeMother, SliceUnderReviewMother
@@ -54,8 +56,15 @@ class TestEachInvocationCarriesTheLiteralContentOfItsDeclaredSource:
 
         assert _LITERAL_LINE_OF_CLAUDE_MD in invocation.text
 
+    def test_the_conflict_resolver_carries_a_literal_line_of_the_declared_source(self) -> None:
+        conflict = replace(MergeConflictMother.of_one_conflicting_file(), worktree=str(_ROOT))
 
-class TestTheThreeInvocationsAgreeOnTheSameSourcesTextForTheSameSources:
+        text = ConflictResolverInvocation(conflict=conflict, reader=self._real_reader()).text
+
+        assert _LITERAL_LINE_OF_CLAUDE_MD in text
+
+
+class TestTheFourInvocationsAgreeOnTheSameSourcesTextForTheSameSources:
     @staticmethod
     def _fuentes_section(text: str) -> str:
         lines = text.splitlines()
@@ -66,7 +75,7 @@ class TestTheThreeInvocationsAgreeOnTheSameSourcesTextForTheSameSources:
 
         return "\n".join(lines[start:end])
 
-    def test_the_fuentes_section_is_character_for_character_identical_across_the_three(self) -> None:
+    def test_the_fuentes_section_is_character_for_character_identical_across_the_four(self) -> None:
         reader = RecordedSourceReader(contents={"CLAUDE.md": "linea unica de la convencion"})
 
         implementer_text = ImplementerInvocation(assignment=AssignmentMother.of_the_first_round(), reader=reader).text
@@ -81,17 +90,21 @@ class TestTheThreeInvocationsAgreeOnTheSameSourcesTextForTheSameSources:
             alignment=Alignment(),
             reader=reader,
         ).text
+        resolver_text = ConflictResolverInvocation(
+            conflict=MergeConflictMother.of_one_conflicting_file(), reader=reader
+        ).text
 
         sections = {
             self._fuentes_section(implementer_text),
             self._fuentes_section(judge_text),
             self._fuentes_section(understanding_text),
+            self._fuentes_section(resolver_text),
         }
         assert len(sections) == 1
 
 
-class TestTheThreeInvocationsAgreeOnTheSameWorkingDirectory:
-    def test_the_three_invocations_agree_that_the_cwd_is_the_worktree_and_not_the_repo_slug(self) -> None:
+class TestTheFourInvocationsAgreeOnTheSameWorkingDirectory:
+    def test_the_four_invocations_agree_that_the_cwd_is_the_worktree_and_not_the_repo_slug(self) -> None:
         worktree = AssignmentMother.WORKTREE
         reader = RecordedSourceReader()
 
@@ -109,5 +122,8 @@ class TestTheThreeInvocationsAgreeOnTheSameWorkingDirectory:
             alignment=Alignment(),
             reader=reader,
         )
+        resolver = ConflictResolverInvocation(
+            conflict=replace(MergeConflictMother.of_one_conflicting_file(), worktree=worktree), reader=reader
+        )
 
-        assert implementer.cwd == judge.cwd == understanding.cwd == worktree
+        assert implementer.cwd == judge.cwd == understanding.cwd == resolver.cwd == worktree

@@ -115,7 +115,6 @@ class ConductSliceProgress:
     discarded_call: DiscardedCall | None = None
     ci_indeterminate_cause: CiIndeterminateCause | None = None
     diff_stats: DiffStats | None = None
-    conflicting_paths: tuple[str, ...] = field(default=())
 
     @property
     def spend(self) -> HarnessSpend:
@@ -275,23 +274,16 @@ class ConductSlice:
         return step is Step.AWAIT_CI or step is Step.AWAIT_MERGE
 
     def _caught_up_before_conducting(self, progress: ConductSliceProgress) -> ConductSliceResult:
-        caught_up = self._catch_up.execute(
-            CatchUpBranchParams(
-                worktree=progress.params.worktree, branch=progress.subissue.branch, base=progress.params.base
-            )
-        )
-        if caught_up.outcome is Outcome.CONFLICTING:
-            return self._blocked_by_a_catch_up_conflict(
-                replace(progress, conflicting_paths=caught_up.conflicting_paths)
-            )
+        stepped = self._catching_up_the_branch(progress)
+        if stepped.outcome is Outcome.DONE:
+            return self._conducting(stepped.progress)
 
-        return self._conducting(progress)
+        transition = self._machine.after(replace(stepped.progress.run, step=Step.CATCH_UP), stepped.outcome)
+        recorded = self._recorded(stepped.progress, transition)
+        if transition.state is not RunState.OPEN:
+            return self._closing(recorded, transition.state)
 
-    def _blocked_by_a_catch_up_conflict(self, progress: ConductSliceProgress) -> ConductSliceResult:
-        transition = self._machine.after(progress.run, Outcome.CONFLICTING)
-        closed = self._recorded(progress, transition)
-
-        return self._closing(closed, transition.state)
+        return self._conducting(recorded)
 
     def _recreating_the_branch(self, progress: ConductSliceProgress) -> ConductSliceResult:
         self._branches.create(
@@ -474,16 +466,25 @@ class ConductSlice:
                 return self._asking_for_the_merge(progress)
 
     def _catching_up_the_branch(self, progress: ConductSliceProgress) -> SteppedSlice:
-        caught_up = self._catch_up.execute(
-            CatchUpBranchParams(
-                worktree=progress.params.worktree, branch=progress.subissue.branch, base=progress.params.base
-            )
-        )
-        if caught_up.outcome is not Outcome.CONFLICTING:
+        caught_up = self._catch_up.execute(self._catch_up_params(progress))
+        if caught_up.outcome is Outcome.DONE and caught_up.spend is None:
             return SteppedSlice(progress=progress, outcome=caught_up.outcome)
 
-        return SteppedSlice(
-            progress=replace(progress, conflicting_paths=caught_up.conflicting_paths), outcome=caught_up.outcome
+        spends = progress.spends if caught_up.spend is None else (*progress.spends, caught_up.spend)
+        spent = replace(progress, spends=spends)
+
+        return self._within_budget(SteppedSlice(progress=spent, outcome=caught_up.outcome), call=caught_up.spend)
+
+    @staticmethod
+    def _catch_up_params(progress: ConductSliceProgress) -> CatchUpBranchParams:
+        return CatchUpBranchParams(
+            repo=progress.params.repo,
+            issue=progress.subissue.number,
+            slice_id=progress.subissue.slice_id.canonical,
+            worktree=progress.params.worktree,
+            branch=progress.subissue.branch,
+            base=progress.params.base,
+            sources=progress.parent.sources,
         )
 
     def _implementing(self, progress: ConductSliceProgress) -> SteppedSlice:
@@ -758,7 +759,6 @@ class ConductSlice:
                 ci_indeterminate_cause=progress.ci_indeterminate_cause,
                 debt=progress.debt,
                 diff_stats=progress.diff_stats,
-                conflicting_paths=progress.conflicting_paths,
             )
         )
         if state is RunState.MERGED:

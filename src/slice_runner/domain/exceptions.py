@@ -28,6 +28,10 @@ class InvalidUnderstandingReportError(MeasuredCallError):
     pass
 
 
+class InvalidResolutionReportError(MeasuredCallError):
+    pass
+
+
 class PermissionDeniedError(MeasuredCallError):
     pass
 

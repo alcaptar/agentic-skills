@@ -79,11 +79,16 @@ def test_the_row_the_program_writes_is_one_metrics_py_can_still_read() -> None:
 
 
 def test_the_model_the_judge_ran_with_reaches_the_row_so_a_verdict_can_be_traced_to_what_measured_it() -> None:
-    models = RoleModels(understand="sonnet", implement="sonnet", verify="opus")
+    models = RoleModels(understand="sonnet", implement="sonnet", verify="opus", resolve="opus")
     closed = ClosedSliceMother.merged_with_config(models=models)
     row = MetricsEntryPayload.from_domain(closed, ts=datetime(2026, 8, 10, tzinfo=UTC).isoformat()).to_contract()
 
-    assert row["models_by_role"] == {"understand": "sonnet", "implement": "sonnet", "verify": "opus"}
+    assert row["models_by_role"] == {
+        "understand": "sonnet",
+        "implement": "sonnet",
+        "verify": "opus",
+        "resolve": "opus",
+    }
 
 
 def test_a_row_that_discards_the_judge_is_read_with_the_cause_metrics_py_knows() -> None:

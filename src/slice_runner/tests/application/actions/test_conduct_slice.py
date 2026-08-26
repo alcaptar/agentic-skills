@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import itertools
 from dataclasses import replace
 from typing import TYPE_CHECKING
 from unittest.mock import Mock
@@ -18,6 +19,7 @@ from slice_runner.domain.event_status import EventStatus
 from slice_runner.domain.exceptions import (
     CiCommandFailedError,
     DirtyIndexError,
+    InvalidResolutionReportError,
     MissingBranchError,
     NoPullRequestError,
     NoSliceLeftError,
@@ -552,7 +554,7 @@ class TestConductSliceClosingAMergeMissedBetweenInvocations:
         self,
     ) -> None:
         dangling = SubIssueMother.dangling()
-        models = RoleModels(understand="opus", implement="opus", verify="opus")
+        models = RoleModels(understand="opus", implement="opus", verify="opus", resolve="opus")
         conductor = self._conductor(dangling=(dangling,), models=models)
 
         conductor.conduct()
@@ -877,9 +879,11 @@ class TestConductSliceResumingAnInterruptedRun:
 
 
 class TestConductSliceResumingCatchesUpTheBranch:
+    _CLEAN_FILE = "clean-file-outside-conflict.txt"
+
     @staticmethod
-    def _conductor() -> Conductor:
-        return Conductor(chosen=SelectSliceResultMother.resumed_at(RunMother.implementing()))
+    def _conductor(*, budgets: Budgets | None = None) -> Conductor:
+        return Conductor(chosen=SelectSliceResultMother.resumed_at(RunMother.implementing()), budgets=budgets)
 
     def test_a_branch_already_caught_up_still_reaches_the_implementer(self) -> None:
         conductor = self._conductor()
@@ -888,35 +892,29 @@ class TestConductSliceResumingCatchesUpTheBranch:
 
         assert conductor.implement.execute.call_count == 1
 
-    def test_a_conflicting_catch_up_closes_the_run_before_spending_any_call_on_the_harness(self) -> None:
+    def test_a_conflicting_catch_up_during_resume_calls_the_resolver_instead_of_blocking_the_run(self) -> None:
+        conductor = self._conductor()
+        conductor.branches.catch_up.return_value = BranchCatchUpMother.conflicting_on_a_shared_file()
+
+        conductor.conduct()
+
+        assert conductor.resolver.resolve.call_count == 1
+
+    def test_a_resolved_conflict_during_resume_still_reaches_the_implementer(self) -> None:
         conductor = self._conductor()
         conductor.branches.catch_up.return_value = BranchCatchUpMother.conflicting_on_a_shared_file()
 
         result = conductor.conduct()
 
-        assert result.state is RunState.BLOCKED_CI_CONFLICT
-        assert (conductor.implement.execute.call_count, conductor.verify.execute.call_count) == (0, 0)
+        assert result.state is RunState.MERGED
+        assert conductor.implement.execute.call_count == 1
 
-    def test_a_conflicting_catch_up_writes_the_conflict_label_and_records_the_closed_row(self) -> None:
+    def test_a_clean_catch_up_during_resume_never_calls_the_resolver(self) -> None:
         conductor = self._conductor()
-        conductor.branches.catch_up.return_value = BranchCatchUpMother.conflicting_on_a_shared_file()
 
         conductor.conduct()
 
-        conductor.repository.write_label.assert_called_once_with(
-            repo=Conductor.REPO, issue=_SUBISSUE, remove=IssueLabel.IN_PROGRESS, add=IssueLabel.BLOCKED_CI_CONFLICT
-        )
-        assert conductor.metrics.record.call_args.args[0].state is RunState.BLOCKED_CI_CONFLICT
-
-    def test_a_conflicting_catch_up_publishes_the_paths_git_reported_as_a_comment(self) -> None:
-        conductor = self._conductor()
-        conductor.branches.catch_up.return_value = BranchCatchUpMother.conflicting_on_a_shared_file()
-
-        conductor.conduct()
-
-        conductor.repository.publish_catch_up_conflict.assert_called_once_with(
-            repo=Conductor.REPO, issue=_SUBISSUE, paths=BranchCatchUpMother.CONFLICTING_PATHS
-        )
+        assert conductor.resolver.resolve.call_count == 0
 
     def test_a_branch_that_no_longer_exists_is_never_asked_to_catch_up(self) -> None:
         conductor = self._conductor()
@@ -941,11 +939,99 @@ class TestConductSliceResumingCatchesUpTheBranch:
 
         assert conductor.branches.catch_up.call_count == 0
 
+    def test_a_dead_resolver_call_during_resume_closes_the_run_instead_of_reaching_the_implementer(self) -> None:
+        conductor = self._conductor()
+        conductor.branches.catch_up.return_value = BranchCatchUpMother.conflicting_on_a_shared_file()
+        conductor.resolver.resolve.side_effect = InvalidResolutionReportError("the resolver never emitted a report")
+
+        result = conductor.conduct()
+
+        assert conductor.resolver.resolve.call_count == 1
+        assert conductor.branches.abort_merge.call_count == 1
+        assert result.state is RunState.ABORTED_UNMEASURED_CALL
+        assert conductor.implement.execute.call_count == 0
+
+    def test_a_resolver_that_keeps_touching_a_clean_file_during_resume_blocks_instead_of_reaching_the_implementer(
+        self,
+    ) -> None:
+        conductor = self._conductor(budgets=Budgets(hygiene_retries=0))
+        conductor.branches.catch_up.return_value = BranchCatchUpMother.conflicting_on_a_shared_file()
+        conductor.branches.changed_paths.side_effect = itertools.cycle(
+            [
+                BranchCatchUpMother.CONFLICTING_PATHS,
+                (*BranchCatchUpMother.CONFLICTING_PATHS, self._CLEAN_FILE),
+            ]
+        )
+
+        result = conductor.conduct()
+
+        assert conductor.resolver.resolve.call_count == 1
+        assert conductor.branches.abort_merge.call_count == 1
+        assert result.state is RunState.BLOCKED_HYGIENE
+        assert conductor.implement.execute.call_count == 0
+
 
 class _ResumedAwaitingTheCi:
     @staticmethod
     def _conductor(*, budgets: Budgets | None = None) -> Conductor:
         return Conductor(chosen=SelectSliceResultMother.resumed_at(RunMother.about_to_ask_the_ci()), budgets=budgets)
+
+
+class TestConductSliceWhenTheConflictResolverIsRejected(_ResumedAwaitingTheCi):
+    _CLEAN_FILE = "clean-file-outside-conflict.txt"
+
+    def test_a_resolver_that_keeps_touching_a_clean_file_retries_up_to_the_hygiene_budget_then_blocks(self) -> None:
+        conductor = self._conductor(budgets=Budgets(hygiene_retries=1))
+        conductor.ci.status.return_value = CiStatus.NO_CHECKS
+        conductor.forum.pull_request_state.return_value = PullRequestStatusMother.open_and_conflicting()
+        conductor.branches.catch_up.return_value = BranchCatchUpMother.conflicting_on_a_shared_file()
+        conductor.branches.changed_paths.side_effect = itertools.cycle(
+            [
+                BranchCatchUpMother.CONFLICTING_PATHS,
+                (*BranchCatchUpMother.CONFLICTING_PATHS, self._CLEAN_FILE),
+            ]
+        )
+
+        result = conductor.conduct()
+
+        assert conductor.resolver.resolve.call_count == 2
+        assert result.state is RunState.BLOCKED_HYGIENE
+
+    def test_the_exhausted_hygiene_budget_writes_its_label_and_records_the_row(self) -> None:
+        conductor = self._conductor(budgets=Budgets(hygiene_retries=0))
+        conductor.ci.status.return_value = CiStatus.NO_CHECKS
+        conductor.forum.pull_request_state.return_value = PullRequestStatusMother.open_and_conflicting()
+        conductor.branches.catch_up.return_value = BranchCatchUpMother.conflicting_on_a_shared_file()
+        conductor.branches.changed_paths.side_effect = itertools.cycle(
+            [
+                BranchCatchUpMother.CONFLICTING_PATHS,
+                (*BranchCatchUpMother.CONFLICTING_PATHS, self._CLEAN_FILE),
+            ]
+        )
+
+        result = conductor.conduct()
+
+        assert result.state is RunState.BLOCKED_HYGIENE
+        conductor.repository.write_label.assert_called_once_with(
+            repo=Conductor.REPO, issue=_SUBISSUE, remove=IssueLabel.IN_PROGRESS, add=IssueLabel.BLOCKED_HYGIENE
+        )
+        assert conductor.metrics.record.call_args.args[0].state is RunState.BLOCKED_HYGIENE
+
+    def test_a_dead_resolver_call_closes_the_run_instead_of_retrying_forever(self) -> None:
+        conductor = self._conductor()
+        conductor.ci.status.return_value = CiStatus.NO_CHECKS
+        conductor.forum.pull_request_state.return_value = PullRequestStatusMother.open_and_conflicting()
+        conductor.branches.catch_up.return_value = BranchCatchUpMother.conflicting_on_a_shared_file()
+        conductor.resolver.resolve.side_effect = itertools.repeat(
+            InvalidResolutionReportError("the resolver never emitted a report"), 5
+        )
+
+        result = conductor.conduct()
+
+        assert conductor.resolver.resolve.call_count == 1
+        assert conductor.branches.abort_merge.call_count == 1
+        assert conductor.branches.conclude_merge.call_count == 0
+        assert result.state is RunState.ABORTED_UNMEASURED_CALL
 
 
 class TestConductSliceCatchesUpTheBranchWhenTheCiFindsAConflict(_ResumedAwaitingTheCi):
@@ -996,18 +1082,15 @@ class TestConductSliceCatchesUpTheBranchWhenTheCiFindsAConflict(_ResumedAwaiting
         assert conductor.branches.catch_up.call_count == 1
         assert result.state is RunState.BLOCKED_CI_CONFLICT
 
-    def test_a_conflict_found_while_catching_up_the_branch_after_a_ci_retry_publishes_its_paths(self) -> None:
+    def test_a_conflict_found_while_catching_up_the_branch_after_a_ci_retry_calls_the_resolver(self) -> None:
         conductor = self._conductor(budgets=Budgets(catch_up_retries=1))
         conductor.ci.status.return_value = CiStatus.NO_CHECKS
         conductor.forum.pull_request_state.return_value = PullRequestStatusMother.open_and_conflicting()
         conductor.branches.catch_up.return_value = BranchCatchUpMother.conflicting_on_a_shared_file()
 
-        result = conductor.conduct()
+        conductor.conduct()
 
-        assert result.state is RunState.BLOCKED_CI_CONFLICT
-        conductor.repository.publish_catch_up_conflict.assert_called_once_with(
-            repo=Conductor.REPO, issue=_SUBISSUE, paths=BranchCatchUpMother.CONFLICTING_PATHS
-        )
+        assert conductor.resolver.resolve.call_count == 1
 
     def test_resuming_with_a_catch_up_retry_already_spent_does_not_reset_the_counter(self) -> None:
         conductor = Conductor(
@@ -1252,7 +1335,7 @@ class TestConductSliceOnTheHappyPath:
         )
 
     def test_the_durable_row_carries_the_budgets_and_the_models_this_invocation_ran_with(self) -> None:
-        models = RoleModels(understand="opus", implement="opus", verify="opus")
+        models = RoleModels(understand="opus", implement="opus", verify="opus", resolve="opus")
         conductor = Conductor(
             chosen=SelectSliceResultMother.resumed_at(RunMother.implementing()),
             budgets=Budgets(slice_cost_usd=99.0),

@@ -8,3 +8,4 @@ class RoleModels:
     understand: str
     implement: str
     verify: str
+    resolve: str

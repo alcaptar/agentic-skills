@@ -53,7 +53,7 @@ class _Closer:
             "state": RunState.MERGED,
             "run": RunMother.awaiting_merge(),
             "budgets": Budgets(),
-            "models": RoleModels(understand="sonnet", implement="sonnet", verify="sonnet"),
+            "models": RoleModels(understand="sonnet", implement="sonnet", verify="sonnet", resolve="opus"),
             **overrides,
         }
         self.action.execute(RecordClosureParams(**params))  # type: ignore[arg-type]
@@ -132,7 +132,7 @@ class TestTheRowItWrites:
 
     def test_the_model_assigned_to_each_role_reaches_the_row(self) -> None:
         closer = _Closer()
-        models = RoleModels(understand="haiku", implement="opus", verify="haiku")
+        models = RoleModels(understand="haiku", implement="opus", verify="haiku", resolve="opus")
 
         written = closer.close(models=models)
 
@@ -199,30 +199,6 @@ class TestWhichSpendsCount:
         written = closer.close()
 
         assert written.spends == (free_call,)
-
-
-class TestPublishingTheCatchUpConflict:
-    def test_a_closure_by_conflict_with_paths_publishes_them(self) -> None:
-        closer = _Closer()
-        paths = ("shared.txt", "src/module.py")
-
-        closer.close(state=RunState.BLOCKED_CI_CONFLICT, conflicting_paths=paths)
-
-        closer.repository.publish_catch_up_conflict.assert_called_once_with(repo=_REPO, issue=_ISSUE, paths=paths)
-
-    def test_a_closure_by_conflict_with_no_paths_publishes_nothing(self) -> None:
-        closer = _Closer()
-
-        closer.close(state=RunState.BLOCKED_CI_CONFLICT, conflicting_paths=())
-
-        closer.repository.publish_catch_up_conflict.assert_not_called()
-
-    def test_a_closure_in_another_state_never_publishes_even_if_conflicting_paths_arrived(self) -> None:
-        closer = _Closer()
-
-        closer.close(state=RunState.MERGED, conflicting_paths=("shared.txt",))
-
-        closer.repository.publish_catch_up_conflict.assert_not_called()
 
 
 class TestPublishingTheVetoFindings:

@@ -42,3 +42,27 @@ class Git:
         cls.run(root, "config", "user.name", "test")
 
         return root
+
+    @classmethod
+    def repo_with_a_conflicting_edit_pushed_from_elsewhere(
+        cls, tmp_path: Path, *, branch: str, extra_files: dict[str, str] | None = None
+    ) -> tuple[Path, Path]:
+        files = {"shared.txt": "base\n", **(extra_files or {})}
+        remote = tmp_path / "remote.git"
+        cls.run(tmp_path, "init", "--bare", str(remote))
+        repo = cls.init_repo(tmp_path / "repo")
+        for name, content in files.items():
+            (repo / name).write_text(content)
+        cls.run(repo, "add", *files)
+        cls.run(repo, "commit", "-m", "base")
+        cls.run(repo, "remote", "add", "origin", str(remote))
+        cls.run(repo, "push", "-u", "origin", cls.BASE_BRANCH)
+        cls.run(repo, "switch", "-c", branch, f"origin/{cls.BASE_BRANCH}")
+        cls.run(repo, "push", "-u", "origin", branch)
+        elsewhere = cls.clone(remote=remote, into=tmp_path / "elsewhere")
+        cls.run(elsewhere, "switch", branch)
+        (elsewhere / "shared.txt").write_text("from elsewhere\n")
+        cls.run(elsewhere, "commit", "-am", "edited from elsewhere")
+        cls.run(elsewhere, "push")
+
+        return repo, remote

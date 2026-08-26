@@ -4,7 +4,6 @@ from enum import StrEnum
 from typing import TYPE_CHECKING
 
 from slice_runner.domain.alignment_response_kind import AlignmentResponseKind
-from slice_runner.domain.branch_catch_up_outcome import BranchCatchUpOutcome
 from slice_runner.domain.ci_status import CiStatus
 from slice_runner.domain.control_status import ControlStatus
 from slice_runner.domain.cost_exhaustion import CostExhaustion
@@ -67,14 +66,6 @@ class Outcome(StrEnum):
             return cls.INDETERMINATE
 
         return cls.DONE
-
-    @classmethod
-    def of_the_catch_up(cls, outcome: BranchCatchUpOutcome) -> Outcome:
-        match outcome:
-            case BranchCatchUpOutcome.CAUGHT_UP:
-                return cls.DONE
-            case BranchCatchUpOutcome.CONFLICTING:
-                return cls.CONFLICTING
 
     @classmethod
     def of_the_cost_exhaustion(cls, exhaustion: CostExhaustion, *, otherwise: Outcome) -> Outcome:

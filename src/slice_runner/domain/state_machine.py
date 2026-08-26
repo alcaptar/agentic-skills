@@ -43,18 +43,11 @@ class StateMachine:
 
     def _after_a_catch_up_conflict(self, run: Run) -> Transition:
         match run.step:
-            case (
-                Step.UNDERSTAND
-                | Step.IMPLEMENT
-                | Step.RUN_CONTROLS
-                | Step.VERIFY
-                | Step.OPEN_PULL_REQUEST
-                | Step.CATCH_UP
-            ):
+            case Step.UNDERSTAND | Step.IMPLEMENT | Step.RUN_CONTROLS | Step.VERIFY | Step.OPEN_PULL_REQUEST:
                 return self._closed(run, RunState.BLOCKED_CI_CONFLICT)
             case Step.AWAIT_CI:
                 return self._retrying_a_catch_up(run)
-            case Step.AWAIT_MERGE:
+            case Step.CATCH_UP | Step.AWAIT_MERGE:
                 self._impossible(run, Outcome.CONFLICTING)
 
     def _retrying_a_catch_up(self, run: Run) -> Transition:
@@ -151,10 +144,17 @@ class StateMachine:
                 return self._after_asking_for_the_merge(run, outcome)
 
     def _after_catching_up_the_branch(self, run: Run, outcome: Outcome) -> Transition:
-        if outcome is Outcome.DONE:
-            return self._moving_to(replace(run, catching_up_the_branch=True), Step.RUN_CONTROLS)
-
-        self._impossible(run, outcome)
+        match outcome:
+            case Outcome.DONE:
+                return self._moving_to(replace(run, catching_up_the_branch=True), Step.RUN_CONTROLS)
+            case Outcome.DISCARDED:
+                return self._moving_to(run, Step.CATCH_UP)
+            case Outcome.HYGIENE_REJECTED:
+                return self._retrying_a_hygiene_rejection(run, back_to=Step.CATCH_UP)
+            case Outcome.CALL_NOT_MEASURED:
+                return self._closed(run, RunState.ABORTED_UNMEASURED_CALL)
+            case _:
+                self._impossible(run, outcome)
 
     def _after_the_alignment_pause(self, run: Run, outcome: Outcome, *, call_died: bool) -> Transition:
         match outcome:
@@ -190,7 +190,7 @@ class StateMachine:
             case Outcome.FAILED:
                 return self._retrying_a_mechanical_failure(self._logged_a_round(run))
             case Outcome.HYGIENE_REJECTED:
-                return self._retrying_a_hygiene_rejection(run)
+                return self._retrying_a_hygiene_rejection(run, back_to=Step.IMPLEMENT)
             case Outcome.INDETERMINATE:
                 return self._ticking(self._logged_a_round(run))
             case _:
@@ -216,10 +216,10 @@ class StateMachine:
 
         return self._closed(run, RunState.BLOCKED_CONTROLS)
 
-    def _retrying_a_hygiene_rejection(self, run: Run) -> Transition:
+    def _retrying_a_hygiene_rejection(self, run: Run, *, back_to: Step) -> Transition:
         if run.hygiene_retries < self.budgets.hygiene_retries:
             return self._moving_to(
-                replace(run, hygiene_retries=run.hygiene_retries + 1, catching_up_the_branch=False), Step.IMPLEMENT
+                replace(run, hygiene_retries=run.hygiene_retries + 1, catching_up_the_branch=False), back_to
             )
 
         return self._closed(run, RunState.BLOCKED_HYGIENE)

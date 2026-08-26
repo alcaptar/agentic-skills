@@ -257,7 +257,7 @@ class TestToleratingHistory:
         assert record.budgets == asdict(budgets)
 
     def test_the_old_spanish_key_for_models_by_role_is_still_read_into_the_same_field(self) -> None:
-        models = RoleModels(understand="haiku", implement="opus", verify="haiku")
+        models = RoleModels(understand="haiku", implement="opus", verify="haiku", resolve="opus")
         row = MetricsEntryPayload.from_domain(
             ClosedSliceMother.merged_with_config(models=models), ts=_STAMP.isoformat()
         ).to_contract()
@@ -266,7 +266,12 @@ class TestToleratingHistory:
         record = MetricsLedgerEntry.read(row)
 
         assert record is not None
-        assert record.models_by_role == {"understand": "haiku", "implement": "opus", "verify": "haiku"}
+        assert record.models_by_role == {
+            "understand": "haiku",
+            "implement": "opus",
+            "verify": "haiku",
+            "resolve": "opus",
+        }
 
     def test_a_row_without_a_timestamp_cannot_be_placed_in_a_range_and_is_skipped(self) -> None:
         row = MetricsEntryPayload.from_domain(ClosedSliceMother.merged(), ts=_STAMP.isoformat()).to_contract()

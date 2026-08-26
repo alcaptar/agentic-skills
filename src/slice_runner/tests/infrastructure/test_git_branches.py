@@ -282,25 +282,11 @@ class TestGitBranchesCatchingUpTheBranch:
 
     @staticmethod
     def _repo_with_a_conflicting_edit_pushed_from_elsewhere(tmp_path: Path) -> tuple[Path, Path]:
-        remote = tmp_path / "remote.git"
-        Git.run(tmp_path, "init", "--bare", str(remote))
-        repo = Git.init_repo(tmp_path / "repo")
-        (repo / "shared.txt").write_text("base\n")
-        Git.run(repo, "add", "shared.txt")
-        Git.run(repo, "commit", "-m", "base")
-        Git.run(repo, "remote", "add", "origin", str(remote))
-        Git.run(repo, "push", "-u", "origin", Git.BASE_BRANCH)
-        Git.run(repo, "switch", "-c", TestGitBranchesCatchingUpTheBranch._SLICE_BRANCH, f"origin/{Git.BASE_BRANCH}")
-        Git.run(repo, "push", "-u", "origin", TestGitBranchesCatchingUpTheBranch._SLICE_BRANCH)
-        elsewhere = Git.clone(remote=remote, into=tmp_path / "elsewhere")
-        Git.run(elsewhere, "switch", TestGitBranchesCatchingUpTheBranch._SLICE_BRANCH)
-        (elsewhere / "shared.txt").write_text("from elsewhere\n")
-        Git.run(elsewhere, "commit", "-am", "edited from elsewhere")
-        Git.run(elsewhere, "push")
+        return Git.repo_with_a_conflicting_edit_pushed_from_elsewhere(
+            tmp_path, branch=TestGitBranchesCatchingUpTheBranch._SLICE_BRANCH
+        )
 
-        return repo, remote
-
-    def test_files_left_conflicting_close_the_merge_instead_of_leaving_the_worktree_half_merged(
+    def test_files_left_conflicting_leave_the_merge_open_instead_of_aborting_it_on_its_own(
         self, tmp_path: Path
     ) -> None:
         repo, _ = self._repo_with_a_conflicting_edit_pushed_from_elsewhere(tmp_path)
@@ -312,8 +298,8 @@ class TestGitBranchesCatchingUpTheBranch:
         )
 
         assert outcome.outcome is BranchCatchUpOutcome.CONFLICTING
-        assert Git.run(repo, "status", "--porcelain").strip() == ""
-        assert not (repo / ".git" / "MERGE_HEAD").exists()
+        assert (repo / ".git" / "MERGE_HEAD").exists()
+        assert "<<<<<<<" in (repo / "shared.txt").read_text()
 
     def test_files_left_conflicting_report_the_paths_git_marked_as_unmerged(self, tmp_path: Path) -> None:
         repo, _ = self._repo_with_a_conflicting_edit_pushed_from_elsewhere(tmp_path)
@@ -475,3 +461,82 @@ class TestGitBranchesCatchingUpTheBranch:
         )
 
         assert outcome.outcome is BranchCatchUpOutcome.CAUGHT_UP
+
+
+@pytest.mark.integration
+class TestGitBranchesConcludingOrAbortingAMergeLeftOpenByCatchUp:
+    _SLICE_BRANCH = "slice/22-la-rama-se-pone-al-dia"
+
+    @staticmethod
+    def _repo_with_a_merge_left_open_on_a_conflict(tmp_path: Path) -> Path:
+        branch = TestGitBranchesConcludingOrAbortingAMergeLeftOpenByCatchUp._SLICE_BRANCH
+        repo, _ = Git.repo_with_a_conflicting_edit_pushed_from_elsewhere(tmp_path, branch=branch)
+        (repo / "shared.txt").write_text("from the worktree\n")
+        Git.run(repo, "commit", "-am", "edited locally")
+        GitBranches(process=Real.process()).catch_up(worktree=str(repo), name=branch, base=Git.BASE_BRANCH)
+
+        return repo
+
+    def test_concluding_a_resolved_merge_commits_it_and_leaves_the_index_clean(self, tmp_path: Path) -> None:
+        repo = self._repo_with_a_merge_left_open_on_a_conflict(tmp_path)
+        (repo / "shared.txt").write_text("resolved\n")
+        Git.run(repo, "add", "shared.txt")
+
+        GitBranches(process=Real.process()).conclude_merge(worktree=str(repo))
+
+        assert not (repo / ".git" / "MERGE_HEAD").exists()
+        assert Git.run(repo, "status", "--porcelain").strip() == ""
+        assert (repo / "shared.txt").read_text() == "resolved\n"
+
+    def test_aborting_a_merge_restores_the_tree_to_how_it_stood_before_the_attempt(self, tmp_path: Path) -> None:
+        repo = self._repo_with_a_merge_left_open_on_a_conflict(tmp_path)
+
+        GitBranches(process=Real.process()).abort_merge(worktree=str(repo))
+
+        assert not (repo / ".git" / "MERGE_HEAD").exists()
+        assert Git.run(repo, "status", "--porcelain").strip() == ""
+        assert (repo / "shared.txt").read_text() == "from the worktree\n"
+
+
+@pytest.mark.integration
+class TestGitBranchesReportingWhatChangedDuringAMergeAttempt:
+    _SLICE_BRANCH = "slice/22-la-rama-se-pone-al-dia"
+
+    @staticmethod
+    def _repo_with_a_conflict_and_a_clean_file_untouched_by_either_branch(tmp_path: Path) -> Path:
+        branch = TestGitBranchesReportingWhatChangedDuringAMergeAttempt._SLICE_BRANCH
+        repo, _ = Git.repo_with_a_conflicting_edit_pushed_from_elsewhere(
+            tmp_path, branch=branch, extra_files={"clean.txt": "base\n"}
+        )
+        (repo / "shared.txt").write_text("from the worktree\n")
+        Git.run(repo, "commit", "-am", "edited locally")
+        GitBranches(process=Real.process()).catch_up(worktree=str(repo), name=branch, base=Git.BASE_BRANCH)
+
+        return repo
+
+    def test_the_conflicting_path_itself_is_reported_as_changed_even_before_anyone_touches_it(
+        self, tmp_path: Path
+    ) -> None:
+        repo = self._repo_with_a_conflict_and_a_clean_file_untouched_by_either_branch(tmp_path)
+
+        changed = GitBranches(process=Real.process()).changed_paths(worktree=str(repo))
+
+        assert changed == ("shared.txt",)
+
+    def test_a_file_edited_in_the_working_tree_but_never_staged_is_still_reported_as_changed(
+        self, tmp_path: Path
+    ) -> None:
+        repo = self._repo_with_a_conflict_and_a_clean_file_untouched_by_either_branch(tmp_path)
+        (repo / "clean.txt").write_text("a stray edit outside the conflict\n")
+
+        changed = GitBranches(process=Real.process()).changed_paths(worktree=str(repo))
+
+        assert changed == ("clean.txt", "shared.txt")
+
+    def test_a_new_untracked_file_is_reported_as_changed_too(self, tmp_path: Path) -> None:
+        repo = self._repo_with_a_conflict_and_a_clean_file_untouched_by_either_branch(tmp_path)
+        (repo / "new.txt").write_text("a file nobody declared\n")
+
+        changed = GitBranches(process=Real.process()).changed_paths(worktree=str(repo))
+
+        assert changed == ("new.txt", "shared.txt")
