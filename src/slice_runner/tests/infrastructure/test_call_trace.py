@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import io
 import json
+import os
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import TYPE_CHECKING
 from unittest.mock import Mock, create_autospec
 
@@ -10,13 +13,32 @@ import pytest
 from slice_runner.domain.clock import Clock
 from slice_runner.domain.exceptions import UnreadableCallTraceError
 from slice_runner.domain.step import Step
+from slice_runner.infrastructure import local_call_trace
 from slice_runner.infrastructure.claude_config import ClaudeConfig
+from slice_runner.infrastructure.durable_ledger import DurableLedger
 from slice_runner.infrastructure.harness_call_payload import HarnessCallPayload
 from slice_runner.infrastructure.local_call_trace import LocalCallTrace
 from slice_runner.tests.mothers.harness_call_mother import HarnessCallMother
 
 if TYPE_CHECKING:
-    from pathlib import Path
+    from collections.abc import Callable, Iterator
+
+_RETIRED_DIRECTORY = ("slice-runner", "log")
+
+
+@pytest.fixture(autouse=True)
+def _forbid_opening_the_retired_log_directory(monkeypatch: pytest.MonkeyPatch) -> None:
+    real_open: Callable[..., object] = io.open
+
+    def guarded(file: object, *args: object, **kwargs: object) -> object:
+        if isinstance(file, str | os.PathLike) and Path(str(file)).parts[-3:-1] == _RETIRED_DIRECTORY:
+            raise AssertionError(f"the retired log directory must never be opened: {file!r}")
+
+        return real_open(file, *args, **kwargs)
+
+    monkeypatch.setattr(io, "open", guarded)
+    monkeypatch.setattr("builtins.open", guarded)
+
 
 _STAMP = datetime(2026, 8, 10, 12, 0, 0, tzinfo=UTC)
 
@@ -24,7 +46,7 @@ _STAMP = datetime(2026, 8, 10, 12, 0, 0, tzinfo=UTC)
 class WrittenTrace:
     @staticmethod
     def records_under(root: Path) -> list[dict[str, object]]:
-        ledger = root / "slice-runner" / "log" / "calls.jsonl"
+        ledger = root / "slice-runner" / "runs" / "calls.jsonl"
 
         return [json.loads(line) for line in ledger.read_text(encoding="utf-8").splitlines()]
 
@@ -146,7 +168,7 @@ class TestFindingTheSessionOfAPastCall(WithTheTraceOutOfTheRealHome):
     def test_a_line_from_before_this_run_carried_identity_is_still_readable_and_never_matches_by_accident(
         self, tmp_path: Path
     ) -> None:
-        ledger = tmp_path / "slice-runner" / "log" / "calls.jsonl"
+        ledger = tmp_path / "slice-runner" / "runs" / "calls.jsonl"
         ledger.parent.mkdir(parents=True)
         ledger.write_text(
             json.dumps({"slice_id": HarnessCallMother.SLICE_ID, "step": "implement", "session": "old-session"}) + "\n",
@@ -180,7 +202,7 @@ class TestFindingTheSessionOfAPastCall(WithTheTraceOutOfTheRealHome):
     def test_a_line_written_by_the_old_bare_identifier_does_not_match_the_new_prefixed_one(
         self, tmp_path: Path
     ) -> None:
-        ledger = tmp_path / "slice-runner" / "log" / "calls.jsonl"
+        ledger = tmp_path / "slice-runner" / "runs" / "calls.jsonl"
         ledger.parent.mkdir(parents=True)
         ledger.write_text(
             json.dumps(
@@ -210,7 +232,7 @@ class TestFindingTheSessionOfAPastCall(WithTheTraceOutOfTheRealHome):
         assert found_by_the_new_prefixed_identifier == ()
 
     def test_a_line_that_is_not_json_is_refused_instead_of_being_skipped_in_silence(self, tmp_path: Path) -> None:
-        ledger = tmp_path / "slice-runner" / "log" / "calls.jsonl"
+        ledger = tmp_path / "slice-runner" / "runs" / "calls.jsonl"
         ledger.parent.mkdir(parents=True)
         ledger.write_text("not json\n", encoding="utf-8")
 
@@ -225,7 +247,7 @@ class TestFindingTheSessionOfAPastCall(WithTheTraceOutOfTheRealHome):
     def test_a_line_this_program_did_not_write_is_refused_instead_of_being_skipped_in_silence(
         self, tmp_path: Path
     ) -> None:
-        ledger = tmp_path / "slice-runner" / "log" / "calls.jsonl"
+        ledger = tmp_path / "slice-runner" / "runs" / "calls.jsonl"
         ledger.parent.mkdir(parents=True)
         ledger.write_text(json.dumps({"step": "implement"}) + "\n", encoding="utf-8")
 
@@ -308,4 +330,122 @@ class TestWhereTheTraceLives:
 
         LocalCallTrace(clock=WithTheTraceOutOfTheRealHome.frozen_at()).record(HarnessCallMother.of_the_judge())
 
-        assert (tmp_path / "never-used-before" / "slice-runner" / "log" / "calls.jsonl").exists()
+        assert (tmp_path / "never-used-before" / "slice-runner" / "runs" / "calls.jsonl").exists()
+
+    def test_the_ledger_path_is_composed_under_runs_and_not_under_the_retired_log_directory(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
+
+        path = DurableLedger(name=LocalCallTrace.LEDGER, row=HarnessCallPayload).path()
+
+        assert path == tmp_path / "slice-runner" / "runs" / "calls.jsonl"
+
+
+class TestTheAdapterOwnsOnlyItsNameAndItsPayload:
+    class _StubLedger:
+        def __init__(self, *, name: str, row: type[HarnessCallPayload]) -> None:
+            self.name = name
+            self.row = row
+            self.appended: list[HarnessCallPayload] = []
+
+        def append(self, row: HarnessCallPayload) -> None:
+            self.appended.append(row)
+
+        def rows(self) -> Iterator[HarnessCallPayload]:
+            yield from self.appended
+
+    @staticmethod
+    def _wired_stub(monkeypatch: pytest.MonkeyPatch) -> list[TestTheAdapterOwnsOnlyItsNameAndItsPayload._StubLedger]:
+        created: list[TestTheAdapterOwnsOnlyItsNameAndItsPayload._StubLedger] = []
+
+        def factory(
+            *, name: str, row: type[HarnessCallPayload]
+        ) -> TestTheAdapterOwnsOnlyItsNameAndItsPayload._StubLedger:
+            stub = TestTheAdapterOwnsOnlyItsNameAndItsPayload._StubLedger(name=name, row=row)
+            created.append(stub)
+            return stub
+
+        monkeypatch.setattr(local_call_trace, "DurableLedger", factory)
+
+        return created
+
+    def test_recording_a_call_reaches_only_the_ledger_and_writes_no_file(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
+        created = self._wired_stub(monkeypatch)
+
+        trace = LocalCallTrace(clock=WithTheTraceOutOfTheRealHome.frozen_at())
+        trace.record(HarnessCallMother.of_the_implementer())
+
+        assert len(created) == 1
+        stub = created[0]
+        assert stub.name == LocalCallTrace.LEDGER
+        assert stub.row is HarnessCallPayload
+        assert [call.session for call in stub.appended] == [HarnessCallMother.SESSION_OF_THE_IMPLEMENTER]
+        assert not (tmp_path / "slice-runner").exists()
+
+    def test_sessions_of_reads_only_from_the_ledger_and_writes_no_file(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
+        self._wired_stub(monkeypatch)
+
+        trace = LocalCallTrace(clock=WithTheTraceOutOfTheRealHome.frozen_at())
+        trace.record(HarnessCallMother.of_the_implementer())
+
+        found = trace.sessions_of(
+            repo=HarnessCallMother.REPO,
+            issue=HarnessCallMother.ISSUE,
+            slice_id=HarnessCallMother.SLICE_ID,
+            step=Step.IMPLEMENT,
+        )
+
+        assert found == (HarnessCallMother.SESSION_OF_THE_IMPLEMENTER,)
+        assert not (tmp_path / "slice-runner").exists()
+
+
+class TestTheRetiredLogDirectoryIsNeverTouched(WithTheTraceOutOfTheRealHome):
+    @staticmethod
+    def _seeded_without_opening(path: Path, data: bytes) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        descriptor = os.open(str(path), os.O_CREAT | os.O_WRONLY | os.O_TRUNC)
+        try:
+            os.write(descriptor, data)
+        finally:
+            os.close(descriptor)
+
+    @staticmethod
+    def _read_without_opening(path: Path) -> bytes:
+        descriptor = os.open(str(path), os.O_RDONLY)
+        try:
+            return os.read(descriptor, 1_000_000)
+        finally:
+            os.close(descriptor)
+
+    def test_a_session_written_under_the_retired_directory_is_neither_found_nor_touched(self, tmp_path: Path) -> None:
+        old_ledger = tmp_path / "slice-runner" / "log" / "calls.jsonl"
+        old_line = (
+            json.dumps(
+                {
+                    "repo": HarnessCallMother.REPO,
+                    "issue": HarnessCallMother.ISSUE,
+                    "slice_id": HarnessCallMother.SLICE_ID,
+                    "step": "implement",
+                    "session": "session-from-before-the-move",
+                }
+            )
+            + "\n"
+        ).encode("utf-8")
+        self._seeded_without_opening(old_ledger, old_line)
+
+        found = LocalCallTrace(clock=self.frozen_at()).sessions_of(
+            repo=HarnessCallMother.REPO,
+            issue=HarnessCallMother.ISSUE,
+            slice_id=HarnessCallMother.SLICE_ID,
+            step=Step.IMPLEMENT,
+        )
+
+        assert found == ()
+        assert self._read_without_opening(old_ledger) == old_line
