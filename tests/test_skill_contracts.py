@@ -90,6 +90,23 @@ acceptance criteria are confirmed here and never written to the parent issue. So
 about the prose, and rewording either half moves its anchor with it.
 """
 
+_EXISTING_PIECE_ANCHORS = ("que hace hoy esa pieza", "una ruta que existe deja de cumplir")
+"""Anchors for the rule that a `- pieza:` line names behaviour, not just that a path exists.
+
+Step `1b` already confirms the pointer -- the path itself -- so a `- pieza:` line that only restates
+it is a file census a spec could pass without anybody reading what the code does. Same kind of claim
+as `_CONFIRMATION_ANCHORS`: no second surface parses this prose, so the anchors travel with the
+sentence in the hard rules and in the matching `validate` checklist item.
+"""
+
+_EXISTING_PIECE_LOCATION_ANCHOR = "reportandola como `issue padre`"
+"""Where the `validate` checklist owes reporting the `- pieza:` deviation it just learned to catch.
+
+`_VALIDATE_ANCHORS` already contains the literal string `issue padre`, but it is satisfied by an
+unrelated checklist item, so deleting this phrase alone leaves that broader test green. This anchor
+is scoped to the sentence under test, not the whole `validate` section.
+"""
+
 _VALIDATE_ANCHORS = (
     "la regla que incumple y su ubicacion",
     "issue padre",
@@ -474,6 +491,46 @@ def test_the_validate_mode_reports_every_deviation_with_its_rule_and_where_it_li
         f"the `validate` mode of {_rel(_SPEC)} no longer states {missing}: a deviation reported without "
         f"its rule and its location is one the person has to go and find"
     )
+
+
+_PIECE_LINE = re.compile(r"^- pieza: \S+ - (.+?)(?=\n- |\Z)", re.MULTILINE | re.DOTALL)
+
+
+def test_the_existing_piece_lines_name_behaviour_and_the_documented_example_shows_it() -> None:
+    """`- pieza:` used to pass by naming a path that exists; now it owes what that path does today.
+
+    The hard rules state the bar, `validate` catches a spec written under the old one, and the
+    parent's example is what a model copies verbatim -- so a rule that tightened without the example
+    following would have the skill teaching the very shape it now rejects. This is the comparison
+    `docs/conventions/testing.md` asks for between two copies of the same contract: reword one side
+    and the other stays behind.
+    """
+    hard_rules = _spec_prose(_HARD_RULES)
+    missing_in_rules = [anchor for anchor in _EXISTING_PIECE_ANCHORS if anchor not in hard_rules]
+    assert not missing_in_rules, (
+        f"the hard rules of {_rel(_SPEC)} no longer state {missing_in_rules}: a `- pieza:` line that "
+        f"only names a path that exists has to stop being enough"
+    )
+
+    validate_prose = _spec_prose(_VALIDATE)
+    missing_in_validate = [anchor for anchor in _EXISTING_PIECE_ANCHORS if anchor not in validate_prose]
+    assert not missing_in_validate, (
+        f"the `validate` checklist of {_rel(_SPEC)} no longer states {missing_in_validate}: it has to "
+        f"catch a `- pieza:` line that only names an existing path"
+    )
+    assert _EXISTING_PIECE_LOCATION_ANCHOR in validate_prose, (
+        f"the `validate` checklist of {_rel(_SPEC)} no longer states {_EXISTING_PIECE_LOCATION_ANCHOR!r}: "
+        f"a deviation reported without its location is one the person has to go and find"
+    )
+
+    example = _spec_example(_PARENT_EXAMPLE)
+    pieces = _PIECE_LINE.findall(example)
+    assert pieces, f"the documented parent under {_PARENT_EXAMPLE} carries no `- pieza:` line to check"
+    for tail in pieces:
+        assert "existe" not in tail, (
+            f"the documented `- pieza:` line {tail!r} still describes the piece as existing, which is "
+            f"exactly what the tightened rule rejects"
+        )
 
 
 _GRACE_WINDOW_IS_WRITTEN_IN = (
