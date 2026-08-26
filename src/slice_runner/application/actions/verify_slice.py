@@ -25,6 +25,7 @@ class VerifySliceParams:
     worktree: str
     base: str
     slice_id: str
+    verify_round: int
     prior_art: str
     signal: str
     excludes: str
@@ -68,6 +69,8 @@ class VerifySlice:
                 repo=params.repo,
                 issue=params.issue,
                 slice_id=params.slice_id,
+                verify_round=params.verify_round,
+                session=verification.session,
                 diff=diff,
                 verdict=verification.verdict,
             )

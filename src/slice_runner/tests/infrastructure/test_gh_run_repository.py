@@ -67,7 +67,7 @@ _SUB1_BODY = (
     '"hygiene_retries": 0, "verify_retries": 0, '
     '"correction_retries": 0, "ci_retries": 0, "catch_up_retries": 0, "indeterminate_ticks": 2, '
     '"verify_discards": 0, '
-    '"understand_discards": 0, "implement_discards": 0, "control_rounds_logged": 0, '
+    '"understand_discards": 0, "implement_discards": 0, "control_rounds_logged": 0, "verify_rounds_logged": 0, '
     '"last_reviewed_id": 0, "requested_changes": []}\n'
     "-->\n\n"
 )
@@ -456,6 +456,29 @@ class TestReadingTheChildren:
 
         assert children[0].run == RunMother.about_to_ask_the_ci()
 
+    def test_a_state_block_written_before_this_slice_with_no_verify_rounds_logged_key_reads_it_as_zero(self) -> None:
+        without_the_key = [
+            {
+                "number": 1,
+                "title": "slice-01 (x): y",
+                "body": (
+                    "INTENCION: z\n\n"
+                    "<!-- slice-runner:estado\n"
+                    '{"step": "verify", "control_retries": 0, "verify_retries": 0, "ci_retries": 0, '
+                    '"indeterminate_ticks": 0, "verify_discards": 0}\n'
+                    "-->\n"
+                ),
+                "labels": [],
+                "state": "OPEN",
+            }
+        ]
+
+        children = GhRunRepository(call=GhCallDoubles.wired(self._process(children=without_the_key))).read_children(
+            repo=_REPO, parent=43, expected=1
+        )
+
+        assert children[0].run == RunMother.judging()
+
     def test_a_state_block_with_a_requested_change_reads_back_its_anchored_comments_with_file_and_line(self) -> None:
         with_requested_changes = [
             {
@@ -644,7 +667,7 @@ class TestWritingTheExecutionStateBlock:
             '"control_retries": 0, "hygiene_retries": 0, "verify_retries": 0, '
             '"correction_retries": 0, "ci_retries": 0, "catch_up_retries": 0, "indeterminate_ticks": 0, '
             '"verify_discards": 0, '
-            '"understand_discards": 0, "implement_discards": 0, "control_rounds_logged": 0, '
+            '"understand_discards": 0, "implement_discards": 0, "control_rounds_logged": 0, "verify_rounds_logged": 0, '
             '"last_reviewed_id": 0, "requested_changes": []}\n'
             "-->\n"
         )
@@ -679,7 +702,7 @@ class TestWritingTheExecutionStateBlock:
             '"control_retries": 0, "hygiene_retries": 0, "verify_retries": 0, '
             '"correction_retries": 0, "ci_retries": 0, "catch_up_retries": 0, "indeterminate_ticks": 0, '
             '"verify_discards": 0, '
-            '"understand_discards": 0, "implement_discards": 0, "control_rounds_logged": 0, '
+            '"understand_discards": 0, "implement_discards": 0, "control_rounds_logged": 0, "verify_rounds_logged": 0, '
             '"last_reviewed_id": 0, "requested_changes": []}\n'
             "-->\n\n"
         )
@@ -738,7 +761,7 @@ class TestWritingTheExecutionStateBlock:
             '"control_retries": 0, "hygiene_retries": 0, "verify_retries": 0, '
             '"correction_retries": 0, "ci_retries": 0, "catch_up_retries": 0, "indeterminate_ticks": 0, '
             '"verify_discards": 0, '
-            '"understand_discards": 0, "implement_discards": 0, "control_rounds_logged": 0, '
+            '"understand_discards": 0, "implement_discards": 0, "control_rounds_logged": 0, "verify_rounds_logged": 0, '
             '"last_reviewed_id": 0, "requested_changes": [], '
             '"spend": {"cost_usd": 0.3433209, "turns": 9, "duration_ms": 36315, "calls": 1, '
             '"models": ["claude-sonnet-5"], "input_tokens": 13, "output_tokens": 1159, '

@@ -13,5 +13,7 @@ class CorpusEntry:
     repo: str
     issue: int
     slice_id: str
+    verify_round: int
+    session: str
     diff: SliceDiff
     verdict: Verdict

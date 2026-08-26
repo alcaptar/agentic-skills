@@ -112,6 +112,19 @@ class TestWhatTheJudgeCallCost(Calling):
         assert verification.spend == HarnessSpendMother.of_the_judge_call()
 
 
+class TestWhatTheJudgeCallWasIdentifiedBy(Calling):
+    def test_the_session_of_the_call_comes_back_with_the_verdict_because_it_is_what_ties_this_row_to_calls_jsonl(
+        self,
+    ) -> None:
+        process = RecordedProcess(HarnessEnvelopeMother.recorded())
+
+        verification = ClaudeVerifier(calls=self._calls(process), reader=_READER).verify(
+            _JUDGE, SliceUnderReviewMother.of_the_slice()
+        )
+
+        assert verification.session == HarnessEnvelopeMother.SESSION_OF_THE_JUDGE
+
+
 class TestWhenTheJudgeAnswersSomethingIncoherent(Calling):
     def test_the_spend_survives_the_rejection_so_the_discarded_call_still_counts(self) -> None:
         incoherent = JudgeVerdictMother.passing_with(JudgeVerdictMother.high_severity_finding())

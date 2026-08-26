@@ -14,6 +14,8 @@ class CorpusEntryMother:
     REPO: ClassVar[str] = "alcaptar/agentic-skills"
     ISSUE: ClassVar[int] = 11
     SLICE_ID: ClassVar[str] = "slice-11"
+    VERIFY_ROUND: ClassVar[int] = 1
+    SESSION: ClassVar[str] = "e3f6a3d0-1c8a-4a7b-9c2e-5f6a7b8c9d0e"
 
     @classmethod
     def of_the_slice(
@@ -22,12 +24,16 @@ class CorpusEntryMother:
         repo: str | None = None,
         issue: int | None = None,
         slice_id: str | None = None,
+        verify_round: int | None = None,
+        session: str | None = None,
         verdict: Verdict | None = None,
     ) -> CorpusEntry:
         return CorpusEntry(
             repo=repo or cls.REPO,
             issue=cls.ISSUE if issue is None else issue,
             slice_id=slice_id or cls.SLICE_ID,
+            verify_round=cls.VERIFY_ROUND if verify_round is None else verify_round,
+            session=session or cls.SESSION,
             diff=SliceDiffMother.of_the_slice(),
             verdict=verdict or VerdictMother.passing(),
         )
