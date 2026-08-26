@@ -81,13 +81,15 @@ class GitBranches(Branches):
         if not self._merge_in_progress(worktree):
             raise GitCommandFailedError.from_command(argv, output)
 
-        conflicting = BranchCatchUp.conflicting(paths=self._conflicting_paths(worktree))
-        self._abort_merge(worktree)
+        try:
+            conflicting_paths = self._conflicting_paths(worktree)
+        finally:
+            self._abort_merge(worktree)
 
-        return conflicting
+        return BranchCatchUp.conflicting(paths=conflicting_paths)
 
     def _conflicting_paths(self, worktree: str) -> tuple[str, ...]:
-        argv = ["git", "-C", worktree, "diff", "--name-only", "--diff-filter=U"]
+        argv = ["git", "-C", worktree, "-c", "core.quotePath=false", "diff", "--name-only", "--diff-filter=U"]
         output = self._process.run(argv, stdin="")
         if output.code != 0:
             raise GitCommandFailedError.from_command(argv, output)
