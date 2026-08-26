@@ -129,8 +129,8 @@ acaba abriendo un caso a soporte, que tampoco tiene donde mirar. Y como nada val
 ajuste negativo entra sin que nadie lo frene y deja el stock en negativo hasta que alguien lo nota.
 
 ## Lo que ya existe
-- pieza: src/stock/domain/stock_repository.py - el puerto de persistencia ya existe; esta slice usa
-  el que hay, no introduce otro
+- pieza: src/stock/domain/stock_repository.py - guarda y lee el stock por sku; esta slice usa esa
+  lectura para decidir si el ajuste deja el stock en negativo, no introduce otro puerto
 - precedente: #88 - se intento con un job nocturno y se revirtio porque no daba trazabilidad del quien
 - acopla: `AjustarStock` ya emite el evento; el ajuste manual se engancha ahi, no en el endpoint
 
@@ -182,11 +182,13 @@ SUSTITUYE: no
 - El padre abre con `## Intencion`: el problema de la feature entera, que esta mal hoy y como se nota.
   Es lo primero que lee una persona al abrirlo, y lo que `slice-runner` reutiliza en el cuerpo de cada
   pull request. Sin ella la spec no esta terminada.
-- El padre lleva `## Lo que ya existe` con lineas `- pieza: <ruta> - <que es>`,
+- El padre lleva `## Lo que ya existe` con lineas `- pieza: <ruta> - <que hace hoy>`,
   `- precedente: #<numero> - <que le paso>` o `- acopla: <sitio> - <como>`. **Cada linea cita una ruta
-  o un numero**: un hallazgo que no se puede ir a comprobar es una impresion y no entra. Si de verdad
-  no hay nada, la seccion lleva una sola linea `- nada: <motivo>`; **vacia no vale**, por lo mismo que
-  `SENAL:` distingue exenta de ausente.
+  o un numero**: un hallazgo que no se puede ir a comprobar es una impresion y no entra. **Y una linea
+  `- pieza:` dice que hace hoy esa pieza, no solo que existe**: el puntero ya lo dio el paso 1b, y
+  nombrar una ruta que existe deja de cumplir la vara. Si de verdad no hay nada, la seccion lleva una
+  sola linea `- nada: <motivo>`; **vacia no vale**, por lo mismo que `SENAL:` distingue exenta de
+  ausente.
 - El padre lleva `## Fuentes de convencion` con lineas `- doc: <ruta>` o `- skill: <ruta>`: punteros
   confirmados a la vara de medir del repo (los escribe el paso 3; slice-runner los exige). Punteros,
   nunca el contenido de la convencion.
@@ -362,7 +364,9 @@ SUSTITUYE: no
    controles: ella sabe cual de esos precedentes se revirtio por un motivo que sigue vigente. Lo
    confirmado se escribe en la seccion `## Lo que ya existe` del issue padre, y **se usa en el paso 2**:
    una pieza reutilizable suele quitar una slice entera, y un precedente revertido suele cambiar el
-   orden.
+   orden. **La linea `- pieza:` que se escribe aqui es solo el puntero**: que hace hoy esa pieza lo
+   entiende el paso 1c, y es esa lectura -no la confirmacion de este paso- la que completa la linea
+   antes de cortar.
 
    **Si no hay nada, dilo con esa seccion vacia y su motivo**, no la omitas: ausencia declarada y
    ausencia silenciosa no son lo mismo, igual que en `SENAL:` y en los controles.
@@ -378,7 +382,8 @@ SUSTITUYE: no
 
    - **Lo que entiendes del codigo**, con forma exigible: por cada pieza que el corte va a tocar, su
      ruta y **que hace hoy**. **Una linea que solo dice que el fichero existe no cumple**: eso ya lo
-     dio el paso 1b, y esta pausa pide el comportamiento.
+     dio el paso 1b, y esta pausa completa esa linea con el comportamiento antes de que el paso 2 la
+     escriba en el padre.
    - **Los criterios de aceptacion de la feature entera**, con la misma **vara de falsabilidad** que
      gobierna los criterios de cada slice -nombra el cambio de produccion que lo haria fallar-, y
      **declara que esa vara se aplico**.
@@ -577,8 +582,10 @@ trabajo. Ofrece corregirlas. Checklist:
 - **Tiene seccion `## Lo que ya existe`**, y cada linea cita una ruta o un `#numero`. Si falta (p. ej.
   un issue anterior a este mecanismo), **es la desviacion a corregir**: corre el descubrimiento
   (paso 1b), confirmalo con la persona y anadela. Una linea sin referencia comprobable -"el repo ya
-  tiene puertos"- se reescribe o se quita: lo que no se puede ir a mirar no informa el corte. Ausencia
-  real se declara con `- nada: <motivo>`, nunca dejando la seccion vacia.
+  tiene puertos"- se reescribe o se quita: lo que no se puede ir a mirar no informa el corte. **Una
+  linea `- pieza:` no dice que hace hoy esa pieza**: nombrar una ruta que existe deja de cumplir la
+  vara, y se reescribe con el comportamiento, reportandola como `issue padre`. Ausencia real se
+  declara con `- nada: <motivo>`, nunca dejando la seccion vacia.
 - **Tiene seccion `## Intencion` con texto**, y **ninguna slice sin linea `INTENCION:`**. Si falta
   (p. ej. un issue anterior a este mecanismo), **es la desviacion a corregir**: reconstruyela con la
   persona y anadela. Comprueba tambien la **vara** en cada linea: nombra el coste de no hacerla. Si
