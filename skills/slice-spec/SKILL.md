@@ -367,15 +367,38 @@ SUSTITUYE: no
    **Si no hay nada, dilo con esa seccion vacia y su motivo**, no la omitas: ausencia declarada y
    ausencia silenciosa no son lo mismo, igual que en `SENAL:` y en los controles.
 
-2. **Trocea en slices verticales (guia activa).** Carga `references/slicing.md` y aplica su
-   procedimiento sobre el diseno aprobado: identifica el **walking skeleton** (slice #1), **saca
-   delante el contrato de toda frontera** -un endpoint o un evento hacia fuera, pero tambien un puerto o
-   un modelo compartido entre capas-, porque es lo que permite que sus dos lados se construyan a la vez
-   en vez de en fila (paso 1b de `slicing.md`, y es de donde sale el paralelismo del paso 7), genera el
-   resto por la **heuristica ordenada**, y **solo abre dialogo con la persona** (opciones graduadas
-   por capa, estilo hamburger) cuando el corte no es obvio o una slice supera el budget. Valida cada
-   slice contra los criterios de validez y el conjunto contra el **test de despriorizacion** e
-   **igualdad de tamano**. Elige el `name` kebab-case de cada slice.
+1c. **Publica lo entendido del codigo y los criterios propuestos, y espera confirmacion de los dos
+   antes de cortar (`check-alignment`).** El paso 1b confirma punteros -rutas, numeros de issue,
+   sitios de acople-; lo que no confirma nadie es que se entendio **que hace** el codigo que el corte
+   va a tocar, ni **que se va a considerar hecho**. Hoy el primer momento en que un malentendido del
+   flujo, o un criterio que no era ese, se puede ver es leyendo las subissues ya creadas, o la pull
+   request de la primera slice con el run ya pagado.
+
+   Publica dos mitades y **espera confirmacion de las dos**:
+
+   - **Lo que entiendes del codigo**, con forma exigible: por cada pieza que el corte va a tocar, su
+     ruta y **que hace hoy**. **Una linea que solo dice que el fichero existe no cumple**: eso ya lo
+     dio el paso 1b, y esta pausa pide el comportamiento.
+   - **Los criterios de aceptacion de la feature entera**, con la misma **vara de falsabilidad** que
+     gobierna los criterios de cada slice -nombra el cambio de produccion que lo haria fallar-, y
+     **declara que esa vara se aplico**.
+
+   Estos criterios de feature **no se escriben en el issue padre**: seria un tercer sitio diciendo lo
+   mismo que ya dicen las subissues, y derivaria en cuanto una slice cambie -el mismo motivo por el
+   que **"el padre no repite las slices"**-. Viven en esta conversacion, y de aqui los reparte el paso
+   siguiente.
+
+2. **Trocea en slices verticales (guia activa), repartiendo lo confirmado en el paso 1c.** Carga
+   `references/slicing.md` y aplica su procedimiento sobre el diseno aprobado: identifica el **walking
+   skeleton** (slice #1), **saca delante el contrato de toda frontera** -un endpoint o un evento hacia
+   fuera, pero tambien un puerto o un modelo compartido entre capas-, porque es lo que permite que sus
+   dos lados se construyan a la vez en vez de en fila (paso 1b de `slicing.md`, y es de donde sale el
+   paralelismo del paso 7), genera el resto por la **heuristica ordenada**, y **solo abre dialogo con
+   la persona** (opciones graduadas por capa, estilo hamburger) cuando el corte no es obvio o una
+   slice supera el budget. Valida cada slice contra los criterios de validez y el conjunto contra el
+   **test de despriorizacion** e **igualdad de tamano**. Elige el `name` kebab-case de cada slice. Las
+   lineas `ACEPTACION:` de cada slice salen de **repartir** los criterios de feature confirmados en el
+   paso 1c, no de inventarlos aqui.
 
 2a. **Escribe la intencion, la de la feature y la de cada slice.** El brainstorming del paso 1 ya
    entendio el problema: la seccion `## Intencion` es su destilado, no trabajo nuevo. Redactala con
