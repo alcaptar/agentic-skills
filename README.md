@@ -226,7 +226,7 @@ que registrar fuera de un run conducido. El identificador de sesion es lo que un
 `calls.jsonl` sin reconstruir el orden por marca de tiempo ni adivinar por proximidad de minuto.
 
 Y **cada llamada al harness** -la que entiende, la que implementa y la que juzga- anexa su linea a
-`~/.claude/slice-runner/log/calls.jsonl`, con el repo y el issue del run, la slice, el paso que servia, el
+`~/.claude/slice-runner/runs/calls.jsonl`, con el repo y el issue del run, la slice, el paso que servia, el
 identificador de sesion de su conversacion y cuando se escribio. El repo y el issue son los que distinguen
 dos features que comparten el mismo identificador de slice -`slice-01` no es unico entre issues-, asi que
 una fila nunca se puede confundir con la de otro run. Es lo que permite abrir la conversacion de una llamada
@@ -234,9 +234,10 @@ concreta -viven en `~/.claude/projects/`, una por sesion- sin adivinar por marca
 ficheros. Tambien append-only y tambien fuera del repo, y por el mismo motivo.
 
 Los cuatro almacenes durables del programa -`metrics.jsonl`, `calls.jsonl`, `spend.jsonl` y el par
-`verdicts.jsonl`/`diffs.jsonl`- viven bajo el mismo directorio y el mismo patron de nombre,
-`~/.claude/slice-runner/log/<concepto>.jsonl`: es el sitio a mirar para leer cualquiera de ellos junto, sin
-recordar que unos colgaban de la raiz y otros de `trace/` o `corpus/`. Cada uno declara su esquema con un
+`verdicts.jsonl`/`diffs.jsonl`- comparten el mismo patron de nombre,
+`~/.claude/slice-runner/<directorio>/<concepto>.jsonl`. Estan migrando uno a uno a un directorio comun,
+`runs/`, que es donde ya vive `calls.jsonl`; los otros tres siguen bajo `log/` hasta que les llegue su turno.
+Cada uno declara su esquema con un
 `json_schema()` propio (`HarnessCallPayload`, `CallSpendPayload`, `MetricsEntryPayload`,
 `CorpusVerdictPayload`, `CorpusDiffPayload`), asi que que campos trae una fila se puede preguntar a un
 programa en vez de abrir el fichero.

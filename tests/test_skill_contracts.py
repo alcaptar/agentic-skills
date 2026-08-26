@@ -80,6 +80,15 @@ is the whole safety of the step. Nothing else in the tree states it, so this is 
 prose rather than a comparison; reword the sentence and the anchors move with it.
 """
 
+_UNDERSTANDING_ANCHORS = ("el fichero existe no cumple", "declara que esa vara se aplico")
+"""Same kind of claim as `_CONFIRMATION_ANCHORS`, for the pause that publishes what got understood.
+
+Neither half has a second surface to compare against: step `1b` confirms pointers -- a path, an
+issue number -- never whether the behaviour behind them was understood, and the feature's
+acceptance criteria are confirmed here and never written to the parent issue. So this is a claim
+about the prose, and rewording either half moves its anchor with it.
+"""
+
 _VALIDATE_ANCHORS = (
     "la regla que incumple y su ubicacion",
     "issue padre",
@@ -425,6 +434,26 @@ def test_the_step_that_creates_the_issues_shows_the_whole_spec_and_waits_before_
     assert not missing, (
         f"the creating step of {_rel(_SPEC)} no longer states {missing}: nothing else in the tree says "
         f"that the spec is shown whole and confirmed before anything is created"
+    )
+
+
+def test_the_step_between_the_repo_search_and_the_slicing_publishes_what_it_understood_and_waits() -> None:
+    """Neither half of this pause has anywhere else to be measured against.
+
+    Step `1b` only confirms pointers -- a path, an issue number -- never whether the behaviour behind
+    them was understood, and the feature's acceptance criteria used to appear only inside the
+    subissues the slicing step writes, with nobody having seen the whole list first. This step is the
+    one place both get shown and confirmed before any slice is cut.
+    """
+    steps = re.split(r"^(?=\d+[a-z]?\.\s)", _spec_prose(_AUTHORING_STEPS), flags=re.MULTILINE)
+    pause = [step for step in steps if step.strip().startswith("1c.")]
+    assert len(pause) == 1, f"expected exactly one step of {_rel(_SPEC)} numbered `1c.`, found {len(pause)}"
+
+    step = pause[0]
+    missing = [anchor for anchor in _UNDERSTANDING_ANCHORS if anchor not in step]
+    assert not missing, (
+        f"step `1c.` of {_rel(_SPEC)} no longer states {missing}: nothing else in the tree confirms that "
+        f"the code was understood or proposes the feature's acceptance criteria before cutting"
     )
 
 

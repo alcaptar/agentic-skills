@@ -1,17 +1,19 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Self
+from typing import TYPE_CHECKING, ClassVar, Self
 
 from slice_runner.domain.exceptions import UnreadableCallTraceError
 from slice_runner.domain.step import Step
-from slice_runner.infrastructure.contract_model import ContractModel
+from slice_runner.infrastructure.durable_ledger import LedgerRow
 from slice_runner.infrastructure.json_schema import JsonSchema
 
 if TYPE_CHECKING:
     from slice_runner.domain.call_trace import HarnessCall
 
 
-class HarnessCallPayload(ContractModel):
+class HarnessCallPayload(LedgerRow):
+    UNREADABLE: ClassVar[type[ValueError]] = UnreadableCallTraceError
+
     slice_id: str
     step: Step
     session: str
@@ -31,4 +33,4 @@ class HarnessCallPayload(ContractModel):
 
     @classmethod
     def from_dict(cls, data: dict[str, object]) -> Self:
-        return cls._validated(data, "the call trace line is not one this program wrote", UnreadableCallTraceError)
+        return cls._validated(data, "the call trace line is not one this program wrote", cls.UNREADABLE)

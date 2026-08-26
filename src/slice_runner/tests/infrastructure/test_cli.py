@@ -20,7 +20,9 @@ from slice_runner.domain.step import Step
 from slice_runner.infrastructure.claude_config import ClaudeConfig
 from slice_runner.infrastructure.cli import Cli
 from slice_runner.infrastructure.deploy_watch_invocation import DeployWatchInvocation
+from slice_runner.infrastructure.durable_ledger import DurableLedger
 from slice_runner.infrastructure.exit_code import ExitCode
+from slice_runner.infrastructure.harness_call_payload import HarnessCallPayload
 from slice_runner.infrastructure.implementer_invocation import ImplementerInvocation
 from slice_runner.infrastructure.judge_invocation import JudgeInvocation
 from slice_runner.infrastructure.local_call_spend_log import LocalCallSpendLog
@@ -460,7 +462,7 @@ class TestTheCommandThatPrintsAConversation:
     def test_a_corrupt_line_in_the_call_trace_exits_with_a_usage_error_instead_of_a_stack_dump(
         self, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        self._corrupted(ClaudeConfig.root().joinpath(*LocalCallTrace.LEDGER))
+        self._corrupted(DurableLedger(name=LocalCallTrace.LEDGER, row=HarnessCallPayload).path())
 
         code = Cli.read(
             repo=self._REPO, issue=self._ISSUE, worktree=self._WORKTREE, slice_id=self._SLICE, step=Step.IMPLEMENT
@@ -618,7 +620,7 @@ class TestTheCommandThatSumsSpendByRole:
     def test_a_corrupt_line_in_the_call_trace_exits_with_a_usage_error_instead_of_a_stack_dump(
         self, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        self._corrupted(ClaudeConfig.root().joinpath(*LocalCallTrace.LEDGER))
+        self._corrupted(DurableLedger(name=LocalCallTrace.LEDGER, row=HarnessCallPayload).path())
 
         code = Cli.spend(repo=self._REPO, issue=self._ISSUE, slice_id=self._SLICE, step=Step.IMPLEMENT)
 
@@ -912,7 +914,7 @@ class TestTheCommandThatEmitsClosedSliceMetrics:
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
         self._closed()
-        ledger = ClaudeConfig.root().joinpath(*LocalCallTrace.LEDGER)
+        ledger = DurableLedger(name=LocalCallTrace.LEDGER, row=HarnessCallPayload).path()
         ledger.parent.mkdir(parents=True, exist_ok=True)
         ledger.write_text("not json\n", encoding="utf-8")
 
