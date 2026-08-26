@@ -11,6 +11,7 @@ if TYPE_CHECKING:
     from slice_runner.domain.checklist_entry import ChecklistEntry
     from slice_runner.domain.corpus import Corpus
     from slice_runner.domain.diff_reader import DiffReader
+    from slice_runner.domain.finding import Finding
     from slice_runner.domain.judge import Judge
     from slice_runner.domain.skill_library import SkillLibrary
     from slice_runner.domain.source import Source
@@ -33,6 +34,7 @@ class VerifySliceParams:
     criteria: tuple[str, ...]
     sources: tuple[Source, ...]
     checklist: tuple[ChecklistEntry, ...]
+    prior_findings: tuple[Finding, ...]
 
 
 class VerifySlice:
@@ -62,6 +64,7 @@ class VerifySlice:
                 criteria=params.criteria,
                 sources=params.sources,
                 checklist=params.checklist,
+                prior_findings=params.prior_findings,
             ),
         )
         self._corpus.record(

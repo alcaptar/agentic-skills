@@ -8,6 +8,7 @@ from slice_runner.infrastructure.judge_invocation import JudgeInvocation
 from slice_runner.infrastructure.verdict_payload import VerdictPayload
 from slice_runner.tests.argv import Argv
 from slice_runner.tests.doubles import RecordedSourceReader
+from slice_runner.tests.mothers.verdict_mother import FindingMother
 from slice_runner.tests.mothers.verification_mother import JudgeMother, SliceUnderReviewMother
 
 _JUDGE = JudgeMother.reading_the_repo_and_its_yardstick()
@@ -132,6 +133,7 @@ class TestWhatTravelsOnStandardInput:
             "- directorios que puedes leer (2):\n"
             "  - /repos/project\n"
             "  - /toolbox/skills\n"
+            "- hallazgos de la ronda anterior (0):\n"
         ) in JudgeInvocation(judge=_JUDGE, review=review, reader=_READER).text
 
     def test_a_slice_that_declared_something_excluded_carries_it_in_the_excluye_line(self) -> None:
@@ -162,6 +164,20 @@ class TestWhatTravelsOnStandardInput:
 
         assert text.index("src/a.py") < text.index("directorios que puedes leer")
         assert text.index("directorios que puedes leer") < text.index(str(JudgeMother.YARDSTICK))
+
+    def test_a_prior_finding_with_a_line_is_cited_with_its_severity_rule_path_and_line(self) -> None:
+        review = SliceUnderReviewMother.of_the_slice(prior_findings=(FindingMother.with_line(line=42),))
+
+        text = JudgeInvocation(judge=_JUDGE, review=review, reader=_READER).text
+
+        assert "- hallazgos de la ronda anterior (1):\n  - [medium] convenciones en src/x.py:42\n" in text
+
+    def test_a_prior_finding_with_no_line_is_cited_with_the_path_alone(self) -> None:
+        review = SliceUnderReviewMother.of_the_slice(prior_findings=(FindingMother.without_line(),))
+
+        text = JudgeInvocation(judge=_JUDGE, review=review, reader=_READER).text
+
+        assert "- hallazgos de la ronda anterior (1):\n  - [high] cobertura-capa en src/x.py\n" in text
 
     def test_the_prompt_does_not_also_travel_in_the_argv(self) -> None:
         invocation = JudgeInvocation(

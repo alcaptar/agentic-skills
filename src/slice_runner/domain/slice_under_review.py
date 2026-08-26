@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from slice_runner.domain.checklist_entry import ChecklistEntry
+    from slice_runner.domain.finding import Finding
     from slice_runner.domain.slice_diff import SliceDiff
     from slice_runner.domain.source import Source
 
@@ -23,3 +24,4 @@ class SliceUnderReview:
     criteria: tuple[str, ...]
     sources: tuple[Source, ...]
     checklist: tuple[ChecklistEntry, ...]
+    prior_findings: tuple[Finding, ...]
