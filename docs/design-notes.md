@@ -925,12 +925,26 @@ solo en ese caso de uso. **Reencender es quitar el envoltorio de esa línea.** E
 vivo y sin cablear, sostenido por su test de frontera, que es la consecuencia que esa misma convención
 acepta.
 
-Lo que se paga por apagarlo, declarado: una rama que se queda atrás vuelve a tumbar el `push` del final
--y eso **no** se autorrepara reinvocando, porque cada vuelta vuelve a empujar contra el mismo remoto por
-delante-, y una pull request inmergeable gasta las tres vueltas de `Budgets.catch_up_retries` corriendo
-los controles antes de cerrar en `bloqueada:conflicto`. Las dos son el estado anterior a esta feature, y
-se eligen a propósito frente a un deadlock que bloquea trabajo pagado en el camino más frecuente que
-tiene ese código: la reanudación.
+**Lo que se paga por apagarlo, declarado.** Tres cosas, y solo dos son el estado anterior a esta feature:
+
+- Una pull request cuya rama entra en conflicto real con su base queda inmergeable y **la integración
+  continua no arranca** -corre sobre el merge commit, que con conflicto no se puede construir-, así que la
+  fusión la hace una persona. Ése era el estado anterior.
+- Un `push` rechazado porque el remoto de **la propia rama** avanzó -alguien la actualizó desde la
+  interfaz- vuelve a tumbar el run, y **no se autorrepara reinvocando**: cada vuelta empuja contra el
+  mismo remoto por delante. También era el estado anterior. Lo que la base avance no lo causa: el `push`
+  mira el remoto de esa rama, no la base.
+- **Y una que es nueva, para que nadie la lea como una avería.** El paso se sigue invocando y contesta que
+  no había nada que fusionar, así que una integración continua en conflicto gasta las tres vueltas de
+  `Budgets.catch_up_retries` -tick, controles, `push` sin nada nuevo, consulta- antes de cerrar en
+  `bloqueada:conflicto`, donde antes de la slice que abrió ese paso cerraba directa. No pierde trabajo y
+  **no gasta ni una llamada al arnés**, pero el registro dice "corrió los controles tres veces sin hacer
+  nada" y eso tiene que poder leerse sin buscar un fallo que no existe. Cortarlo obligaría a modificar la
+  máquina de estados y a deshacer la slice que la cambió: más riesgo del que ahorra en un caso que ocurre
+  dos veces al mes.
+
+Las tres se eligen a propósito frente a un deadlock que bloquea trabajo ya pagado en el camino más
+frecuente que tiene ese código: la reanudación.
 
 **Lo que se sabe y no hay que volver a derivar, si se retoma.** Cinco cosas se midieron al parar esto y
 se pierden si no quedan escritas:
