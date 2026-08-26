@@ -20,6 +20,8 @@ class RunControlsParams:
     worktree: str
     controls: Controls
     logs: Path
+    repo: str
+    issue: int
     slice_id: SliceIdentity
     control_rounds_logged: int
 
@@ -35,11 +37,17 @@ class RunControls:
         self._controls = controls
 
     def execute(self, params: RunControlsParams) -> RunControlsResult:
-        out = params.logs / params.slice_id.canonical / f"round-{params.control_rounds_logged + 1}"
+        out = (
+            params.logs
+            / params.repo
+            / str(params.issue)
+            / params.slice_id.canonical
+            / f"round-{params.control_rounds_logged + 1}"
+        )
         outcomes: tuple[ControlOutcome, ...] = ()
         if params.controls.exemption_reason is None:
             outcomes = tuple(
-                self._controls.run(command, repo=params.worktree, out=out) for command in params.controls.commands
+                self._controls.run(command, worktree=params.worktree, out=out) for command in params.controls.commands
             )
         red = tuple(
             outcome.log for outcome in outcomes if outcome.status is ControlStatus.RED and outcome.log is not None

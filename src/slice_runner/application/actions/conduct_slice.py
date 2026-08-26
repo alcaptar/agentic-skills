@@ -539,6 +539,8 @@ class ConductSlice:
                 worktree=round_progress.params.worktree,
                 controls=round_progress.parent.controls,
                 logs=round_progress.params.logs,
+                repo=round_progress.params.repo,
+                issue=round_progress.params.issue,
                 slice_id=round_progress.subissue.slice_id,
                 control_rounds_logged=round_progress.run.control_rounds_logged,
             )

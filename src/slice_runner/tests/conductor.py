@@ -61,6 +61,7 @@ if TYPE_CHECKING:
     from slice_runner.domain.closed_slice import ClosedSlice
     from slice_runner.domain.event import Event
     from slice_runner.domain.harness_spend import HarnessSpend
+    from slice_runner.domain.slice_identity import SliceIdentity
 
 
 class Conductor:
@@ -117,6 +118,10 @@ class Conductor:
         self.pull_request.body.return_value = self.BODY
         self.deploy_watch: Mock = create_autospec(DeployWatch, spec_set=True, instance=True)
         self.events: Mock = create_autospec(EventLog, spec_set=True, instance=True)
+
+    @classmethod
+    def slice_dir(cls, slice_id: SliceIdentity) -> Path:
+        return cls.LOGS / cls.REPO / str(cls.ISSUE) / slice_id.canonical
 
     def seed_spend(self, *, session: str, spend: HarnessSpend) -> None:
         self.spend_log.record(HarnessCallSpend(repo=self.REPO, issue=self.ISSUE, session=session, spend=spend))

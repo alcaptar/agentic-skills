@@ -784,7 +784,7 @@ class TestConductSliceReopeningABlockedRun:
 
         conductor.conduct()
 
-        slice_dir = Conductor.LOGS / SubIssueMother.pending().slice_id.canonical
+        slice_dir = Conductor.slice_dir(SubIssueMother.pending().slice_id)
         assert conductor.controls.run.call_args.kwargs["out"] == slice_dir / "round-4"
 
     def test_a_fresh_invocation_resuming_a_run_reopened_by_an_earlier_one_still_names_the_round_after_the_ones_logged(
@@ -795,7 +795,7 @@ class TestConductSliceReopeningABlockedRun:
 
         conductor.conduct()
 
-        slice_dir = Conductor.LOGS / SubIssueMother.pending().slice_id.canonical
+        slice_dir = Conductor.slice_dir(SubIssueMother.pending().slice_id)
         assert conductor.controls.run.call_args_list[0].kwargs["out"] == slice_dir / "round-4"
 
 
@@ -1530,7 +1530,7 @@ class TestConductSliceWhenTheControlsComeBackRed:
         conductor.conduct()
 
         assert conductor.controls.run.call_args_list[0].kwargs["out"] == (
-            Conductor.LOGS / SubIssueMother.pending().slice_id.canonical / "round-2"
+            Conductor.slice_dir(SubIssueMother.pending().slice_id) / "round-2"
         )
 
     def test_the_exhausted_control_budget_closes_the_run_writes_its_label_and_records_the_row(self) -> None:

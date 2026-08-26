@@ -4,9 +4,7 @@ import io
 import json
 import shutil
 import sys
-import tempfile
 from datetime import UTC, datetime
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
@@ -51,6 +49,8 @@ from slice_runner.tests.mothers.understanding_report_mother import Understanding
 from slice_runner.tests.run_invocation import RunInvocation
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from slice_runner.domain.call_spend_log import HarnessCallSpend
     from slice_runner.domain.closed_slice import ClosedSlice
     from slice_runner.domain.run import Run
@@ -1293,10 +1293,20 @@ class TestTheCommandThatConductsASlice:
 
         assert arguments.worktree == "."
 
-    def test_the_directory_of_the_control_logs_defaults_to_one_under_the_temporary_of_the_machine(self) -> None:
+    def test_the_directory_of_the_control_logs_defaults_to_one_under_the_configuration_root_of_the_tool(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
         arguments = Cli.parser().parse_args(self._complete())
 
-        assert arguments.logs.parent == Path(tempfile.gettempdir())
+        assert arguments.logs == tmp_path / "slice-runner" / "runs" / "controls"
+
+    def test_the_directory_of_the_control_logs_can_be_set_explicitly_and_it_overrides_the_default(
+        self, tmp_path: Path
+    ) -> None:
+        arguments = Cli.parser().parse_args([*self._complete(), "--logs", str(tmp_path / "chosen")])
+
+        assert arguments.logs == tmp_path / "chosen"
 
     def test_the_repo_of_the_issue_has_no_default_because_a_guessed_one_reads_another_issue(
         self, capsys: pytest.CaptureFixture[str]
@@ -1661,12 +1671,16 @@ class TestTheControlLogsOfARetriedRound(BlindToTheToolboxOfThisMachine):
             ),
         )
 
+    @staticmethod
+    def _slice_dir(logs: Path, *, issue: int = GhConversationMother.ISSUE) -> Path:
+        return logs / GhConversationMother.REPO / str(issue) / GhConversationMother.SLICE
+
     def test_two_retried_rounds_of_the_same_slice_both_keep_their_log_on_disk(self, tmp_path: Path) -> None:
         invocation = self._invocation(RunMother.implementing())
 
         invocation.conduct(logs=tmp_path / "logs", budgets=Budgets(control_retries=1))
 
-        slice_dir = tmp_path / "logs" / GhConversationMother.SLICE
+        slice_dir = self._slice_dir(tmp_path / "logs")
         assert (slice_dir / "round-1" / "lint.log").exists()
         assert (slice_dir / "round-2" / "lint.log").exists()
 
@@ -1677,9 +1691,25 @@ class TestTheControlLogsOfARetriedRound(BlindToTheToolboxOfThisMachine):
 
         invocation.conduct(logs=tmp_path / "logs", budgets=Budgets(control_retries=0))
 
-        slice_dir = tmp_path / "logs" / GhConversationMother.SLICE
+        slice_dir = self._slice_dir(tmp_path / "logs")
         assert (slice_dir / "round-2" / "lint.log").exists()
         assert not (slice_dir / "round-1").exists()
+
+    def test_two_features_sharing_the_same_slice_identifier_do_not_overwrite_each_other_s_log(
+        self, tmp_path: Path
+    ) -> None:
+        logs = tmp_path / "logs"
+        first_issue, second_issue = GhConversationMother.ISSUE, GhConversationMother.ISSUE + 1
+
+        self._invocation(RunMother.implementing()).conduct(
+            logs=logs, budgets=Budgets(control_retries=0), issue=first_issue
+        )
+        self._invocation(RunMother.implementing()).conduct(
+            logs=logs, budgets=Budgets(control_retries=0), issue=second_issue
+        )
+
+        assert (self._slice_dir(logs, issue=first_issue) / "round-1" / "lint.log").exists()
+        assert (self._slice_dir(logs, issue=second_issue) / "round-1" / "lint.log").exists()
 
 
 class TestTheVerifyRoundOfARetriedVerdict(BlindToTheToolboxOfThisMachine):

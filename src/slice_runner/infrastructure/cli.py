@@ -3,7 +3,6 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
@@ -76,6 +75,7 @@ from slice_runner.infrastructure.closed_slice_metrics_payload import ClosedSlice
 from slice_runner.infrastructure.closed_slice_metrics_view import ClosedSliceMetricsView
 from slice_runner.infrastructure.closed_slice_record_payload import ClosedSliceRecordPayload
 from slice_runner.infrastructure.conducted_slice_payload import ConductedSlicePayload
+from slice_runner.infrastructure.control_logs_directory import ControlLogsDirectory
 from slice_runner.infrastructure.conversation_report import ConversationReport
 from slice_runner.infrastructure.conversation_tool_use_recorder import ConversationToolUseRecorder
 from slice_runner.infrastructure.exit_code import ExitCode
@@ -128,7 +128,6 @@ if TYPE_CHECKING:
 
 class Cli:
     PROGRAM: ClassVar[str] = "slice-runner"
-    LOGS: ClassVar[Path] = Path(tempfile.gettempdir()) / "slice-runner-logs"
     STOPS: ClassVar[tuple[type[Exception], ...]] = (
         NoSliceLeftError,
         UnresolvableRepoOrBaseError,
@@ -248,7 +247,10 @@ class Cli:
         run.add_argument("--worktree", default=".", help="local path where the slice is implemented and measured")
         run.add_argument("--base", required=True, help="branch the diff is taken against and the pull request targets")
         run.add_argument(
-            "--logs", type=Path, default=cls.LOGS, help="directory where the log of each control is written"
+            "--logs",
+            type=Path,
+            default=ControlLogsDirectory.default(),
+            help="directory where the log of each control is written",
         )
         run.add_argument(
             "--slice",
