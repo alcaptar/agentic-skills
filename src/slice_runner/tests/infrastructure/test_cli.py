@@ -835,6 +835,26 @@ class TestTheCommandThatEmitsClosedSliceMetrics:
 
         assert summary["rates"]["ci_red"] == {"value": 50.0, "samples": 2}
 
+    def test_the_blocked_by_hygiene_rate_counts_only_slices_closed_over_an_incomplete_report(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        self._record(ClosedSliceMother.closed_as_for_issue(RunState.BLOCKED_HYGIENE, issue=310))
+        self._record(ClosedSliceMother.closed_as_for_issue(RunState.MERGED, issue=311))
+
+        summary = json.loads(self._emitted(tmp_path, capsys)[-1])
+
+        assert summary["rates"]["blocked_by_hygiene"] == {"value": 50.0, "samples": 2}
+
+    def test_the_verify_discards_rate_counts_slices_where_the_judges_contract_broke_at_least_once(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        self._record(ClosedSliceMother.merged_after_going_back_for_every_reason())
+        self._record(ClosedSliceMother.closed_as_for_issue(RunState.MERGED, issue=ClosedSliceMother.ISSUE + 1))
+
+        summary = json.loads(self._emitted(tmp_path, capsys)[-1])
+
+        assert summary["rates"]["verify_discards"] == {"value": 50.0, "samples": 2}
+
     def test_a_record_declaring_two_models_is_counted_in_both_of_their_groups(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
@@ -861,6 +881,21 @@ class TestTheCommandThatEmitsClosedSliceMetrics:
 
         assert {group["label"] for group in summary["by_model"]} == {"unknown"}
         assert {group["label"] for group in summary["by_variant"]} == {"unknown"}
+
+    def test_two_rows_with_different_declared_variants_land_in_their_own_group(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        self._record(ClosedSliceMother.merged_for_issue(402))
+        row = self._row_for(ClosedSliceMother.merged(), issue=403)
+        row["variante"] = "skill"
+        self._append_row(row)
+
+        summary = json.loads(self._emitted(tmp_path, capsys)[-1])
+
+        samples_by_label = {
+            group["label"]: group["rates"]["first_attempt"]["samples"] for group in summary["by_variant"]
+        }
+        assert samples_by_label == {"programa": 1, "skill": 1}
 
     def test_the_spend_averages_only_count_the_records_that_measured_something(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
@@ -893,6 +928,23 @@ class TestTheCommandThatEmitsClosedSliceMetrics:
         assert tallies == {"failed-call": 1, "incoherent-verdict": 1}
         assert all(tally["samples"] == 2 for tally in summary["discards_by_cause"])
 
+    def test_a_discard_of_a_step_other_than_verify_does_not_count_as_a_verify_discard(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        self._record(ClosedSliceMother.merged_discarding_because_of(DiscardedCallMother.of_a_failed_call()))
+        self._append_row(
+            self._row_for(
+                ClosedSliceMother.merged_discarding_because_of(DiscardedCallMother.of_the_step(Step.IMPLEMENT)),
+                issue=701,
+            )
+        )
+
+        summary = json.loads(self._emitted(tmp_path, capsys)[-1])
+
+        tallies = {tally["cause"]: tally["count"] for tally in summary["discards_by_cause"]}
+        assert tallies["failed-call"] == 1
+        assert all(tally["samples"] == 1 for tally in summary["discards_by_cause"])
+
     def test_the_summary_line_names_its_top_level_keys_literally(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
@@ -904,8 +956,10 @@ class TestTheCommandThatEmitsClosedSliceMetrics:
         assert set(summary["rates"]) == {
             "verifier_fail",
             "blocked_by_controls",
+            "blocked_by_hygiene",
             "first_attempt",
             "implement_retries",
+            "verify_discards",
             "ci_red",
         }
         assert set(summary["spend"]) == {"cost_usd", "turns", "duration_ms", "cache_read_tokens"}

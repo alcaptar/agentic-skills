@@ -16,8 +16,10 @@ if TYPE_CHECKING:
 class SliceRates:
     verifier_fail: Measurement
     blocked_by_controls: Measurement
+    blocked_by_hygiene: Measurement
     first_attempt: Measurement
     implement_retries: Measurement
+    verify_discards: Measurement
     ci_red: Measurement
 
     @classmethod
@@ -30,8 +32,14 @@ class SliceRates:
             blocked_by_controls=Measurement.of_the_fraction(
                 sum(1 for record in records if record.state == RunState.BLOCKED_CONTROLS), total
             ),
+            blocked_by_hygiene=Measurement.of_the_fraction(
+                sum(1 for record in records if record.state == RunState.BLOCKED_HYGIENE), total
+            ),
             first_attempt=Measurement.of_the_fraction(sum(1 for record in records if record.first_attempt), total),
             implement_retries=Measurement.of_the_mean([float(record.implement_retries) for record in records]),
+            verify_discards=Measurement.of_the_fraction(
+                sum(1 for record in records if record.verify_discards > 0), total
+            ),
             ci_red=Measurement.of_the_fraction(
                 sum(1 for record in records if record.state == RunState.BLOCKED_CI_RED), total
             ),

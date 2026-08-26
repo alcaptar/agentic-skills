@@ -165,8 +165,10 @@ class ClosedSliceMetricsView:
         named = (
             ("verifier_fail", rates.verifier_fail),
             ("blocked_by_controls", rates.blocked_by_controls),
+            ("blocked_by_hygiene", rates.blocked_by_hygiene),
             ("first_attempt", rates.first_attempt),
             ("implement_retries", rates.implement_retries),
+            ("verify_discards", rates.verify_discards),
             ("ci_red", rates.ci_red),
         )
         return "".join(

@@ -25,8 +25,10 @@ class MeasurementPayload(ContractModel):
 class SliceRatesPayload(ContractModel):
     verifier_fail: MeasurementPayload
     blocked_by_controls: MeasurementPayload
+    blocked_by_hygiene: MeasurementPayload
     first_attempt: MeasurementPayload
     implement_retries: MeasurementPayload
+    verify_discards: MeasurementPayload
     ci_red: MeasurementPayload
 
     @classmethod
@@ -34,8 +36,10 @@ class SliceRatesPayload(ContractModel):
         return cls(
             verifier_fail=MeasurementPayload.from_domain(rates.verifier_fail),
             blocked_by_controls=MeasurementPayload.from_domain(rates.blocked_by_controls),
+            blocked_by_hygiene=MeasurementPayload.from_domain(rates.blocked_by_hygiene),
             first_attempt=MeasurementPayload.from_domain(rates.first_attempt),
             implement_retries=MeasurementPayload.from_domain(rates.implement_retries),
+            verify_discards=MeasurementPayload.from_domain(rates.verify_discards),
             ci_red=MeasurementPayload.from_domain(rates.ci_red),
         )
 
