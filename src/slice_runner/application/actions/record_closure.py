@@ -37,6 +37,7 @@ class RecordClosureParams:
     ci_indeterminate_cause: CiIndeterminateCause | None = None
     debt: tuple[str, ...] = field(default=())
     diff_stats: DiffStats | None = None
+    conflicting_paths: tuple[str, ...] = field(default=())
 
 
 class RecordClosure:
@@ -72,6 +73,10 @@ class RecordClosure:
         if params.state is RunState.BLOCKED_VERIFY and params.findings_of_the_last_round:
             self._repository.publish_findings(
                 repo=params.repo, issue=params.issue, findings=params.findings_of_the_last_round
+            )
+        if params.state is RunState.BLOCKED_CI_CONFLICT and params.conflicting_paths:
+            self._repository.publish_catch_up_conflict(
+                repo=params.repo, issue=params.issue, paths=params.conflicting_paths
             )
 
     def _spend_of(self, params: RecordClosureParams) -> HarnessSpend:

@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from slice_runner.domain.branch_catch_up_outcome import BranchCatchUpOutcome
+    from slice_runner.domain.branch_catch_up import BranchCatchUp
 
 
 class Branches(ABC):
@@ -18,4 +18,4 @@ class Branches(ABC):
     def commits_behind_remote(self, *, worktree: str, base: str) -> int: ...
 
     @abstractmethod
-    def catch_up(self, *, worktree: str, name: str, base: str) -> BranchCatchUpOutcome: ...
+    def catch_up(self, *, worktree: str, name: str, base: str) -> BranchCatchUp: ...

@@ -10,7 +10,6 @@ from slice_runner.application.actions.close_parent import CloseParentParams
 from slice_runner.application.actions.reopen_slice import ReopenSliceParams, ReopenSliceResult
 from slice_runner.domain.alignment_response import AlignmentResponse
 from slice_runner.domain.alignment_response_kind import AlignmentResponseKind
-from slice_runner.domain.branch_catch_up_outcome import BranchCatchUpOutcome
 from slice_runner.domain.budgets import Budgets
 from slice_runner.domain.ci_indeterminate_cause import CiIndeterminateCause
 from slice_runner.domain.ci_status import CiStatus
@@ -38,6 +37,7 @@ from slice_runner.domain.run import Run
 from slice_runner.domain.run_state import RunState
 from slice_runner.domain.step import Step
 from slice_runner.tests.conductor import Conductor
+from slice_runner.tests.mothers.branch_catch_up_mother import BranchCatchUpMother
 from slice_runner.tests.mothers.control_outcome_mother import ControlOutcomeMother
 from slice_runner.tests.mothers.harness_call_mother import HarnessCallMother
 from slice_runner.tests.mothers.harness_spend_mother import HarnessSpendMother
@@ -890,7 +890,7 @@ class TestConductSliceResumingCatchesUpTheBranch:
 
     def test_a_conflicting_catch_up_closes_the_run_before_spending_any_call_on_the_harness(self) -> None:
         conductor = self._conductor()
-        conductor.branches.catch_up.return_value = BranchCatchUpOutcome.CONFLICTING
+        conductor.branches.catch_up.return_value = BranchCatchUpMother.conflicting_on_a_shared_file()
 
         result = conductor.conduct()
 
@@ -899,7 +899,7 @@ class TestConductSliceResumingCatchesUpTheBranch:
 
     def test_a_conflicting_catch_up_writes_the_conflict_label_and_records_the_closed_row(self) -> None:
         conductor = self._conductor()
-        conductor.branches.catch_up.return_value = BranchCatchUpOutcome.CONFLICTING
+        conductor.branches.catch_up.return_value = BranchCatchUpMother.conflicting_on_a_shared_file()
 
         conductor.conduct()
 
@@ -907,6 +907,16 @@ class TestConductSliceResumingCatchesUpTheBranch:
             repo=Conductor.REPO, issue=_SUBISSUE, remove=IssueLabel.IN_PROGRESS, add=IssueLabel.BLOCKED_CI_CONFLICT
         )
         assert conductor.metrics.record.call_args.args[0].state is RunState.BLOCKED_CI_CONFLICT
+
+    def test_a_conflicting_catch_up_publishes_the_paths_git_reported_as_a_comment(self) -> None:
+        conductor = self._conductor()
+        conductor.branches.catch_up.return_value = BranchCatchUpMother.conflicting_on_a_shared_file()
+
+        conductor.conduct()
+
+        conductor.repository.publish_catch_up_conflict.assert_called_once_with(
+            repo=Conductor.REPO, issue=_SUBISSUE, paths=BranchCatchUpMother.CONFLICTING_PATHS
+        )
 
     def test_a_branch_that_no_longer_exists_is_never_asked_to_catch_up(self) -> None:
         conductor = self._conductor()
@@ -985,6 +995,19 @@ class TestConductSliceCatchesUpTheBranchWhenTheCiFindsAConflict(_ResumedAwaiting
 
         assert conductor.branches.catch_up.call_count == 1
         assert result.state is RunState.BLOCKED_CI_CONFLICT
+
+    def test_a_conflict_found_while_catching_up_the_branch_after_a_ci_retry_publishes_its_paths(self) -> None:
+        conductor = self._conductor(budgets=Budgets(catch_up_retries=1))
+        conductor.ci.status.return_value = CiStatus.NO_CHECKS
+        conductor.forum.pull_request_state.return_value = PullRequestStatusMother.open_and_conflicting()
+        conductor.branches.catch_up.return_value = BranchCatchUpMother.conflicting_on_a_shared_file()
+
+        result = conductor.conduct()
+
+        assert result.state is RunState.BLOCKED_CI_CONFLICT
+        conductor.repository.publish_catch_up_conflict.assert_called_once_with(
+            repo=Conductor.REPO, issue=_SUBISSUE, paths=BranchCatchUpMother.CONFLICTING_PATHS
+        )
 
     def test_resuming_with_a_catch_up_retry_already_spent_does_not_reset_the_counter(self) -> None:
         conductor = Conductor(

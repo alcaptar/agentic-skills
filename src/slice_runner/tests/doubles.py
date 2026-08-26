@@ -196,6 +196,26 @@ class AnsweringByArgv(Process):
         return list(argv) in [call.argv for call in self.calls]
 
 
+class RaisingOnCommand(Process):
+    def __init__(self, *, when: tuple[str, ...], raises: Exception) -> None:
+        self._when = when
+        self._raises = raises
+        self._real = Real.process()
+
+    def run(
+        self,
+        argv: list[str],
+        *,
+        stdin: str = "",
+        cwd: str | None = None,
+        on_line: Callable[[str], None] | None = None,
+    ) -> ProcessOutput:
+        if all(token in argv for token in self._when):
+            raise self._raises
+
+        return self._real.run(argv, stdin=stdin, cwd=cwd, on_line=on_line)
+
+
 class SpyingProcess(Process):
     def __init__(self) -> None:
         self._real = Real.process()
