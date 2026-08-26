@@ -854,6 +854,72 @@ existe, no que una afirmacion sobre el codigo siga siendo cierta, y por diseno n
 con arbol es lo que este repo evita en el otro sentido-. Lo unico que baja el riesgo es la regla de esta
 nota: no escribir la afirmacion.
 
+## El conflicto de contenido no lo resuelve un agente (lo que se midió)
+
+**La decisión.** Se para el resolutor automático de conflictos: el paso que iba a llamar a un cuarto rol
+para fusionar lo que `git` no puede fusionar solo. Un conflicto de contenido sigue cerrando el run en
+`bloqueada:conflicto`, con la lista de ficheros publicada en el issue, y lo fusiona la persona. Eso no es
+una carencia pendiente de tapar: es el final correcto para este caso.
+
+**La frecuencia.** Sobre los 2.498 eventos del repositorio entre el 23 de julio y el 26 de agosto de 2026
+-todo el histórico del proyecto en su forma actual-, la etiqueta `bloqueada:conflicto` se puso **dos
+veces**: el 18 de agosto y el 20 de agosto. Y la segunda fue en `#334`, una slice de la propia feature que
+pretendía resolverlos. Es decir: **un conflicto real en un mes de uso**. En el mismo periodo,
+`abortada:presupuesto` se puso 19 veces y `abortada:llamada-no-medida` 11.
+
+**El coste.** El ledger registra 69 runs y 1.263 USD entre el 14 y el 26 de agosto. La feature `#333` se
+llevó 11 runs y unos 315 USD brutos -la cifra sobrecuenta, porque un run reabierto se registra dos veces;
+el orden de magnitud es **un cuarto del gasto del proyecto**-. De eso, la parte con juicio, `#336` y
+`#380`, se llevó **128 USD y no entregó nada**: las dos murieron. El resto -la puesta al día, la CI en
+conflicto, el contrato del payload, la lista de ficheros- está mergeado y funcionando.
+
+**Por qué la parte barata era la que valía.** La intención de `#333` ya lo decía: *"nada de esto necesita
+juicio la mayoría de las veces: fusionar lo que git fusiona solo es determinista y no cuesta un
+céntimo"*. El caso mayoritario -la rama envejece y el `push` muere al final con todo pagado- lo resuelve
+`git merge` en el paso que `#334` y `#335` construyeron. El resolutor con juicio era la cola de la
+distribución, y la cola resultó ser un caso al mes.
+
+**La asimetría que cierra el caso.** Lo que cuesta hoy un conflicto sin resolver: un run cerrado con su
+etiqueta, la lista de ficheros en el issue y unos minutos de persona. Lo que cuesta un resolutor que falla
+mal, medido sobre el código que `#380` dejó escrito: un resolutor que **no resuelve** -no lanza, no
+ensucia, simplemente no arregla el conflicto- pasa la comprobación de higiene, concluye la fusión y
+devuelve `done`, dejando los marcadores `<<<<<<<` **dentro del commit de fusión** con el árbol limpio. Si
+el conflicto cae en un fichero que los controles no compilan, la pull request se abre y la integración
+continua sale verde. La máquina que ahorra cinco minutos de persona una vez al mes puede meter marcadores
+de conflicto en la rama principal.
+
+**Por qué era caro de construir.** El de la puesta al día es **el único paso del pipeline que deja estado
+a medias en disco**: un `git merge` conflictivo deja `MERGE_HEAD`, ficheros en estado `U` y ficheros
+auto-fusionados, y cada camino de salida tiene que decidir si eso se aborta o se concluye. Los tres
+hallazgos altos de esta feature son el mismo fallo tres veces -la fusión sin abortar cuando falla la
+lectura de rutas, el valor por omisión que dice que no hay conflicto, y la fusión concluida con
+marcadores-. Ninguno es un error de lógica de negocio: los tres son un estado intermedio en una forma que
+nadie contempló. Encima, la slice-07 no añadía "resolver conflictos": añadía **un cuarto rol de agente
+entero** -brief, invocación, payload, modelo, adaptador, contabilidad del gasto, higiene, contador propio-
+dentro de ese paso. De ahí sus 43 ficheros, y de ahí que el implementador se comiera 38,8 de los 50 USD
+del tope en cuatro pasadas, 23,6 de ellos en la primera.
+
+**Lo que no se deshizo, y por qué.** Nada. En la rama principal no quedó ni un gancho del resolutor: no
+hay `ConflictResolver`, ni `MergeConflict`, ni `RoleModels.resolve`. Y lo mergeado tiene consumidor propio
+sin él: la lista de ficheros en conflicto que `#379` calcula la publica `RecordClosure` en el issue para
+la persona que va a fusionar a mano. Que se pueda parar aquí sin revertir una línea es consecuencia de la
+regla de que cada slice entrega valor sola.
+
+**Dónde está el trabajo, si se retoma.** Dos ramas, ninguna mergeada ni mergeable tal cual:
+`preservado/slice-07-el-conflicto-de-contenido-lo-resuelve-un-agente` lleva el índice de `#380` -43
+ficheros, 1.314 líneas, `make check` en verde- y `slice/04-el-conflicto-de-contenido-lo-resuelve-un-agente`
+lleva el diseño de `#336`, cuyo núcleo pasó cinco rondas de juez sin un hallazgo alto. Al retomarlo, la
+comprobación que falta es la que el hallazgo de arriba nombra: tras resolver, que no queden ficheros en
+estado `U`. El código que lo mide ya existe.
+
+**Lo que queda declarado.** Esto se reconsidera cuando el conflicto de contenido deje de ser un caso al
+mes, y lo que lo cambiaría es **paralelizar de verdad**: varias slices a la vez sobre ficheros que toca
+casi todo. Hasta entonces, construirlo es pagar la cola de la distribución al precio del cuerpo. Y queda
+declarado un agujero que esta medición encontró de paso y que no es de esta feature: **el veredicto del
+juez no se persiste en ningún sitio**. `#380` fue rechazada dos veces y no hay forma de saber qué dijo,
+porque el veredicto se le pasa al implementador y muere con el run. Cuando un run se cae, se pierde justo
+el diagnóstico que explicaría por qué.
+
 ## Roadmap de autonomia (pendiente)
 
 Estado actual: **Nivel 1** — una slice por invocación, todo bajo control manual. Subir de nivel solo cuando el anterior sea fiable; el cuello de botella nunca es implementar, es la calidad del gate de verificación.
