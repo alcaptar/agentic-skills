@@ -1,0 +1,64 @@
+from __future__ import annotations
+
+import json
+from abc import abstractmethod
+from typing import TYPE_CHECKING, ClassVar, Generic, Self, TypeVar
+
+from slice_runner.infrastructure.claude_config import ClaudeConfig
+from slice_runner.infrastructure.contract_model import ContractModel
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
+    from pathlib import Path
+
+
+class LedgerRow(ContractModel):
+    UNREADABLE: ClassVar[type[ValueError]]
+
+    @classmethod
+    @abstractmethod
+    def from_dict(cls, data: dict[str, object]) -> Self: ...
+
+
+_Row = TypeVar("_Row", bound=LedgerRow)
+
+
+class DurableLedger(Generic[_Row]):
+    def __init__(self, *, name: str, row: type[_Row]) -> None:
+        self._name = name
+        self._row = row
+
+    def path(self) -> Path:
+        return ClaudeConfig.root() / "slice-runner" / "runs" / f"{self._name}.jsonl"
+
+    def append(self, row: _Row) -> None:
+        ledger = self.path()
+        ledger.parent.mkdir(parents=True, exist_ok=True)
+
+        with ledger.open("a", encoding="utf-8") as stream:
+            stream.write(f"{json.dumps(row.to_contract(), ensure_ascii=False)}\n")
+
+    def rows(self) -> Iterator[_Row]:
+        ledger = self.path()
+        if not ledger.exists():
+            return
+
+        for number, line in enumerate(ledger.read_text(encoding="utf-8").splitlines(), start=1):
+            if not line.strip():
+                continue
+
+            yield self._row.from_dict(self._decoded(line, number))
+
+    def _decoded(self, line: str, number: int) -> dict[str, object]:
+        try:
+            data = json.loads(line)
+        except json.JSONDecodeError as error:
+            raise self._row.UNREADABLE(
+                f"the {self._name} ledger has a line at {number} that is not JSON: {error}"
+            ) from error
+        if not isinstance(data, dict):
+            raise self._row.UNREADABLE(
+                f"the {self._name} ledger has a line at {number} that has to be an object, not {type(data).__name__}"
+            )
+
+        return {str(key): value for key, value in data.items()}
