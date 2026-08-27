@@ -99,6 +99,10 @@ class RunMother:
         return Run(step=Step.UNDERSTAND, corrected=correction)
 
     @staticmethod
+    def about_to_redraft_after_a_correction(correction: str) -> Run:
+        return Run(step=Step.UNDERSTAND, corrected=correction, understanding_pending=True)
+
+    @staticmethod
     def understanding_after_a_discard(spend: HarnessSpend) -> Run:
         return Run(step=Step.UNDERSTAND, understand_discards=1, spend=spend)
 

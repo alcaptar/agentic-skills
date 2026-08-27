@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 from typing import TYPE_CHECKING
-from unittest.mock import Mock
+from unittest.mock import Mock, call
 
 import pytest
 
@@ -414,7 +414,7 @@ class TestConductSliceRespondingToAlignment:
 
         assert conductor.understanding.write.call_count == 2
 
-    def test_a_review_pauses_no_further_and_cuts_no_branch_but_still_persists_the_spend(self) -> None:
+    def test_a_review_pauses_again_and_cuts_no_branch_after_persisting_the_correction_and_its_redraft(self) -> None:
         conductor = self._conductor(budgets=Budgets(person_wait_seconds=0))
         conductor.repository.read_alignment_response.return_value = AlignmentResponse(
             kind=AlignmentResponseKind.REVIEW, correction="la senal no esta exenta"
@@ -422,16 +422,57 @@ class TestConductSliceRespondingToAlignment:
 
         conductor.conduct()
 
-        assert conductor.repository.pause_for_alignment.call_count == 0
+        assert conductor.repository.pause_for_alignment.call_count == 1
         assert conductor.branches.create.call_count == 0
-        conductor.repository.write_run.assert_called_once_with(
-            repo=Conductor.REPO,
-            issue=_SUBISSUE,
-            run=Run(
-                step=Step.UNDERSTAND,
-                corrected="la senal no esta exenta",
-                spend=HarnessSpendMother.of_the_understanding_call(),
+        assert conductor.repository.write_run.call_args_list == [
+            call(
+                repo=Conductor.REPO,
+                issue=_SUBISSUE,
+                run=RunMother.about_to_redraft_after_a_correction("la senal no esta exenta"),
             ),
+            call(
+                repo=Conductor.REPO,
+                issue=_SUBISSUE,
+                run=Run(
+                    step=Step.UNDERSTAND,
+                    corrected="la senal no esta exenta",
+                    spend=HarnessSpendMother.of_the_understanding_call(),
+                ),
+            ),
+        ]
+
+    def test_a_new_correction_marks_the_slice_in_progress_before_asking_the_harness_to_redraft(self) -> None:
+        conductor = self._conductor(budgets=Budgets(person_wait_seconds=0))
+        conductor.repository.read_alignment_response.return_value = AlignmentResponse(
+            kind=AlignmentResponseKind.REVIEW, correction="la senal no esta exenta"
+        )
+        manager = Mock()
+        manager.attach_mock(conductor.repository.write_label, "write_label")
+        manager.attach_mock(conductor.understanding.write, "understand")
+
+        conductor.conduct()
+
+        assert [call[0] for call in manager.mock_calls][:2] == ["write_label", "understand"]
+        conductor.repository.write_label.assert_called_once_with(
+            repo=Conductor.REPO, issue=_SUBISSUE, remove=IssueLabel.AWAITING_ALIGNMENT, add=IssueLabel.IN_PROGRESS
+        )
+
+    def test_a_new_correction_returns_the_label_to_awaiting_alignment_only_after_the_redraft_is_published(
+        self,
+    ) -> None:
+        conductor = self._conductor(budgets=Budgets(person_wait_seconds=0))
+        conductor.repository.read_alignment_response.return_value = AlignmentResponse(
+            kind=AlignmentResponseKind.REVIEW, correction="la senal no esta exenta"
+        )
+        manager = Mock()
+        manager.attach_mock(conductor.understanding.write, "understand")
+        manager.attach_mock(conductor.repository.pause_for_alignment, "pause_for_alignment")
+
+        conductor.conduct()
+
+        assert [call[0] for call in manager.mock_calls] == ["understand", "pause_for_alignment"]
+        conductor.repository.pause_for_alignment.assert_called_once_with(
+            repo=Conductor.REPO, issue=_SUBISSUE, remove=IssueLabel.IN_PROGRESS
         )
 
     def test_a_go_persists_the_initial_run_and_starts_implementing_in_the_same_invocation(self) -> None:

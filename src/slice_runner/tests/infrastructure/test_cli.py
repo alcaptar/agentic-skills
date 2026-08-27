@@ -64,6 +64,7 @@ _IMPLEMENTER_PAYLOAD = "implementer-two-paths"
 _TABLE: list[tuple[Step, Outcome, dict[str, int], tuple[Step, RunState, int]]] = [
     (Step.UNDERSTAND, Outcome.DONE, {}, (Step.IMPLEMENT, RunState.OPEN, 0)),
     (Step.UNDERSTAND, Outcome.PENDING, {}, (Step.UNDERSTAND, RunState.OPEN, 30)),
+    (Step.UNDERSTAND, Outcome.CHANGES_REQUESTED, {}, (Step.UNDERSTAND, RunState.OPEN, 0)),
     (Step.UNDERSTAND, Outcome.DISCARDED, {}, (Step.UNDERSTAND, RunState.OPEN, 0)),
     (Step.UNDERSTAND, Outcome.OVER_BUDGET, {}, (Step.UNDERSTAND, RunState.ABORTED_BUDGET, 0)),
     (
