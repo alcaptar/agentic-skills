@@ -224,6 +224,35 @@ class TestAddingUpTheSpendOfASlice(WithTheLedgerOutOfTheRealHome):
 
         assert found == HarnessSpendMother.of_the_implementer_call()
 
+    def test_a_line_of_an_earlier_generation_belonging_to_another_slice_does_not_block_reading_this_one(
+        self, tmp_path: Path
+    ) -> None:
+        ledger = tmp_path / "slice-runner" / "runs" / "spend.jsonl"
+        ledger.parent.mkdir(parents=True)
+        earlier = {"session": "older-session", "spend": {"cost_usd": 1.0}, "repo": "org/other", "issue": 7}
+        ledger.write_text(json.dumps(earlier) + "\n", encoding="utf-8")
+        log = LocalCallSpendLog(clock=self.frozen_at())
+        log.record(HarnessCallSpendMother.of_the_implementer())
+
+        found = log.spend_of_the_slice(HarnessCallSpendMother.coordinates())
+
+        assert found == HarnessSpendMother.of_the_implementer_call()
+
+    def test_a_line_of_an_earlier_generation_belonging_to_this_slice_is_still_refused(self, tmp_path: Path) -> None:
+        ledger = tmp_path / "slice-runner" / "runs" / "spend.jsonl"
+        ledger.parent.mkdir(parents=True)
+        wanted = HarnessCallSpendMother.coordinates()
+        mine_but_earlier = {
+            "session": "older-session",
+            "repo": wanted.repo,
+            "issue": wanted.issue,
+            "slice_id": wanted.slice_id.text,
+        }
+        ledger.write_text(json.dumps(mine_but_earlier) + "\n", encoding="utf-8")
+
+        with pytest.raises(UnreadableCallSpendLogError, match="generation"):
+            LocalCallSpendLog(clock=self.frozen_at()).spend_of_the_slice(wanted)
+
     def test_a_corrupted_call_trace_ledger_never_gets_in_the_way_because_it_is_never_opened(
         self, tmp_path: Path
     ) -> None:

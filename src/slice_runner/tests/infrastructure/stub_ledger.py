@@ -2,13 +2,15 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
+from slice_runner.infrastructure.durable_ledger import LedgerRow
+
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Callable, Iterator
     from types import ModuleType
 
     import pytest
 
-_Row = TypeVar("_Row")
+_Row = TypeVar("_Row", bound=LedgerRow)
 
 
 class StubLedger(Generic[_Row]):
@@ -22,6 +24,11 @@ class StubLedger(Generic[_Row]):
 
     def rows(self, as_row: type[object]) -> Iterator[_Row]:
         yield from self.appended
+
+    def rows_where(self, as_row: type[object], keep: Callable[[dict[str, object]], bool]) -> Iterator[_Row]:
+        for row in self.appended:
+            if keep(row.to_contract()):
+                yield row
 
 
 class WiredStubLedgers:
