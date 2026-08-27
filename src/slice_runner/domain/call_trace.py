@@ -5,14 +5,13 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from slice_runner.domain.slice_coordinates import SliceCoordinates
     from slice_runner.domain.step import Step
 
 
 @dataclass(frozen=True, kw_only=True, slots=True)
 class HarnessCall:
-    repo: str
-    issue: int
-    slice_id: str
+    coordinates: SliceCoordinates
     step: Step
     session: str
 

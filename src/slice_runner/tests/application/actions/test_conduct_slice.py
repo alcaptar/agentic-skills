@@ -77,11 +77,6 @@ class TestConductSliceStartingANewRun:
             UnderstandingMother.of_the_chosen_slice(),
         ]
         conductor.repository.read_alignment_response.return_value = AlignmentResponse(kind=AlignmentResponseKind.GO)
-        conductor.trace.calls_of.return_value = (
-            HarnessCallMother.of_the_discarded_understanding(),
-            HarnessCallMother.of_the_implementer(),
-            HarnessCallMother.of_the_judge(),
-        )
         conductor.seed_spend(
             session=HarnessCallMother.SESSION_OF_THE_DISCARDED_UNDERSTANDING,
             spend=HarnessSpendMother.of_a_call_that_cost_nothing(),
@@ -1061,10 +1056,6 @@ class TestConductSliceResumingWithSpendAlreadyPersisted:
     def test_the_durable_row_of_a_reinvoked_run_still_carries_the_cost_paid_in_an_earlier_invocation(self) -> None:
         prior = HarnessSpendMother.of_the_implementer_call()
         conductor = Conductor(chosen=SelectSliceResultMother.resumed_at(RunMother.judging_after_spending(prior)))
-        conductor.trace.calls_of.return_value = (
-            HarnessCallMother.of_the_implementer(),
-            HarnessCallMother.of_the_judge(),
-        )
         conductor.seed_spend(session=HarnessCallMother.SESSION_OF_THE_IMPLEMENTER, spend=prior)
         conductor.seed_spend(
             session=HarnessCallMother.SESSION_OF_THE_JUDGE, spend=HarnessSpendMother.of_the_judge_call()
@@ -1089,10 +1080,6 @@ class TestConductSliceResumingWithSpendAlreadyPersisted:
         the_last_persisted = HarnessSpendMother.of_the_implementer_call()
         conductor = Conductor(
             chosen=SelectSliceResultMother.resumed_at(RunMother.judging_after_spending(the_last_persisted))
-        )
-        conductor.trace.calls_of.return_value = (
-            HarnessCallMother.of_the_implementer(),
-            HarnessCallMother.of_the_judge(),
         )
         conductor.seed_spend(session=HarnessCallMother.SESSION_OF_THE_IMPLEMENTER, spend=lost_to_the_dead_invocation)
         conductor.seed_spend(session=HarnessCallMother.SESSION_OF_THE_JUDGE, spend=the_last_persisted)
@@ -1227,10 +1214,6 @@ class TestConductSliceOnTheHappyPath:
 
     def test_the_durable_row_carries_the_slice_the_state_and_every_call_that_was_paid_for(self) -> None:
         conductor = self._conductor()
-        conductor.trace.calls_of.return_value = (
-            HarnessCallMother.of_the_implementer(),
-            HarnessCallMother.of_the_judge(),
-        )
         conductor.seed_spend(
             session=HarnessCallMother.SESSION_OF_THE_IMPLEMENTER, spend=HarnessSpendMother.of_the_implementer_call()
         )
@@ -1446,11 +1429,6 @@ class TestConductSliceImplementing:
             RejectionMother.invalid_implementation_report(),
             ImplementationMother.of_two_paths(),
         ]
-        conductor.trace.calls_of.return_value = (
-            HarnessCallMother.of_the_discarded_implementer(),
-            HarnessCallMother.of_the_implementer(),
-            HarnessCallMother.of_the_judge(),
-        )
         conductor.seed_spend(
             session=HarnessCallMother.SESSION_OF_THE_DISCARDED_IMPLEMENTER,
             spend=HarnessSpendMother.of_a_call_that_cost_nothing(),
@@ -1785,11 +1763,6 @@ class TestConductSliceWhenTheJudgeSpeaks:
     def test_a_discarded_verdict_spends_no_verify_retry_and_still_counts_what_the_call_cost(self) -> None:
         conductor = self._conductor()
         conductor.verify.execute.side_effect = [RejectionMother.incoherent_verdict(), VerificationMother.passing()]
-        conductor.trace.calls_of.return_value = (
-            HarnessCallMother.of_the_discarded_verdict(),
-            HarnessCallMother.of_the_implementer(),
-            HarnessCallMother.of_the_judge(),
-        )
         conductor.seed_spend(
             session=HarnessCallMother.SESSION_OF_THE_DISCARDED_VERDICT,
             spend=HarnessSpendMother.of_a_call_that_cost_nothing(),

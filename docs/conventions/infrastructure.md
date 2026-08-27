@@ -173,6 +173,16 @@ importar**: un smoke que solo importe el módulo lo da por bueno. Lo evita
 
   **Los payloads de un almacen durable declaran su esquema**, reusando el mismo emisor plano que los que
   viajan en un prompt. Es lo que deja preguntar que campos trae una fila sin abrir el fichero.
+
+  **Toda fila de todo almacen durable trae marca de tiempo, repo, issue y la slice a la que pertenece.**
+  Las cuatro se declaran una sola vez -en `StampedRow`, que los payloads heredan- y se escriben siempre
+  juntas a traves de un unico constructor (`_stamped`), nunca sueltas campo a campo. Cruzar dos almacenes
+  por sesion para saber de que slice era una llamada es la arqueologia que esto reemplaza. El texto que
+  nombra la slice sale de `SliceIdentity`/`CanonicalSliceId`, nunca compuesto a mano en un payload: **el
+  formato del identificador -el prefijo, el `-NN` final- vive en un solo sitio**, y un almacen que hoy no
+  tenga fila antigua que tolerar declara las cuatro obligatorias; el resto hereda opcional solo la
+  coordenada que de verdad le faltaba, y sigue exigiendo la que ya escribia, para no aflojar una garantia
+  que ya tenia mientras sigue leyendo lo que se escribio antes de esta regla.
 - **El registro durable lo escribe el programa el mismo**, con el mismo patrón que los demas almacenes y
   un payload de frontera que traduce el dominio a las claves del log. **No delega esa escritura en un
   script fuera de su paquete**: sería una dependencia fisica con código que no es referencia.

@@ -244,6 +244,12 @@ siete declaran su esquema con un `json_schema()` propio (`HarnessCallPayload`, `
 `UnrecordedCallToolUsePayload`), asi que que campos trae esa fila se puede preguntar a un programa en vez de
 abrir el fichero.
 
+Y toda fila de los siete trae marca de tiempo, repo, issue y la slice a la que pertenece: `spend.jsonl` ya
+no necesita cruzarse por sesion contra `calls.jsonl` para saber cuanto costo una slice, y
+`tool-uses.jsonl`/`unrecorded-tool-uses.jsonl` se leen solos aunque sean los que dicen que toco el
+implementador. Las cuatro se declaran una sola vez (`StampedRow`) y el texto que nombra la slice sale de
+`SliceIdentity`, nunca compuesto a mano fila por fila.
+
 El log de un control fallido -lo unico que recibe el implementador para arreglarlo- vive tambien bajo
 `runs/`, en `~/.claude/slice-runner/runs/controls/` por defecto, con el repo y el issue del run ademas de
 la slice y la ronda en la ruta: dos features distintas que compartan el mismo identificador de slice no se

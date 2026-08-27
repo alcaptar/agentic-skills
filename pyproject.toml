@@ -59,6 +59,7 @@ runtime-evaluated-base-classes = [
     "slice_runner.infrastructure.durable_ledger.LedgerRow",
     "slice_runner.infrastructure.durable_ledger.ReadableLedgerRow",
     "slice_runner.infrastructure.open_vocabulary_model.OpenVocabularyModel",
+    "slice_runner.infrastructure.stamped_row.StampedRow",
 ]
 
 [tool.ruff.lint.isort]

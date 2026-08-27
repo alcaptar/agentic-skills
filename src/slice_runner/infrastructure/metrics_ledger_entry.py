@@ -21,6 +21,7 @@ from slice_runner.infrastructure.metrics_entry_payload import (
     DurableVerdict,
     HarnessMeasurementPayload,
 )
+from slice_runner.infrastructure.stamped_row import LegacyTolerantStampedRow
 
 if TYPE_CHECKING:
     from slice_runner.domain.ci_indeterminate_cause import CiIndeterminateCause
@@ -29,14 +30,10 @@ if TYPE_CHECKING:
 _IGNORED_LEGACY_KEYS = ("duracion_s", "coste_tokens", "descartes_verify_causa")
 
 
-class MetricsLedgerRowPayload(ReadableLedgerRow):
+class MetricsLedgerRowPayload(LegacyTolerantStampedRow, ReadableLedgerRow):
     UNREADABLE: ClassVar[type[ValueError]] = UnreadableMetricsLogError
     LEGACY_VERDICT: ClassVar[str] = "bloqueada-puertas"
 
-    ts: str | None = None
-    repo: str | None = None
-    issue: int | None = None
-    slice_id: str | None = None
     name: str | None = None
     verdict: DurableVerdict | None = Field(alias="veredicto", default=None)
     ci: DurableCi | None = None

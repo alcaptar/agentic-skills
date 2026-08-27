@@ -11,9 +11,11 @@ import pytest
 
 from slice_runner.domain.budgets import Budgets
 from slice_runner.domain.call_trace import HarnessCall
+from slice_runner.domain.canonical_slice_id import CanonicalSliceId
 from slice_runner.domain.issue_label import IssueLabel
 from slice_runner.domain.outcome import Outcome
 from slice_runner.domain.run_state import RunState
+from slice_runner.domain.slice_coordinates import SliceCoordinates
 from slice_runner.domain.step import Step
 from slice_runner.infrastructure.call_spend_payload import CallSpendPayload
 from slice_runner.infrastructure.claude_config import ClaudeConfig
@@ -283,6 +285,16 @@ class TestWhenThereIsNothingToJudge(BlindToTheToolboxOfThisMachine):
         assert process.calls == 0
         assert "the repo or the base" in capsys.readouterr().err
 
+    def test_a_slice_identifier_a_person_typed_wrong_exits_as_a_usage_error_and_not_as_an_interrupted_run(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str], process: RealExceptTheJudge
+    ) -> None:
+        repo = RepoMother.with_the_slice_staged(tmp_path)
+
+        code = Cli(process=process, budgets=Budgets()).verify(repo=str(repo), base=Git.BASE_BRANCH, slice_id="01")
+
+        assert code == ExitCode.USAGE_ERROR
+        assert process.calls == 0
+
 
 @pytest.mark.integration
 class TestTheDiffTheJudgeReads(BlindToTheToolboxOfThisMachine):
@@ -422,14 +434,14 @@ class TestTheCommandThatPrintsAConversation:
     def toolbox(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
 
+    @classmethod
+    def _coordinates(cls) -> SliceCoordinates:
+        return SliceCoordinates(repo=cls._REPO, issue=cls._ISSUE, slice_id=CanonicalSliceId.of_text(cls._SLICE))
+
     def _traced(self) -> None:
         LocalCallTrace(clock=SystemClock()).record(
             HarnessCall(
-                repo=self._REPO,
-                issue=self._ISSUE,
-                slice_id=self._SLICE,
-                step=Step.IMPLEMENT,
-                session=ConversationTranscriptMother.SESSION,
+                coordinates=self._coordinates(), step=Step.IMPLEMENT, session=ConversationTranscriptMother.SESSION
             )
         )
         ConversationTranscriptMother.written_under(ClaudeConfig.root())
@@ -505,11 +517,7 @@ class TestTheCommandThatPrintsAConversation:
     ) -> None:
         LocalCallTrace(clock=SystemClock()).record(
             HarnessCall(
-                repo=self._REPO,
-                issue=self._ISSUE,
-                slice_id=self._SLICE,
-                step=Step.IMPLEMENT,
-                session=ConversationTranscriptMother.SESSION,
+                coordinates=self._coordinates(), step=Step.IMPLEMENT, session=ConversationTranscriptMother.SESSION
             )
         )
 
@@ -595,8 +603,11 @@ class TestTheCommandThatSumsSpendByRole:
         monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
 
     def _traced_and_spent(self, *, step: Step, call: HarnessCallSpend) -> None:
+        coordinates = SliceCoordinates(
+            repo=self._REPO, issue=self._ISSUE, slice_id=CanonicalSliceId.of_text(self._SLICE)
+        )
         LocalCallTrace(clock=SystemClock()).record(
-            HarnessCall(repo=self._REPO, issue=self._ISSUE, slice_id=self._SLICE, step=step, session=call.session)
+            HarnessCall(coordinates=coordinates, step=step, session=call.session)
         )
         LocalCallSpendLog(clock=SystemClock()).record(call)
 

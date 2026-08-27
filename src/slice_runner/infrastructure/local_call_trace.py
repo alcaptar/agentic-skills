@@ -3,6 +3,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, ClassVar
 
 from slice_runner.domain.call_trace import CallTrace, HarnessCall
+from slice_runner.domain.canonical_slice_id import CanonicalSliceId
+from slice_runner.domain.slice_coordinates import SliceCoordinates
 from slice_runner.infrastructure.durable_ledger import DurableLedger
 from slice_runner.infrastructure.harness_call_payload import HarnessCallPayload
 
@@ -30,8 +32,10 @@ class LocalCallTrace(CallTrace):
         )
 
     def calls_of(self, *, repo: str, issue: int, slice_id: str) -> tuple[HarnessCall, ...]:
+        coordinates = SliceCoordinates(repo=repo, issue=issue, slice_id=CanonicalSliceId.of_text(slice_id))
+
         return tuple(
-            HarnessCall(repo=repo, issue=issue, slice_id=slice_id, step=call.step, session=call.session)
+            HarnessCall(coordinates=coordinates, step=call.step, session=call.session)
             for call in self._ledger.rows(HarnessCallPayload)
             if call.repo == repo and call.issue == issue and call.slice_id == slice_id
         )

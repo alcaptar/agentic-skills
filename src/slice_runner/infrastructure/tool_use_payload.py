@@ -5,8 +5,8 @@ from typing import TYPE_CHECKING, Self
 from slice_runner.domain.step import Step
 from slice_runner.domain.unrecorded_conversation_cause import UnrecordedConversationCause
 from slice_runner.infrastructure.contract_model import ContractModel
-from slice_runner.infrastructure.durable_ledger import LedgerRow
 from slice_runner.infrastructure.json_schema import JsonSchema
+from slice_runner.infrastructure.stamped_row import StampedRow
 
 if TYPE_CHECKING:
     from slice_runner.infrastructure.tool_use_log import HarnessCallToolUse, ToolUse, UnrecordedCallToolUse
@@ -23,8 +23,7 @@ class ToolUsePayload(ContractModel):
         return cls(turn=use.turn, tool=use.tool, path=use.path, failed=use.failed or None)
 
 
-class CallToolUsePayload(LedgerRow):
-    slice_id: str
+class CallToolUsePayload(StampedRow):
     step: Step
     session: str
     uses: tuple[ToolUsePayload, ...]
@@ -34,17 +33,17 @@ class CallToolUsePayload(LedgerRow):
         return JsonSchema.flat(cls)
 
     @classmethod
-    def from_call(cls, call: HarnessCallToolUse) -> Self:
-        return cls(
-            slice_id=call.slice_id,
+    def from_call(cls, call: HarnessCallToolUse, *, ts: str) -> Self:
+        return cls._stamped(
+            call.coordinates,
+            ts=ts,
             step=call.step,
             session=call.session,
             uses=tuple(ToolUsePayload.from_domain(use) for use in call.uses),
         )
 
 
-class UnrecordedCallToolUsePayload(LedgerRow):
-    slice_id: str
+class UnrecordedCallToolUsePayload(StampedRow):
     step: Step
     session: str
     cause: UnrecordedConversationCause
@@ -54,5 +53,5 @@ class UnrecordedCallToolUsePayload(LedgerRow):
         return JsonSchema.flat(cls)
 
     @classmethod
-    def from_call(cls, call: UnrecordedCallToolUse) -> Self:
-        return cls(slice_id=call.slice_id, step=call.step, session=call.session, cause=call.cause)
+    def from_call(cls, call: UnrecordedCallToolUse, *, ts: str) -> Self:
+        return cls._stamped(call.coordinates, ts=ts, step=call.step, session=call.session, cause=call.cause)

@@ -4,11 +4,11 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
+from slice_runner.domain.slice_coordinates import SliceCoordinates
 from slice_runner.domain.slice_status import SliceStatus
 
 if TYPE_CHECKING:
     from slice_runner.domain.call_spend_log import CallSpendLog
-    from slice_runner.domain.call_trace import CallTrace
     from slice_runner.domain.forum import Forum
     from slice_runner.domain.harness_spend import HarnessSpend
     from slice_runner.domain.metrics_log import MetricsLog
@@ -29,13 +29,11 @@ class ShowFeatureStatus:
         repository: RunRepository,
         forum: Forum,
         metrics: MetricsLog,
-        trace: CallTrace,
         spend_log: CallSpendLog,
     ) -> None:
         self._repository = repository
         self._forum = forum
         self._metrics = metrics
-        self._trace = trace
         self._spend_log = spend_log
 
     def execute(self, params: ShowFeatureStatusParams) -> tuple[SliceStatus, ...]:
@@ -61,7 +59,6 @@ class ShowFeatureStatus:
         )
 
     def _spend_of(self, *, repo: str, child: SubIssue) -> HarnessSpend:
-        calls = self._trace.calls_of(repo=repo, issue=child.number, slice_id=child.slice_id.canonical)
-        sessions = tuple(call.session for call in calls)
+        coordinates = SliceCoordinates(repo=repo, issue=child.number, slice_id=child.slice_id.canonical_id)
 
-        return self._spend_log.spend_of(sessions)
+        return self._spend_log.spend_of_the_slice(coordinates)

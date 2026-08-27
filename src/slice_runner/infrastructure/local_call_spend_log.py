@@ -12,6 +12,7 @@ if TYPE_CHECKING:
 
     from slice_runner.domain.call_spend_log import HarnessCallSpend
     from slice_runner.domain.clock import Clock
+    from slice_runner.domain.slice_coordinates import SliceCoordinates
 
 
 class LocalCallSpendLog(CallSpendLog):
@@ -30,11 +31,24 @@ class LocalCallSpendLog(CallSpendLog):
 
         return HarnessSpend.summing(self._once_per_session(self._ledger.rows(CallSpendPayload), wanted=wanted))
 
+    def spend_of_the_slice(self, coordinates: SliceCoordinates) -> HarnessSpend:
+        matching = (
+            call
+            for call in self._ledger.rows(CallSpendPayload)
+            if call.repo == coordinates.repo
+            and call.issue == coordinates.issue
+            and call.slice_id == coordinates.slice_id.text
+        )
+
+        return HarnessSpend.summing(self._once_per_session(matching, wanted=None))
+
     @staticmethod
-    def _once_per_session(calls: Iterator[CallSpendPayload], *, wanted: frozenset[str]) -> Iterator[HarnessSpend]:
+    def _once_per_session(
+        calls: Iterator[CallSpendPayload], *, wanted: frozenset[str] | None
+    ) -> Iterator[HarnessSpend]:
         counted: set[str] = set()
         for call in calls:
-            if call.session not in wanted or call.session in counted:
+            if (wanted is not None and call.session not in wanted) or call.session in counted:
                 continue
             counted.add(call.session)
 

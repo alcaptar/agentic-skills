@@ -3,6 +3,8 @@ from __future__ import annotations
 from typing import ClassVar
 
 from slice_runner.domain.call_trace import HarnessCall
+from slice_runner.domain.canonical_slice_id import CanonicalSliceId
+from slice_runner.domain.slice_coordinates import SliceCoordinates
 from slice_runner.domain.step import Step
 from slice_runner.tests.mothers.judge_output_mother import HarnessEnvelopeMother
 
@@ -22,57 +24,51 @@ class HarnessCallMother:
     SESSION_OF_THE_DISCARDED_VERDICT: ClassVar[str] = "3c4d5e6f-7a8b-4c9d-0e1f-2a3b4c5d6e72"
 
     @classmethod
-    def of_the_implementer(cls) -> HarnessCall:
-        return HarnessCall(
-            repo=cls.REPO,
-            issue=cls.ISSUE,
-            slice_id=cls.SLICE_ID,
-            step=Step.IMPLEMENT,
-            session=cls.SESSION_OF_THE_IMPLEMENTER,
+    def coordinates(cls) -> SliceCoordinates:
+        return SliceCoordinates(repo=cls.REPO, issue=cls.ISSUE, slice_id=CanonicalSliceId.of_text(cls.SLICE_ID))
+
+    @classmethod
+    def coordinates_with_a_user_story(cls) -> SliceCoordinates:
+        return SliceCoordinates(
+            repo=cls.REPO, issue=cls.ISSUE, slice_id=CanonicalSliceId.of_text(cls.SLICE_ID_WITH_A_USER_STORY)
         )
 
     @classmethod
-    def of_the_judge(cls) -> HarnessCall:
-        return HarnessCall(
-            repo=cls.REPO, issue=cls.ISSUE, slice_id=cls.SLICE_ID, step=Step.VERIFY, session=cls.SESSION_OF_THE_JUDGE
+    def coordinates_of_another_feature(cls) -> SliceCoordinates:
+        return SliceCoordinates(
+            repo=cls.OTHER_REPO, issue=cls.OTHER_ISSUE, slice_id=CanonicalSliceId.of_text(cls.SLICE_ID)
         )
+
+    @classmethod
+    def of_the_implementer(cls) -> HarnessCall:
+        return HarnessCall(coordinates=cls.coordinates(), step=Step.IMPLEMENT, session=cls.SESSION_OF_THE_IMPLEMENTER)
+
+    @classmethod
+    def of_the_judge(cls) -> HarnessCall:
+        return HarnessCall(coordinates=cls.coordinates(), step=Step.VERIFY, session=cls.SESSION_OF_THE_JUDGE)
 
     @classmethod
     def of_the_discarded_understanding(cls) -> HarnessCall:
         return HarnessCall(
-            repo=cls.REPO,
-            issue=cls.ISSUE,
-            slice_id=cls.SLICE_ID,
-            step=Step.UNDERSTAND,
-            session=cls.SESSION_OF_THE_DISCARDED_UNDERSTANDING,
+            coordinates=cls.coordinates(), step=Step.UNDERSTAND, session=cls.SESSION_OF_THE_DISCARDED_UNDERSTANDING
         )
 
     @classmethod
     def of_the_discarded_implementer(cls) -> HarnessCall:
         return HarnessCall(
-            repo=cls.REPO,
-            issue=cls.ISSUE,
-            slice_id=cls.SLICE_ID,
-            step=Step.IMPLEMENT,
-            session=cls.SESSION_OF_THE_DISCARDED_IMPLEMENTER,
+            coordinates=cls.coordinates(), step=Step.IMPLEMENT, session=cls.SESSION_OF_THE_DISCARDED_IMPLEMENTER
         )
 
     @classmethod
     def of_the_discarded_verdict(cls) -> HarnessCall:
         return HarnessCall(
-            repo=cls.REPO,
-            issue=cls.ISSUE,
-            slice_id=cls.SLICE_ID,
-            step=Step.VERIFY,
-            session=cls.SESSION_OF_THE_DISCARDED_VERDICT,
+            coordinates=cls.coordinates(), step=Step.VERIFY, session=cls.SESSION_OF_THE_DISCARDED_VERDICT
         )
 
     @classmethod
     def of_the_implementer_of_a_slice_with_a_user_story(cls) -> HarnessCall:
         return HarnessCall(
-            repo=cls.REPO,
-            issue=cls.ISSUE,
-            slice_id=cls.SLICE_ID_WITH_A_USER_STORY,
+            coordinates=cls.coordinates_with_a_user_story(),
             step=Step.IMPLEMENT,
             session=cls.SESSION_OF_THE_IMPLEMENTER,
         )
@@ -80,9 +76,7 @@ class HarnessCallMother:
     @classmethod
     def of_the_implementer_of_another_feature(cls) -> HarnessCall:
         return HarnessCall(
-            repo=cls.OTHER_REPO,
-            issue=cls.OTHER_ISSUE,
-            slice_id=cls.SLICE_ID,
+            coordinates=cls.coordinates_of_another_feature(),
             step=Step.IMPLEMENT,
             session=cls.SESSION_OF_ANOTHER_FEATURE,
         )
