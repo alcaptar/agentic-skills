@@ -144,6 +144,8 @@ class TestTheEventItEmits:
         emitted = recorder.events.emit.call_args.args[0]
         assert emitted.step is Step.VERIFY
         assert emitted.slice_id == _SLICE
+        assert emitted.repo == _REPO
+        assert emitted.issue == _ISSUE
         assert emitted.at == _AT
 
     def test_a_closing_transition_is_emitted_as_closed_so_the_log_says_the_run_ended(self) -> None:

@@ -233,16 +233,24 @@ una fila nunca se puede confundir con la de otro run. Es lo que permite abrir la
 concreta -viven en `~/.claude/projects/`, una por sesion- sin adivinar por marcas de tiempo entre decenas de
 ficheros. Tambien append-only y tambien fuera del repo, y por el mismo motivo.
 
-Los siete almacenes durables del programa -`metrics.jsonl`, `calls.jsonl`, `spend.jsonl`, el par
-`verdicts.jsonl`/`diffs.jsonl` y el par `tool-uses.jsonl`/`unrecorded-tool-uses.jsonl`- comparten el mismo
-patron de nombre, `~/.claude/slice-runner/runs/<concepto>.jsonl`, y lo comparten porque pasan por la misma
-pieza (`DurableLedger`): un adaptador solo le da su nombre y el payload de su fila, y es la pieza la que
-compone la ruta, crea el directorio si falta y anexa. Los ficheros de las dos generaciones anteriores
+Y **cada transicion del run** -avanzo, se quedo esperando a una maquina, se quedo esperando a una
+persona, o cerro- anexa su linea a `~/.claude/slice-runner/runs/events.jsonl`, con el repo y el issue del
+run ademas de la slice, el paso al que llego, el instante, el gasto acumulado y el estado. Es la misma fila
+que hasta ahora solo salia por la salida de error de `run` -y sigue saliendo, para poder mirar un run en
+marcha-, pero ahora tambien dura: reconstruir cuanto tardo o cuanto espero una slice deja de depender de
+tener la terminal abierta cuando corrio. Lo que no anexa esta fila es el turno del arnes -numero, herramienta
+y objetivo-, porque eso ya lo escribe `tool-uses.jsonl` al terminar cada llamada.
+
+Los ocho almacenes durables del programa -`metrics.jsonl`, `calls.jsonl`, `spend.jsonl`, `events.jsonl`, el
+par `verdicts.jsonl`/`diffs.jsonl` y el par `tool-uses.jsonl`/`unrecorded-tool-uses.jsonl`- comparten el
+mismo patron de nombre, `~/.claude/slice-runner/runs/<concepto>.jsonl`, y lo comparten porque pasan por la
+misma pieza (`DurableLedger`): un adaptador solo le da su nombre y el payload de su fila, y es la pieza la
+que compone la ruta, crea el directorio si falta y anexa. Los ficheros de las dos generaciones anteriores
 -bajo `log/` y `trace/`- no se leen ni se escriben mas: quedan como archivo, sin moverse ni borrarse. Los
-siete declaran su esquema con un `json_schema()` propio (`HarnessCallPayload`, `CallSpendPayload`,
+ocho declaran su esquema con un `json_schema()` propio (`HarnessCallPayload`, `CallSpendPayload`,
 `MetricsEntryPayload`, `CorpusVerdictPayload`, `CorpusDiffPayload`, `CallToolUsePayload`,
-`UnrecordedCallToolUsePayload`), asi que que campos trae esa fila se puede preguntar a un programa en vez de
-abrir el fichero.
+`UnrecordedCallToolUsePayload`, `EventPayload`), asi que que campos trae esa fila se puede preguntar a un
+programa en vez de abrir el fichero.
 
 Y toda fila de los siete trae marca de tiempo, repo, issue y la slice a la que pertenece: `spend.jsonl` ya
 no necesita cruzarse por sesion contra `calls.jsonl` para saber cuanto costo una slice, y

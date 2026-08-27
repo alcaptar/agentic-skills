@@ -5,6 +5,7 @@ import json
 from slice_runner.infrastructure.call_spend_payload import CallSpendPayload
 from slice_runner.infrastructure.corpus_diff_payload import CorpusDiffPayload
 from slice_runner.infrastructure.corpus_verdict_payload import CorpusVerdictPayload
+from slice_runner.infrastructure.event_payload import EventPayload
 from slice_runner.infrastructure.harness_call_payload import HarnessCallPayload
 from slice_runner.infrastructure.metrics_entry_payload import MetricsEntryPayload
 from slice_runner.infrastructure.tool_use_payload import CallToolUsePayload, UnrecordedCallToolUsePayload
@@ -67,7 +68,20 @@ class TestEveryDurableLogDeclaresASchemaAProgramCanRead:
             "cause",
         }
 
-    def test_none_of_the_seven_schemas_leaves_a_reference_unresolved(self) -> None:
+    def test_the_event_schema_requires_the_repo_the_issue_the_slice_the_step_the_instant_the_spend_and_the_status(
+        self,
+    ) -> None:
+        assert self._required(EventPayload.json_schema()) == {
+            "slice_id",
+            "repo",
+            "issue",
+            "step",
+            "at",
+            "spend",
+            "status",
+        }
+
+    def test_none_of_the_eight_schemas_leaves_a_reference_unresolved(self) -> None:
         for payload in (
             HarnessCallPayload,
             CallSpendPayload,
@@ -76,6 +90,7 @@ class TestEveryDurableLogDeclaresASchemaAProgramCanRead:
             CorpusDiffPayload,
             CallToolUsePayload,
             UnrecordedCallToolUsePayload,
+            EventPayload,
         ):
             emitted = json.dumps(payload.json_schema())
 
