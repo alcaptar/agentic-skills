@@ -61,9 +61,11 @@ El programa te pasa, en el prompt de invocacion:
 - **El `EXCLUYE` que declaro la slice**: lo que quien la especifico decidio dejar fuera de esta slice a
   proposito -tipicamente andamiaje de una slice futura ya prevista-. Es una **prohibicion, no un
   permiso**: convierte en cita lo que el item 5 tendria que inferir.
-- **El `SUSTITUYE` que declaro la slice**: si el diff sustituye comportamiento que ya vivia en
-  produccion y, si es asi, con que mecanismo se puede volver atras sin redeploy. Convierte en cita lo
-  que el item 2 tendria que inferir mirando si el diff toca contrato publico, cuando la linea trae dato.
+- **El `SUSTITUYE` que declaro la slice**: si el diff sustituye algo que ya estaba funcionando y, si es
+  asi, que se hace al respecto. Su segunda mitad depende de como se distribuye el sujeto: en un servicio
+  desplegado es el mecanismo para volver atras sin redeploy; en un programa que se instala es que deja
+  ilegible o inservible de lo que ya esta escrito y que pasa con ello. Convierte en cita lo que el item 2
+  tendria que inferir mirando si el diff toca contrato publico, cuando la linea trae dato.
 - **Las fuentes de convencion**: los punteros a la vara principal del item 1, ya filtrados por el repo
   de la slice. Son rutas y nombres, asi que tienes que abrirlos tu.
 - **Los hallazgos que tu mismo levantaste en la ronda anterior**, si la hay: uno por hallazgo, con su
@@ -122,10 +124,15 @@ Recorrela **entera** y reporta item a item. No la amplies con criterios propios 
    Ademas, contrastalo contra el `SUSTITUYE` que declaro la slice en vez de dejar que el disparador
    general de arriba adivine solo si el diff toca contrato publico:
 
-   - **`SUSTITUYE: si - <que sustituye>; <como se vuelve atras sin redeploy>`**: el diff tiene que traer,
-     ademas del patron que exige la convencion, **el mecanismo de vuelta atras que la linea nombra**
-     (flag, dual-write, doble lectura, o lo que sea que declaro). Si no esta, es **FAIL (severity
-     high)**, citando la linea de `SUSTITUYE` y su ausencia en el diff.
+   - **`SUSTITUYE: si - <que sustituye>; <que se hace al respecto>`**: el diff tiene que traer, ademas
+     del patron que exige la convencion, **lo que la segunda mitad de la linea nombra**. Lee esa mitad
+     antes de decidir que buscas, porque cambia con el sujeto: si nombra un **mecanismo de vuelta atras**
+     -flag, dual-write, doble lectura- ese mecanismo tiene que estar en el diff; si nombra **que pasa con
+     lo que ya esta escrito** -filas de un almacen, estado persistido, ficheros que el programa relee-, lo
+     que tiene que estar es eso: la lectura que falla en vez de leer a medias, el paso que lo declara, o
+     la prosa del registro duradero que dice que se archiva a mano. Exigir un flag a un programa que se
+     instala es un hallazgo inventado: ahi volver atras es reinstalar. Si lo que la linea nombra no esta
+     en el diff, es **FAIL (severity high)**, citando la linea de `SUSTITUYE` y su ausencia.
    - **`SUSTITUYE: no`**: es una afirmacion refutable contra el diff, no una exencion del check general
      de arriba. Si el diff cambia comportamiento que ya existia en produccion pese a la declaracion, es
      **FAIL (severity high)**, citando la linea y el cambio que la contradice.

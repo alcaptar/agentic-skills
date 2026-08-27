@@ -286,17 +286,27 @@ SUSTITUYE: no
   del repo solo cubren lo que alguien se acordo de escribir en ellas. Un criterio de forma no sustituye a
   la convencion -si la regla vale para todo el repo, su casa es `docs/conventions/`-, pero es lo que
   impide que **esta** slice nazca en el sitio equivocado mientras la convencion se escribe.
-- **Y cada criterio se le pide a quien puede cumplirlo.** El implementador no toca `git` -ni commitea,
-  ni stagea, ni cambia de rama, ni redacta mensajes de commit- y no compone el cuerpo de la pull
-  request: lo que devuelve es codigo, tests y su informe. Un criterio que pida algo fuera de eso es
-  **invalido aunque sea falsable**, porque nadie en el pipeline puede cumplirlo, y su unico efecto es
-  gastar una vuelta hasta que alguien lo descubre. `ACEPTACION: la retirada de los tests va en un
-  segundo commit` hay que reescribirla (el reparto en commits lo decide el programa, una vuelta un
-  commit); `ACEPTACION: el cuerpo de la pull request nombra el test que cubre cada uno retirado`
-  tambien (el cuerpo se compone solo, y en las vueltas de correccion ni siquiera se reescribe). Lo
-  que si esta en su mano es **declararlo en su informe**, que es por donde eso llega a la pull
-  request: `ACEPTACION: por cada test retirado, el informe nombra el del caso de uso que lo cubre`
-  cumple la vara.
+- **Y cada criterio se le pide a quien puede cumplirlo, y se escribe contra lo que el verificador
+  recibe.** Son dos filtros y hay que pasar los dos.
+
+  El implementador no toca `git` -ni commitea, ni stagea, ni cambia de rama, ni redacta mensajes de
+  commit- y no compone el cuerpo de la pull request: lo que devuelve es codigo, tests y su informe. Un
+  criterio que pida algo fuera de eso es **invalido aunque sea falsable**, porque nadie en el pipeline
+  puede cumplirlo. `ACEPTACION: la retirada de los tests va en un segundo commit` hay que reescribirla
+  (el reparto en commits lo decide el programa); `ACEPTACION: el cuerpo de la pull request nombra el
+  test que cubre cada uno retirado` tambien (el cuerpo se compone solo).
+
+  **Y el verificador solo recibe el diff, la spec y las fuentes de convencion: no recibe el informe del
+  implementador.** Asi que un criterio que apunte al informe es **inverificable por quien tiene que
+  medirlo**, aunque el implementador si pueda cumplirlo. Eso no es una vara: es pedirle al juez un
+  veredicto sobre algo que no ve, y lo que devuelve es un hallazgo en cada ronda -medido: sale en tres
+  slices seguidas, y el juez acabo etiquetandolo "sin veredicto por falta de dato"-.
+
+  **La reescritura es apuntar al diff, que es lo que el juez si tiene delante.** `ACEPTACION: por cada
+  test retirado, el informe nombra el del caso de uso que lo cubre` hay que reescribirla como
+  `ACEPTACION: cada comportamiento que cubria un test retirado lo cubre otro test que esta en el diff`:
+  dice lo mismo, se comprueba leyendo el diff, y el implementador lo declara igualmente en su informe
+  porque es donde declara lo que toca.
 - **Una slice que traslada logica declara que se retira de donde estaba.** Cuando el trabajo es mover
   algo de A a B -un paso que se va a su caso de uso, una regla que baja al dominio-, el criterio sobre
   tests dice **que sale de A**, no solo que A sigue verde. "Los tests de A siguen verdes sin tocarlos"
@@ -322,13 +332,27 @@ SUSTITUYE: no
   que `SENAL: exenta - <motivo>`. Es una **prohibicion que viaja a los dos agentes**: el implementador
   no construye lo que nombra, y el verificador bloquea si aparece en el diff, citando la linea en vez de
   tener que argumentar que sobra.
-- El cuerpo lleva una linea `SUSTITUYE:` que dice **si el diff sustituye comportamiento que ya vive en
-  produccion**, con la forma `SUSTITUYE: no` o `SUSTITUYE: si - <que sustituye>; <como se vuelve atras
-  sin redeploy>`. Es obligatoria siempre y **sin figura de exencion**: a diferencia de `EXCLUYE:` y de
-  `SENAL:`, aqui no hay `nada`/`exenta` posible, porque la pregunta -¿esto reemplaza algo vivo?- siempre
-  tiene una respuesta, aunque sea que no. Con `si`, las dos mitades son obligatorias: nombrar que se
-  sustituye sin decir como se vuelve atras deja al verificador de slice-runner sin el mecanismo que el
-  item de patron de rollout exige ver en el diff.
+- El cuerpo lleva una linea `SUSTITUYE:` que dice **si el diff sustituye algo que ya esta funcionando**.
+  Es obligatoria siempre y **sin figura de exencion**: a diferencia de `EXCLUYE:` y de `SENAL:`, aqui no
+  hay `nada`/`exenta` posible, porque la pregunta siempre tiene una respuesta, aunque sea que no.
+
+  **La segunda mitad depende de como se distribuye el sujeto, y confundirlo es lo que hace que la linea
+  se rellene con prosa.** Hay dos formas y hay que elegir la del repo destino:
+
+  - **Un servicio desplegado** -algo que corre en produccion y atiende trafico-: `SUSTITUYE: si - <que
+    sustituye>; <como se vuelve atras sin redeploy>`. Ahi el mecanismo existe -un flag, expand-contract-
+    y nombrarlo es lo que deja al verificador algo que exigir en el diff.
+  - **Un programa que se instala** -una linea de comandos, una libreria, un script-: volver atras **es**
+    reinstalar la version anterior, asi que escribirlo no informa de nada. La pregunta que si muerde
+    aqui es otra: `SUSTITUYE: si - <que deja ilegible o inservible de lo que ya esta escrito>; <que pasa
+    con lo que ya existe>`. Ficheros, filas de un almacen durable, estado persistido, etiquetas.
+
+  **Medido, y por eso esta escrito asi:** con la forma del servicio aplicada a un programa que se
+  instala, la linea no cazo ni una de las tres roturas de generacion reales de una feature entera -un
+  almacen que dejo de leerse, otro que impedia cerrar cualquier slice, un campo renombrado- y en cambio
+  produjo tres hallazgos sobre si misma, porque prometia un rollback que no existia. Cero hallazgos de
+  severidad alta en 445: no bloqueo nunca. La linea no fallaba por estar mal redactada, fallaba por
+  preguntar lo que en ese repo no aplica.
 - Linea `REPO: <org>/<repo>` cuando la slice se implementa en otro repo (alerta, panel). Ausente = el
   repo del padre. Toda slice con `REPO:` exige la subseccion de fuentes **y de controles** de su repo.
 - Una feature de **una sola slice** = un padre con una sola subissue.
@@ -609,13 +633,16 @@ trabajo. Ofrece corregirlas. Checklist:
   issue anterior a este mecanismo), **es la desviacion a corregir**: pregunta a la persona que decidio
   dejar fuera al cortar esta slice -si de verdad nada, la exencion lleva motivo- y anade la linea,
   reportandola como `slice-NN (#numero)`, en el cuerpo.
-- **Ninguna slice sin `SUSTITUYE:`, y ninguna `SUSTITUYE: si` sin las dos mitades.** Si falta (p. ej.
-  un issue anterior a este mecanismo), **es la desviacion a corregir**: pregunta a la persona si el
-  diff de esta slice sustituye comportamiento que ya vive en produccion y anade la linea con la forma
-  `no` o `si - <que sustituye>; <como se vuelve atras sin redeploy>`, reportandola como
-  `slice-NN (#numero)`, en el cuerpo. Un `SUSTITUYE: si` que no nombra las dos mitades -que sustituye,
-  como se vuelve atras- es la misma desviacion: sin el mecanismo de vuelta atras el verificador de
-  slice-runner no tiene contra que exigirlo.
+- **Ninguna slice sin `SUSTITUYE:`, y ninguna `SUSTITUYE: si` sin las dos mitades.** Si falta (p. ej. un
+  issue anterior a este mecanismo), **es la desviacion a corregir**: pregunta a la persona si el diff de
+  esta slice sustituye algo que ya esta funcionando y anade la linea, reportandola como
+  `slice-NN (#numero)`, en el cuerpo. Un `si` que nombra solo una de las dos cosas que debe es la misma
+  desviacion: sin el mecanismo de vuelta atras el verificador no tiene contra que exigirlo en el diff.
+- **Y la segunda mitad tiene que ser la que corresponde al sujeto**, no solo estar. Un programa que se
+  instala con una vuelta atras "sin redeploy" es la desviacion mas comun de esta linea: ahi volver atras
+  **es** reinstalar, asi que esa mitad no informa de nada y hay que reescribirla por la que si muerde
+  -que deja ilegible de lo que ya esta escrito, y que pasa con lo que ya existe-. Se caza leyendo la
+  linea contra el repo destino, no contra su forma.
 - **Cadena de observabilidad**: si alguna slice emite una senal nueva relevante, comprueba que hay slice
   de alerta (y de panel si aporta) **con su `REPO:`** y **detras** de la que emite la serie, o que la
   ausencia es una decision explicita. Nunca alerta/panel en la misma slice que la metrica.
@@ -631,6 +658,17 @@ trabajo. Ofrece corregirlas. Checklist:
   renombro un target del `Makefile` despues de crear el padre, corrigelo aqui. En tiempo de run no hay
   red -el control falla como cualquier otro y la slice acaba con `bloqueada:controles`-, y esa fue una
   decision consciente para no anadir un pre-flight heuristico.
+- **Ninguna linea de la slice contradice a otra de la misma slice.** Es el unico item que no se ve
+  leyendo una linea sola, y el mas caro cuando se escapa: se descubre con el diff delante y tres rondas
+  de juez despues. Dos cruces, siempre: **que lo que `SUSTITUYE` promete no lo prohiba `EXCLUYE`** -paso
+  de verdad: una slice pedia separacion fisica entre generaciones y su propio `EXCLUYE` prohibia
+  renombrar los ficheros, que era lo unico que la lograba, y el implementador tuvo que elegir cual
+  incumplir- y **que lo que un criterio exige no lo excluya otra linea**. Con contradiccion, la
+  desviacion se corrige decidiendo cual de las dos lineas se queda, no dejandosela a quien implemente.
+- **Ningun criterio se mide con algo que el verificador no recibe.** Recibe el diff, la spec y las
+  fuentes de convencion; **no** recibe el informe del implementador. Un criterio que diga "el informe
+  nombra..." es desviacion aunque sea falsable y aunque el implementador pueda cumplirlo: reescribelo
+  apuntando al diff. Se reconoce con una pregunta: *¿con que lo comprueba quien tiene que medirlo?*
 - **Cada criterio es falsable** (no basta con que exista). Por cada uno, nombra el cambio de
   produccion que lo haria fallar; si no puedes nombrarlo, **es la desviacion a corregir**:
   reescribelo con la persona hasta que sea refutable (o pregunta que se pretendia). Un criterio vago
