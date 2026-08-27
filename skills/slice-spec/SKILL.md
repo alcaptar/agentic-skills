@@ -19,7 +19,7 @@ artefacto compartido entre humano y agente, y **vive en GitHub**: una feature = 
 mas **una subissue por slice**.
 
 Par natural: `/slice-spec` crea el issue padre y sus subissues, `uv run slice-runner run <N> --repo
-<org>/<repo> --base master` las ejecuta, una invocacion por slice.
+<org>/<repo> --base master --worktree <ruta-del-worktree>` las ejecuta, una invocacion por slice.
 
 Dos modos:
 
@@ -517,7 +517,15 @@ SUSTITUYE: no
      crea igual que la de estado (`gh label create origen:AS-255 --repo <org>/<repo>`) y se
      reintenta.
 6. **Cierra** diciendo el numero/URL del padre, las subissues creadas con su numero, y que se ejecuta
-   con `slice-runner run <N> --repo <org>/<repo> --base master`, una invocacion por slice.
+   con `slice-runner run <N> --repo <org>/<repo> --base master --worktree <ruta-del-worktree>`, una
+   invocacion por slice.
+
+   **La ruta del worktree va siempre, y este es el unico sitio que explica por que.** Su valor por
+   omision es el directorio actual, asi que un run lanzado sin ella conduce donde estes parado: medido
+   en dos maquinas, es el mecanismo por el que el juez leyo **31 de 32 veces** una rama que no tenia
+   nada que ver con la slice que juzgaba. Quien copie el comando de aqui no puede caer en eso. El paso
+   siguiente monta el worktree; si no vas a paralelizar, monta uno igual -en la practica todo run vive
+   en uno- o pasa la ruta del arbol en el que ya estes trabajando.
 
 7. **Propon el reparto en paralelo y, si te lo confirman, montalo tu.** Una invocacion conduce **una**
    slice, asi que una feature de ocho son ocho invocaciones; en serie eso es toda la tarde. Se pueden
@@ -704,10 +712,12 @@ trabajo. Ofrece corregirlas. Checklist:
   justificado; cuando una slice sustituye comportamiento en prod, nombra su mecanismo seguro (flag /
   expand-contract).
 
-Si todo cumple: reporta `spec valida` y recuerda que se ejecuta con `uv run slice-runner run`.
+Si todo cumple: reporta `spec valida` y recuerda que se ejecuta con
+`uv run slice-runner run <N> --repo <org>/<repo> --base master --worktree <ruta-del-worktree>`.
 
 ## Fin
 
 Reporta: numero/URL del issue padre, las subissues con su numero y su nombre, y el comando para
-ejecutarla (`uv run slice-runner run <N> --repo <org>/<repo> --base master`, una invocacion por
-slice). No implementes nada: ese es el trabajo de `slice-runner`.
+ejecutarla (`uv run slice-runner run <N> --repo <org>/<repo> --base master --worktree
+<ruta-del-worktree>`, una invocacion por slice). No implementes nada: ese es el trabajo de
+`slice-runner`.
