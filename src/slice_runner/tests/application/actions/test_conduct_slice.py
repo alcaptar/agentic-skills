@@ -111,6 +111,45 @@ class TestConductSliceStartingANewRun:
             )
         )
 
+    def test_a_call_whose_envelope_has_no_structured_output_is_discarded_and_retried_within_budget(self) -> None:
+        conductor = self._conductor()
+        conductor.understanding.write.side_effect = [
+            RejectionMother.envelope_without_structured_output(),
+            UnderstandingMother.of_the_chosen_slice(),
+        ]
+        conductor.repository.read_alignment_response.return_value = AlignmentResponse(kind=AlignmentResponseKind.GO)
+        conductor.trace.calls_of.return_value = (
+            HarnessCallMother.of_the_discarded_understanding(),
+            HarnessCallMother.of_the_implementer(),
+            HarnessCallMother.of_the_judge(),
+        )
+        conductor.seed_spend(
+            session=HarnessCallMother.SESSION_OF_THE_DISCARDED_UNDERSTANDING,
+            spend=HarnessSpendMother.of_a_call_that_cost_nothing(),
+        )
+        conductor.seed_spend(
+            session=HarnessCallMother.SESSION_OF_THE_IMPLEMENTER, spend=HarnessSpendMother.of_the_implementer_call()
+        )
+        conductor.seed_spend(
+            session=HarnessCallMother.SESSION_OF_THE_JUDGE, spend=HarnessSpendMother.of_the_judge_call()
+        )
+
+        conductor.conduct()
+
+        assert conductor.understanding.write.call_count == 2
+        recorded = conductor.closed
+        assert recorded.run.understand_discards == 1
+        assert recorded.discarded_call is not None
+        assert recorded.discarded_call.step is Step.UNDERSTAND
+        assert recorded.discarded_call.cause is DiscardCause.NO_STRUCTURED_OUTPUT
+        assert recorded.spend == HarnessSpend.summing(
+            (
+                HarnessSpendMother.of_a_call_that_cost_nothing(),
+                HarnessSpendMother.of_the_implementer_call(),
+                HarnessSpendMother.of_the_judge_call(),
+            )
+        )
+
     def test_a_discard_whose_message_is_longer_than_the_reason_limit_is_recorded_with_it_truncated(self) -> None:
         conductor = self._conductor()
         conductor.understanding.write.side_effect = [

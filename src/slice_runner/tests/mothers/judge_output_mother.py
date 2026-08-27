@@ -81,6 +81,14 @@ class HarnessEnvelopeMother:
         return {name: value for name, value in cls.recorded().items() if name != key}
 
     @classmethod
+    def without_structured_output(cls, *, recorded: str = "full-recipe") -> dict[str, object]:
+        return cls.recorded(recorded) | {"structured_output": None}
+
+    @classmethod
+    def without_structured_output_that_ran_out_of_turns(cls, *, recorded: str = "full-recipe") -> dict[str, object]:
+        return cls.without_structured_output(recorded=recorded) | {"subtype": "error_max_turns"}
+
+    @classmethod
     def denying_a_read(cls, verdict: dict[str, object] | None = None) -> dict[str, object]:
         return cls.carrying(verdict or JudgeVerdictMother.passing()) | {
             "permission_denials": [dict(denial) for denial in cls.DENIALS_AS_THE_HARNESS_SENDS_THEM]

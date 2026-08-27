@@ -31,7 +31,7 @@ class ClaudeVerifier(Verifier):
             ),
         )
         with envelope.measuring():
-            verdict = VerdictPayload.from_dict(envelope.structured_output).to_domain()
+            verdict = VerdictPayload.from_dict(envelope.structured()).to_domain()
 
         return Verification(
             verdict=verdict,

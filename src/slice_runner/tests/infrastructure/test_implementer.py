@@ -5,7 +5,11 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from slice_runner.domain.exceptions import InvalidImplementationReportError, PermissionDeniedError
+from slice_runner.domain.exceptions import (
+    InvalidImplementationReportError,
+    MissingStructuredOutputError,
+    PermissionDeniedError,
+)
 from slice_runner.domain.path_kind import PathKind
 from slice_runner.infrastructure.claude_implementer import ClaudeImplementer
 from slice_runner.infrastructure.harness_invocation_runner import HarnessInvocationRunner
@@ -500,6 +504,20 @@ class TestWhatTheImplementerIsAllowedToReturn:
         process = RecordedProcess(HarnessEnvelopeMother.carrying(incomplete, recorded=_RECORDED))
 
         with pytest.raises(InvalidImplementationReportError) as rejection:
+            OneRound.implemented(process)
+
+        assert rejection.value.spend == HarnessSpendMother.of_the_implementer_call()
+
+    def test_an_envelope_without_structured_output_is_rejected_instead_of_treated_as_an_empty_report(self) -> None:
+        process = RecordedProcess(HarnessEnvelopeMother.without_structured_output(recorded=_RECORDED))
+
+        with pytest.raises(MissingStructuredOutputError):
+            OneRound.implemented(process)
+
+    def test_the_rejection_of_a_missing_structured_output_still_reports_what_the_call_spent(self) -> None:
+        process = RecordedProcess(HarnessEnvelopeMother.without_structured_output(recorded=_RECORDED))
+
+        with pytest.raises(MissingStructuredOutputError) as rejection:
             OneRound.implemented(process)
 
         assert rejection.value.spend == HarnessSpendMother.of_the_implementer_call()

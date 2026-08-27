@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 from slice_runner.domain.alignment import Alignment
-from slice_runner.domain.exceptions import InvalidUnderstandingReportError
+from slice_runner.domain.exceptions import InvalidUnderstandingReportError, MissingStructuredOutputError
 from slice_runner.infrastructure.claude_understanding import ClaudeUnderstanding
 from slice_runner.infrastructure.harness_invocation_runner import HarnessInvocationRunner
 from slice_runner.infrastructure.harness_telemetry import HarnessTelemetry
@@ -153,5 +153,19 @@ class TestWhatTheCallIsAllowedToReturn:
 
         with pytest.raises(InvalidUnderstandingReportError) as rejection:
             Writing.understood(Writing.carrying(blank))
+
+        assert rejection.value.spend == HarnessSpendMother.of_the_implementer_call()
+
+    def test_an_envelope_without_structured_output_is_rejected_instead_of_treated_as_blank_text(self) -> None:
+        process = RecordedProcess(HarnessEnvelopeMother.without_structured_output(recorded=_RECORDED))
+
+        with pytest.raises(MissingStructuredOutputError):
+            Writing.understood(process)
+
+    def test_the_rejection_of_a_missing_structured_output_still_reports_what_it_spent(self) -> None:
+        process = RecordedProcess(HarnessEnvelopeMother.without_structured_output(recorded=_RECORDED))
+
+        with pytest.raises(MissingStructuredOutputError) as rejection:
+            Writing.understood(process)
 
         assert rejection.value.spend == HarnessSpendMother.of_the_implementer_call()

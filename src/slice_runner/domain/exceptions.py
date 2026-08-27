@@ -20,6 +20,10 @@ class InvalidVerdictError(InvalidHarnessOutputError):
     pass
 
 
+class MissingStructuredOutputError(InvalidHarnessOutputError):
+    pass
+
+
 class InvalidImplementationReportError(MeasuredCallError):
     pass
 

@@ -702,6 +702,30 @@ emite nunca y `to_domain()` la lee y la descarta en vez de pasarla a `Run(...)`.
 lectura pura: se puede retirar la clave del payload en cuanto no quede ningún run persistido de antes de
 esta fecha que todavía la lleve.
 
+### Un sobre pagado sin informe deja de perder su gasto (2026-08-27)
+
+`HarnessOutput` declaraba `structured_output` como campo obligatorio de la carcasa: un sobre que
+llegaba con su coste, sus turnos y su sesión pero sin salida estructurada -el caso que el propio
+consumidor oficial del arnés documenta tras agotar sus reintentos (`is_error=False`,
+`structured_output=None`)- se rechazaba en `HarnessOutput.from_dict`, antes de que existiera un
+modelo del que colgar el gasto. `measuring()` solo cuelga el gasto de una excepción cuando ya hay
+`envelope` construido; rechazar en la carcasa deja la excepción sin `spend`, `Budgets.cost_exhausted`
+la lee como `CALL_UNMEASURED`, y el run cierra como `abortada-llamada-no-medida` -presupuesto, cuando
+lo que fallo fue la respuesta-.
+
+El arreglo mueve el rechazo, no lo retira: `structured_output` pasa a opcional, así que la carcasa
+valida igual con el campo ausente o nulo, y el rechazo se hace en un accesor propio del modelo
+(`HarnessOutput.structured()`) que los tres adaptadores del arnés invocan dentro de su bloque
+`measuring()`. Ahí sí hay `envelope` construido, así que la excepción sale con el gasto colgado, y el
+descarte pasa a contar como un descarte medido más (`DiscardCause.NO_STRUCTURED_OUTPUT`) en vez de
+cerrar el run.
+
+`is_error` deja de contar como causa de terminación: viajaba junto a `subtype`, `stop_reason` y
+`terminal_reason` en la lista de campos que explican por qué acabó la sesión, pero es un campo
+obligatorio de la carcasa -siempre está presente-, así que contarlo haría imposible cumplir "no
+inventar una causa cuando el sobre no trae ninguna": con `is_error` en la lista, esa lista nunca
+estaría vacía.
+
 ## deploy-watch
 
 ### Decisiones clave

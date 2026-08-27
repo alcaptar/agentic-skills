@@ -926,7 +926,7 @@ class TestTheCommandThatEmitsClosedSliceMetrics:
         summary = json.loads(self._emitted(tmp_path, capsys)[-1])
 
         tallies = {tally["cause"]: tally["count"] for tally in summary["discards_by_cause"]}
-        assert tallies == {"failed-call": 1, "incoherent-verdict": 1}
+        assert tallies == {"failed-call": 1, "incoherent-verdict": 1, "no-structured-output": 0}
         assert all(tally["samples"] == 2 for tally in summary["discards_by_cause"])
 
     def test_a_discard_of_a_step_other_than_verify_does_not_count_as_a_verify_discard(

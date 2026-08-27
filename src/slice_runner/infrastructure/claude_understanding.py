@@ -49,7 +49,7 @@ class ClaudeUnderstanding(UnderstandingWriter):
 
     @staticmethod
     def _usable_text(envelope: HarnessOutput) -> str:
-        text = UnderstandingReportPayload.from_dict(envelope.structured_output).report.strip()
+        text = UnderstandingReportPayload.from_dict(envelope.structured()).report.strip()
         if not text:
             raise InvalidUnderstandingReportError("the harness returned only blank text as its understanding")
 

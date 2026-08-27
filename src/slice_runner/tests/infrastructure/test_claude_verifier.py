@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from slice_runner.domain.exceptions import InvalidVerdictError
+from slice_runner.domain.exceptions import InvalidVerdictError, MissingStructuredOutputError
 from slice_runner.domain.ruling import Ruling
 from slice_runner.infrastructure.claude_verifier import ClaudeVerifier
 from slice_runner.infrastructure.harness_invocation_runner import HarnessInvocationRunner
@@ -131,6 +131,18 @@ class TestWhenTheJudgeAnswersSomethingIncoherent(Calling):
         process = RecordedProcess(HarnessEnvelopeMother.carrying(incoherent))
 
         with pytest.raises(InvalidVerdictError) as rejection:
+            ClaudeVerifier(calls=self._calls(process), reader=_READER).verify(
+                _JUDGE, SliceUnderReviewMother.of_the_slice()
+            )
+
+        assert rejection.value.spend == HarnessSpendMother.of_the_judge_call()
+
+
+class TestWhenTheEnvelopeHasNoStructuredOutput(Calling):
+    def test_the_spend_survives_the_rejection_so_the_discarded_call_still_counts(self) -> None:
+        process = RecordedProcess(HarnessEnvelopeMother.without_structured_output())
+
+        with pytest.raises(MissingStructuredOutputError) as rejection:
             ClaudeVerifier(calls=self._calls(process), reader=_READER).verify(
                 _JUDGE, SliceUnderReviewMother.of_the_slice()
             )

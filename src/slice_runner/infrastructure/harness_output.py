@@ -6,7 +6,11 @@ from typing import TYPE_CHECKING, ClassVar, Self
 
 from pydantic import Field
 
-from slice_runner.domain.exceptions import InvalidHarnessOutputError, MeasuredCallError
+from slice_runner.domain.exceptions import (
+    InvalidHarnessOutputError,
+    MeasuredCallError,
+    MissingStructuredOutputError,
+)
 from slice_runner.domain.harness_spend import HarnessSpend
 from slice_runner.infrastructure.model_usage_payload import ModelUsageEntry
 from slice_runner.infrastructure.open_vocabulary_model import OpenVocabularyModel
@@ -18,12 +22,36 @@ if TYPE_CHECKING:
     from slice_runner.infrastructure.process import ProcessOutput
 
 
+class SessionEndCause:
+    FIELDS: ClassVar[tuple[str, ...]] = ("subtype", "stop_reason", "terminal_reason")
+
+    @classmethod
+    def of_the_dict(cls, data: dict[str, object]) -> str:
+        return cls._of_the_values({field: data.get(field) for field in cls.FIELDS})
+
+    @classmethod
+    def of_the_envelope(cls, envelope: HarnessOutput) -> str:
+        return cls._of_the_values({field: getattr(envelope, field) for field in cls.FIELDS})
+
+    @classmethod
+    def _of_the_values(cls, values: dict[str, object]) -> str:
+        present = [f"{field}={value!r}" for field, value in values.items() if value is not None]
+
+        return cls._suffix(present)
+
+    @staticmethod
+    def _suffix(present: list[str]) -> str:
+        if not present:
+            return ""
+
+        return f" (session ended with: {', '.join(present)})"
+
+
 class HarnessOutput(OpenVocabularyModel):
-    CAUSE_FIELDS: ClassVar[tuple[str, ...]] = ("is_error", "subtype", "stop_reason", "terminal_reason")
     RESULT: ClassVar[str] = "result"
 
     is_error: bool = Field(strict=True)
-    structured_output: dict[str, object]
+    structured_output: dict[str, object] | None = None
 
     duration_api_ms: int | None = None
     duration_ms: int
@@ -31,6 +59,9 @@ class HarnessOutput(OpenVocabularyModel):
     num_turns: int
     permission_denials: tuple[PermissionDenial, ...] = ()
     session_id: str
+    stop_reason: str | None = None
+    subtype: str | None = None
+    terminal_reason: str | None = None
     total_cost_usd: float
     ttft_ms: int | None = None
 
@@ -61,6 +92,14 @@ class HarnessOutput(OpenVocabularyModel):
             error.spend = self.to_domain()
             raise
 
+    def structured(self) -> dict[str, object]:
+        if self.structured_output is None:
+            raise MissingStructuredOutputError(
+                f"the harness envelope has no `structured_output`{SessionEndCause.of_the_envelope(self)}"
+            )
+
+        return self.structured_output
+
     @classmethod
     def from_process(cls, output: ProcessOutput) -> Self:
         envelope = cls.from_dict(cls._decoded(output))
@@ -75,18 +114,10 @@ class HarnessOutput(OpenVocabularyModel):
         try:
             return cls._validated(data, "the harness envelope is not the one we know", InvalidHarnessOutputError)
         except InvalidHarnessOutputError as error:
-            cause = cls._why_the_session_ended(data)
+            cause = SessionEndCause.of_the_dict(data)
             if not cause:
                 raise
             raise InvalidHarnessOutputError(f"{error}{cause}") from error
-
-    @classmethod
-    def _why_the_session_ended(cls, data: dict[str, object]) -> str:
-        present = [f"{field}={data[field]!r}" for field in cls.CAUSE_FIELDS if field in data]
-        if not present:
-            return ""
-
-        return f" (session ended with: {', '.join(present)})"
 
     @classmethod
     def _decoded(cls, output: ProcessOutput) -> dict[str, object]:
