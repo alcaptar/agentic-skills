@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from slice_runner.domain.slice_coordinates import SliceCoordinates
     from slice_runner.domain.step import Step
     from slice_runner.domain.unrecorded_conversation_cause import UnrecordedConversationCause
 
@@ -19,7 +20,7 @@ class ToolUse:
 
 @dataclass(frozen=True, kw_only=True, slots=True)
 class HarnessCallToolUse:
-    slice_id: str
+    coordinates: SliceCoordinates
     step: Step
     session: str
     uses: tuple[ToolUse, ...]
@@ -27,7 +28,7 @@ class HarnessCallToolUse:
 
 @dataclass(frozen=True, kw_only=True, slots=True)
 class UnrecordedCallToolUse:
-    slice_id: str
+    coordinates: SliceCoordinates
     step: Step
     session: str
     cause: UnrecordedConversationCause

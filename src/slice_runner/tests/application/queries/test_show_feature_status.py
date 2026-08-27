@@ -8,15 +8,15 @@ import pytest
 from slice_runner.application.queries.show_feature_status import ShowFeatureStatus, ShowFeatureStatusParams
 from slice_runner.domain.branch_pull_request import BranchPullRequest
 from slice_runner.domain.call_spend_log import CallSpendLog
-from slice_runner.domain.call_trace import CallTrace
+from slice_runner.domain.canonical_slice_id import CanonicalSliceId
 from slice_runner.domain.forum import Forum
 from slice_runner.domain.harness_spend import HarnessSpend
 from slice_runner.domain.issue_label import IssueLabel
 from slice_runner.domain.metrics_log import MetricsLog
 from slice_runner.domain.run_repository import RunRepository
+from slice_runner.domain.slice_coordinates import SliceCoordinates
 from slice_runner.domain.slice_status import SliceStatus
 from slice_runner.tests.mothers.closed_slice_record_mother import ClosedSliceRecordMother
-from slice_runner.tests.mothers.harness_call_mother import HarnessCallMother
 from slice_runner.tests.mothers.harness_spend_mother import HarnessSpendMother
 from slice_runner.tests.mothers.parent_issue_mother import ParentIssueMother
 from slice_runner.tests.mothers.run_mother import RunMother
@@ -42,8 +42,8 @@ class _SharedQueryFixtures:
         return metrics
 
     @pytest.fixture
-    def query(self, repository: Mock, forum: Mock, metrics: Mock, trace: Mock, spend_log: Mock) -> ShowFeatureStatus:
-        return ShowFeatureStatus(repository=repository, forum=forum, metrics=metrics, trace=trace, spend_log=spend_log)
+    def query(self, repository: Mock, forum: Mock, metrics: Mock, spend_log: Mock) -> ShowFeatureStatus:
+        return ShowFeatureStatus(repository=repository, forum=forum, metrics=metrics, spend_log=spend_log)
 
 
 class TestShowFeatureStatus(_SharedQueryFixtures):
@@ -55,15 +55,9 @@ class TestShowFeatureStatus(_SharedQueryFixtures):
         return repository
 
     @pytest.fixture
-    def trace(self) -> Mock:
-        trace: Mock = create_autospec(CallTrace, spec_set=True, instance=True)
-        trace.calls_of.return_value = ()
-        return trace
-
-    @pytest.fixture
     def spend_log(self) -> Mock:
         spend_log: Mock = create_autospec(CallSpendLog, spec_set=True, instance=True)
-        spend_log.spend_of.return_value = HarnessSpend.nothing()
+        spend_log.spend_of_the_slice.return_value = HarnessSpend.nothing()
         return spend_log
 
     def test_the_children_are_read_with_the_count_the_parent_declared(
@@ -172,26 +166,24 @@ class TestSpendAcrossInvocations(_SharedQueryFixtures):
         return repository
 
     @pytest.fixture
-    def trace(self) -> Mock:
-        trace: Mock = create_autospec(CallTrace, spec_set=True, instance=True)
-        trace.calls_of.return_value = (HarnessCallMother.of_the_implementer(), HarnessCallMother.of_the_judge())
-        return trace
-
-    @pytest.fixture
     def spend_log(self) -> Mock:
         spend_log: Mock = create_autospec(CallSpendLog, spec_set=True, instance=True)
-        spend_log.spend_of.return_value = HarnessSpend.summing(
+        spend_log.spend_of_the_slice.return_value = HarnessSpend.summing(
             (HarnessSpendMother.of_the_implementer_call(), HarnessSpendMother.of_the_judge_call())
         )
         return spend_log
 
     def test_a_child_whose_persisted_run_reflects_only_its_last_invocation_reports_the_spend_of_every_traced_call(
-        self, query: ShowFeatureStatus, repository: Mock, trace: Mock
+        self, query: ShowFeatureStatus, repository: Mock, spend_log: Mock
     ) -> None:
         statuses = query.execute(_PARAMS)
 
         child = repository.read_children.return_value[0]
-        trace.calls_of.assert_called_once_with(repo=_REPO, issue=child.number, slice_id=child.slice_id.canonical)
+        spend_log.spend_of_the_slice.assert_called_once_with(
+            SliceCoordinates(
+                repo=_REPO, issue=child.number, slice_id=CanonicalSliceId.of_text(child.slice_id.canonical)
+            )
+        )
         assert child.run is not None
         assert child.run.spend == HarnessSpendMother.of_the_implementer_call()
         assert statuses[0].spend == HarnessSpend.summing(
@@ -201,7 +193,7 @@ class TestSpendAcrossInvocations(_SharedQueryFixtures):
     def test_a_spend_log_with_nothing_measured_for_the_child_leaves_it_unmeasured_instead_of_a_zero(
         self, query: ShowFeatureStatus, spend_log: Mock
     ) -> None:
-        spend_log.spend_of.return_value = HarnessSpend.nothing()
+        spend_log.spend_of_the_slice.return_value = HarnessSpend.nothing()
 
         statuses = query.execute(_PARAMS)
 

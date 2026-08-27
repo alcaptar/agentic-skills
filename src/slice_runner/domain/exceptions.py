@@ -159,3 +159,7 @@ class SourcesBudgetExceededError(ValueError):
 
 class UnreadableFindingsError(ValueError):
     pass
+
+
+class MalformedSliceIdError(ValueError):
+    pass

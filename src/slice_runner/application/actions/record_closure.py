@@ -3,13 +3,14 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
+from slice_runner.domain.canonical_slice_id import CanonicalSliceId
 from slice_runner.domain.closed_slice import ClosedSlice
 from slice_runner.domain.run_state import RunState
+from slice_runner.domain.slice_coordinates import SliceCoordinates
 
 if TYPE_CHECKING:
     from slice_runner.domain.budgets import Budgets
     from slice_runner.domain.call_spend_log import CallSpendLog
-    from slice_runner.domain.call_trace import CallTrace
     from slice_runner.domain.ci_indeterminate_cause import CiIndeterminateCause
     from slice_runner.domain.diff_stats import DiffStats
     from slice_runner.domain.discarded_call import DiscardedCall
@@ -41,12 +42,9 @@ class RecordClosureParams:
 
 
 class RecordClosure:
-    def __init__(
-        self, *, metrics: MetricsLog, repository: RunRepository, trace: CallTrace, spend_log: CallSpendLog
-    ) -> None:
+    def __init__(self, *, metrics: MetricsLog, repository: RunRepository, spend_log: CallSpendLog) -> None:
         self._metrics = metrics
         self._repository = repository
-        self._trace = trace
         self._spend_log = spend_log
 
     def execute(self, params: RecordClosureParams) -> None:
@@ -80,7 +78,8 @@ class RecordClosure:
             )
 
     def _spend_of(self, params: RecordClosureParams) -> HarnessSpend:
-        calls = self._trace.calls_of(repo=params.repo, issue=params.issue, slice_id=params.slice_id)
-        sessions = tuple(call.session for call in calls)
+        coordinates = SliceCoordinates(
+            repo=params.repo, issue=params.issue, slice_id=CanonicalSliceId.of_text(params.slice_id)
+        )
 
-        return self._spend_log.spend_of(sessions)
+        return self._spend_log.spend_of_the_slice(coordinates)

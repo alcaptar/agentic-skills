@@ -33,8 +33,10 @@ if TYPE_CHECKING:
 
     from slice_runner.domain.call_spend_log import HarnessCallSpend
     from slice_runner.domain.call_trace import HarnessCall
+    from slice_runner.domain.slice_coordinates import SliceCoordinates
     from slice_runner.domain.source import Source
     from slice_runner.domain.step import Step
+    from slice_runner.infrastructure.harness_invocation_runner import HarnessCallSubject
     from slice_runner.infrastructure.turn_log import HarnessTurn
 
 
@@ -293,12 +295,19 @@ class RecordedTrace(CallTrace):
         return tuple(
             call.session
             for call in self.calls
-            if call.repo == repo and call.issue == issue and call.slice_id == slice_id and call.step == step
+            if call.coordinates.repo == repo
+            and call.coordinates.issue == issue
+            and call.coordinates.slice_id.text == slice_id
+            and call.step == step
         )
 
     def calls_of(self, *, repo: str, issue: int, slice_id: str) -> tuple[HarnessCall, ...]:
         return tuple(
-            call for call in self.calls if call.repo == repo and call.issue == issue and call.slice_id == slice_id
+            call
+            for call in self.calls
+            if call.coordinates.repo == repo
+            and call.coordinates.issue == issue
+            and call.coordinates.slice_id.text == slice_id
         )
 
 
@@ -320,6 +329,15 @@ class RecordedSpendLog(CallSpendLog):
     def spend_of(self, sessions: tuple[str, ...]) -> HarnessSpend:
         return HarnessSpend.summing(call.spend for call in self.calls if call.session in sessions)
 
+    def spend_of_the_slice(self, coordinates: SliceCoordinates) -> HarnessSpend:
+        return HarnessSpend.summing(
+            call.spend
+            for call in self.calls
+            if call.coordinates.repo == coordinates.repo
+            and call.coordinates.issue == coordinates.issue
+            and call.coordinates.slice_id.text == coordinates.slice_id.text
+        )
+
 
 @dataclass(frozen=True, kw_only=True, slots=True)
 class RecordedToolUseCall:
@@ -333,8 +351,12 @@ class RecordedToolUseRecorder(ToolUseRecorder):
     def __init__(self) -> None:
         self.calls: list[RecordedToolUseCall] = []
 
-    def record_after(self, *, slice_id: str, step: Step, session: str, worktree: str) -> None:
-        self.calls.append(RecordedToolUseCall(slice_id=slice_id, step=step, session=session, worktree=worktree))
+    def record_after(self, subject: HarnessCallSubject, *, step: Step, session: str) -> None:
+        self.calls.append(
+            RecordedToolUseCall(
+                slice_id=subject.coordinates.slice_id.text, step=step, session=session, worktree=subject.worktree
+            )
+        )
 
 
 class RecordingClock(Clock):

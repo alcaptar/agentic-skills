@@ -20,12 +20,8 @@ from slice_runner.tests.mothers.judge_output_mother import HarnessEnvelopeMother
 if TYPE_CHECKING:
     from slice_runner.infrastructure.process import Process
 
-_SUBJECT = HarnessCallSubject(
-    repo=HarnessCallSpendMother.REPO,
-    issue=HarnessCallSpendMother.ISSUE,
-    slice_id="slice-05",
-    worktree="/repos/agentic-skills",
-)
+_SUBJECT = HarnessCallSubject(coordinates=HarnessCallSpendMother.coordinates(), worktree="/repos/agentic-skills")
+_SLICE_ID = _SUBJECT.coordinates.slice_id.text
 
 
 class Calling:
@@ -79,8 +75,8 @@ class TestTheTraceOfTheCall(Calling):
 
         runner.call(FixedInvocation(), step=Step.VERIFY, subject=_SUBJECT)
 
-        assert [(call.slice_id, call.step, call.session) for call in trace.calls] == [
-            (_SUBJECT.slice_id, Step.VERIFY, HarnessEnvelopeMother.SESSION_OF_THE_JUDGE)
+        assert [(call.coordinates.slice_id.text, call.step, call.session) for call in trace.calls] == [
+            (_SLICE_ID, Step.VERIFY, HarnessEnvelopeMother.SESSION_OF_THE_JUDGE)
         ]
 
     def test_the_trace_carries_the_repo_and_the_issue_of_the_subject(self) -> None:
@@ -89,7 +85,9 @@ class TestTheTraceOfTheCall(Calling):
 
         runner.call(FixedInvocation(), step=Step.VERIFY, subject=_SUBJECT)
 
-        assert [(call.repo, call.issue) for call in trace.calls] == [(_SUBJECT.repo, _SUBJECT.issue)]
+        assert [(call.coordinates.repo, call.coordinates.issue) for call in trace.calls] == [
+            (_SUBJECT.coordinates.repo, _SUBJECT.coordinates.issue)
+        ]
 
 
 class TestTheSpendLogOfTheCall(Calling):
@@ -110,7 +108,7 @@ class TestTheToolUseRecordingOfTheCall(Calling):
         runner.call(FixedInvocation(), step=Step.VERIFY, subject=_SUBJECT)
 
         assert [(call.slice_id, call.step, call.session, call.worktree) for call in tool_uses.calls] == [
-            (_SUBJECT.slice_id, Step.VERIFY, HarnessEnvelopeMother.SESSION_OF_THE_JUDGE, _SUBJECT.worktree)
+            (_SLICE_ID, Step.VERIFY, HarnessEnvelopeMother.SESSION_OF_THE_JUDGE, _SUBJECT.worktree)
         ]
 
 
@@ -122,8 +120,8 @@ class TestTheTurnsObservedWhileTheCallIsInFlight(Calling):
         runner.call(FixedInvocation(), step=Step.IMPLEMENT, subject=_SUBJECT)
 
         assert [(turn.slice_id, turn.step, turn.number, turn.tool, turn.target) for turn in turns.turns] == [
-            (_SUBJECT.slice_id, Step.IMPLEMENT, 1, "Write", "/private/tmp/stream-capture2/repo/hello.py"),
-            (_SUBJECT.slice_id, Step.IMPLEMENT, 2, "StructuredOutput", None),
+            (_SLICE_ID, Step.IMPLEMENT, 1, "Write", "/private/tmp/stream-capture2/repo/hello.py"),
+            (_SLICE_ID, Step.IMPLEMENT, 2, "StructuredOutput", None),
         ]
 
 

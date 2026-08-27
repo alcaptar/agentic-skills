@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from slice_runner.domain.exceptions import InvalidVerdictError
+from slice_runner.domain.exceptions import InvalidVerdictError, MalformedSliceIdError
 from slice_runner.domain.ruling import Ruling
 from slice_runner.infrastructure.claude_verifier import ClaudeVerifier
 from slice_runner.infrastructure.harness_invocation_runner import HarnessInvocationRunner
@@ -148,7 +148,11 @@ class TestTheCallSubjectComesFromTheReviewsOwnFields(Calling):
         ).verify(_JUDGE, review)
 
         recorded = trace.calls[0]
-        assert (recorded.repo, recorded.issue, recorded.slice_id) == (review.repo, review.issue, review.slice_id)
+        assert (recorded.coordinates.repo, recorded.coordinates.issue, recorded.coordinates.slice_id.text) == (
+            review.repo,
+            review.issue,
+            review.slice_id,
+        )
 
     def test_the_tool_use_recording_carries_the_reviews_own_worktree_and_slice_id(self) -> None:
         tool_uses = RecordedToolUseRecorder()
@@ -160,6 +164,17 @@ class TestTheCallSubjectComesFromTheReviewsOwnFields(Calling):
 
         recorded = tool_uses.calls[0]
         assert (recorded.worktree, recorded.slice_id) == (review.worktree, review.slice_id)
+
+
+class TestASliceIdThatIsNotCanonical(Calling):
+    def test_a_slice_id_that_a_person_typed_wrong_is_rejected_before_any_call_is_made(self) -> None:
+        process = RecordedProcess(HarnessEnvelopeMother.recorded())
+        review = SliceUnderReviewMother.of_the_slice(slice_id="01")
+
+        with pytest.raises(MalformedSliceIdError):
+            ClaudeVerifier(calls=self._calls(process), reader=_READER).verify(_JUDGE, review)
+
+        assert process.calls == 0
 
 
 class TestWhatTheHarnessDeniedTheJudge(Calling):

@@ -5,8 +5,9 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from slice_runner.domain.step import Step
+    from slice_runner.infrastructure.harness_invocation_runner import HarnessCallSubject
 
 
 class ToolUseRecorder(ABC):
     @abstractmethod
-    def record_after(self, *, slice_id: str, step: Step, session: str, worktree: str) -> None: ...
+    def record_after(self, subject: HarnessCallSubject, *, step: Step, session: str) -> None: ...

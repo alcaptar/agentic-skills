@@ -6,20 +6,17 @@ from slice_runner.domain.exceptions import UnreadableCallTraceError
 from slice_runner.domain.step import Step
 from slice_runner.infrastructure.durable_ledger import ReadableLedgerRow
 from slice_runner.infrastructure.json_schema import JsonSchema
+from slice_runner.infrastructure.stamped_row import SliceStampedRow
 
 if TYPE_CHECKING:
     from slice_runner.domain.call_trace import HarnessCall
 
 
-class HarnessCallPayload(ReadableLedgerRow):
+class HarnessCallPayload(SliceStampedRow, ReadableLedgerRow):
     UNREADABLE: ClassVar[type[ValueError]] = UnreadableCallTraceError
 
-    slice_id: str
     step: Step
     session: str
-    repo: str | None = None
-    issue: int | None = None
-    ts: str | None = None
 
     @classmethod
     def json_schema(cls) -> dict[str, object]:
@@ -27,9 +24,7 @@ class HarnessCallPayload(ReadableLedgerRow):
 
     @classmethod
     def from_call(cls, call: HarnessCall, *, ts: str) -> Self:
-        return cls(
-            slice_id=call.slice_id, step=call.step, session=call.session, repo=call.repo, issue=call.issue, ts=ts
-        )
+        return cls._stamped(call.coordinates, ts=ts, step=call.step, session=call.session)
 
     @classmethod
     def from_dict(cls, data: dict[str, object]) -> Self:

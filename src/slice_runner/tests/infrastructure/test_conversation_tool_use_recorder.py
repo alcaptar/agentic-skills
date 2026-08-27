@@ -2,18 +2,23 @@ from __future__ import annotations
 
 import json
 from dataclasses import replace
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
+from unittest.mock import Mock, create_autospec
 
 import pytest
 
 from slice_runner.domain.alignment import Alignment
+from slice_runner.domain.canonical_slice_id import CanonicalSliceId
+from slice_runner.domain.clock import Clock
+from slice_runner.domain.slice_coordinates import SliceCoordinates
 from slice_runner.domain.step import Step
 from slice_runner.infrastructure.claude_config import ClaudeConfig
 from slice_runner.infrastructure.claude_implementer import ClaudeImplementer
 from slice_runner.infrastructure.claude_understanding import ClaudeUnderstanding
 from slice_runner.infrastructure.claude_verifier import ClaudeVerifier
 from slice_runner.infrastructure.conversation_tool_use_recorder import ConversationToolUseRecorder
-from slice_runner.infrastructure.harness_invocation_runner import HarnessInvocationRunner
+from slice_runner.infrastructure.harness_invocation_runner import HarnessCallSubject, HarnessInvocationRunner
 from slice_runner.infrastructure.harness_telemetry import HarnessTelemetry
 from slice_runner.infrastructure.local_conversation_log import LocalConversationLog
 from slice_runner.infrastructure.local_tool_use_log import LocalToolUseLog
@@ -36,7 +41,20 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 _WORKTREE = ConversationTranscriptMother.WORKTREE
+_REPO = "alcaptar/agentic-skills"
+_ISSUE = 45
 _SLICE_ID = "slice-05"
+_STAMP = datetime(2026, 8, 10, 12, 0, 0, tzinfo=UTC)
+_SUBJECT = HarnessCallSubject(
+    coordinates=SliceCoordinates(repo=_REPO, issue=_ISSUE, slice_id=CanonicalSliceId.of_text(_SLICE_ID)),
+    worktree=_WORKTREE,
+)
+
+
+def _frozen_at(stamp: datetime = _STAMP) -> Mock:
+    clock: Mock = create_autospec(Clock, spec_set=True, instance=True)
+    clock.now.return_value = stamp
+    return clock
 
 
 class WrittenToolUses:
@@ -62,17 +80,20 @@ class TestARecordedConversation(WithTheToolUseLogOutOfTheRealHome):
         self, tmp_path: Path
     ) -> None:
         ConversationTranscriptMother.written_under(tmp_path)
-        recorder = ConversationToolUseRecorder(conversations=LocalConversationLog(), tool_use_log=LocalToolUseLog())
-
-        recorder.record_after(
-            slice_id=_SLICE_ID, step=Step.IMPLEMENT, session=ConversationTranscriptMother.SESSION, worktree=_WORKTREE
+        recorder = ConversationToolUseRecorder(
+            conversations=LocalConversationLog(), tool_use_log=LocalToolUseLog(clock=_frozen_at())
         )
+
+        recorder.record_after(_SUBJECT, step=Step.IMPLEMENT, session=ConversationTranscriptMother.SESSION)
 
         assert WrittenToolUses.records_under(tmp_path) == [
             {
+                "repo": _REPO,
+                "issue": _ISSUE,
                 "slice_id": _SLICE_ID,
                 "step": "implement",
                 "session": ConversationTranscriptMother.SESSION,
+                "ts": _STAMP.isoformat(),
                 "uses": [
                     {"turn": 2, "tool": "Bash"},
                     {"turn": 4, "tool": "Bash"},
@@ -86,11 +107,11 @@ class TestARecordedConversation(WithTheToolUseLogOutOfTheRealHome):
         ConversationTranscriptMother.written_under(
             tmp_path, recorded=ConversationTranscriptMother.REJECTED_STRUCTURED_OUTPUT
         )
-        recorder = ConversationToolUseRecorder(conversations=LocalConversationLog(), tool_use_log=LocalToolUseLog())
-
-        recorder.record_after(
-            slice_id=_SLICE_ID, step=Step.UNDERSTAND, session=ConversationTranscriptMother.SESSION, worktree=_WORKTREE
+        recorder = ConversationToolUseRecorder(
+            conversations=LocalConversationLog(), tool_use_log=LocalToolUseLog(clock=_frozen_at())
         )
+
+        recorder.record_after(_SUBJECT, step=Step.UNDERSTAND, session=ConversationTranscriptMother.SESSION)
 
         assert WrittenToolUses.records_under(tmp_path)[0]["uses"] == [
             {"turn": 1, "tool": "StructuredOutput", "failed": True}
@@ -111,22 +132,29 @@ class WrittenUnrecordedToolUses:
 
 class TestATranscriptThatCannotBeRead(WithTheToolUseLogOutOfTheRealHome):
     def test_a_session_never_recorded_leaves_the_run_going_instead_of_raising(self, tmp_path: Path) -> None:
-        recorder = ConversationToolUseRecorder(conversations=LocalConversationLog(), tool_use_log=LocalToolUseLog())
+        recorder = ConversationToolUseRecorder(
+            conversations=LocalConversationLog(), tool_use_log=LocalToolUseLog(clock=_frozen_at())
+        )
 
-        recorder.record_after(slice_id=_SLICE_ID, step=Step.IMPLEMENT, session="never-recorded", worktree=_WORKTREE)
+        recorder.record_after(_SUBJECT, step=Step.IMPLEMENT, session="never-recorded")
 
         assert WrittenToolUses.records_under(tmp_path) == []
 
     def test_a_session_never_recorded_is_not_abandoned_in_silence_but_says_so(self, tmp_path: Path) -> None:
-        recorder = ConversationToolUseRecorder(conversations=LocalConversationLog(), tool_use_log=LocalToolUseLog())
+        recorder = ConversationToolUseRecorder(
+            conversations=LocalConversationLog(), tool_use_log=LocalToolUseLog(clock=_frozen_at())
+        )
 
-        recorder.record_after(slice_id=_SLICE_ID, step=Step.IMPLEMENT, session="never-recorded", worktree=_WORKTREE)
+        recorder.record_after(_SUBJECT, step=Step.IMPLEMENT, session="never-recorded")
 
         assert WrittenUnrecordedToolUses.records_under(tmp_path) == [
             {
+                "repo": _REPO,
+                "issue": _ISSUE,
                 "slice_id": _SLICE_ID,
                 "step": "implement",
                 "session": "never-recorded",
+                "ts": _STAMP.isoformat(),
                 "cause": "not-found",
             }
         ]
@@ -136,9 +164,11 @@ class TestATranscriptThatCannotBeRead(WithTheToolUseLogOutOfTheRealHome):
         ConversationTranscriptMother.destination_of(tmp_path, session=session).write_text(
             "not json at all\n", encoding="utf-8"
         )
-        recorder = ConversationToolUseRecorder(conversations=LocalConversationLog(), tool_use_log=LocalToolUseLog())
+        recorder = ConversationToolUseRecorder(
+            conversations=LocalConversationLog(), tool_use_log=LocalToolUseLog(clock=_frozen_at())
+        )
 
-        recorder.record_after(slice_id=_SLICE_ID, step=Step.IMPLEMENT, session=session, worktree=_WORKTREE)
+        recorder.record_after(_SUBJECT, step=Step.IMPLEMENT, session=session)
 
         assert WrittenToolUses.records_under(tmp_path) == []
 
@@ -149,15 +179,20 @@ class TestATranscriptThatCannotBeRead(WithTheToolUseLogOutOfTheRealHome):
         ConversationTranscriptMother.destination_of(tmp_path, session=session).write_text(
             "not json at all\n", encoding="utf-8"
         )
-        recorder = ConversationToolUseRecorder(conversations=LocalConversationLog(), tool_use_log=LocalToolUseLog())
+        recorder = ConversationToolUseRecorder(
+            conversations=LocalConversationLog(), tool_use_log=LocalToolUseLog(clock=_frozen_at())
+        )
 
-        recorder.record_after(slice_id=_SLICE_ID, step=Step.IMPLEMENT, session=session, worktree=_WORKTREE)
+        recorder.record_after(_SUBJECT, step=Step.IMPLEMENT, session=session)
 
         assert WrittenUnrecordedToolUses.records_under(tmp_path) == [
             {
+                "repo": _REPO,
+                "issue": _ISSUE,
                 "slice_id": _SLICE_ID,
                 "step": "implement",
                 "session": session,
+                "ts": _STAMP.isoformat(),
                 "cause": "unreadable",
             }
         ]
@@ -180,7 +215,9 @@ class TestARunThatCallsAllThreeStepsOfTheHarness(WithTheToolUseLogOutOfTheRealHo
     @classmethod
     def _run_all_three(cls, tmp_path: Path) -> None:
         ConversationTranscriptMother.written_under(tmp_path)
-        tool_uses = ConversationToolUseRecorder(conversations=LocalConversationLog(), tool_use_log=LocalToolUseLog())
+        tool_uses = ConversationToolUseRecorder(
+            conversations=LocalConversationLog(), tool_use_log=LocalToolUseLog(clock=_frozen_at())
+        )
         telemetry = HarnessTelemetry(
             trace=RecordedTrace(), turns=RecordedTurnLog(), spend_log=RecordedSpendLog(), tool_uses=tool_uses
         )

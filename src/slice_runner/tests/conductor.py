@@ -31,7 +31,7 @@ from slice_runner.domain.alignment_response_kind import AlignmentResponseKind
 from slice_runner.domain.branches import Branches
 from slice_runner.domain.budgets import Budgets
 from slice_runner.domain.call_spend_log import HarnessCallSpend
-from slice_runner.domain.call_trace import CallTrace
+from slice_runner.domain.canonical_slice_id import CanonicalSliceId
 from slice_runner.domain.ci import Ci
 from slice_runner.domain.ci_status import CiStatus
 from slice_runner.domain.clock import Clock
@@ -45,6 +45,7 @@ from slice_runner.domain.precheck_result import PrecheckResult
 from slice_runner.domain.pull_request_writer import PullRequestWriter
 from slice_runner.domain.role_models import RoleModels
 from slice_runner.domain.run_repository import RunRepository
+from slice_runner.domain.slice_coordinates import SliceCoordinates
 from slice_runner.domain.state_machine import StateMachine
 from slice_runner.domain.understanding_writer import UnderstandingWriter
 from slice_runner.tests.doubles import RecordedSpendLog
@@ -52,6 +53,7 @@ from slice_runner.tests.mothers.branch_catch_up_mother import BranchCatchUpMothe
 from slice_runner.tests.mothers.control_outcome_mother import ControlOutcomeMother
 from slice_runner.tests.mothers.implementation_mother import ImplementationMother
 from slice_runner.tests.mothers.pull_request_status_mother import PullRequestStatusMother
+from slice_runner.tests.mothers.sub_issue_mother import SubIssueMother
 from slice_runner.tests.mothers.understanding_mother import UnderstandingMother
 from slice_runner.tests.mothers.verification_mother import VerificationMother
 
@@ -77,6 +79,8 @@ class Conductor:
     NOW: ClassVar[datetime] = datetime(2024, 1, 1, tzinfo=UTC)
 
     MODELS: ClassVar[RoleModels] = RoleModels(understand="sonnet", implement="sonnet", verify="sonnet")
+    SLICE_ID: ClassVar[str] = SubIssueMother.pending().slice_id.canonical
+    SLICE_ISSUE: ClassVar[int] = SubIssueMother.pending().number
 
     def __init__(
         self, *, chosen: SelectSliceResult, budgets: Budgets | None = None, models: RoleModels | None = None
@@ -108,8 +112,6 @@ class Conductor:
         self.clock: Mock = create_autospec(Clock, spec_set=True, instance=True)
         self.clock.now.return_value = self.NOW
         self.metrics: Mock = create_autospec(MetricsLog, spec_set=True, instance=True)
-        self.trace: Mock = create_autospec(CallTrace, spec_set=True, instance=True)
-        self.trace.calls_of.return_value = ()
         self.spend_log = RecordedSpendLog()
         self.understanding: Mock = create_autospec(UnderstandingWriter, spec_set=True, instance=True)
         self.understanding.write.return_value = UnderstandingMother.of_the_chosen_slice()
@@ -124,7 +126,10 @@ class Conductor:
         return cls.LOGS / cls.REPO / str(cls.ISSUE) / slice_id.canonical
 
     def seed_spend(self, *, session: str, spend: HarnessSpend) -> None:
-        self.spend_log.record(HarnessCallSpend(repo=self.REPO, issue=self.ISSUE, session=session, spend=spend))
+        coordinates = SliceCoordinates(
+            repo=self.REPO, issue=self.SLICE_ISSUE, slice_id=CanonicalSliceId.of_text(self.SLICE_ID)
+        )
+        self.spend_log.record(HarnessCallSpend(coordinates=coordinates, session=session, spend=spend))
 
     @property
     def emitted_events(self) -> list[Event]:
@@ -155,7 +160,7 @@ class Conductor:
                 close=self.close,
                 record_step=RecordStep(repository=self.repository, events=self.events, clock=self.clock),
                 record_closure=RecordClosure(
-                    metrics=self.metrics, repository=self.repository, trace=self.trace, spend_log=self.spend_log
+                    metrics=self.metrics, repository=self.repository, spend_log=self.spend_log
                 ),
                 read_ci=ReadCiStatus(ci=self.ci, forum=self.forum),
                 read_pull_request=ReadPullRequestStatus(forum=self.forum),

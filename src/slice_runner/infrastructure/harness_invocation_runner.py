@@ -10,6 +10,7 @@ from slice_runner.infrastructure.harness_output import HarnessOutput
 from slice_runner.infrastructure.harness_turn_watch import HarnessTurnWatch
 
 if TYPE_CHECKING:
+    from slice_runner.domain.slice_coordinates import SliceCoordinates
     from slice_runner.domain.step import Step
     from slice_runner.infrastructure.harness_telemetry import HarnessTelemetry
     from slice_runner.infrastructure.process import Process
@@ -31,9 +32,7 @@ class HarnessInvocation(ABC):
 
 @dataclass(frozen=True, kw_only=True, slots=True)
 class HarnessCallSubject:
-    repo: str
-    issue: int
-    slice_id: str
+    coordinates: SliceCoordinates
     worktree: str
 
 
@@ -43,25 +42,15 @@ class HarnessInvocationRunner:
         self._telemetry = telemetry
 
     def call(self, invocation: HarnessInvocation, *, step: Step, subject: HarnessCallSubject) -> HarnessOutput:
-        watch = HarnessTurnWatch(turns=self._telemetry.turns, slice_id=subject.slice_id, step=step)
+        watch = HarnessTurnWatch(turns=self._telemetry.turns, slice_id=subject.coordinates.slice_id.text, step=step)
         output = self._process.run(invocation.argv, stdin=invocation.text, cwd=invocation.cwd, on_line=watch)
         envelope = HarnessOutput.from_process(output)
         self._telemetry.trace.record(
-            HarnessCall(
-                repo=subject.repo,
-                issue=subject.issue,
-                slice_id=subject.slice_id,
-                step=step,
-                session=envelope.session_id,
-            )
+            HarnessCall(coordinates=subject.coordinates, step=step, session=envelope.session_id)
         )
         self._telemetry.spend_log.record(
-            HarnessCallSpend(
-                repo=subject.repo, issue=subject.issue, session=envelope.session_id, spend=envelope.to_domain()
-            )
+            HarnessCallSpend(coordinates=subject.coordinates, session=envelope.session_id, spend=envelope.to_domain())
         )
-        self._telemetry.tool_uses.record_after(
-            slice_id=subject.slice_id, step=step, session=envelope.session_id, worktree=subject.worktree
-        )
+        self._telemetry.tool_uses.record_after(subject, step=step, session=envelope.session_id)
 
         return envelope
