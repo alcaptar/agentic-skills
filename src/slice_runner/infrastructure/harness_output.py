@@ -31,7 +31,13 @@ class SessionEndCause:
 
     @classmethod
     def of_the_envelope(cls, envelope: HarnessOutput) -> str:
-        return cls._of_the_values({field: getattr(envelope, field) for field in cls.FIELDS})
+        return cls._of_the_values(
+            {
+                "subtype": envelope.subtype,
+                "stop_reason": envelope.stop_reason,
+                "terminal_reason": envelope.terminal_reason,
+            }
+        )
 
     @classmethod
     def _of_the_values(cls, values: dict[str, object]) -> str:

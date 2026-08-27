@@ -115,7 +115,7 @@ class TestConductSliceStartingANewRun:
         conductor.repository.read_alignment_response.return_value = AlignmentResponse(kind=AlignmentResponseKind.GO)
         conductor.seed_spend(
             session=HarnessCallMother.SESSION_OF_THE_DISCARDED_UNDERSTANDING,
-            spend=HarnessSpendMother.of_a_call_that_cost_nothing(),
+            spend=HarnessSpendMother.of_the_understanding_call(),
         )
         conductor.seed_spend(
             session=HarnessCallMother.SESSION_OF_THE_IMPLEMENTER, spend=HarnessSpendMother.of_the_implementer_call()
@@ -134,7 +134,7 @@ class TestConductSliceStartingANewRun:
         assert recorded.discarded_call.cause is DiscardCause.NO_STRUCTURED_OUTPUT
         assert recorded.spend == HarnessSpend.summing(
             (
-                HarnessSpendMother.of_a_call_that_cost_nothing(),
+                HarnessSpendMother.of_the_understanding_call(),
                 HarnessSpendMother.of_the_implementer_call(),
                 HarnessSpendMother.of_the_judge_call(),
             )

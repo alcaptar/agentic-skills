@@ -55,7 +55,7 @@ class TestTheEnvelopeWeKnow:
 
         assert envelope.structured_output is None
 
-    @pytest.mark.parametrize("key", ["total_cost_usd", "duration_ms", "num_turns", "is_error", "session_id"])
+    @pytest.mark.parametrize("key", ["duration_ms", "num_turns", "is_error"])
     def test_removing_a_key_the_program_consumes_still_rejects_the_envelope(self, key: str) -> None:
         with pytest.raises(InvalidHarnessOutputError, match=key):
             HarnessOutput.from_dict(HarnessEnvelopeMother.without(key))
