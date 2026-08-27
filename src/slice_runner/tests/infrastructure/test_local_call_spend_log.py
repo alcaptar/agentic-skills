@@ -59,8 +59,9 @@ class TestWhatIsWrittenDownOfACall(WithTheLedgerOutOfTheRealHome):
 
         assert WrittenLedger.records_under(tmp_path) == [
             {
-                "repo": call.repo,
-                "issue": call.issue,
+                "repo": call.coordinates.repo,
+                "issue": call.coordinates.issue,
+                "slice_id": call.coordinates.slice_id.text,
                 "session": call.session,
                 "ts": _STAMP.isoformat(),
                 "spend": {
@@ -192,6 +193,50 @@ class TestAddingUpTheSpendOfSomeSessions(WithTheLedgerOutOfTheRealHome):
             LocalCallSpendLog(clock=self.frozen_at()).spend_of((HarnessCallSpendMother.of_the_implementer().session,))
 
 
+class TestAddingUpTheSpendOfASlice(WithTheLedgerOutOfTheRealHome):
+    def test_the_spend_of_a_slice_is_summed_by_reading_only_the_spend_ledger(self, tmp_path: Path) -> None:
+        ledger = LocalCallSpendLog(clock=self.frozen_at())
+        ledger.record(HarnessCallSpendMother.of_the_implementer())
+        ledger.record(HarnessCallSpendMother.of_the_judge())
+        ledger.record(HarnessCallSpendMother.of_another_slice())
+
+        found = ledger.spend_of_the_slice(HarnessCallSpendMother.coordinates())
+
+        assert found == HarnessSpend.summing(
+            [HarnessSpendMother.of_the_implementer_call(), HarnessSpendMother.of_the_judge_call()]
+        )
+
+    def test_a_slice_never_recorded_returns_nothing_measured_instead_of_a_zero(self, tmp_path: Path) -> None:
+        ledger = LocalCallSpendLog(clock=self.frozen_at())
+        ledger.record(HarnessCallSpendMother.of_another_slice())
+
+        found = ledger.spend_of_the_slice(HarnessCallSpendMother.coordinates())
+
+        assert found == HarnessSpend.nothing()
+
+    def test_a_session_written_twice_by_a_stale_reinvocation_is_summed_only_once(self, tmp_path: Path) -> None:
+        ledger = LocalCallSpendLog(clock=self.frozen_at())
+        ledger.record(HarnessCallSpendMother.of_the_implementer())
+        ledger.record(HarnessCallSpendMother.of_the_implementer())
+
+        found = ledger.spend_of_the_slice(HarnessCallSpendMother.coordinates())
+
+        assert found == HarnessSpendMother.of_the_implementer_call()
+
+    def test_a_corrupted_call_trace_ledger_never_gets_in_the_way_because_it_is_never_opened(
+        self, tmp_path: Path
+    ) -> None:
+        calls_ledger = tmp_path / "slice-runner" / "runs" / "calls.jsonl"
+        calls_ledger.parent.mkdir(parents=True)
+        calls_ledger.write_text("not json\n", encoding="utf-8")
+        ledger = LocalCallSpendLog(clock=self.frozen_at())
+        ledger.record(HarnessCallSpendMother.of_the_implementer())
+
+        found = ledger.spend_of_the_slice(HarnessCallSpendMother.coordinates())
+
+        assert found == HarnessSpendMother.of_the_implementer_call()
+
+
 class TestASessionDuplicatedInTheLedgerIsCountedOnce(WithTheLedgerOutOfTheRealHome):
     def test_a_session_written_twice_by_a_stale_reinvocation_is_summed_only_once(self, tmp_path: Path) -> None:
         ledger = LocalCallSpendLog(clock=self.frozen_at())
@@ -245,8 +290,7 @@ class TestARealEnvelopeReachesTheLedger(WithTheLedgerOutOfTheRealHome):
     ) -> None:
         spend = HarnessOutput.from_dict(HarnessEnvelopeMother.recorded("full-recipe")).to_domain()
         call = HarnessCallSpend(
-            repo=HarnessCallSpendMother.REPO,
-            issue=HarnessCallSpendMother.ISSUE,
+            coordinates=HarnessCallSpendMother.coordinates(),
             session=HarnessEnvelopeMother.SESSION_OF_THE_JUDGE,
             spend=spend,
         )

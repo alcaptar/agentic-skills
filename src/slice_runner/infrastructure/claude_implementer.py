@@ -2,9 +2,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from slice_runner.domain.canonical_slice_id import CanonicalSliceId
 from slice_runner.domain.exceptions import PermissionDeniedError
 from slice_runner.domain.implementation import Implementation
 from slice_runner.domain.implementer import Implementer
+from slice_runner.domain.slice_coordinates import SliceCoordinates
 from slice_runner.domain.step import Step
 from slice_runner.infrastructure.harness_invocation_runner import HarnessCallSubject
 from slice_runner.infrastructure.implementer_invocation import ImplementerInvocation
@@ -28,7 +30,10 @@ class ClaudeImplementer(Implementer):
             invocation,
             step=Step.IMPLEMENT,
             subject=HarnessCallSubject(
-                repo=assignment.repo, issue=assignment.issue, slice_id=assignment.slice_id, worktree=assignment.worktree
+                coordinates=SliceCoordinates(
+                    repo=assignment.repo, issue=assignment.issue, slice_id=CanonicalSliceId.of_text(assignment.slice_id)
+                ),
+                worktree=assignment.worktree,
             ),
         )
         with envelope.measuring():

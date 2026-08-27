@@ -94,7 +94,7 @@ class TestTheCallSubjectComesFromItsOwnArguments:
         Writing.understood(Writing.carrying(UnderstandingReportMother.valid()), trace=trace)
 
         recorded = trace.calls[0]
-        assert (recorded.repo, recorded.issue, recorded.slice_id) == (
+        assert (recorded.coordinates.repo, recorded.coordinates.issue, recorded.coordinates.slice_id.text) == (
             UnderstandingInvocationMother.REPO,
             subissue.number,
             subissue.slice_id.canonical,

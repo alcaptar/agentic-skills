@@ -4,10 +4,12 @@ from typing import TYPE_CHECKING, Self
 
 from pydantic import AliasChoices, Field
 
+from slice_runner.domain.canonical_slice_id import CanonicalSliceId
 from slice_runner.domain.severity import Severity
+from slice_runner.domain.slice_coordinates import SliceCoordinates
 from slice_runner.infrastructure.contract_model import ContractModel
-from slice_runner.infrastructure.durable_ledger import LedgerRow
 from slice_runner.infrastructure.json_schema import JsonSchema
+from slice_runner.infrastructure.stamped_row import StampedRow
 from slice_runner.infrastructure.verdict_payload import VerdictPayload
 
 if TYPE_CHECKING:
@@ -31,15 +33,11 @@ class SeverityCountPayload(ContractModel):
         )
 
 
-class CorpusVerdictPayload(LedgerRow):
-    slice_id: str
+class CorpusVerdictPayload(StampedRow):
     verify_round: int
     session: str
     verdict: VerdictPayload
     severity_counts: SeverityCountPayload
-    repo: str | None = None
-    issue: int | None = None
-    ts: str | None = None
 
     @classmethod
     def json_schema(cls) -> dict[str, object]:
@@ -47,15 +45,15 @@ class CorpusVerdictPayload(LedgerRow):
 
     @classmethod
     def from_domain(cls, entry: CorpusEntry, *, ts: str) -> Self:
-        return cls.model_validate(
-            {
-                "slice_id": entry.slice_id,
-                "verify_round": entry.verify_round,
-                "session": entry.session,
-                "verdict": VerdictPayload.from_domain(entry.verdict),
-                "severity_counts": SeverityCountPayload.from_domain(entry.verdict),
-                "repo": entry.repo,
-                "issue": entry.issue,
-                "ts": ts,
-            }
+        coordinates = SliceCoordinates(
+            repo=entry.repo, issue=entry.issue, slice_id=CanonicalSliceId.of_text(entry.slice_id)
+        )
+
+        return cls._stamped(
+            coordinates,
+            ts=ts,
+            verify_round=entry.verify_round,
+            session=entry.session,
+            verdict=VerdictPayload.from_domain(entry.verdict),
+            severity_counts=SeverityCountPayload.from_domain(entry.verdict),
         )

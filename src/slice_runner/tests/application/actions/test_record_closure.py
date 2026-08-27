@@ -6,7 +6,7 @@ from unittest.mock import Mock, create_autospec
 from slice_runner.application.actions.record_closure import RecordClosure, RecordClosureParams
 from slice_runner.domain.budgets import Budgets
 from slice_runner.domain.call_spend_log import CallSpendLog
-from slice_runner.domain.call_trace import CallTrace
+from slice_runner.domain.canonical_slice_id import CanonicalSliceId
 from slice_runner.domain.diff_stats import DiffStats
 from slice_runner.domain.harness_spend import HarnessSpend
 from slice_runner.domain.metrics_log import MetricsLog
@@ -14,8 +14,8 @@ from slice_runner.domain.role_models import RoleModels
 from slice_runner.domain.run_repository import RunRepository
 from slice_runner.domain.run_state import RunState
 from slice_runner.domain.severity import Severity
+from slice_runner.domain.slice_coordinates import SliceCoordinates
 from slice_runner.tests.mothers.discarded_call_mother import DiscardedCallMother
-from slice_runner.tests.mothers.harness_call_mother import HarnessCallMother
 from slice_runner.tests.mothers.harness_spend_mother import HarnessSpendMother
 from slice_runner.tests.mothers.run_mother import RunMother
 from slice_runner.tests.mothers.verdict_mother import FindingMother
@@ -27,22 +27,19 @@ _REPO = "alcaptar/agentic-skills"
 _ISSUE = 38
 _SLICE = "slice-07"
 _NAME = "una-llamada-una-fila"
+_COORDINATES = SliceCoordinates(repo=_REPO, issue=_ISSUE, slice_id=CanonicalSliceId.of_text(_SLICE))
 
 
 class _Closer:
     def __init__(self) -> None:
         self.metrics: Mock = create_autospec(MetricsLog, spec_set=True, instance=True)
         self.repository: Mock = create_autospec(RunRepository, spec_set=True, instance=True)
-        self.trace: Mock = create_autospec(CallTrace, spec_set=True, instance=True)
-        self.trace.calls_of.return_value = ()
         self.spend_log: Mock = create_autospec(CallSpendLog, spec_set=True, instance=True)
-        self.spend_log.spend_of.return_value = HarnessSpend.nothing()
+        self.spend_log.spend_of_the_slice.return_value = HarnessSpend.nothing()
 
     @property
     def action(self) -> RecordClosure:
-        return RecordClosure(
-            metrics=self.metrics, repository=self.repository, trace=self.trace, spend_log=self.spend_log
-        )
+        return RecordClosure(metrics=self.metrics, repository=self.repository, spend_log=self.spend_log)
 
     def close(self, **overrides: object) -> ClosedSlice:
         params = {
@@ -140,38 +137,19 @@ class TestTheRowItWrites:
 
 
 class TestWhichSpendsCount:
-    def test_the_row_asks_the_trace_for_the_calls_of_this_slice_and_writes_what_the_spend_log_sums(self) -> None:
+    def test_the_row_asks_the_spend_log_for_this_slice_and_writes_what_it_answers(self) -> None:
         closer = _Closer()
-        closer.trace.calls_of.return_value = (HarnessCallMother.of_the_implementer(),)
-        closer.spend_log.spend_of.return_value = HarnessSpendMother.of_the_implementer_call()
+        closer.spend_log.spend_of_the_slice.return_value = HarnessSpendMother.of_the_implementer_call()
 
         written = closer.close()
 
-        closer.trace.calls_of.assert_called_once_with(repo=_REPO, issue=_ISSUE, slice_id=_SLICE)
-        closer.spend_log.spend_of.assert_called_once_with((HarnessCallMother.SESSION_OF_THE_IMPLEMENTER,))
+        closer.spend_log.spend_of_the_slice.assert_called_once_with(_COORDINATES)
         assert written.spend == HarnessSpendMother.of_the_implementer_call()
 
-    def test_two_invocations_traced_with_distinct_sessions_are_each_summed_once_and_not_dropped(self) -> None:
-        closer = _Closer()
-        closer.trace.calls_of.return_value = (HarnessCallMother.of_the_implementer(), HarnessCallMother.of_the_judge())
-        closer.spend_log.spend_of.return_value = HarnessSpend.summing(
-            (HarnessSpendMother.of_the_implementer_call(), HarnessSpendMother.of_the_judge_call())
-        )
-
-        written = closer.close()
-
-        closer.spend_log.spend_of.assert_called_once_with(
-            (HarnessCallMother.SESSION_OF_THE_IMPLEMENTER, HarnessCallMother.SESSION_OF_THE_JUDGE)
-        )
-        assert written.spend == HarnessSpend.summing(
-            (HarnessSpendMother.of_the_implementer_call(), HarnessSpendMother.of_the_judge_call())
-        )
-
-    def test_the_spend_the_persisted_run_already_carries_is_not_added_on_top_of_the_trace_and_the_log(self) -> None:
+    def test_the_spend_the_persisted_run_already_carries_is_not_added_on_top_of_what_the_slice_answers(self) -> None:
         closer = _Closer()
         already_on_the_run = HarnessSpendMother.of_the_understanding_call()
-        closer.trace.calls_of.return_value = (HarnessCallMother.of_the_implementer(), HarnessCallMother.of_the_judge())
-        closer.spend_log.spend_of.return_value = HarnessSpend.summing(
+        closer.spend_log.spend_of_the_slice.return_value = HarnessSpend.summing(
             (HarnessSpendMother.of_the_implementer_call(), HarnessSpendMother.of_the_judge_call())
         )
 
@@ -192,9 +170,8 @@ class TestWhichSpendsCount:
         self,
     ) -> None:
         closer = _Closer()
-        closer.trace.calls_of.return_value = (HarnessCallMother.of_the_implementer(),)
         free_call = HarnessSpendMother.of_a_call_that_cost_nothing()
-        closer.spend_log.spend_of.return_value = free_call
+        closer.spend_log.spend_of_the_slice.return_value = free_call
 
         written = closer.close()
 

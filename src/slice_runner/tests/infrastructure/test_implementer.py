@@ -170,7 +170,7 @@ class TestTheCallSubjectComesFromTheAssignmentsOwnFields(Calling):
         ).implement(assignment)
 
         recorded = trace.calls[0]
-        assert (recorded.repo, recorded.issue, recorded.slice_id) == (
+        assert (recorded.coordinates.repo, recorded.coordinates.issue, recorded.coordinates.slice_id.text) == (
             assignment.repo,
             assignment.issue,
             assignment.slice_id,

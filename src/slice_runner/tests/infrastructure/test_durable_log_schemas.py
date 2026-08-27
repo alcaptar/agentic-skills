@@ -25,6 +25,9 @@ class TestEveryDurableLogDeclaresASchemaAProgramCanRead:
 
     def test_the_corpus_verdict_schema_requires_the_slice_and_the_verdict_the_judge_gave(self) -> None:
         assert self._required(CorpusVerdictPayload.json_schema()) == {
+            "ts",
+            "repo",
+            "issue",
             "slice_id",
             "verify_round",
             "session",
@@ -33,13 +36,37 @@ class TestEveryDurableLogDeclaresASchemaAProgramCanRead:
         }
 
     def test_the_corpus_diff_schema_requires_the_slice_and_the_diff_that_was_judged(self) -> None:
-        assert self._required(CorpusDiffPayload.json_schema()) == {"slice_id", "verify_round", "session", "diff"}
+        assert self._required(CorpusDiffPayload.json_schema()) == {
+            "ts",
+            "repo",
+            "issue",
+            "slice_id",
+            "verify_round",
+            "session",
+            "diff",
+        }
 
     def test_the_tool_use_schema_requires_the_identity_of_the_call_and_the_uses_it_carries(self) -> None:
-        assert self._required(CallToolUsePayload.json_schema()) == {"slice_id", "step", "session", "uses"}
+        assert self._required(CallToolUsePayload.json_schema()) == {
+            "ts",
+            "repo",
+            "issue",
+            "slice_id",
+            "step",
+            "session",
+            "uses",
+        }
 
     def test_the_unrecorded_tool_use_schema_requires_the_identity_of_the_call_and_the_cause(self) -> None:
-        assert self._required(UnrecordedCallToolUsePayload.json_schema()) == {"slice_id", "step", "session", "cause"}
+        assert self._required(UnrecordedCallToolUsePayload.json_schema()) == {
+            "ts",
+            "repo",
+            "issue",
+            "slice_id",
+            "step",
+            "session",
+            "cause",
+        }
 
     def test_the_event_schema_requires_the_repo_the_issue_the_slice_the_step_the_instant_the_spend_and_the_status(
         self,
@@ -49,7 +76,7 @@ class TestEveryDurableLogDeclaresASchemaAProgramCanRead:
             "repo",
             "issue",
             "step",
-            "at",
+            "ts",
             "spend",
             "status",
         }

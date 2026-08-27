@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from slice_runner.domain.canonical_slice_id import CanonicalSliceId
+from slice_runner.domain.slice_coordinates import SliceCoordinates
 from slice_runner.domain.step import Step
 from slice_runner.domain.verification import Verification
 from slice_runner.domain.verifier import Verifier
@@ -27,7 +29,10 @@ class ClaudeVerifier(Verifier):
             invocation,
             step=Step.VERIFY,
             subject=HarnessCallSubject(
-                repo=review.repo, issue=review.issue, slice_id=review.slice_id, worktree=review.worktree
+                coordinates=SliceCoordinates(
+                    repo=review.repo, issue=review.issue, slice_id=CanonicalSliceId.of_text(review.slice_id)
+                ),
+                worktree=review.worktree,
             ),
         )
         with envelope.measuring():

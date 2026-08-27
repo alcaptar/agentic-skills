@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
+from unittest.mock import Mock, create_autospec
 
 import pytest
 
+from slice_runner.domain.clock import Clock
 from slice_runner.domain.step import Step
 from slice_runner.domain.unrecorded_conversation_cause import UnrecordedConversationCause
 from slice_runner.infrastructure import local_tool_use_log
@@ -18,6 +21,8 @@ from slice_runner.tests.mothers.harness_call_tool_use_mother import HarnessCallT
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+_STAMP = datetime(2026, 8, 10, 12, 0, 0, tzinfo=UTC)
 
 
 class WrittenToolUses:
@@ -33,18 +38,27 @@ class WithTheLogOutOfTheRealHome:
     def log_root(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
 
+    @staticmethod
+    def frozen_at(stamp: datetime = _STAMP) -> Mock:
+        clock: Mock = create_autospec(Clock, spec_set=True, instance=True)
+        clock.now.return_value = stamp
+        return clock
+
 
 class TestWhatIsWrittenDownOfACall(WithTheLogOutOfTheRealHome):
     def test_a_call_is_written_as_the_slice_the_step_the_session_and_every_tool_use_it_made(
         self, tmp_path: Path
     ) -> None:
-        LocalToolUseLog().record(HarnessCallToolUseMother.of_the_implementer())
+        LocalToolUseLog(clock=self.frozen_at()).record(HarnessCallToolUseMother.of_the_implementer())
 
         assert WrittenToolUses.records_under(tmp_path) == [
             {
+                "repo": HarnessCallToolUseMother.REPO,
+                "issue": HarnessCallToolUseMother.ISSUE,
                 "slice_id": HarnessCallToolUseMother.SLICE_ID,
                 "step": "implement",
                 "session": HarnessCallToolUseMother.SESSION,
+                "ts": _STAMP.isoformat(),
                 "uses": [
                     {"turn": 1, "tool": "Read", "path": "src/x.py"},
                     {"turn": 2, "tool": "Bash"},
@@ -55,7 +69,7 @@ class TestWhatIsWrittenDownOfACall(WithTheLogOutOfTheRealHome):
 
 class TestTheLogOnlyGrows(WithTheLogOutOfTheRealHome):
     def test_a_second_call_is_appended_instead_of_overwriting_the_first(self, tmp_path: Path) -> None:
-        log = LocalToolUseLog()
+        log = LocalToolUseLog(clock=self.frozen_at())
 
         log.record(HarnessCallToolUseMother.of_the_implementer())
         log.record(HarnessCallToolUseMother.of_the_implementer())
@@ -69,7 +83,9 @@ class TestWhereTheLogLives:
     ) -> None:
         monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path / "never-used-before"))
 
-        LocalToolUseLog().record(HarnessCallToolUseMother.of_the_implementer())
+        LocalToolUseLog(clock=WithTheLogOutOfTheRealHome.frozen_at()).record(
+            HarnessCallToolUseMother.of_the_implementer()
+        )
 
         assert (tmp_path / "never-used-before" / "slice-runner" / "runs" / "tool-uses.jsonl").exists()
 
@@ -92,7 +108,9 @@ class TestTheAdapterOwnsOnlyItsNameAndItsPayload:
         monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
         created = WiredStubLedgers.on(local_tool_use_log, monkeypatch)
 
-        LocalToolUseLog().record(HarnessCallToolUseMother.of_the_implementer())
+        LocalToolUseLog(clock=WithTheLogOutOfTheRealHome.frozen_at()).record(
+            HarnessCallToolUseMother.of_the_implementer()
+        )
 
         uses_stub, unrecorded_stub = created
         assert (uses_stub.name, uses_stub.row) == (LocalToolUseLog.LEDGER, CallToolUsePayload)
@@ -110,9 +128,9 @@ class TestTheAdapterOwnsOnlyItsNameAndItsPayload:
         monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
         created = WiredStubLedgers.on(local_tool_use_log, monkeypatch)
 
-        LocalToolUseLog().record_unrecorded(
+        LocalToolUseLog(clock=WithTheLogOutOfTheRealHome.frozen_at()).record_unrecorded(
             UnrecordedCallToolUse(
-                slice_id=HarnessCallToolUseMother.SLICE_ID,
+                coordinates=HarnessCallToolUseMother.coordinates(),
                 step=Step.IMPLEMENT,
                 session="never-recorded",
                 cause=UnrecordedConversationCause.NOT_FOUND,

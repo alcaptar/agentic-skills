@@ -6,17 +6,19 @@ from typing import TYPE_CHECKING, ClassVar, Self
 
 from pydantic import AliasChoices, Field
 
+from slice_runner.domain.canonical_slice_id import CanonicalSliceId
 from slice_runner.domain.ci_indeterminate_cause import CiIndeterminateCause
 from slice_runner.domain.discard_cause import DiscardCause
 from slice_runner.domain.discarded_call import DiscardedCall
 from slice_runner.domain.exceptions import RunNotClosedError
 from slice_runner.domain.run_state import RunState
 from slice_runner.domain.severity import Severity
+from slice_runner.domain.slice_coordinates import SliceCoordinates
 from slice_runner.domain.step import Step
 from slice_runner.infrastructure.contract_model import ContractModel
 from slice_runner.infrastructure.corpus_verdict_payload import SeverityCountPayload
-from slice_runner.infrastructure.durable_ledger import LedgerRow
 from slice_runner.infrastructure.json_schema import JsonSchema
+from slice_runner.infrastructure.stamped_row import StampedRow
 
 if TYPE_CHECKING:
     from slice_runner.domain.closed_slice import ClosedSlice
@@ -201,13 +203,9 @@ class DiffStatsPayload(ContractModel):
         )
 
 
-class MetricsEntryPayload(LedgerRow):
+class MetricsEntryPayload(StampedRow):
     VARIANT: ClassVar[str] = "programa"
 
-    ts: str
-    repo: str
-    issue: int
-    slice_id: str
     name: str
     verdict: DurableVerdict = Field(alias="veredicto")
     ci: DurableCi
@@ -239,12 +237,13 @@ class MetricsEntryPayload(LedgerRow):
     def from_domain(cls, closed: ClosedSlice, *, ts: str) -> Self:
         closure = DurableClosure.of(closed.state)
         spend = closed.spend
-        return cls.model_validate(
-            {
-                "ts": ts,
-                "repo": closed.repo,
-                "issue": closed.issue,
-                "slice_id": closed.slice_id,
+        coordinates = SliceCoordinates(
+            repo=closed.repo, issue=closed.issue, slice_id=CanonicalSliceId.of_text(closed.slice_id)
+        )
+        return cls._stamped(
+            coordinates,
+            ts=ts,
+            **{
                 "name": closed.name,
                 "veredicto": closure.verdict,
                 "ci": closure.ci,
@@ -283,7 +282,7 @@ class MetricsEntryPayload(LedgerRow):
                 "diff": DiffStatsPayload.from_domain(closed.diff_stats) if closed.diff_stats is not None else None,
                 "budgets": asdict(closed.budgets),
                 "models_by_role": asdict(closed.models),
-            }
+            },
         )
 
     def to_contract(self) -> dict[str, object]:

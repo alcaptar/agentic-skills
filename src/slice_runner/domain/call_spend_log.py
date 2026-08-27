@@ -6,12 +6,12 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from slice_runner.domain.harness_spend import HarnessSpend
+    from slice_runner.domain.slice_coordinates import SliceCoordinates
 
 
 @dataclass(frozen=True, kw_only=True, slots=True)
 class HarnessCallSpend:
-    repo: str
-    issue: int
+    coordinates: SliceCoordinates
     session: str
     spend: HarnessSpend
 
@@ -22,3 +22,6 @@ class CallSpendLog(ABC):
 
     @abstractmethod
     def spend_of(self, sessions: tuple[str, ...]) -> HarnessSpend: ...
+
+    @abstractmethod
+    def spend_of_the_slice(self, coordinates: SliceCoordinates) -> HarnessSpend: ...

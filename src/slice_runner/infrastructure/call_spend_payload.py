@@ -6,19 +6,17 @@ from slice_runner.domain.exceptions import UnreadableCallSpendLogError
 from slice_runner.infrastructure.durable_ledger import ReadableLedgerRow
 from slice_runner.infrastructure.json_schema import JsonSchema
 from slice_runner.infrastructure.spend_payload import SpendPayload
+from slice_runner.infrastructure.stamped_row import LegacyTolerantStampedRow
 
 if TYPE_CHECKING:
     from slice_runner.domain.call_spend_log import HarnessCallSpend
 
 
-class CallSpendPayload(ReadableLedgerRow):
+class CallSpendPayload(LegacyTolerantStampedRow, ReadableLedgerRow):
     UNREADABLE: ClassVar[type[ValueError]] = UnreadableCallSpendLogError
 
     session: str
     spend: SpendPayload
-    repo: str | None = None
-    issue: int | None = None
-    ts: str | None = None
 
     @classmethod
     def json_schema(cls) -> dict[str, object]:
@@ -26,9 +24,7 @@ class CallSpendPayload(ReadableLedgerRow):
 
     @classmethod
     def from_call(cls, call: HarnessCallSpend, *, ts: str) -> Self:
-        return cls(
-            session=call.session, spend=SpendPayload.from_domain(call.spend), repo=call.repo, issue=call.issue, ts=ts
-        )
+        return cls._stamped(call.coordinates, ts=ts, session=call.session, spend=SpendPayload.from_domain(call.spend))
 
     @classmethod
     def from_dict(cls, data: dict[str, object]) -> Self:

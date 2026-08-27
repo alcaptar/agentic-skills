@@ -44,6 +44,7 @@ from slice_runner.domain.exceptions import (
     ImpossibleTransitionError,
     InvalidHarnessOutputError,
     LaggingSearchIndexError,
+    MalformedSliceIdError,
     MeasuredCallError,
     MissingBranchError,
     NoConversationRecordedError,
@@ -396,6 +397,7 @@ class Cli:
             ProcessTimedOutError,
             ProcessNotRunnableError,
             SourcesBudgetExceededError,
+            MalformedSliceIdError,
         ) as error:
             return self._why_verify_failed(error)
 
@@ -411,15 +413,25 @@ class Cli:
         | InvalidHarnessOutputError
         | ProcessTimedOutError
         | ProcessNotRunnableError
-        | SourcesBudgetExceededError,
+        | SourcesBudgetExceededError
+        | MalformedSliceIdError,
     ) -> int:
         match error:
+            case MalformedSliceIdError():
+                return self._reported(f"the slice identifier requested is not canonical: {error}", ExitCode.USAGE_ERROR)
             case UnresolvableRepoOrBaseError():
                 return self._reported(f"the repo or the base requested do not resolve: {error}", ExitCode.USAGE_ERROR)
             case DiffNotReadableError():
                 return self._reported(f"there is no diff to verify: {error}", ExitCode.NO_DIFF)
             case InvalidHarnessOutputError():
                 return self._reported(f"the judge left no usable verdict: {error}", ExitCode.NO_USABLE_VERDICT)
+            case ProcessTimedOutError() | ProcessNotRunnableError() | SourcesBudgetExceededError():
+                return self._why_the_verify_call_failed(error)
+
+    def _why_the_verify_call_failed(
+        self, error: ProcessTimedOutError | ProcessNotRunnableError | SourcesBudgetExceededError
+    ) -> int:
+        match error:
             case ProcessTimedOutError():
                 return self._reported(
                     f"a process the run needs never came back and was killed at its cap: {error}",
@@ -504,7 +516,6 @@ class Cli:
                 repository=GhRunRepository(call=gh_call),
                 forum=GhForum(call=gh_call),
                 metrics=LocalMetricsLog(clock=clock),
-                trace=LocalCallTrace(clock=clock),
                 spend_log=LocalCallSpendLog(clock=clock),
             ).execute(ShowFeatureStatusParams(repo=repo, issue=issue))
         except (
@@ -572,7 +583,7 @@ class Cli:
                 trace=LocalCallTrace(clock=clock),
                 turns=StderrTurnLog(),
                 spend_log=LocalCallSpendLog(clock=clock),
-                tool_uses=self._tool_uses(),
+                tool_uses=self._tool_uses(clock=clock),
             ),
         )
 
@@ -594,7 +605,6 @@ class Cli:
                 record_closure=RecordClosure(
                     metrics=LocalMetricsLog(clock=clock),
                     repository=repository,
-                    trace=LocalCallTrace(clock=clock),
                     spend_log=LocalCallSpendLog(clock=clock),
                 ),
                 read_ci=ReadCiStatus(ci=GhCi(call=gh_call), forum=forum),
@@ -637,7 +647,7 @@ class Cli:
                         trace=LocalCallTrace(clock=used),
                         turns=StderrTurnLog(),
                         spend_log=LocalCallSpendLog(clock=used),
-                        tool_uses=self._tool_uses(),
+                        tool_uses=self._tool_uses(clock=used),
                     ),
                 ),
                 reader=ProcessSourceReader(process=self._process, budgets=self._budgets),
@@ -648,8 +658,10 @@ class Cli:
         )
 
     @staticmethod
-    def _tool_uses() -> ConversationToolUseRecorder:
-        return ConversationToolUseRecorder(conversations=LocalConversationLog(), tool_use_log=LocalToolUseLog())
+    def _tool_uses(*, clock: Clock) -> ConversationToolUseRecorder:
+        return ConversationToolUseRecorder(
+            conversations=LocalConversationLog(), tool_use_log=LocalToolUseLog(clock=clock)
+        )
 
     @staticmethod
     def _warn_about(denied_reads: tuple[str, ...]) -> None:

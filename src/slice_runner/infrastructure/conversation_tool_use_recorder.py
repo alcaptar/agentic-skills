@@ -10,6 +10,7 @@ from slice_runner.infrastructure.tool_use_recorder import ToolUseRecorder
 if TYPE_CHECKING:
     from slice_runner.domain.conversation_log import ConversationLog
     from slice_runner.domain.step import Step
+    from slice_runner.infrastructure.harness_invocation_runner import HarnessCallSubject
     from slice_runner.infrastructure.tool_use_log import ToolUseLog
 
 
@@ -18,13 +19,13 @@ class ConversationToolUseRecorder(ToolUseRecorder):
         self._conversations = conversations
         self._tool_use_log = tool_use_log
 
-    def record_after(self, *, slice_id: str, step: Step, session: str, worktree: str) -> None:
+    def record_after(self, subject: HarnessCallSubject, *, step: Step, session: str) -> None:
         try:
-            conversation = self._conversations.read(session=session, worktree=worktree)
+            conversation = self._conversations.read(session=session, worktree=subject.worktree)
         except (ConversationNotFoundError, UnreadableConversationError) as unreadable:
             self._tool_use_log.record_unrecorded(
                 UnrecordedCallToolUse(
-                    slice_id=slice_id,
+                    coordinates=subject.coordinates,
                     step=step,
                     session=session,
                     cause=UnrecordedConversationCause.of_the_failure(unreadable),
@@ -34,7 +35,7 @@ class ConversationToolUseRecorder(ToolUseRecorder):
 
         self._tool_use_log.record(
             HarnessCallToolUse(
-                slice_id=slice_id,
+                coordinates=subject.coordinates,
                 step=step,
                 session=session,
                 uses=tuple(

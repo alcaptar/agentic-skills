@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from slice_runner.domain.exceptions import InvalidUnderstandingReportError
+from slice_runner.domain.slice_coordinates import SliceCoordinates
 from slice_runner.domain.step import Step
 from slice_runner.domain.understanding import Understanding
 from slice_runner.domain.understanding_writer import UnderstandingWriter
@@ -39,7 +40,8 @@ class ClaudeUnderstanding(UnderstandingWriter):
             invocation,
             step=Step.UNDERSTAND,
             subject=HarnessCallSubject(
-                repo=repo, issue=subissue.number, slice_id=subissue.slice_id.canonical, worktree=worktree
+                coordinates=SliceCoordinates(repo=repo, issue=subissue.number, slice_id=subissue.slice_id.canonical_id),
+                worktree=worktree,
             ),
         )
         with envelope.measuring():

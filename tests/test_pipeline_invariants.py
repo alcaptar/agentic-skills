@@ -26,6 +26,15 @@ The ninth scans every module that builds a `DurableLedger` for the vocabulary of
 writing the same row twice. It is not a list of stores either, and the tenth, its meta-test, proves
 against synthetic source that a ledger naming that vocabulary trips it and a well-formed one does
 not.
+
+The eleventh scans every class inheriting `LedgerRow`, `ReadableLedgerRow`, `StampedRow`,
+`LegacyTolerantStampedRow` or `SliceStampedRow` for a coordinate -`ts`, `repo`, `issue`, `slice_id`-
+declared again instead of taken from the shared base those three narrow. It names what MAY
+redeclare a field, not what may not, so the twelfth, its meta-test, proves a class the scan has never
+seen still turns red by default. The thirteenth scans
+for the canonical slice text composed by hand -peeling `"slice-"` off a string, or `:02d`-formatting
+an ordinal- anywhere outside `CanonicalSliceId`, the one place that format is allowed to exist, and
+the fourteenth is its meta-test.
 """
 
 from __future__ import annotations
@@ -591,6 +600,158 @@ def test_no_durable_ledger_names_the_vocabulary_of_a_harness_turn() -> None:
     )
 
 
+_STAMPED_ROW_BASES = frozenset(
+    {"LedgerRow", "ReadableLedgerRow", "StampedRow", "LegacyTolerantStampedRow", "SliceStampedRow"}
+)
+_COORDINATE_FIELDS = frozenset({"ts", "repo", "issue", "slice_id"})
+_STAMPED_ROW_BASE_CLASSES = frozenset({"_CoordinatedRow", "StampedRow", "LegacyTolerantStampedRow", "SliceStampedRow"})
+
+_MAY_REDECLARE_COORDINATES: dict[str, str] = {}
+"""What is exempt from the scan below, each for a reason about what the class needs.
+
+Empty on purpose: with the four coordinates obligatory on `StampedRow`, the optionality that
+`spend.jsonl` and `metrics.jsonl` still need to tolerate carried by `LegacyTolerantStampedRow`, and
+the single coordinate `calls.jsonl` already had before this rule -while still tolerating the rest-
+carried by `SliceStampedRow`, no payload has a reason left to redeclare a coordinate. `StampedRow`,
+`LegacyTolerantStampedRow` and `SliceStampedRow` are not listed here: they never trip the scan, they
+are the three places the four fields are declared for the tree to inherit.
+"""
+
+
+def _classes_inheriting_a_stamped_base(source: str) -> dict[str, ast.ClassDef]:
+    found: dict[str, ast.ClassDef] = {}
+    for node in ast.walk(ast.parse(source)):
+        if (
+            isinstance(node, ast.ClassDef)
+            and node.name not in _STAMPED_ROW_BASE_CLASSES
+            and any(isinstance(base, ast.Name) and base.id in _STAMPED_ROW_BASES for base in node.bases)
+        ):
+            found[node.name] = node
+
+    return found
+
+
+def _redeclared_coordinate_fields(class_node: ast.ClassDef) -> list[str]:
+    return [
+        statement.target.id
+        for statement in class_node.body
+        if isinstance(statement, ast.AnnAssign)
+        and isinstance(statement.target, ast.Name)
+        and statement.target.id in _COORDINATE_FIELDS
+    ]
+
+
+@pytest.mark.integration
+def test_no_payload_declares_a_coordinate_of_its_own_instead_of_taking_it_from_stamped_row() -> None:
+    """`infrastructure.md`: the four coordinates are declared in one place the payloads take them from.
+
+    Not hypothetical: before `StampedRow` existed, `spend.jsonl` never carried a `slice_id` at all and
+    `tool-uses.jsonl` never carried `ts`, `repo` or `issue` -- each payload wrote whichever subset of the
+    four it felt like, because there was no single place asking the question. Naming what MAY redeclare a
+    field, instead of what may not, is what makes a ninth payload copying `ts: str | None = None` by hand
+    turn the suite red instead of passing by omission.
+    """
+    candidates: set[str] = set()
+    offending: dict[str, list[str]] = {}
+    for path in _tracked("src/slice_runner/*.py"):
+        if path.startswith("src/slice_runner/tests/"):
+            continue
+        for name, class_node in _classes_inheriting_a_stamped_base(_read(_ROOT / path)).items():
+            candidates.add(name)
+            redeclared = _redeclared_coordinate_fields(class_node)
+            if redeclared and name not in _MAY_REDECLARE_COORDINATES:
+                offending[f"{path}::{name}"] = redeclared
+
+    for exempt, reason in _MAY_REDECLARE_COORDINATES.items():
+        assert exempt in candidates, (
+            f"the exemption `{exempt}` ({reason}) is gone; drop it from _MAY_REDECLARE_COORDINATES "
+            f"instead of leaving a stale exemption that silently widens the check"
+        )
+
+    assert not offending, "these classes redeclare a coordinate instead of taking it from StampedRow:\n" + (
+        "\n".join(f"  {where}: {fields}" for where, fields in sorted(offending.items()))
+    )
+
+
+def test_the_scan_catches_a_redeclared_coordinate_even_on_a_class_it_has_never_seen() -> None:
+    """A allow-list of what MAY redeclare only works if everything else counts as a violation by default.
+
+    A class the scan has never heard of, inheriting `StampedRow` and declaring `ts` on its own, must turn
+    red the same way a known offender would -- the point of naming exceptions instead of offenders.
+    """
+    redeclaring = "\n".join(
+        [
+            "from slice_runner.infrastructure.stamped_row import StampedRow",
+            "class BrandNewPayload(StampedRow):",
+            "    ts: str",
+            "    session: str",
+        ]
+    )
+    inheriting_cleanly = "\n".join(
+        [
+            "from slice_runner.infrastructure.stamped_row import StampedRow",
+            "class BrandNewPayload(StampedRow):",
+            "    session: str",
+        ]
+    )
+
+    redeclaring_classes = _classes_inheriting_a_stamped_base(redeclaring)
+    assert _redeclared_coordinate_fields(redeclaring_classes["BrandNewPayload"]) == ["ts"]
+
+    clean_classes = _classes_inheriting_a_stamped_base(inheriting_cleanly)
+    assert _redeclared_coordinate_fields(clean_classes["BrandNewPayload"]) == []
+
+
+_CANONICAL_SLICE_ID_MODULE = "src/slice_runner/domain/canonical_slice_id.py"
+
+
+def _composes_the_canonical_slice_text_by_hand(source: str) -> bool:
+    """A module trips this by peeling `"slice-"` off a string, or by `:02d`-formatting an ordinal.
+
+    Those are the two shapes every canonical slice identifier was composed with by hand before
+    `CanonicalSliceId` existed to own the question.
+    """
+    for node in ast.walk(ast.parse(source)):
+        if (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "removeprefix"
+            and any(isinstance(arg, ast.Constant) and arg.value == "slice-" for arg in node.args)
+        ):
+            return True
+        if isinstance(node, ast.FormattedValue) and node.format_spec is not None:
+            for spec_piece in ast.walk(node.format_spec):
+                if (
+                    isinstance(spec_piece, ast.Constant)
+                    and isinstance(spec_piece.value, str)
+                    and "02d" in spec_piece.value
+                ):
+                    return True
+
+    return False
+
+
+@pytest.mark.integration
+def test_no_module_other_than_canonical_slice_id_composes_the_canonical_slice_text_by_hand() -> None:
+    """`infrastructure.md`: the text that names a slice comes from `SliceIdentity`, never composed in place.
+
+    Not hypothetical: `SliceIdentity.branch` used to peel `"slice-"` off its own `canonical` string by
+    hand, next to `MetricsLedgerRowPayload`'s own `f"...-{ordinal:02d}"` -- two redactions of the same
+    format that only `CanonicalSliceId` should own now.
+    """
+    offending = [
+        path
+        for path in _tracked("src/slice_runner/*.py")
+        if path != _CANONICAL_SLICE_ID_MODULE
+        and not path.startswith("src/slice_runner/tests/")
+        and _composes_the_canonical_slice_text_by_hand(_read(_ROOT / path))
+    ]
+
+    assert not offending, "these modules compose the canonical slice text by hand:\n" + (
+        "\n".join(f"  {path}" for path in offending)
+    )
+
+
 def test_the_scan_catches_a_durable_ledger_that_names_the_turn_vocabulary_and_leaves_a_clean_one_be() -> None:
     """A well-formed ledger that never mentions a turn must stay invisible to the scan.
 
@@ -617,3 +778,39 @@ def test_the_scan_catches_a_durable_ledger_that_names_the_turn_vocabulary_and_le
 
     assert _builds_a_durable_ledger_naming_a_turn(a_turn_ledger)
     assert not _builds_a_durable_ledger_naming_a_turn(a_well_formed_ledger)
+
+
+def test_the_scan_catches_every_shape_a_module_could_compose_the_canonical_slice_text_with() -> None:
+    peeling_the_prefix_off = "\n".join(
+        [
+            "class Foo:",
+            "    def branch(self, canonical):",
+            '        return canonical.removeprefix("slice-")',
+        ]
+    )
+    formatting_the_ordinal = "\n".join(
+        [
+            "class Foo:",
+            "    def canonical(self, ordinal):",
+            '        return f"slice-{ordinal:02d}"',
+        ]
+    )
+    an_unrelated_removeprefix = "\n".join(
+        [
+            "class Foo:",
+            "    def instruction(self, stripped):",
+            '        return stripped.removeprefix("RETRY: ")',
+        ]
+    )
+    an_unrelated_format_spec = "\n".join(
+        [
+            "class Foo:",
+            "    def rendered(self, cost):",
+            '        return f"{cost:.2f}"',
+        ]
+    )
+
+    assert _composes_the_canonical_slice_text_by_hand(peeling_the_prefix_off)
+    assert _composes_the_canonical_slice_text_by_hand(formatting_the_ordinal)
+    assert not _composes_the_canonical_slice_text_by_hand(an_unrelated_removeprefix)
+    assert not _composes_the_canonical_slice_text_by_hand(an_unrelated_format_spec)
