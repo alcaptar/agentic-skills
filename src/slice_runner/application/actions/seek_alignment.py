@@ -41,14 +41,14 @@ class SeekAlignment:
 
     def execute(self, params: SeekAlignmentParams) -> SeekAlignmentResult:
         if params.run.understanding_pending:
-            return self._published(params, agreed=params.understanding, correction="")
+            return self._published(params)
 
         response = self._repository.read_alignment_response(repo=params.repo, issue=params.subissue.number)
         if response.kind is AlignmentResponseKind.REVIEW and response.correction != params.run.corrected:
-            seeded = self._seeded(params)
-            published = self._published(seeded, agreed=seeded.understanding, correction=response.correction)
+            run = replace(params.run, corrected=response.correction, understanding_pending=True)
+            self._repository.write_run(repo=params.repo, issue=params.subissue.number, run=run)
 
-            return replace(published, response=response.kind)
+            return SeekAlignmentResult(run=run, understanding=params.understanding, response=response.kind)
         if response.kind is AlignmentResponseKind.MALFORMED and response.reason is not None:
             self._repository.write_malformed_response(
                 repo=params.repo, issue=params.subissue.number, reason=response.reason
@@ -56,19 +56,20 @@ class SeekAlignment:
 
         return SeekAlignmentResult(run=params.run, understanding=params.understanding, response=response.kind)
 
-    def _published(self, params: SeekAlignmentParams, *, agreed: str, correction: str) -> SeekAlignmentResult:
+    def _published(self, params: SeekAlignmentParams) -> SeekAlignmentResult:
+        correction = params.run.corrected
+        seeded = self._seeded(params) if params.run.has_a_correction else params
         understanding = self._understanding.write(
-            subissue=params.subissue,
-            parent=params.parent,
-            repo=params.repo,
-            worktree=params.worktree,
-            alignment=Alignment(agreed=agreed, correction=correction),
+            subissue=seeded.subissue,
+            parent=seeded.parent,
+            repo=seeded.repo,
+            worktree=seeded.worktree,
+            alignment=Alignment(agreed=seeded.understanding, correction=correction),
         )
         run = replace(
             params.run,
             step=Step.UNDERSTAND,
             spend=params.run.spend.plus(understanding.spend),
-            corrected=correction,
             understanding_pending=False,
         )
         self._repository.write_run(repo=params.repo, issue=params.subissue.number, run=run)

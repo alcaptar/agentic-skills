@@ -358,6 +358,9 @@ class ConductSlice:
         return replace(progress, label=IssueLabel.IN_PROGRESS)
 
     def _awaiting_alignment(self, progress: ConductSliceProgress) -> SteppedSlice:
+        if progress.run.redrafting_after_a_correction:
+            progress = self._marked_in_progress(progress)
+
         try:
             sought = self._seek_alignment.execute(
                 SeekAlignmentParams(
@@ -384,16 +387,27 @@ class ConductSlice:
         )
         response = sought.response
         if response is None:
-            return self._paused_for_alignment(updated)
+            if updated.run.has_a_correction:
+                return self._paused_for_alignment(updated)
 
-        return SteppedSlice(progress=updated, outcome=Outcome.of_the_alignment(response))
+            return self._paused_for_the_first_alignment(updated)
+
+        return SteppedSlice(
+            progress=updated,
+            outcome=Outcome.of_the_alignment(response, redrafting=updated.run.redrafting_after_a_correction),
+        )
+
+    def _paused_for_the_first_alignment(self, progress: ConductSliceProgress) -> SteppedSlice:
+        stepped = self._paused_for_alignment(progress)
+        self._branches.create(
+            worktree=progress.params.worktree, name=progress.subissue.branch, base=progress.params.base
+        )
+
+        return stepped
 
     def _paused_for_alignment(self, progress: ConductSliceProgress) -> SteppedSlice:
         self._repository.pause_for_alignment(
             repo=progress.params.repo, issue=progress.subissue.number, remove=progress.label
-        )
-        self._branches.create(
-            worktree=progress.params.worktree, name=progress.subissue.branch, base=progress.params.base
         )
 
         return SteppedSlice(

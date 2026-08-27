@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import TYPE_CHECKING
 from unittest.mock import Mock, create_autospec
 
@@ -132,7 +133,7 @@ class TestSeekAlignment:
         assert understanding.write.call_count == 0
         assert result.response is AlignmentResponseKind.GO
 
-    def test_a_review_with_a_correction_never_published_rewrites_the_understanding_with_it(
+    def test_a_review_with_a_new_correction_persists_it_without_paying_the_harness_yet(
         self, action: SeekAlignment, repository: Mock, understanding: Mock
     ) -> None:
         repository.read_alignment_response.return_value = AlignmentResponse(
@@ -143,6 +144,24 @@ class TestSeekAlignment:
             self._params(run=RunMother.awaiting_alignment(), understanding=UnderstandingMother.TEXT)
         )
 
+        assert understanding.write.call_count == 0
+        repository.write_run.assert_called_once_with(
+            repo=_REPO,
+            issue=_ISSUE,
+            run=RunMother.about_to_redraft_after_a_correction("la senal no esta exenta"),
+        )
+        assert result.response is AlignmentResponseKind.REVIEW
+
+    def test_a_run_pending_a_redraft_after_a_correction_rewrites_the_understanding_with_it(
+        self, action: SeekAlignment, understanding: Mock
+    ) -> None:
+        action.execute(
+            self._params(
+                run=RunMother.about_to_redraft_after_a_correction("la senal no esta exenta"),
+                understanding=UnderstandingMother.TEXT,
+            )
+        )
+
         understanding.write.assert_called_once_with(
             subissue=SubIssueMother.pending(),
             parent=ParentIssueMother.with_sources_and_controls(),
@@ -150,16 +169,13 @@ class TestSeekAlignment:
             worktree=_WORKTREE,
             alignment=Alignment(agreed=UnderstandingMother.TEXT, correction="la senal no esta exenta"),
         )
-        assert result.response is AlignmentResponseKind.REVIEW
 
-    def test_a_review_seeds_the_agreed_text_from_the_repository_only_when_none_was_cached(
+    def test_a_redraft_seeds_the_agreed_text_from_the_repository_only_when_none_was_cached(
         self, action: SeekAlignment, repository: Mock, understanding: Mock
     ) -> None:
-        repository.read_alignment_response.return_value = AlignmentResponse(
-            kind=AlignmentResponseKind.REVIEW, correction="la senal no esta exenta"
+        action.execute(
+            self._params(run=RunMother.about_to_redraft_after_a_correction("la senal no esta exenta"), understanding="")
         )
-
-        action.execute(self._params(run=RunMother.awaiting_alignment(), understanding=""))
 
         repository.read_understanding.assert_called_once_with(repo=_REPO, issue=_ISSUE)
         understanding.write.assert_called_once_with(
@@ -170,14 +186,15 @@ class TestSeekAlignment:
             alignment=Alignment(agreed=UnderstandingMother.TEXT, correction="la senal no esta exenta"),
         )
 
-    def test_a_review_does_not_reread_the_agreed_text_when_it_is_already_cached(
+    def test_a_redraft_does_not_reread_the_agreed_text_when_it_is_already_cached(
         self, action: SeekAlignment, repository: Mock, understanding: Mock
     ) -> None:
-        repository.read_alignment_response.return_value = AlignmentResponse(
-            kind=AlignmentResponseKind.REVIEW, correction="la senal no esta exenta"
+        action.execute(
+            self._params(
+                run=RunMother.about_to_redraft_after_a_correction("la senal no esta exenta"),
+                understanding="ya en cache",
+            )
         )
-
-        action.execute(self._params(run=RunMother.awaiting_alignment(), understanding="ya en cache"))
 
         assert repository.read_understanding.call_count == 0
         understanding.write.assert_called_once_with(
@@ -202,32 +219,26 @@ class TestSeekAlignment:
         assert understanding.write.call_count == 0
         assert result.response is AlignmentResponseKind.REVIEW
 
-    def test_a_review_that_publishes_carries_the_spend_forward_on_top_of_what_was_already_spent(
-        self, action: SeekAlignment, repository: Mock
-    ) -> None:
-        repository.read_alignment_response.return_value = AlignmentResponse(
-            kind=AlignmentResponseKind.REVIEW, correction="la senal no esta exenta"
-        )
+    def test_a_redraft_carries_the_spend_forward_on_top_of_what_was_already_spent(self, action: SeekAlignment) -> None:
         already_spent = HarnessSpendMother.of_the_understanding_call()
+        pending = replace(RunMother.about_to_redraft_after_a_correction("la senal no esta exenta"), spend=already_spent)
 
-        result = action.execute(
-            self._params(
-                run=RunMother.awaiting_alignment_after_spending(already_spent), understanding=UnderstandingMother.TEXT
-            )
-        )
+        result = action.execute(self._params(run=pending, understanding=UnderstandingMother.TEXT))
 
         assert result.run.spend == already_spent.plus(HarnessSpendMother.of_the_understanding_call())
 
-    def test_a_rewritten_review_propagates_a_rejection_of_its_own_publish_call(
-        self, action: SeekAlignment, repository: Mock, understanding: Mock
+    def test_a_rejected_redraft_propagates_instead_of_being_swallowed(
+        self, action: SeekAlignment, understanding: Mock
     ) -> None:
-        repository.read_alignment_response.return_value = AlignmentResponse(
-            kind=AlignmentResponseKind.REVIEW, correction="la senal no esta exenta"
-        )
         understanding.write.side_effect = InvalidUnderstandingReportError("blank text")
 
         with pytest.raises(InvalidUnderstandingReportError, match="blank text"):
-            action.execute(self._params(run=RunMother.awaiting_alignment(), understanding=UnderstandingMother.TEXT))
+            action.execute(
+                self._params(
+                    run=RunMother.about_to_redraft_after_a_correction("la senal no esta exenta"),
+                    understanding=UnderstandingMother.TEXT,
+                )
+            )
 
     def test_a_malformed_response_carrying_text_alongside_a_go_is_answered_instead_of_treated_as_silence(
         self, action: SeekAlignment, repository: Mock, understanding: Mock

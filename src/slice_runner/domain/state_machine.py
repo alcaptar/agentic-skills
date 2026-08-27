@@ -162,6 +162,8 @@ class StateMachine:
                 return self._moving_to(run, Step.IMPLEMENT)
             case Outcome.PENDING:
                 return self._ticking(run)
+            case Outcome.CHANGES_REQUESTED:
+                return self._moving_to(run, Step.UNDERSTAND)
             case Outcome.DISCARDED:
                 return self._moving_to(replace(run, understand_discards=run.understand_discards + 1), Step.UNDERSTAND)
             case Outcome.CALL_NOT_MEASURED:

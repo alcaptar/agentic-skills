@@ -30,7 +30,10 @@ class Outcome(StrEnum):
     CHANGES_REQUESTED = "changes-requested"
 
     @classmethod
-    def of_the_alignment(cls, kind: AlignmentResponseKind) -> Outcome:
+    def of_the_alignment(cls, kind: AlignmentResponseKind, *, redrafting: bool) -> Outcome:
+        if redrafting:
+            return cls.CHANGES_REQUESTED
+
         match kind:
             case AlignmentResponseKind.GO:
                 return cls.DONE

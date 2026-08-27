@@ -38,6 +38,14 @@ class Run:
         return bool(self.requested_changes)
 
     @property
+    def has_a_correction(self) -> bool:
+        return bool(self.corrected)
+
+    @property
+    def redrafting_after_a_correction(self) -> bool:
+        return self.has_a_correction and self.understanding_pending
+
+    @property
     def verify_round_in_progress(self) -> int:
         return self.verify_rounds_logged + 1
 
