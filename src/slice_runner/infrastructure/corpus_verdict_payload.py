@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Self
 
-from pydantic import AliasChoices, Field
-
 from slice_runner.domain.canonical_slice_id import CanonicalSliceId
 from slice_runner.domain.severity import Severity
 from slice_runner.domain.slice_coordinates import SliceCoordinates
@@ -18,9 +16,9 @@ if TYPE_CHECKING:
 
 
 class SeverityCountPayload(ContractModel):
-    high: int = Field(validation_alias=AliasChoices("high", "alta"))
-    medium: int = Field(validation_alias=AliasChoices("medium", "media"))
-    low: int = Field(validation_alias=AliasChoices("low", "baja"))
+    high: int
+    medium: int
+    low: int
 
     @classmethod
     def from_domain(cls, verdict: Verdict) -> Self:

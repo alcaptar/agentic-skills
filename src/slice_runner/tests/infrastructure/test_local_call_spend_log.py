@@ -161,7 +161,9 @@ class TestAddingUpTheSpendOfSomeSessions(WithTheLedgerOutOfTheRealHome):
 
         assert found == HarnessSpend.nothing()
 
-    def test_a_line_from_before_this_run_carried_identity_is_still_summed_without_raising(self, tmp_path: Path) -> None:
+    def test_a_line_from_before_this_run_carried_identity_is_rejected_instead_of_summed_by_accident(
+        self, tmp_path: Path
+    ) -> None:
         ledger = tmp_path / "slice-runner" / "runs" / "spend.jsonl"
         ledger.parent.mkdir(parents=True)
         old_call = HarnessCallSpendMother.of_the_implementer()
@@ -170,9 +172,8 @@ class TestAddingUpTheSpendOfSomeSessions(WithTheLedgerOutOfTheRealHome):
         )
         ledger.write_text(json.dumps(old_line) + "\n", encoding="utf-8")
 
-        found = LocalCallSpendLog(clock=self.frozen_at()).spend_of((old_call.session,))
-
-        assert found == HarnessSpendMother.of_the_implementer_call()
+        with pytest.raises(UnreadableCallSpendLogError):
+            LocalCallSpendLog(clock=self.frozen_at()).spend_of((old_call.session,))
 
     def test_a_line_that_is_not_json_is_refused_instead_of_being_skipped_in_silence(self, tmp_path: Path) -> None:
         ledger = tmp_path / "slice-runner" / "runs" / "spend.jsonl"

@@ -74,14 +74,14 @@ class TestHowEachClosureIsRecorded(WithTheLedgerOutOfTheRealHome):
     @pytest.mark.parametrize(
         ("state", "verdict", "ci"),
         [
-            (RunState.MERGED, "PASA", "green"),
-            (RunState.BLOCKED_CI_RED, "PASA", "red"),
-            (RunState.BLOCKED_CI_INDETERMINATE, "PASA", "none"),
-            (RunState.BLOCKED_VERIFY, "FALLA", "none"),
-            (RunState.BLOCKED_CONTROLS, "bloqueada-controles", "none"),
-            (RunState.BLOCKED_HYGIENE, "bloqueada-higiene", "none"),
-            (RunState.ABORTED_BUDGET, "abortada-presupuesto", "none"),
-            (RunState.ABORTED_UNMEASURED_CALL, "abortada-llamada-no-medida", "none"),
+            (RunState.MERGED, "pass", "green"),
+            (RunState.BLOCKED_CI_RED, "pass", "red"),
+            (RunState.BLOCKED_CI_INDETERMINATE, "pass", "none"),
+            (RunState.BLOCKED_VERIFY, "fail", "none"),
+            (RunState.BLOCKED_CONTROLS, "blocked-controls", "none"),
+            (RunState.BLOCKED_HYGIENE, "blocked-hygiene", "none"),
+            (RunState.ABORTED_BUDGET, "aborted-budget", "none"),
+            (RunState.ABORTED_UNMEASURED_CALL, "aborted-unmeasured-call", "none"),
         ],
     )
     def test_every_closure_of_the_program_has_its_own_pair_in_the_durable_vocabulary(
@@ -90,7 +90,7 @@ class TestHowEachClosureIsRecorded(WithTheLedgerOutOfTheRealHome):
         LocalMetricsLog(clock=self.frozen_at()).record(ClosedSliceMother.closed_as(state))
 
         row = WrittenMetricsLog.row_under(tmp_path)
-        assert (row["veredicto"], row["ci"]) == (verdict, ci)
+        assert (row["verdict"], row["ci"]) == (verdict, ci)
 
     def test_a_budget_abort_is_recorded_with_a_cost_that_really_is_above_its_own_cap(self, tmp_path: Path) -> None:
         budgets = Budgets(slice_cost_usd=0.1)
@@ -103,9 +103,9 @@ class TestHowEachClosureIsRecorded(WithTheLedgerOutOfTheRealHome):
         recorded_budgets = row["budgets"]
         assert isinstance(harness, dict)
         assert isinstance(recorded_budgets, dict)
-        assert row["veredicto"] == "abortada-presupuesto"
-        assert harness["coste_usd"] == spend.cost_usd
-        assert harness["coste_usd"] > recorded_budgets["slice_cost_usd"]
+        assert row["verdict"] == "aborted-budget"
+        assert harness["cost_usd"] == spend.cost_usd
+        assert harness["cost_usd"] > recorded_budgets["slice_cost_usd"]
 
     def test_a_run_that_has_not_closed_is_rejected_instead_of_written_as_a_row(self, tmp_path: Path) -> None:
         with pytest.raises(RunNotClosedError, match="one line per closed slice"):
@@ -146,34 +146,16 @@ class TestWhatOfTheHarnessIsWritten(WithTheLedgerOutOfTheRealHome):
 
         harness = WrittenMetricsLog.row_under(tmp_path)["harness"]
         assert harness == {
-            "coste_usd": 0.3951979,
-            "turnos": 14,
-            "duracion_ms": 65652,
-            "tokens_cache": 256813,
+            "cost_usd": 0.3951979,
+            "turns": 14,
+            "duration_ms": 65652,
+            "cache_read_tokens": 256813,
         }
 
     def test_with_nothing_measured_no_group_of_the_harness_is_written(self, tmp_path: Path) -> None:
         LocalMetricsLog(clock=self.frozen_at()).record(ClosedSliceMother.merged_measuring_nothing())
 
         assert "harness" not in WrittenMetricsLog.row_under(tmp_path)
-
-    def test_the_wall_clock_duration_is_never_written_as_a_number_because_nothing_here_measures_it(
-        self, tmp_path: Path
-    ) -> None:
-        LocalMetricsLog(clock=self.frozen_at()).record(
-            ClosedSliceMother.merged_measuring(HarnessSpendMother.of_the_judge_call())
-        )
-
-        assert WrittenMetricsLog.row_under(tmp_path)["duracion_s"] is None
-
-    def test_the_token_count_is_never_written_as_a_number_either_because_the_envelope_does_not_bring_it(
-        self, tmp_path: Path
-    ) -> None:
-        LocalMetricsLog(clock=self.frozen_at()).record(
-            ClosedSliceMother.merged_measuring(HarnessSpendMother.of_the_judge_call())
-        )
-
-        assert WrittenMetricsLog.row_under(tmp_path)["coste_tokens"] is None
 
     def test_the_model_the_harness_declares_travels_and_not_the_alias_the_program_requested(
         self, tmp_path: Path
@@ -182,7 +164,7 @@ class TestWhatOfTheHarnessIsWritten(WithTheLedgerOutOfTheRealHome):
             ClosedSliceMother.merged_measuring(HarnessSpendMother.of_the_implementer_call())
         )
 
-        assert WrittenMetricsLog.row_under(tmp_path)["modelos"] == ["claude-sonnet-5"]
+        assert WrittenMetricsLog.row_under(tmp_path)["models"] == ["claude-sonnet-5"]
 
     def test_a_slice_that_used_more_than_one_model_writes_every_one_of_them(self, tmp_path: Path) -> None:
         closed = ClosedSliceMother.merged_measuring(
@@ -191,19 +173,19 @@ class TestWhatOfTheHarnessIsWritten(WithTheLedgerOutOfTheRealHome):
 
         LocalMetricsLog(clock=self.frozen_at()).record(closed)
 
-        assert WrittenMetricsLog.row_under(tmp_path)["modelos"] == ["claude-haiku-4-5-20251001", "claude-sonnet-5"]
+        assert WrittenMetricsLog.row_under(tmp_path)["models"] == ["claude-haiku-4-5-20251001", "claude-sonnet-5"]
 
     def test_with_nothing_measured_no_model_is_written(self, tmp_path: Path) -> None:
         LocalMetricsLog(clock=self.frozen_at()).record(ClosedSliceMother.merged_measuring_nothing())
 
-        assert "modelos" not in WrittenMetricsLog.row_under(tmp_path)
+        assert "models" not in WrittenMetricsLog.row_under(tmp_path)
 
 
 class TestWhatVariantIsWritten(WithTheLedgerOutOfTheRealHome):
     def test_every_row_the_program_writes_names_the_variant_that_is_conducting_the_slice(self, tmp_path: Path) -> None:
         LocalMetricsLog(clock=self.frozen_at()).record(ClosedSliceMother.merged())
 
-        assert WrittenMetricsLog.row_under(tmp_path)["variante"] == "programa"
+        assert WrittenMetricsLog.row_under(tmp_path)["variant"] == MetricsEntryPayload.VARIANT
 
 
 class TestHowMuchTheSliceChanged(WithTheLedgerOutOfTheRealHome):
@@ -282,7 +264,7 @@ class TestWhatTheRunAlreadyCounted(WithTheLedgerOutOfTheRealHome):
 
         LocalMetricsLog(clock=self.frozen_at()).record(ClosedSliceMother.merged_after_going_back_for_every_reason())
 
-        assert WrittenMetricsLog.row_under(tmp_path)["reintentos_implement"] == (
+        assert WrittenMetricsLog.row_under(tmp_path)["implement_retries"] == (
             run.control_retries + run.hygiene_retries + run.verify_retries + run.correction_retries + run.ci_retries
         )
 
@@ -292,7 +274,7 @@ class TestWhatTheRunAlreadyCounted(WithTheLedgerOutOfTheRealHome):
         LocalMetricsLog(clock=self.frozen_at()).record(ClosedSliceMother.merged_after_going_back_for_every_reason())
 
         row = WrittenMetricsLog.row_under(tmp_path)
-        assert (row["reintentos_controles"], row["reintentos_verify"], row["reintentos_ci"]) == (
+        assert (row["control_retries"], row["verify_retries"], row["ci_retries"]) == (
             run.control_retries,
             run.verify_retries,
             run.ci_retries,
@@ -306,11 +288,11 @@ class TestWhatTheRunAlreadyCounted(WithTheLedgerOutOfTheRealHome):
         LocalMetricsLog(clock=self.frozen_at()).record(ClosedSliceMother.merged_after_going_back_for_every_reason())
 
         row = WrittenMetricsLog.row_under(tmp_path)
-        assert (row["reintentos_verify"], row["correction_retries"]) == (
+        assert (row["verify_retries"], row["correction_retries"]) == (
             run.verify_retries,
             run.correction_retries,
         )
-        assert row["reintentos_verify"] != row["correction_retries"]
+        assert row["verify_retries"] != row["correction_retries"]
 
     def test_the_findings_travel_counted_by_severity_and_not_as_a_single_total(self, tmp_path: Path) -> None:
         LocalMetricsLog(clock=self.frozen_at()).record(
@@ -337,10 +319,10 @@ class TestWhatTheRunAlreadyCounted(WithTheLedgerOutOfTheRealHome):
 
 class TestWhyTheJudgeWasReinvoked(WithTheLedgerOutOfTheRealHome):
     @staticmethod
-    def _descartes(row: dict[str, object]) -> dict[str, object]:
-        descartes = row["descartes"]
-        assert isinstance(descartes, dict)
-        return descartes
+    def _discarded_call(row: dict[str, object]) -> dict[str, object]:
+        discarded_call = row["discarded_call"]
+        assert isinstance(discarded_call, dict)
+        return discarded_call
 
     def test_the_cause_of_the_discards_travels_next_to_their_count(self, tmp_path: Path) -> None:
         run = RunMother.that_went_back_for_every_reason()
@@ -350,8 +332,8 @@ class TestWhyTheJudgeWasReinvoked(WithTheLedgerOutOfTheRealHome):
         )
 
         row = WrittenMetricsLog.row_under(tmp_path)
-        assert row["descartes_verify"] == run.verify_discards
-        assert self._descartes(row)["causa"] == "llamada-fallida"
+        assert row["verify_discards"] == run.verify_discards
+        assert self._discarded_call(row)["cause"] == "failed-call"
 
     def test_the_step_of_the_discard_travels_next_to_its_cause(self, tmp_path: Path) -> None:
         discarded = DiscardedCallMother.of_a_failed_call()
@@ -359,7 +341,7 @@ class TestWhyTheJudgeWasReinvoked(WithTheLedgerOutOfTheRealHome):
         LocalMetricsLog(clock=self.frozen_at()).record(ClosedSliceMother.merged_discarding_because_of(discarded))
 
         row = WrittenMetricsLog.row_under(tmp_path)
-        assert self._descartes(row)["paso"] == "verify"
+        assert self._discarded_call(row)["step"] == "verify"
 
     def test_an_incoherent_verdict_is_recorded_as_a_different_cause_than_a_call_that_never_answered(
         self, tmp_path: Path
@@ -369,7 +351,7 @@ class TestWhyTheJudgeWasReinvoked(WithTheLedgerOutOfTheRealHome):
         )
 
         row = WrittenMetricsLog.row_under(tmp_path)
-        assert self._descartes(row)["causa"] == "veredicto-incoherente"
+        assert self._discarded_call(row)["cause"] == "incoherent-verdict"
 
     def test_a_call_discarded_for_a_missing_structured_output_is_recorded_with_its_own_cause(
         self, tmp_path: Path
@@ -379,14 +361,14 @@ class TestWhyTheJudgeWasReinvoked(WithTheLedgerOutOfTheRealHome):
         )
 
         row = WrittenMetricsLog.row_under(tmp_path)
-        assert self._descartes(row)["causa"] == "sin-salida-estructurada"
+        assert self._discarded_call(row)["cause"] == "no-structured-output"
 
     def test_without_a_cause_only_the_count_travels_because_none_is_invented(self, tmp_path: Path) -> None:
         LocalMetricsLog(clock=self.frozen_at()).record(ClosedSliceMother.merged_discarding_because_of(None))
 
         row = WrittenMetricsLog.row_under(tmp_path)
-        assert "descartes_verify" in row
-        assert "descartes" not in row
+        assert "verify_discards" in row
+        assert "discarded_call" not in row
 
 
 class TestWhyTheCiCouldNotBeRead(WithTheLedgerOutOfTheRealHome):
@@ -395,7 +377,7 @@ class TestWhyTheCiCouldNotBeRead(WithTheLedgerOutOfTheRealHome):
             ClosedSliceMother.blocked_indeterminate_because_of(CiIndeterminateCause.COMMAND_FAILED)
         )
 
-        assert WrittenMetricsLog.row_under(tmp_path)["ci_indeterminada_causa"] == "comando-fallido"
+        assert WrittenMetricsLog.row_under(tmp_path)["ci_indeterminate_cause"] == "command-failed"
 
     def test_an_unreadable_response_is_recorded_as_a_different_cause_than_a_failed_command(
         self, tmp_path: Path
@@ -404,14 +386,14 @@ class TestWhyTheCiCouldNotBeRead(WithTheLedgerOutOfTheRealHome):
             ClosedSliceMother.blocked_indeterminate_because_of(CiIndeterminateCause.UNREADABLE_RESPONSE)
         )
 
-        assert WrittenMetricsLog.row_under(tmp_path)["ci_indeterminada_causa"] == "respuesta-no-legible"
+        assert WrittenMetricsLog.row_under(tmp_path)["ci_indeterminate_cause"] == "unreadable-response"
 
     def test_without_a_cause_only_the_ci_field_travels_because_none_is_invented(self, tmp_path: Path) -> None:
         LocalMetricsLog(clock=self.frozen_at()).record(ClosedSliceMother.blocked_indeterminate_because_of(None))
 
         row = WrittenMetricsLog.row_under(tmp_path)
         assert row["ci"] == "none"
-        assert "ci_indeterminada_causa" not in row
+        assert "ci_indeterminate_cause" not in row
 
 
 class TestTheLedgerOnlyGrows(WithTheLedgerOutOfTheRealHome):
@@ -421,7 +403,7 @@ class TestTheLedgerOnlyGrows(WithTheLedgerOutOfTheRealHome):
         log.record(ClosedSliceMother.closed_as(RunState.MERGED))
         log.record(ClosedSliceMother.closed_as(RunState.BLOCKED_VERIFY))
 
-        assert [row["veredicto"] for row in WrittenMetricsLog.rows_under(tmp_path)] == ["PASA", "FALLA"]
+        assert [row["verdict"] for row in WrittenMetricsLog.rows_under(tmp_path)] == ["pass", "fail"]
 
 
 class TestReadingBackTheClosedSlices(WithTheLedgerOutOfTheRealHome):

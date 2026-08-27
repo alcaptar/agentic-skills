@@ -13,15 +13,17 @@ from slice_runner.infrastructure.tool_use_payload import CallToolUsePayload, Unr
 
 class TestEveryDurableLogDeclaresASchemaAProgramCanRead:
     def test_the_call_trace_schema_requires_the_identity_of_the_call(self) -> None:
-        assert self._required(HarnessCallPayload.json_schema()) == {"slice_id", "step", "session"}
+        required = self._required(HarnessCallPayload.json_schema())
+
+        assert required == {"ts", "repo", "issue", "slice_id", "step", "session"}
 
     def test_the_spend_log_schema_requires_the_session_and_the_spend_it_carries(self) -> None:
-        assert self._required(CallSpendPayload.json_schema()) == {"session", "spend"}
+        assert self._required(CallSpendPayload.json_schema()) == {"ts", "repo", "issue", "slice_id", "session", "spend"}
 
     def test_the_metrics_log_schema_requires_the_identity_and_the_closure_of_the_slice(self) -> None:
         required = self._required(MetricsEntryPayload.json_schema())
 
-        assert {"ts", "repo", "issue", "slice_id", "name", "veredicto", "ci"} <= required
+        assert {"ts", "repo", "issue", "slice_id", "name", "verdict", "ci"} <= required
 
     def test_the_corpus_verdict_schema_requires_the_slice_and_the_verdict_the_judge_gave(self) -> None:
         assert self._required(CorpusVerdictPayload.json_schema()) == {

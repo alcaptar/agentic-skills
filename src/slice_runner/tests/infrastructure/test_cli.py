@@ -882,24 +882,21 @@ class TestTheCommandThatEmitsClosedSliceMetrics:
         assert labels == {"claude-sonnet-5", "claude-haiku-4-5-20251001"}
         assert all(group["rates"]["first_attempt"]["samples"] == 1 for group in summary["by_model"])
 
-    def test_a_row_declaring_neither_model_nor_variant_is_grouped_as_unknown_instead_of_disappearing(
+    def test_a_row_declaring_no_model_is_grouped_as_unknown_instead_of_disappearing(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        row = self._row_for(ClosedSliceMother.merged_measuring_nothing(), issue=401)
-        del row["variante"]
-        self._append_row(row)
+        self._record(ClosedSliceMother.merged_measuring_nothing())
 
         summary = json.loads(self._emitted(tmp_path, capsys)[-1])
 
         assert {group["label"] for group in summary["by_model"]} == {"unknown"}
-        assert {group["label"] for group in summary["by_variant"]} == {"unknown"}
 
     def test_two_rows_with_different_declared_variants_land_in_their_own_group(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
         self._record(ClosedSliceMother.merged_for_issue(402))
         row = self._row_for(ClosedSliceMother.merged(), issue=403)
-        row["variante"] = "skill"
+        row["variant"] = "skill"
         self._append_row(row)
 
         summary = json.loads(self._emitted(tmp_path, capsys)[-1])
@@ -907,7 +904,7 @@ class TestTheCommandThatEmitsClosedSliceMetrics:
         samples_by_label = {
             group["label"]: group["rates"]["first_attempt"]["samples"] for group in summary["by_variant"]
         }
-        assert samples_by_label == {"programa": 1, "skill": 1}
+        assert samples_by_label == {MetricsEntryPayload.VARIANT: 1, "skill": 1}
 
     def test_the_spend_averages_only_count_the_records_that_measured_something(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
