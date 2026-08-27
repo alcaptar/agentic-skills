@@ -19,6 +19,13 @@ segments `log`/`trace` cited next to `slice-runner` in the same path expression.
 the stores that exist today -a well-formed new one that only names `DurableLedger` never trips it-,
 which is what the eighth, its meta-test, proves against synthetic source: without it, a scan that
 finds nothing and one that is broken read the same.
+
+The ninth scans every module that builds a `DurableLedger` for the vocabulary of a harness turn
+(`HarnessTurn`, `TurnLog`, `TurnPayload`): a turn's number, tool and target are what
+`tool_use_log.py` already writes when a call ends, so a store that names that vocabulary would be
+writing the same row twice. It is not a list of stores either, and the tenth, its meta-test, proves
+against synthetic source that a ledger naming that vocabulary trips it and a well-formed one does
+not.
 """
 
 from __future__ import annotations
@@ -540,3 +547,73 @@ def test_the_scan_catches_every_shape_a_module_could_compose_its_own_durable_sto
     assert _composes_its_own_durable_store_path(citing_log_next_to_slice_runner)
     assert _composes_its_own_durable_store_path(citing_trace_next_to_slice_runner_in_a_tuple)
     assert not _composes_its_own_durable_store_path(a_well_formed_new_store)
+
+
+_TURN_VOCABULARY = frozenset({"HarnessTurn", "TurnLog", "TurnPayload"})
+"""What a harness turn is called wherever it already lives, in `turn_log.py` and `turn_payload.py`."""
+
+
+def _referenced_names(tree: ast.Module) -> set[str]:
+    named = {node.id for node in ast.walk(tree) if isinstance(node, ast.Name)}
+    imports = (node for node in ast.walk(tree) if isinstance(node, ast.ImportFrom))
+    imported = {alias.asname or alias.name for node in imports for alias in node.names}
+
+    return named | imported
+
+
+def _builds_a_durable_ledger_naming_a_turn(source: str) -> bool:
+    """A module trips this by constructing `DurableLedger` while its tree also names a harness
+
+    turn -- through an import, a type annotation, or the `row=` it hands the ledger.
+    """
+    tree = ast.parse(source)
+    builds_a_ledger = any(
+        isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "DurableLedger"
+        for node in ast.walk(tree)
+    )
+
+    return builds_a_ledger and bool(_TURN_VOCABULARY & _referenced_names(tree))
+
+
+@pytest.mark.integration
+def test_no_durable_ledger_names_the_vocabulary_of_a_harness_turn() -> None:
+    """`infrastructure.md`: a turn's number, tool and target is what the tool-use ledger already
+
+    writes when a call ends, so anexing it again per turn would write the same row twice. This
+    measures the tree instead of trusting that nobody wires a `LocalTurnLog` tomorrow.
+    """
+    candidates = [path for path in _tracked("src/slice_runner/*.py") if not path.startswith("src/slice_runner/tests/")]
+
+    offending = [path for path in candidates if _builds_a_durable_ledger_naming_a_turn(_read(_ROOT / path))]
+
+    assert not offending, "these modules build a durable ledger that names the turn vocabulary:\n" + (
+        "\n".join(f"  {path}" for path in offending)
+    )
+
+
+def test_the_scan_catches_a_durable_ledger_that_names_the_turn_vocabulary_and_leaves_a_clean_one_be() -> None:
+    """A well-formed ledger that never mentions a turn must stay invisible to the scan.
+
+    Turning this into a list of today's stores is exactly what the acceptance criteria this pins
+    forbids: what trips it is naming the vocabulary next to `DurableLedger`, not a fixed name.
+    """
+    a_turn_ledger = "\n".join(
+        [
+            "from slice_runner.infrastructure.turn_payload import TurnPayload",
+            "from slice_runner.infrastructure.durable_ledger import DurableLedger",
+            "class Foo:",
+            "    def __init__(self):",
+            '        self._ledger = DurableLedger(name="turns", row=TurnPayload)',
+        ]
+    )
+    a_well_formed_ledger = "\n".join(
+        [
+            "from slice_runner.infrastructure.durable_ledger import DurableLedger",
+            "class Foo:",
+            "    def __init__(self):",
+            '        self._ledger = DurableLedger(name="foo", row=FooPayload)',
+        ]
+    )
+
+    assert _builds_a_durable_ledger_naming_a_turn(a_turn_ledger)
+    assert not _builds_a_durable_ledger_naming_a_turn(a_well_formed_ledger)

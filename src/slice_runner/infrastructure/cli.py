@@ -97,6 +97,7 @@ from slice_runner.infrastructure.local_call_trace import LocalCallTrace
 from slice_runner.infrastructure.local_control_runner import LocalControlRunner
 from slice_runner.infrastructure.local_conversation_log import LocalConversationLog
 from slice_runner.infrastructure.local_corpus import LocalCorpus
+from slice_runner.infrastructure.local_event_log import LocalEventLog
 from slice_runner.infrastructure.local_metrics_log import LocalMetricsLog
 from slice_runner.infrastructure.local_plugin_registry import LocalPluginRegistry
 from slice_runner.infrastructure.local_process import LocalProcess
@@ -110,7 +111,6 @@ from slice_runner.infrastructure.readiness_report import ReadinessReport
 from slice_runner.infrastructure.slice_pull_request import SlicePullRequest
 from slice_runner.infrastructure.slice_verifier_judge import SliceVerifierJudge
 from slice_runner.infrastructure.spend_payload import SpendPayload
-from slice_runner.infrastructure.stderr_event_log import StderrEventLog
 from slice_runner.infrastructure.stderr_turn_log import StderrTurnLog
 from slice_runner.infrastructure.subcommand import Subcommand
 from slice_runner.infrastructure.system_clock import SystemClock
@@ -590,7 +590,7 @@ class Cli:
                 verify=self._action(clock=clock),
                 deliver=DeliverSlice(workspace=workspace, forum=forum),
                 close=CloseParent(repository=repository),
-                record_step=RecordStep(repository=repository, events=StderrEventLog(), clock=clock),
+                record_step=RecordStep(repository=repository, events=LocalEventLog(), clock=clock),
                 record_closure=RecordClosure(
                     metrics=LocalMetricsLog(clock=clock),
                     repository=repository,

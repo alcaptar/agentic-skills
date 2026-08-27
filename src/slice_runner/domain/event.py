@@ -14,6 +14,8 @@ if TYPE_CHECKING:
 @dataclass(frozen=True, kw_only=True, slots=True)
 class Event:
     slice_id: str
+    repo: str
+    issue: int
     step: Step
     at: datetime
     spend: HarnessSpend
