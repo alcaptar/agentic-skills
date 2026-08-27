@@ -173,6 +173,12 @@ importar**: un smoke que solo importe el módulo lo da por bueno. Lo evita
 
   **Los payloads de un almacen durable declaran su esquema**, reusando el mismo emisor plano que los que
   viajan en un prompt. Es lo que deja preguntar que campos trae una fila sin abrir el fichero.
+- **Lo que además se mira en vivo se escribe dos veces desde el mismo adaptador**, no desde dos
+  compositores: una vez a disco, porque es la que dura, y una vez a la salida de error, porque es la que
+  deja mirar un run en marcha. Las dos comparten el mismo payload, compuesto una sola vez.
+- **Un turno del arnés no se anexa a un almacen durable propio.** Lo que un turno dice -numero, herramienta
+  y objetivo- ya lo escribe el registro de usos de herramienta al terminar cada llamada; anexarlo tambien
+  por turno seria escribir la misma fila dos veces con otro nombre.
 - **El registro durable lo escribe el programa el mismo**, con el mismo patrón que los demas almacenes y
   un payload de frontera que traduce el dominio a las claves del log. **No delega esa escritura en un
   script fuera de su paquete**: sería una dependencia fisica con código que no es referencia.

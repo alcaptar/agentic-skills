@@ -66,6 +66,8 @@ class RecordStep:
         self._events.emit(
             Event(
                 slice_id=params.slice_id,
+                repo=params.repo,
+                issue=params.issue,
                 step=run.step,
                 at=self._clock.now(),
                 spend=params.spend,

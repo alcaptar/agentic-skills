@@ -5,9 +5,13 @@ from slice_runner.tests.mothers.event_mother import EventMother
 
 
 class TestWhatTheProgramEmits:
-    def test_the_event_serialises_with_the_slice_the_step_the_instant_the_spend_and_the_status(self) -> None:
+    def test_the_event_serialises_with_the_repo_the_issue_the_slice_the_step_the_instant_the_spend_and_the_status(
+        self,
+    ) -> None:
         assert EventPayload.from_domain(EventMother.advancing()).to_contract() == {
             "slice_id": "slice-05",
+            "repo": EventMother.REPO,
+            "issue": EventMother.ISSUE,
             "step": "run-controls",
             "at": "2024-01-01T12:30:45Z",
             "spend": {
