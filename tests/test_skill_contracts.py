@@ -30,6 +30,7 @@ from slice_runner.domain.issue_label import IssueLabel
 from slice_runner.domain.ruling import Ruling
 from slice_runner.domain.severity import Severity
 from slice_runner.domain.state_machine import StateMachine
+from slice_runner.infrastructure.cli import Cli
 from slice_runner.infrastructure.exit_code import ExitCode
 from slice_runner.infrastructure.gh_run_repository import GhRunRepository
 from slice_runner.infrastructure.local_skill_library import LocalSkillLibrary
@@ -535,6 +536,46 @@ def test_the_existing_piece_lines_name_behaviour_and_the_documented_example_show
         assert "existe" not in tail, (
             f"the documented `- pieza:` line {tail!r} still describes the piece as existing, which is "
             f"exactly what the tightened rule rejects"
+        )
+
+
+_RUN_COMMAND = re.compile(r"slice-runner run\s+((?:[^`\n]|\n(?!\s*\n))+?)(?=`|\n\s*\n|$)")
+_PLACEHOLDER = re.compile(r"<[^>]+>")
+
+
+def _argv_of(command: str) -> list[str]:
+    """The command as the parser would receive it: one line, placeholders filled, no continuations."""
+    flattened = " ".join(command.replace("\\\n", " ").split())
+
+    return ["run", *(_PLACEHOLDER.sub(lambda m: "1" if m.group() in ("<N>", "<padre>") else "x", flattened)).split()]
+
+
+def test_every_command_slice_spec_teaches_parses_and_names_the_worktree_it_runs_in() -> None:
+    """The skill teaches the launch command on four surfaces, and they had drifted apart.
+
+    Three of them -- the natural pair up top, the close of step 6 and the close of `validate` -- left
+    `--worktree` out, and only step 7's parallel split carried it. The one read on every single spec
+    was one of the three without it, so following the skill meant falling into the default: the
+    current working directory, which is the measured mechanism behind the judge reading a branch of
+    someone else's slice 31 times out of 32. Copies of a command with nothing measuring them is how
+    the surface that matters ends up being the stale one.
+
+    This compares the prose against `Cli.parser()` rather than against another copy of the prose, so
+    it also fails when a flag is renamed or dropped from the program and the skill still teaches it.
+    """
+    taught = set(_RUN_COMMAND.findall(_read(_SPEC)))
+    # The default is read by parsing a command WITHOUT the flag, not from `get_default`: the option
+    # lives on the `run` subparser, so the root parser answers `None` for it and every comparison
+    # against that passes -- which is how the first version of this test passed all five mutations.
+    conducting_where_the_caller_stands = Cli.parser().parse_args(["run", "1", "--repo", "x", "--base", "x"]).worktree
+
+    assert taught, f"{_rel(_SPEC)} teaches no launch command at all"
+    for command in sorted(taught):
+        argv = _argv_of(command)
+        parsed = Cli.parser().parse_args(argv)
+        assert parsed.worktree != conducting_where_the_caller_stands, (
+            f"{_rel(_SPEC)} teaches `slice-runner run {' '.join(argv[1:])}`, which leaves the worktree "
+            f"at {conducting_where_the_caller_stands!r} and conducts wherever the caller happens to stand"
         )
 
 
