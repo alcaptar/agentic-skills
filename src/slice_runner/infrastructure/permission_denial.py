@@ -5,7 +5,6 @@ from slice_runner.infrastructure.open_vocabulary_model import OpenVocabularyMode
 
 class PermissionDenial(OpenVocabularyModel):
     tool_name: str
-    tool_use_id: str
     tool_input: dict[str, object]
 
     @property

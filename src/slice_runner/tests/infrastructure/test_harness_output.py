@@ -6,6 +6,8 @@ import pytest
 
 from slice_runner.domain.exceptions import InvalidHarnessOutputError
 from slice_runner.infrastructure.harness_output import HarnessOutput
+from slice_runner.infrastructure.model_usage_payload import ModelUsageEntry
+from slice_runner.infrastructure.permission_denial import PermissionDenial
 from slice_runner.infrastructure.process import ProcessOutput
 from slice_runner.tests.mothers.harness_spend_mother import HarnessSpendMother
 from slice_runner.tests.mothers.judge_output_mother import HarnessEnvelopeMother
@@ -133,6 +135,18 @@ class TestWhatTheHarnessMeasured:
 
         assert spend.duration_api_ms == 0
 
+    @pytest.mark.parametrize("recorded", HarnessEnvelopeMother.ALL_RECORDED)
+    def test_every_recorded_call_brings_every_model_usage_key_we_consume_so_a_rename_still_breaks(
+        self, recorded: str
+    ) -> None:
+        model_usage = HarnessEnvelopeMother.recorded(recorded)["modelUsage"]
+        assert isinstance(model_usage, dict)
+        consumed = {field.alias or name for name, field in ModelUsageEntry.model_fields.items()}
+
+        for entry in model_usage.values():
+            assert isinstance(entry, dict)
+            assert consumed <= set(entry)
+
     def test_a_model_usage_entry_missing_one_of_the_new_token_fields_still_parses_with_zero_for_it(self) -> None:
         recorded = HarnessEnvelopeMother.recorded("full-recipe")
         model_usage = recorded["modelUsage"]
@@ -197,6 +211,12 @@ class TestAStreamedEnvelope:
         assert [denial.denied_action for denial in envelope.permission_denials] == [
             f"Read {HarnessEnvelopeMother.DENIED_READ}"
         ]
+
+    def test_the_denial_the_harness_sends_brings_every_key_we_consume_so_a_rename_still_breaks(self) -> None:
+        consumed = {field.alias or name for name, field in PermissionDenial.model_fields.items()}
+
+        for denial in HarnessEnvelopeMother.DENIALS_AS_THE_HARNESS_SENDS_THEM:
+            assert consumed <= set(denial)
 
     def test_permission_denials_still_extract_empty_when_none_of_the_turns_were_denied(self) -> None:
         envelope = HarnessOutput.from_process(self._streamed())

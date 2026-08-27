@@ -10,9 +10,3 @@ class ModelUsageEntry(OpenVocabularyModel):
     output_tokens: int = Field(alias="outputTokens", default=0)
     cache_read_input_tokens: int = Field(alias="cacheReadInputTokens", default=0)
     cache_creation_input_tokens: int = Field(alias="cacheCreationInputTokens", default=0)
-    web_search_requests: int = Field(alias="webSearchRequests")
-    cost_usd: float = Field(alias="costUSD")
-    context_window: int = Field(alias="contextWindow")
-    max_output_tokens: int = Field(alias="maxOutputTokens")
-    canonical_model: str = Field(alias="canonicalModel")
-    provider: str
