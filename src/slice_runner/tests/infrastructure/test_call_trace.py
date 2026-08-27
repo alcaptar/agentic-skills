@@ -260,6 +260,28 @@ class TestFindingTheSessionOfAPastCall(WithTheTraceOutOfTheRealHome):
             )
 
 
+class TestAnEarlierGenerationInTheSameLedger(WithTheTraceOutOfTheRealHome):
+    def test_a_line_of_another_slice_that_this_generation_cannot_read_does_not_block_finding_ours(
+        self, tmp_path: Path
+    ) -> None:
+        ledger = tmp_path / "slice-runner" / "runs" / "calls.jsonl"
+        ledger.parent.mkdir(parents=True)
+        earlier = {"session": "older-session", "step": str(Step.IMPLEMENT), "repo": "org/other", "issue": 7}
+        ledger.write_text(json.dumps(earlier) + "\n", encoding="utf-8")
+        trace = LocalCallTrace(clock=self.frozen_at())
+        mine = HarnessCallMother.of_the_implementer()
+        trace.record(mine)
+
+        found = trace.sessions_of(
+            repo=mine.coordinates.repo,
+            issue=mine.coordinates.issue,
+            slice_id=mine.coordinates.slice_id.text,
+            step=mine.step,
+        )
+
+        assert found == (mine.session,)
+
+
 class TestFindingTheCallsOfAPastSlice(WithTheTraceOutOfTheRealHome):
     def test_every_call_of_the_slice_across_every_step_is_returned_in_the_order_it_was_recorded(
         self, tmp_path: Path

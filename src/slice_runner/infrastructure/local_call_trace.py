@@ -9,6 +9,8 @@ from slice_runner.infrastructure.durable_ledger import DurableLedger
 from slice_runner.infrastructure.harness_call_payload import HarnessCallPayload
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
+
     from slice_runner.domain.clock import Clock
     from slice_runner.domain.step import Step
 
@@ -25,18 +27,19 @@ class LocalCallTrace(CallTrace):
         self._ledger.append(payload)
 
     def sessions_of(self, *, repo: str, issue: int, slice_id: str, step: Step) -> tuple[str, ...]:
-        return tuple(
-            call.session
-            for call in self._ledger.rows(HarnessCallPayload)
-            if call.repo == repo and call.issue == issue and call.slice_id == slice_id and call.step == step
-        )
+        coordinates = SliceCoordinates(repo=repo, issue=issue, slice_id=CanonicalSliceId.of_text(slice_id))
+
+        return tuple(call.session for call in self._mine(coordinates) if call.step == step)
 
     def calls_of(self, *, repo: str, issue: int, slice_id: str) -> tuple[HarnessCall, ...]:
         coordinates = SliceCoordinates(repo=repo, issue=issue, slice_id=CanonicalSliceId.of_text(slice_id))
-        wanted = coordinates.slice_id.text
 
         return tuple(
             HarnessCall(coordinates=coordinates, step=call.step, session=call.session)
-            for call in self._ledger.rows(HarnessCallPayload)
-            if call.repo == coordinates.repo and call.issue == coordinates.issue and call.slice_id == wanted
+            for call in self._mine(coordinates)
+        )
+
+    def _mine(self, coordinates: SliceCoordinates) -> Iterator[HarnessCallPayload]:
+        return self._ledger.rows_where(
+            HarnessCallPayload, lambda data: HarnessCallPayload.may_belong_to(data, coordinates)
         )

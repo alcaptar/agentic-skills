@@ -8,7 +8,7 @@ from slice_runner.infrastructure.claude_config import ClaudeConfig
 from slice_runner.infrastructure.contract_model import ContractModel
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Callable, Iterator
     from pathlib import Path
 
 
@@ -43,15 +43,28 @@ class DurableLedger(Generic[_Row]):
             stream.write(f"{json.dumps(row.to_contract(), ensure_ascii=False)}\n")
 
     def rows(self, as_row: type[_Read]) -> Iterator[_Read]:
+        yield from self.rows_where(as_row, self._anything)
+
+    def rows_where(self, as_row: type[_Read], keep: Callable[[dict[str, object]], bool]) -> Iterator[_Read]:
+        for number, line in self._numbered_lines():
+            data = self._decoded(line, number, as_row)
+            if not keep(data):
+                continue
+
+            yield as_row.from_dict(data)
+
+    @staticmethod
+    def _anything(data: dict[str, object]) -> bool:
+        return True
+
+    def _numbered_lines(self) -> Iterator[tuple[int, str]]:
         ledger = self.path()
         if not ledger.exists():
             return
 
         for number, line in enumerate(ledger.read_text(encoding="utf-8").splitlines(), start=1):
-            if not line.strip():
-                continue
-
-            yield as_row.from_dict(self._decoded(line, number, as_row))
+            if line.strip():
+                yield number, line
 
     def _decoded(self, line: str, number: int, as_row: type[_Read]) -> dict[str, object]:
         try:

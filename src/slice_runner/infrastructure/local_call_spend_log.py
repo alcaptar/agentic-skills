@@ -32,12 +32,8 @@ class LocalCallSpendLog(CallSpendLog):
         return HarnessSpend.summing(self._once_per_session(self._ledger.rows(CallSpendPayload), wanted=wanted))
 
     def spend_of_the_slice(self, coordinates: SliceCoordinates) -> HarnessSpend:
-        matching = (
-            call
-            for call in self._ledger.rows(CallSpendPayload)
-            if call.repo == coordinates.repo
-            and call.issue == coordinates.issue
-            and call.slice_id == coordinates.slice_id.text
+        matching = self._ledger.rows_where(
+            CallSpendPayload, lambda data: CallSpendPayload.may_belong_to(data, coordinates)
         )
 
         return HarnessSpend.summing(self._once_per_session(matching, wanted=None))
