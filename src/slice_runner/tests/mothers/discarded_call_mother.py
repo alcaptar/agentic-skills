@@ -21,3 +21,11 @@ class DiscardedCallMother:
     @staticmethod
     def of_the_step(step: Step) -> DiscardedCall:
         return DiscardedCall(step=step, cause=DiscardCause.FAILED_CALL, reason="claude: command not found")
+
+    @staticmethod
+    def of_a_missing_structured_output() -> DiscardedCall:
+        return DiscardedCall(
+            step=Step.UNDERSTAND,
+            cause=DiscardCause.NO_STRUCTURED_OUTPUT,
+            reason="the harness envelope has no `structured_output`",
+        )

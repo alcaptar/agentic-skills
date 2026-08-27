@@ -5,6 +5,7 @@ from slice_runner.domain.exceptions import (
     InvalidImplementationReportError,
     InvalidUnderstandingReportError,
     InvalidVerdictError,
+    MissingStructuredOutputError,
     PermissionDeniedError,
 )
 from slice_runner.tests.mothers.harness_spend_mother import HarnessSpendMother
@@ -47,5 +48,12 @@ class RejectionMother:
     def invalid_implementation_report() -> InvalidImplementationReportError:
         rejection = InvalidImplementationReportError("the implementer did not emit the report the brief asked for")
         rejection.spend = HarnessSpendMother.of_the_implementer_call()
+
+        return rejection
+
+    @staticmethod
+    def envelope_without_structured_output() -> MissingStructuredOutputError:
+        rejection = MissingStructuredOutputError("the harness envelope has no `structured_output`")
+        rejection.spend = HarnessSpendMother.of_the_understanding_call()
 
         return rejection

@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from slice_runner.domain.exceptions import InvalidHarnessOutputError
+from slice_runner.domain.exceptions import InvalidHarnessOutputError, MissingStructuredOutputError
 from slice_runner.infrastructure.harness_output import HarnessOutput
 from slice_runner.infrastructure.model_usage_payload import ModelUsageEntry
 from slice_runner.infrastructure.permission_denial import PermissionDenial
@@ -37,32 +37,85 @@ class TestTheEnvelopeWeKnow:
         with pytest.raises(InvalidHarnessOutputError, match="total_cost_usd"):
             HarnessOutput.from_dict(HarnessEnvelopeMother.without("total_cost_usd"))
 
+    def test_a_rejection_over_the_raw_dict_does_not_report_a_termination_cause_that_arrived_null(self) -> None:
+        without_session = HarnessEnvelopeMother.without("session_id") | {"subtype": None}
+
+        with pytest.raises(InvalidHarnessOutputError) as rejection:
+            HarnessOutput.from_dict(without_session)
+
+        assert "subtype" not in str(rejection.value)
+        assert "stop_reason" in str(rejection.value)
+
     def test_a_text_that_looks_like_a_boolean_is_not_taken_as_one(self) -> None:
         with pytest.raises(InvalidHarnessOutputError, match=r"`is_error`.*valid boolean"):
             HarnessOutput.from_dict(HarnessEnvelopeMother.plus(is_error="no"))
 
-    def test_one_without_structured_output_is_rejected_instead_of_falling_back_to_result(self) -> None:
-        with pytest.raises(InvalidHarnessOutputError, match="structured_output"):
-            HarnessOutput.from_dict(HarnessEnvelopeMother.without("structured_output"))
+    def test_one_without_structured_output_validates_the_carcass_instead_of_being_rejected_there(self) -> None:
+        envelope = HarnessOutput.from_dict(HarnessEnvelopeMother.without_structured_output())
 
-    def test_one_without_structured_output_that_ran_out_of_turns_says_so_in_the_rejection(self) -> None:
-        envelope = HarnessEnvelopeMother.without("structured_output") | {"subtype": "error_max_turns"}
+        assert envelope.structured_output is None
 
-        with pytest.raises(InvalidHarnessOutputError, match="error_max_turns"):
-            HarnessOutput.from_dict(envelope)
+    @pytest.mark.parametrize("key", ["duration_ms", "num_turns", "is_error"])
+    def test_removing_a_key_the_program_consumes_still_rejects_the_envelope(self, key: str) -> None:
+        with pytest.raises(InvalidHarnessOutputError, match=key):
+            HarnessOutput.from_dict(HarnessEnvelopeMother.without(key))
 
-    def test_one_without_structured_output_and_without_any_cause_field_does_not_invent_one(self) -> None:
-        cause_fields = ("is_error", "subtype", "stop_reason", "terminal_reason")
-        envelope = {
+
+class TestTheStructuredOutputAccessor:
+    def test_a_missing_structured_output_is_rejected_by_the_accessor_instead_of_the_carcass(self) -> None:
+        envelope = HarnessOutput.from_dict(HarnessEnvelopeMother.without_structured_output())
+
+        with pytest.raises(MissingStructuredOutputError, match="structured_output"):
+            envelope.structured()
+
+    def test_a_structured_output_key_that_never_arrives_is_rejected_the_same_as_an_explicit_null(self) -> None:
+        envelope = HarnessOutput.from_dict(HarnessEnvelopeMother.without("structured_output"))
+
+        with pytest.raises(MissingStructuredOutputError, match="structured_output"):
+            envelope.structured()
+
+    def test_the_rejection_of_a_missing_structured_output_hangs_the_calls_spend(self) -> None:
+        envelope = HarnessOutput.from_dict(HarnessEnvelopeMother.without_structured_output())
+
+        with pytest.raises(MissingStructuredOutputError) as rejection, envelope.measuring():
+            envelope.structured()
+
+        assert rejection.value.spend == HarnessSpendMother.of_the_judge_call()
+
+    def test_a_missing_structured_output_that_ran_out_of_turns_names_it_in_the_rejection(self) -> None:
+        envelope = HarnessOutput.from_dict(HarnessEnvelopeMother.without_structured_output_that_ran_out_of_turns())
+
+        with pytest.raises(MissingStructuredOutputError, match="error_max_turns"):
+            envelope.structured()
+
+    def test_a_missing_structured_output_with_no_termination_cause_field_does_not_invent_one(self) -> None:
+        cause_fields = ("subtype", "stop_reason", "terminal_reason")
+        without_causes = {
             key: value
-            for key, value in HarnessEnvelopeMother.without("structured_output").items()
+            for key, value in HarnessEnvelopeMother.without_structured_output().items()
             if key not in cause_fields
         }
+        envelope = HarnessOutput.from_dict(without_causes)
 
-        with pytest.raises(InvalidHarnessOutputError) as rejection:
-            HarnessOutput.from_dict(envelope)
+        with pytest.raises(MissingStructuredOutputError) as rejection:
+            envelope.structured()
 
         assert "session ended" not in str(rejection.value)
+
+    def test_is_error_is_not_counted_as_a_termination_cause_because_it_is_mandatory(self) -> None:
+        envelope = HarnessOutput.from_dict(HarnessEnvelopeMother.without_structured_output())
+
+        with pytest.raises(MissingStructuredOutputError) as rejection:
+            envelope.structured()
+
+        assert "is_error" not in str(rejection.value)
+
+    def test_a_structured_output_that_is_present_is_returned_by_the_accessor(self) -> None:
+        recorded = HarnessEnvelopeMother.recorded()
+
+        envelope = HarnessOutput.from_dict(recorded)
+
+        assert envelope.structured() == recorded["structured_output"]
 
 
 class TestWhatTheHarnessMeasured:

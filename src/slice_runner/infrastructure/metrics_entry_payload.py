@@ -45,6 +45,7 @@ class DurableCi(StrEnum):
 class DurableDiscardCause(StrEnum):
     INCOHERENT_VERDICT = "veredicto-incoherente"
     FAILED_CALL = "llamada-fallida"
+    NO_STRUCTURED_OUTPUT = "sin-salida-estructurada"
 
     @classmethod
     def of(cls, cause: DiscardCause) -> DurableDiscardCause:
@@ -53,6 +54,8 @@ class DurableDiscardCause(StrEnum):
                 return cls.INCOHERENT_VERDICT
             case DiscardCause.FAILED_CALL:
                 return cls.FAILED_CALL
+            case DiscardCause.NO_STRUCTURED_OUTPUT:
+                return cls.NO_STRUCTURED_OUTPUT
 
     def to_domain(self) -> DiscardCause:
         match self:
@@ -60,6 +63,8 @@ class DurableDiscardCause(StrEnum):
                 return DiscardCause.INCOHERENT_VERDICT
             case DurableDiscardCause.FAILED_CALL:
                 return DiscardCause.FAILED_CALL
+            case DurableDiscardCause.NO_STRUCTURED_OUTPUT:
+                return DiscardCause.NO_STRUCTURED_OUTPUT
 
 
 class DurableCiIndeterminateCause(StrEnum):

@@ -371,6 +371,16 @@ class TestWhyTheJudgeWasReinvoked(WithTheLedgerOutOfTheRealHome):
         row = WrittenMetricsLog.row_under(tmp_path)
         assert self._descartes(row)["causa"] == "veredicto-incoherente"
 
+    def test_a_call_discarded_for_a_missing_structured_output_is_recorded_with_its_own_cause(
+        self, tmp_path: Path
+    ) -> None:
+        LocalMetricsLog(clock=self.frozen_at()).record(
+            ClosedSliceMother.merged_discarding_because_of(DiscardedCallMother.of_a_missing_structured_output())
+        )
+
+        row = WrittenMetricsLog.row_under(tmp_path)
+        assert self._descartes(row)["causa"] == "sin-salida-estructurada"
+
     def test_without_a_cause_only_the_count_travels_because_none_is_invented(self, tmp_path: Path) -> None:
         LocalMetricsLog(clock=self.frozen_at()).record(ClosedSliceMother.merged_discarding_because_of(None))
 

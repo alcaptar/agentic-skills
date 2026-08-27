@@ -131,6 +131,17 @@ class TestReadingBackARowThisProgramWrote(ReadingARow):
         assert record is not None
         assert record.discarded_call == discarded
 
+    def test_a_discarded_call_for_a_missing_structured_output_is_read_back_with_that_cause(self) -> None:
+        discarded = DiscardedCallMother.of_a_missing_structured_output()
+        row = MetricsEntryPayload.from_domain(
+            ClosedSliceMother.merged_discarding_because_of(discarded), ts=_STAMP.isoformat()
+        ).to_contract()
+
+        record = self._read(row)
+
+        assert record is not None
+        assert record.discarded_call == discarded
+
     def test_the_cause_ci_could_not_be_read_is_read_back_as_the_domain_value_it_came_from(self) -> None:
         row = MetricsEntryPayload.from_domain(
             ClosedSliceMother.blocked_indeterminate_because_of(CiIndeterminateCause.COMMAND_FAILED),

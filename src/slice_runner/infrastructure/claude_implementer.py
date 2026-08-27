@@ -38,7 +38,7 @@ class ClaudeImplementer(Implementer):
         )
         with envelope.measuring():
             self._reject_denials(envelope)
-            report = ImplementationReportPayload.from_dict(envelope.structured_output)
+            report = ImplementationReportPayload.from_dict(envelope.structured())
 
         return Implementation(paths=report.to_domain(), left_out=tuple(report.left_out), spend=envelope.to_domain())
 
