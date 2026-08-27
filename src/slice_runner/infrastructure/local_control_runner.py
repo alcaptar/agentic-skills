@@ -18,9 +18,9 @@ class LocalControlRunner(ControlRunner):
     def __init__(self, *, process: Process) -> None:
         self._process = process
 
-    def run(self, command: ControlCommand, *, repo: str, out: Path) -> ControlOutcome:
+    def run(self, command: ControlCommand, *, worktree: str, out: Path) -> ControlOutcome:
         try:
-            output = self._process.run(["sh", "-c", command.command], stdin="", cwd=repo)
+            output = self._process.run(["sh", "-c", command.command], stdin="", cwd=worktree)
         except ProcessNotRunnableError as unrunnable:
             log = self._logged(command, out=out, text=str(unrunnable))
 

@@ -854,6 +854,152 @@ existe, no que una afirmacion sobre el codigo siga siendo cierta, y por diseno n
 con arbol es lo que este repo evita en el otro sentido-. Lo unico que baja el riesgo es la regla de esta
 nota: no escribir la afirmacion.
 
+## El conflicto de contenido no lo resuelve un agente (lo que se midió)
+
+**La decisión.** Se para el resolutor automático de conflictos: el paso que iba a llamar a un cuarto rol
+para fusionar lo que `git` no puede fusionar solo. Un conflicto de contenido sigue cerrando el run en
+`bloqueada:conflicto`, con la lista de ficheros publicada en el issue, y lo fusiona la persona. Eso no es
+una carencia pendiente de tapar: es el final correcto para este caso.
+
+**La frecuencia.** Sobre los 2.498 eventos del repositorio entre el 23 de julio y el 26 de agosto de 2026
+-todo el histórico del proyecto en su forma actual-, la etiqueta `bloqueada:conflicto` se puso **dos
+veces**: el 18 de agosto y el 20 de agosto. Y la segunda fue en `#334`, una slice de la propia feature que
+pretendía resolverlos. Es decir: **un conflicto real en un mes de uso**. En el mismo periodo,
+`abortada:presupuesto` se puso 19 veces y `abortada:llamada-no-medida` 11.
+
+**El coste.** El ledger registra 69 runs y 1.263 USD entre el 14 y el 26 de agosto. La feature `#333` se
+llevó 11 runs y unos 315 USD brutos -la cifra sobrecuenta, porque un run reabierto se registra dos veces;
+el orden de magnitud es **un cuarto del gasto del proyecto**-. De eso, la parte con juicio, `#336` y
+`#380`, se llevó **128 USD y no entregó nada**: las dos murieron. El resto -la puesta al día, la CI en
+conflicto, el contrato del payload, la lista de ficheros- está mergeado y funcionando.
+
+**Por qué la parte barata era la que valía.** La intención de `#333` ya lo decía: *"nada de esto necesita
+juicio la mayoría de las veces: fusionar lo que git fusiona solo es determinista y no cuesta un
+céntimo"*. El caso mayoritario -la rama envejece y el `push` muere al final con todo pagado- lo resuelve
+`git merge` en el paso que `#334` y `#335` construyeron. El resolutor con juicio era la cola de la
+distribución, y la cola resultó ser un caso al mes.
+
+**La asimetría que cierra el caso.** Lo que cuesta hoy un conflicto sin resolver: un run cerrado con su
+etiqueta, la lista de ficheros en el issue y unos minutos de persona. Lo que cuesta un resolutor que falla
+mal, medido sobre el código que `#380` dejó escrito: un resolutor que **no resuelve** -no lanza, no
+ensucia, simplemente no arregla el conflicto- pasa la comprobación de higiene, concluye la fusión y
+devuelve `done`, dejando los marcadores `<<<<<<<` **dentro del commit de fusión** con el árbol limpio. Si
+el conflicto cae en un fichero que los controles no compilan, la pull request se abre y la integración
+continua sale verde. La máquina que ahorra cinco minutos de persona una vez al mes puede meter marcadores
+de conflicto en la rama principal.
+
+**Por qué era caro de construir.** El de la puesta al día es **el único paso del pipeline que deja estado
+a medias en disco**: un `git merge` conflictivo deja `MERGE_HEAD`, ficheros en estado `U` y ficheros
+auto-fusionados, y cada camino de salida tiene que decidir si eso se aborta o se concluye. Los tres
+hallazgos altos de esta feature son el mismo fallo tres veces -la fusión sin abortar cuando falla la
+lectura de rutas, el valor por omisión que dice que no hay conflicto, y la fusión concluida con
+marcadores-. Ninguno es un error de lógica de negocio: los tres son un estado intermedio en una forma que
+nadie contempló. Encima, la slice-07 no añadía "resolver conflictos": añadía **un cuarto rol de agente
+entero** -brief, invocación, payload, modelo, adaptador, contabilidad del gasto, higiene, contador propio-
+dentro de ese paso. De ahí sus 43 ficheros, y de ahí que el implementador se comiera 38,8 de los 50 USD
+del tope en cuatro pasadas, 23,6 de ellos en la primera.
+
+**Lo que no se deshizo, y por qué.** Nada. En la rama principal no quedó ni un gancho del resolutor: no
+hay `ConflictResolver`, ni `MergeConflict`, ni `RoleModels.resolve`. Y lo mergeado tiene consumidor propio
+sin él: la lista de ficheros en conflicto que `#379` calcula la publica `RecordClosure` en el issue para
+la persona que va a fusionar a mano. Que se pueda parar aquí sin revertir una línea es consecuencia de la
+regla de que cada slice entrega valor sola.
+
+**Dónde está el trabajo, si se retoma.** Dos ramas, ninguna mergeada ni mergeable tal cual:
+`preservado/slice-07-el-conflicto-de-contenido-lo-resuelve-un-agente` lleva el índice de `#380` -43
+ficheros, 1.314 líneas, `make check` en verde- y `slice/04-el-conflicto-de-contenido-lo-resuelve-un-agente`
+lleva el diseño de `#336`, cuyo núcleo pasó cinco rondas de juez sin un hallazgo alto. Al retomarlo, la
+comprobación que falta es la que el hallazgo de arriba nombra: tras resolver, que no queden ficheros en
+estado `U`. El código que lo mide ya existe.
+
+**El paso queda apagado, no borrado.** La puesta al día seguía viva después de parar el resolutor, y
+puede matar un run: no hay ninguna comprobación de árbol limpio antes de fusionar, y `git merge` se niega
+-código distinto de cero y sin dejar `MERGE_HEAD`- cuando lo que está sin commitear colisiona con lo que
+llega, que es exactamente el estado de una slice que murió después de implementar. Ese fallo cae en la
+rama que lanza la excepción de git, así que el run muere opaco y con trabajo pagado dentro; ocurrió tres
+veces en una semana. Se apaga con el mecanismo que `docs/conventions/infrastructure.md` declara para esto
+-adaptador que no hace nada, decidido por el entrypoint-:
+`src/slice_runner/infrastructure/branches_without_catch_up.py` delega el puerto entero salvo la puesta al
+día, que contesta que no había nada que fusionar, y `src/slice_runner/infrastructure/cli.py` lo inyecta
+solo en ese caso de uso. **Reencender es quitar el envoltorio de esa línea.** El adaptador real se queda
+vivo y sin cablear, sostenido por su test de frontera, que es la consecuencia que esa misma convención
+acepta.
+
+**Lo que se paga por apagarlo, declarado.** Tres cosas, y solo dos son el estado anterior a esta feature:
+
+- Una pull request cuya rama entra en conflicto real con su base queda inmergeable y **la integración
+  continua no arranca** -corre sobre el merge commit, que con conflicto no se puede construir-, así que la
+  fusión la hace una persona. Ése era el estado anterior.
+- Un `push` rechazado porque el remoto de **la propia rama** avanzó -alguien la actualizó desde la
+  interfaz- vuelve a tumbar el run, y **no se autorrepara reinvocando**: cada vuelta empuja contra el
+  mismo remoto por delante. También era el estado anterior. Lo que la base avance no lo causa: el `push`
+  mira el remoto de esa rama, no la base.
+- **Y una que es nueva, para que nadie la lea como una avería.** El paso se sigue invocando y contesta que
+  no había nada que fusionar, así que una integración continua en conflicto gasta las tres vueltas de
+  `Budgets.catch_up_retries` -tick, controles, `push` sin nada nuevo, consulta- antes de cerrar en
+  `bloqueada:conflicto`, donde antes de la slice que abrió ese paso cerraba directa. No pierde trabajo y
+  **no gasta ni una llamada al arnés**, pero el registro dice "corrió los controles tres veces sin hacer
+  nada" y eso tiene que poder leerse sin buscar un fallo que no existe. Cortarlo obligaría a modificar la
+  máquina de estados y a deshacer la slice que la cambió: más riesgo del que ahorra en un caso que ocurre
+  dos veces al mes.
+
+Las tres se eligen a propósito frente a un deadlock que bloquea trabajo ya pagado en el camino más
+frecuente que tiene ese código: la reanudación.
+
+**Lo que se sabe y no hay que volver a derivar, si se retoma.** Cinco cosas se midieron al parar esto y
+se pierden si no quedan escritas:
+
+1. **El arreglo del deadlock, diseñado y sin construir.** No se arregla preguntando si el árbol está
+   limpio antes de fusionar: `git merge` **sí fusiona** con el árbol sucio cuando lo sucio no colisiona
+   con lo que llega -medido ejecutándolo, y además conserva el trabajo-, así que preguntar antes tiraría
+   fusiones válidas y pondría una llamada de más en el camino feliz. Solo hay que clasificar **cuando el
+   merge ya falló**: si no quedó `MERGE_HEAD`, se pregunta al árbol, que es robusto frente al idioma y la
+   versión de git -a diferencia de mirar el texto del `stderr`-. Eso da un miembro más en
+   `src/slice_runner/domain/branch_catch_up_outcome.py`, que rompe en `mypy` el `match` que lo proyecta,
+   que es el efecto buscado. La política que le corresponde: **cierre directo, cero ticks** -esperar no
+   limpia un árbol sucio- y **sin compartir el contador del conflicto**, por la regla de las dos causas de
+   `docs/conventions/domain.md`.
+2. **`git merge --autostash` no vale, y no por el stash compartido.** Usa el ref `MERGE_AUTOSTASH`, que es
+   por worktree, así que ese riesgo no aplica. El motivo real es que al reaplicar no garantiza que lo
+   staged siga staged, y **el índice staged es el producto del paso de implementación** que el juez va a
+   leer: convertirlo en "modificado sin stagear" rompe el paso siguiente.
+3. **El fallo original de la intención sigue vivo, y está en otro sitio.**
+   `src/slice_runner/application/actions/deliver_slice.py` empuja con `git push -u origin <rama>` a secas,
+   y su excepción **no se captura en aplicación ni en dominio**. La puesta al día temprana solo estrechó
+   esa ventana: entre ella y el `push` caben la implementación, los controles y el juez -en la slice-07,
+   47 minutos y cuatro pasadas-. El sitio donde el desfase importa y donde el árbol está limpio **por
+   construcción** es entre el commit y el `push`, no antes de trabajar.
+4. **Lo que le falta al código preservado, por orden de gravedad.** Además de la comprobación de ficheros
+   en estado `U` ya nombrada: el desenlace de la puesta al día lleva un campo con **valor por omisión**
+   que, si llega vacío, ensancha lo que el resolutor tiene permitido tocar -el mismo fail-open que se
+   rechazó en #379, aunque su único constructor real lo rellene-; la regla de "qué puede tocar" se calcula
+   **restando dos mediciones tomadas en capas distintas** -el adaptador antes de fusionar, el caso de uso
+   después-, y sale más simple si el adaptador devuelve de una vez las dos listas que git ya sabe en el
+   momento del conflicto; y la política de higiene del índice se reutiliza con una semántica prestada,
+   recibiendo lo que cambió en el árbol en vez del índice.
+5. **La mitad de ese diff no está revisada, y hay un falso positivo que parece un fallo.** Quedaron sin
+   mirar el conductor, el adaptador del resolutor, su invocación, su brief, el entrypoint y los contratos
+   de invocación: quien lo retome no hereda una revisión completa. Y el cambio de `try/finally` a
+   `try/except` en `src/slice_runner/infrastructure/git_branches.py` **no es** la regresión de #379 que
+   parece: el contrato cambió -la fusión tiene que quedarse viva para que alguien la resuelva- y el abort
+   se conservó en el camino de fallo. Revertirlo "arreglaría" algo que estaba bien.
+
+**Lo que queda declarado.** Esto se reconsidera cuando el conflicto de contenido deje de ser un caso al
+mes, y lo que lo cambiaría es **paralelizar de verdad**: varias slices a la vez sobre ficheros que toca
+casi todo. Hasta entonces, construirlo es pagar la cola de la distribución al precio del cuerpo. Y queda
+declarado un agujero que esta medición encontró de paso y que no es de esta feature: **el veredicto del
+juez no se persiste en ningún sitio**. `#380` fue rechazada dos veces y no hay forma de saber qué dijo,
+porque el veredicto se le pasa al implementador y muere con el run. Cuando un run se cae, se pierde justo
+el diagnóstico que explicaría por qué.
+
+Y dos más que salieron de paso, medidas y sin issue: **un puntero a una rama de git en un issue es un
+puntero muerto para el agente** -el rol que lee la subissue lleva `Read`, `Grep`, `Glob` y `Skill`, sin
+`Bash`, así que no puede abrir la rama donde se preservó un diseño; hubo que resumírsela a mano en la
+respuesta de la persona-, y **el tratamiento de una llamada al arnés está escrito tres veces en el
+conductor**. Esa segunda es duplicación declarada, no un agujero: hay un invariante que escanea el árbol y
+falla si nace una cuarta llamada sin su descarte, que es más de lo que sostiene la prosa. Lo que no existe
+es la pieza que lo escribiría una sola vez.
+
 ## Roadmap de autonomia (pendiente)
 
 Estado actual: **Nivel 1** — una slice por invocación, todo bajo control manual. Subir de nivel solo cuando el anterior sea fiable; el cuello de botella nunca es implementar, es la calidad del gate de verificación.

@@ -244,6 +244,12 @@ siete declaran su esquema con un `json_schema()` propio (`HarnessCallPayload`, `
 `UnrecordedCallToolUsePayload`), asi que que campos trae esa fila se puede preguntar a un programa en vez de
 abrir el fichero.
 
+El log de un control fallido -lo unico que recibe el implementador para arreglarlo- vive tambien bajo
+`runs/`, en `~/.claude/slice-runner/runs/controls/` por defecto, con el repo y el issue del run ademas de
+la slice y la ronda en la ruta: dos features distintas que compartan el mismo identificador de slice no se
+pisan el log. `--logs` sigue existiendo y sigue mandando sobre ese defecto, que es como se separan hoy las
+slices que corren en paralelo en worktrees distintos.
+
 `read` es quien la abre:
 
 ```bash

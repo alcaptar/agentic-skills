@@ -20,6 +20,8 @@ if TYPE_CHECKING:
 
 _WORKTREE = "/repos/agentic-skills"
 _LOGS = Path("/tmp/slice-runner/logs")
+_REPO = "alcaptar/agentic-skills"
+_ISSUE = 38
 _SLICE_ID: SliceIdentity = SubIssueMother.pending().slice_id
 
 
@@ -40,6 +42,8 @@ class TestRunControls:
             worktree=_WORKTREE,
             controls=controls,
             logs=_LOGS,
+            repo=_REPO,
+            issue=_ISSUE,
             slice_id=_SLICE_ID,
             control_rounds_logged=control_rounds_logged,
         )
@@ -69,8 +73,9 @@ class TestRunControls:
             self._params(controls=ParentIssueMother.with_sources_and_controls().controls, control_rounds_logged=1)
         )
 
-        assert controls_runner.run.call_args.kwargs["out"] == _LOGS / _SLICE_ID.canonical / "round-2"
-        assert controls_runner.run.call_args.kwargs["repo"] == _WORKTREE
+        expected = _LOGS / _REPO / str(_ISSUE) / _SLICE_ID.canonical / "round-2"
+        assert controls_runner.run.call_args.kwargs["out"] == expected
+        assert controls_runner.run.call_args.kwargs["worktree"] == _WORKTREE
 
     def test_a_red_controls_log_reaches_the_result_so_the_next_implementation_can_read_it(
         self, action: RunControls, controls_runner: Mock
