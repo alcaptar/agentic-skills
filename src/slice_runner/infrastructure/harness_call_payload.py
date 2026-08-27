@@ -4,14 +4,14 @@ from typing import TYPE_CHECKING, ClassVar, Self
 
 from slice_runner.domain.exceptions import UnreadableCallTraceError
 from slice_runner.domain.step import Step
-from slice_runner.infrastructure.durable_ledger import LedgerRow
+from slice_runner.infrastructure.durable_ledger import ReadableLedgerRow
 from slice_runner.infrastructure.json_schema import JsonSchema
 
 if TYPE_CHECKING:
     from slice_runner.domain.call_trace import HarnessCall
 
 
-class HarnessCallPayload(LedgerRow):
+class HarnessCallPayload(ReadableLedgerRow):
     UNREADABLE: ClassVar[type[ValueError]] = UnreadableCallTraceError
 
     slice_id: str

@@ -16,9 +16,13 @@ from slice_runner.domain.exceptions import RunNotClosedError, UnreadableMetricsL
 from slice_runner.domain.role_models import RoleModels
 from slice_runner.domain.run_state import RunState
 from slice_runner.domain.severity import Severity
+from slice_runner.infrastructure import local_metrics_log
 from slice_runner.infrastructure.claude_config import ClaudeConfig
+from slice_runner.infrastructure.durable_ledger import DurableLedger
 from slice_runner.infrastructure.local_metrics_log import LocalMetricsLog
 from slice_runner.infrastructure.metrics_entry_payload import MetricsEntryPayload
+from slice_runner.tests.infrastructure.retired_ledger_directory import RetiredLedgerDirectory
+from slice_runner.tests.infrastructure.stub_ledger import WiredStubLedgers
 from slice_runner.tests.mothers.closed_slice_mother import ClosedSliceMother
 from slice_runner.tests.mothers.discarded_call_mother import DiscardedCallMother
 from slice_runner.tests.mothers.harness_spend_mother import HarnessSpendMother
@@ -34,7 +38,7 @@ _STAMP = datetime(2026, 8, 10, 12, 0, 0, tzinfo=UTC)
 class WrittenMetricsLog:
     @staticmethod
     def rows_under(root: Path) -> list[dict[str, object]]:
-        ledger = root / "slice-runner" / "log" / "metrics.jsonl"
+        ledger = root / "slice-runner" / "runs" / "metrics.jsonl"
 
         return [json.loads(line) for line in ledger.read_text(encoding="utf-8").splitlines()]
 
@@ -63,7 +67,7 @@ class TestWhereTheDurableLogIsWrittenFrom(WithTheLedgerOutOfTheRealHome):
     def test_the_log_is_written_by_the_program_itself_and_not_by_launching_a_process(self, tmp_path: Path) -> None:
         LocalMetricsLog(clock=self.frozen_at()).record(ClosedSliceMother.merged())
 
-        assert (tmp_path / "slice-runner" / "log" / "metrics.jsonl").exists()
+        assert (tmp_path / "slice-runner" / "runs" / "metrics.jsonl").exists()
 
 
 class TestHowEachClosureIsRecorded(WithTheLedgerOutOfTheRealHome):
@@ -107,7 +111,7 @@ class TestHowEachClosureIsRecorded(WithTheLedgerOutOfTheRealHome):
         with pytest.raises(RunNotClosedError, match="one line per closed slice"):
             LocalMetricsLog(clock=self.frozen_at()).record(ClosedSliceMother.still_open())
 
-        assert not (tmp_path / "slice-runner" / "log" / "metrics.jsonl").exists()
+        assert not (tmp_path / "slice-runner" / "runs" / "metrics.jsonl").exists()
 
     def test_the_slice_travels_by_the_three_names_the_log_indexes_it_with(self, tmp_path: Path) -> None:
         LocalMetricsLog(clock=self.frozen_at()).record(ClosedSliceMother.merged())
@@ -488,7 +492,7 @@ class TestReadingBackTheClosedSlices(WithTheLedgerOutOfTheRealHome):
     def test_a_line_that_is_not_json_is_refused_instead_of_being_skipped_in_silence(self, tmp_path: Path) -> None:
         log = LocalMetricsLog(clock=self.frozen_at())
         log.record(ClosedSliceMother.merged())
-        ledger = tmp_path / "slice-runner" / "log" / "metrics.jsonl"
+        ledger = tmp_path / "slice-runner" / "runs" / "metrics.jsonl"
         with ledger.open("a", encoding="utf-8") as fh:
             fh.write("not json\n")
 
@@ -540,6 +544,23 @@ class TestDeduplicatingRepeatedClosuresOfTheSameSlice(WithTheLedgerOutOfTheRealH
         assert [record.slice_id for record in found] == ["PROJ-1234-07"]
 
 
+class TestTheRetiredLogDirectoryIsNeverTouched(WithTheLedgerOutOfTheRealHome):
+    def test_a_closure_written_under_the_retired_directory_is_neither_found_nor_touched(self, tmp_path: Path) -> None:
+        old_ledger = RetiredLedgerDirectory.path(tmp_path, "metrics")
+        old_line = (
+            json.dumps(MetricsEntryPayload.from_domain(ClosedSliceMother.merged(), ts=_STAMP.isoformat()).to_contract())
+            + "\n"
+        ).encode("utf-8")
+        RetiredLedgerDirectory.seeded_without_opening(old_ledger, old_line)
+
+        found = LocalMetricsLog(clock=self.frozen_at()).closed_slices(
+            repo=None, since=datetime(2000, 1, 1, tzinfo=UTC), until=datetime(2100, 1, 1, tzinfo=UTC)
+        )
+
+        assert found == ()
+        assert RetiredLedgerDirectory.read_without_opening(old_ledger) == old_line
+
+
 class TestWhereTheLedgerLives:
     def test_the_directory_is_created_when_it_is_not_there_so_the_first_row_is_not_lost(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -548,4 +569,30 @@ class TestWhereTheLedgerLives:
 
         LocalMetricsLog(clock=WithTheLedgerOutOfTheRealHome.frozen_at()).record(ClosedSliceMother.merged())
 
-        assert (tmp_path / "never-used-before" / "slice-runner" / "log" / "metrics.jsonl").exists()
+        assert (tmp_path / "never-used-before" / "slice-runner" / "runs" / "metrics.jsonl").exists()
+
+    def test_the_ledger_path_is_composed_under_runs_and_not_under_the_retired_log_directory(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
+
+        path = DurableLedger(name=LocalMetricsLog.LEDGER, row=MetricsEntryPayload).path()
+
+        assert path == tmp_path / "slice-runner" / "runs" / "metrics.jsonl"
+
+
+class TestTheAdapterOwnsOnlyItsNameAndItsPayload:
+    def test_recording_a_closure_reaches_only_the_ledger_and_writes_no_file(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
+        created = WiredStubLedgers.on(local_metrics_log, monkeypatch)
+
+        LocalMetricsLog(clock=WithTheLedgerOutOfTheRealHome.frozen_at()).record(ClosedSliceMother.merged())
+
+        assert len(created) == 1
+        stub = created[0]
+        assert stub.name == LocalMetricsLog.LEDGER
+        assert stub.row is MetricsEntryPayload
+        assert len(stub.appended) == 1
+        assert not (tmp_path / "slice-runner").exists()

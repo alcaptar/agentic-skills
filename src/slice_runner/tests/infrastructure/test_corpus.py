@@ -9,12 +9,17 @@ import pytest
 
 from slice_runner.domain.budgets import Budgets
 from slice_runner.domain.clock import Clock
+from slice_runner.infrastructure import local_corpus
 from slice_runner.infrastructure.claude_config import ClaudeConfig
 from slice_runner.infrastructure.cli import Cli
+from slice_runner.infrastructure.corpus_diff_payload import CorpusDiffPayload
+from slice_runner.infrastructure.corpus_verdict_payload import CorpusVerdictPayload
+from slice_runner.infrastructure.durable_ledger import DurableLedger
 from slice_runner.infrastructure.exit_code import ExitCode
 from slice_runner.infrastructure.local_corpus import LocalCorpus
 from slice_runner.tests.doubles import RealExceptTheJudge
 from slice_runner.tests.git_repo import Git
+from slice_runner.tests.infrastructure.stub_ledger import WiredStubLedgers
 from slice_runner.tests.mothers.corpus_entry_mother import CorpusEntryMother
 from slice_runner.tests.mothers.judge_output_mother import HarnessEnvelopeMother, JudgeVerdictMother
 from slice_runner.tests.mothers.repo_mother import RepoMother
@@ -30,13 +35,13 @@ _STAMP = datetime(2026, 8, 10, 12, 0, 0, tzinfo=UTC)
 class WrittenCorpus:
     @staticmethod
     def verdicts_under(root: Path) -> list[dict[str, object]]:
-        ledger = root / "slice-runner" / "log" / "verdicts.jsonl"
+        ledger = root / "slice-runner" / "runs" / "verdicts.jsonl"
 
         return [json.loads(line) for line in ledger.read_text(encoding="utf-8").splitlines()]
 
     @staticmethod
     def diffs_under(root: Path) -> list[dict[str, object]]:
-        ledger = root / "slice-runner" / "log" / "diffs.jsonl"
+        ledger = root / "slice-runner" / "runs" / "diffs.jsonl"
 
         return [json.loads(line) for line in ledger.read_text(encoding="utf-8").splitlines()]
 
@@ -143,8 +148,8 @@ class TestWhereTheCorpusLives:
 
         LocalCorpus(clock=WithTheCorpusOutOfTheRealHome.frozen_at()).record(CorpusEntryMother.of_the_slice())
 
-        assert (tmp_path / "never-used-before" / "slice-runner" / "log" / "verdicts.jsonl").exists()
-        assert (tmp_path / "never-used-before" / "slice-runner" / "log" / "diffs.jsonl").exists()
+        assert (tmp_path / "never-used-before" / "slice-runner" / "runs" / "verdicts.jsonl").exists()
+        assert (tmp_path / "never-used-before" / "slice-runner" / "runs" / "diffs.jsonl").exists()
 
     def test_without_the_variable_it_falls_back_to_the_home_of_the_tool_and_expands_it(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -154,7 +159,35 @@ class TestWhereTheCorpusLives:
 
         LocalCorpus(clock=WithTheCorpusOutOfTheRealHome.frozen_at()).record(CorpusEntryMother.of_the_slice())
 
-        assert (tmp_path / ".claude" / "slice-runner" / "log" / "verdicts.jsonl").exists()
+        assert (tmp_path / ".claude" / "slice-runner" / "runs" / "verdicts.jsonl").exists()
+
+    def test_the_ledger_paths_are_composed_under_runs_and_not_under_the_retired_log_directory(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
+
+        verdicts = DurableLedger(name=LocalCorpus.LEDGER, row=CorpusVerdictPayload).path()
+        diffs = DurableLedger(name=LocalCorpus.DIFF_LEDGER, row=CorpusDiffPayload).path()
+
+        assert verdicts == tmp_path / "slice-runner" / "runs" / "verdicts.jsonl"
+        assert diffs == tmp_path / "slice-runner" / "runs" / "diffs.jsonl"
+
+
+class TestTheAdapterOwnsOnlyItsNameAndItsPayload:
+    def test_recording_a_verification_reaches_only_the_two_ledgers_and_writes_no_file(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
+        created = WiredStubLedgers.on(local_corpus, monkeypatch)
+
+        LocalCorpus(clock=WithTheCorpusOutOfTheRealHome.frozen_at()).record(CorpusEntryMother.of_the_slice())
+
+        assert [(stub.name, stub.row) for stub in created] == [
+            (LocalCorpus.LEDGER, CorpusVerdictPayload),
+            (LocalCorpus.DIFF_LEDGER, CorpusDiffPayload),
+        ]
+        assert [len(stub.appended) for stub in created] == [1, 1]
+        assert not (tmp_path / "slice-runner").exists()
 
 
 @pytest.mark.integration

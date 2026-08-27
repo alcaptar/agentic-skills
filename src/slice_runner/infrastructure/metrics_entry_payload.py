@@ -15,6 +15,7 @@ from slice_runner.domain.severity import Severity
 from slice_runner.domain.step import Step
 from slice_runner.infrastructure.contract_model import ContractModel
 from slice_runner.infrastructure.corpus_verdict_payload import SeverityCountPayload
+from slice_runner.infrastructure.durable_ledger import LedgerRow
 from slice_runner.infrastructure.json_schema import JsonSchema
 
 if TYPE_CHECKING:
@@ -195,7 +196,7 @@ class DiffStatsPayload(ContractModel):
         )
 
 
-class MetricsEntryPayload(ContractModel):
+class MetricsEntryPayload(LedgerRow):
     VARIANT: ClassVar[str] = "programa"
 
     ts: str

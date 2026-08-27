@@ -15,6 +15,7 @@ from slice_runner.domain.issue_label import IssueLabel
 from slice_runner.domain.outcome import Outcome
 from slice_runner.domain.run_state import RunState
 from slice_runner.domain.step import Step
+from slice_runner.infrastructure.call_spend_payload import CallSpendPayload
 from slice_runner.infrastructure.claude_config import ClaudeConfig
 from slice_runner.infrastructure.cli import Cli
 from slice_runner.infrastructure.deploy_watch_invocation import DeployWatchInvocation
@@ -632,7 +633,7 @@ class TestTheCommandThatSumsSpendByRole:
     def test_a_corrupt_line_in_the_spend_log_exits_with_a_usage_error_instead_of_a_stack_dump(
         self, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        self._corrupted(ClaudeConfig.root().joinpath(*LocalCallSpendLog.LEDGER))
+        self._corrupted(DurableLedger(name=LocalCallSpendLog.LEDGER, row=CallSpendPayload).path())
 
         code = Cli.spend(repo=self._REPO, issue=self._ISSUE, slice_id=self._SLICE, step=Step.IMPLEMENT)
 
@@ -727,7 +728,7 @@ class TestTheCommandThatEmitsClosedSliceMetrics:
 
     @staticmethod
     def _append_row(row: dict[str, object]) -> None:
-        ledger = ClaudeConfig.root().joinpath(*LocalMetricsLog.LEDGER)
+        ledger = DurableLedger(name=LocalMetricsLog.LEDGER, row=MetricsEntryPayload).path()
         ledger.parent.mkdir(parents=True, exist_ok=True)
         with ledger.open("a", encoding="utf-8") as fh:
             fh.write(f"{json.dumps(row)}\n")
@@ -986,7 +987,7 @@ class TestTheCommandThatEmitsClosedSliceMetrics:
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
         self._closed()
-        ledger = ClaudeConfig.root().joinpath(*LocalMetricsLog.LEDGER)
+        ledger = DurableLedger(name=LocalMetricsLog.LEDGER, row=MetricsEntryPayload).path()
         ledger.write_text("not json\n", encoding="utf-8")
 
         code = Cli.metrics(
@@ -1740,7 +1741,7 @@ class TestTheVerifyRoundOfARetriedVerdict(BlindToTheToolboxOfThisMachine):
 
         invocation.conduct(logs=tmp_path / "logs", budgets=Budgets(verify_retries=0))
 
-        ledger = tmp_path / "no-toolbox" / "slice-runner" / "log" / "verdicts.jsonl"
+        ledger = tmp_path / "no-toolbox" / "slice-runner" / "runs" / "verdicts.jsonl"
         recorded = [json.loads(line) for line in ledger.read_text(encoding="utf-8").splitlines()]
         assert [entry["verify_round"] for entry in recorded] == [2]
 
@@ -2473,7 +2474,7 @@ class TestTheCommandThatShowsFeatureStatus:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
     ) -> None:
         monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
-        ledger = ClaudeConfig.root().joinpath(*LocalMetricsLog.LEDGER)
+        ledger = DurableLedger(name=LocalMetricsLog.LEDGER, row=MetricsEntryPayload).path()
         ledger.parent.mkdir(parents=True, exist_ok=True)
         ledger.write_text("not json\n", encoding="utf-8")
 

@@ -18,12 +18,12 @@ from slice_runner.infrastructure.claude_config import ClaudeConfig
 from slice_runner.infrastructure.durable_ledger import DurableLedger
 from slice_runner.infrastructure.harness_call_payload import HarnessCallPayload
 from slice_runner.infrastructure.local_call_trace import LocalCallTrace
+from slice_runner.tests.infrastructure.retired_ledger_directory import RetiredLedgerDirectory
+from slice_runner.tests.infrastructure.stub_ledger import WiredStubLedgers
 from slice_runner.tests.mothers.harness_call_mother import HarnessCallMother
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Iterator
-
-_RETIRED_DIRECTORY = ("slice-runner", "log")
+    from collections.abc import Callable
 
 
 @pytest.fixture(autouse=True)
@@ -31,7 +31,7 @@ def _forbid_opening_the_retired_log_directory(monkeypatch: pytest.MonkeyPatch) -
     real_open: Callable[..., object] = io.open
 
     def guarded(file: object, *args: object, **kwargs: object) -> object:
-        if isinstance(file, str | os.PathLike) and Path(str(file)).parts[-3:-1] == _RETIRED_DIRECTORY:
+        if isinstance(file, str | os.PathLike) and Path(str(file)).parts[-3:-1] == RetiredLedgerDirectory.SEGMENTS:
             raise AssertionError(f"the retired log directory must never be opened: {file!r}")
 
         return real_open(file, *args, **kwargs)
@@ -343,38 +343,11 @@ class TestWhereTheTraceLives:
 
 
 class TestTheAdapterOwnsOnlyItsNameAndItsPayload:
-    class _StubLedger:
-        def __init__(self, *, name: str, row: type[HarnessCallPayload]) -> None:
-            self.name = name
-            self.row = row
-            self.appended: list[HarnessCallPayload] = []
-
-        def append(self, row: HarnessCallPayload) -> None:
-            self.appended.append(row)
-
-        def rows(self) -> Iterator[HarnessCallPayload]:
-            yield from self.appended
-
-    @staticmethod
-    def _wired_stub(monkeypatch: pytest.MonkeyPatch) -> list[TestTheAdapterOwnsOnlyItsNameAndItsPayload._StubLedger]:
-        created: list[TestTheAdapterOwnsOnlyItsNameAndItsPayload._StubLedger] = []
-
-        def factory(
-            *, name: str, row: type[HarnessCallPayload]
-        ) -> TestTheAdapterOwnsOnlyItsNameAndItsPayload._StubLedger:
-            stub = TestTheAdapterOwnsOnlyItsNameAndItsPayload._StubLedger(name=name, row=row)
-            created.append(stub)
-            return stub
-
-        monkeypatch.setattr(local_call_trace, "DurableLedger", factory)
-
-        return created
-
     def test_recording_a_call_reaches_only_the_ledger_and_writes_no_file(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
-        created = self._wired_stub(monkeypatch)
+        created = WiredStubLedgers.on(local_call_trace, monkeypatch)
 
         trace = LocalCallTrace(clock=WithTheTraceOutOfTheRealHome.frozen_at())
         trace.record(HarnessCallMother.of_the_implementer())
@@ -390,7 +363,7 @@ class TestTheAdapterOwnsOnlyItsNameAndItsPayload:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
-        self._wired_stub(monkeypatch)
+        WiredStubLedgers.on(local_call_trace, monkeypatch)
 
         trace = LocalCallTrace(clock=WithTheTraceOutOfTheRealHome.frozen_at())
         trace.record(HarnessCallMother.of_the_implementer())
@@ -407,25 +380,8 @@ class TestTheAdapterOwnsOnlyItsNameAndItsPayload:
 
 
 class TestTheRetiredLogDirectoryIsNeverTouched(WithTheTraceOutOfTheRealHome):
-    @staticmethod
-    def _seeded_without_opening(path: Path, data: bytes) -> None:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        descriptor = os.open(str(path), os.O_CREAT | os.O_WRONLY | os.O_TRUNC)
-        try:
-            os.write(descriptor, data)
-        finally:
-            os.close(descriptor)
-
-    @staticmethod
-    def _read_without_opening(path: Path) -> bytes:
-        descriptor = os.open(str(path), os.O_RDONLY)
-        try:
-            return os.read(descriptor, 1_000_000)
-        finally:
-            os.close(descriptor)
-
     def test_a_session_written_under_the_retired_directory_is_neither_found_nor_touched(self, tmp_path: Path) -> None:
-        old_ledger = tmp_path / "slice-runner" / "log" / "calls.jsonl"
+        old_ledger = RetiredLedgerDirectory.path(tmp_path, "calls")
         old_line = (
             json.dumps(
                 {
@@ -438,7 +394,7 @@ class TestTheRetiredLogDirectoryIsNeverTouched(WithTheTraceOutOfTheRealHome):
             )
             + "\n"
         ).encode("utf-8")
-        self._seeded_without_opening(old_ledger, old_line)
+        RetiredLedgerDirectory.seeded_without_opening(old_ledger, old_line)
 
         found = LocalCallTrace(clock=self.frozen_at()).sessions_of(
             repo=HarnessCallMother.REPO,
@@ -448,4 +404,4 @@ class TestTheRetiredLogDirectoryIsNeverTouched(WithTheTraceOutOfTheRealHome):
         )
 
         assert found == ()
-        assert self._read_without_opening(old_ledger) == old_line
+        assert RetiredLedgerDirectory.read_without_opening(old_ledger) == old_line

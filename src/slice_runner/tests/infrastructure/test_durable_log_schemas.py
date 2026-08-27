@@ -7,6 +7,7 @@ from slice_runner.infrastructure.corpus_diff_payload import CorpusDiffPayload
 from slice_runner.infrastructure.corpus_verdict_payload import CorpusVerdictPayload
 from slice_runner.infrastructure.harness_call_payload import HarnessCallPayload
 from slice_runner.infrastructure.metrics_entry_payload import MetricsEntryPayload
+from slice_runner.infrastructure.tool_use_payload import CallToolUsePayload, UnrecordedCallToolUsePayload
 
 
 class TestEveryDurableLogDeclaresASchemaAProgramCanRead:
@@ -33,13 +34,21 @@ class TestEveryDurableLogDeclaresASchemaAProgramCanRead:
     def test_the_corpus_diff_schema_requires_the_slice_and_the_diff_that_was_judged(self) -> None:
         assert self._required(CorpusDiffPayload.json_schema()) == {"slice_id", "verify_round", "session", "diff"}
 
-    def test_none_of_the_five_schemas_leaves_a_reference_unresolved(self) -> None:
+    def test_the_tool_use_schema_requires_the_identity_of_the_call_and_the_uses_it_carries(self) -> None:
+        assert self._required(CallToolUsePayload.json_schema()) == {"slice_id", "step", "session", "uses"}
+
+    def test_the_unrecorded_tool_use_schema_requires_the_identity_of_the_call_and_the_cause(self) -> None:
+        assert self._required(UnrecordedCallToolUsePayload.json_schema()) == {"slice_id", "step", "session", "cause"}
+
+    def test_none_of_the_seven_schemas_leaves_a_reference_unresolved(self) -> None:
         for payload in (
             HarnessCallPayload,
             CallSpendPayload,
             MetricsEntryPayload,
             CorpusVerdictPayload,
             CorpusDiffPayload,
+            CallToolUsePayload,
+            UnrecordedCallToolUsePayload,
         ):
             emitted = json.dumps(payload.json_schema())
 

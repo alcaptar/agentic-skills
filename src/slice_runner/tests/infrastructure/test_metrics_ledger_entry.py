@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import asdict
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 
 import pytest
 
@@ -15,21 +16,30 @@ from slice_runner.domain.severity import Severity
 from slice_runner.domain.severity_count import SeverityCount
 from slice_runner.domain.step import Step
 from slice_runner.infrastructure.metrics_entry_payload import MetricsEntryPayload
-from slice_runner.infrastructure.metrics_ledger_entry import MetricsLedgerEntry
+from slice_runner.infrastructure.metrics_ledger_entry import MetricsLedgerEntry, MetricsLedgerRowPayload
 from slice_runner.tests.mothers.closed_slice_mother import ClosedSliceMother
 from slice_runner.tests.mothers.discarded_call_mother import DiscardedCallMother
 from slice_runner.tests.mothers.harness_spend_mother import HarnessSpendMother
 from slice_runner.tests.mothers.run_mother import RunMother
 from slice_runner.tests.mothers.verdict_mother import FindingMother
 
+if TYPE_CHECKING:
+    from slice_runner.domain.closed_slice_record import ClosedSliceRecord
+
 _STAMP = datetime(2026, 8, 10, 12, 0, 0, tzinfo=UTC)
 
 
-class TestReadingBackARowThisProgramWrote:
+class ReadingARow:
+    @staticmethod
+    def _read(row: dict[str, object]) -> ClosedSliceRecord | None:
+        return MetricsLedgerEntry.of(MetricsLedgerRowPayload.from_dict(row))
+
+
+class TestReadingBackARowThisProgramWrote(ReadingARow):
     def test_the_identity_of_the_slice_is_read_back_whole(self) -> None:
         row = MetricsEntryPayload.from_domain(ClosedSliceMother.merged(), ts=_STAMP.isoformat()).to_contract()
 
-        record = MetricsLedgerEntry.read(row)
+        record = self._read(row)
 
         assert record is not None
         assert (record.repo, record.issue, record.slice_id, record.name) == (
@@ -47,7 +57,7 @@ class TestReadingBackARowThisProgramWrote:
             closed = ClosedSliceMother.closed_as(state)
             row = MetricsEntryPayload.from_domain(closed, ts=_STAMP.isoformat()).to_contract()
 
-            record = MetricsLedgerEntry.read(row)
+            record = self._read(row)
 
             assert record is not None
             assert record.state == state
@@ -58,7 +68,7 @@ class TestReadingBackARowThisProgramWrote:
         )
         row = MetricsEntryPayload.from_domain(closed, ts=_STAMP.isoformat()).to_contract()
 
-        record = MetricsLedgerEntry.read(row)
+        record = self._read(row)
 
         assert record is not None
         assert record.spend is not None
@@ -75,7 +85,7 @@ class TestReadingBackARowThisProgramWrote:
             ClosedSliceMother.merged_measuring_nothing(), ts=_STAMP.isoformat()
         ).to_contract()
 
-        record = MetricsLedgerEntry.read(row)
+        record = self._read(row)
 
         assert record is not None
         assert record.spend is None
@@ -86,7 +96,7 @@ class TestReadingBackARowThisProgramWrote:
             ClosedSliceMother.merged_measuring_the_diff(stats), ts=_STAMP.isoformat()
         ).to_contract()
 
-        record = MetricsLedgerEntry.read(row)
+        record = self._read(row)
 
         assert record is not None
         assert record.diff == stats
@@ -94,7 +104,7 @@ class TestReadingBackARowThisProgramWrote:
     def test_a_closure_with_no_diff_measured_this_invocation_is_read_back_as_no_diff_at_all(self) -> None:
         row = MetricsEntryPayload.from_domain(ClosedSliceMother.merged(), ts=_STAMP.isoformat()).to_contract()
 
-        record = MetricsLedgerEntry.read(row)
+        record = self._read(row)
 
         assert record is not None
         assert record.diff is None
@@ -105,7 +115,7 @@ class TestReadingBackARowThisProgramWrote:
             ClosedSliceMother.merged_discarding_because_of(discarded), ts=_STAMP.isoformat()
         ).to_contract()
 
-        record = MetricsLedgerEntry.read(row)
+        record = self._read(row)
 
         assert record is not None
         assert record.discarded_call == discarded
@@ -116,7 +126,7 @@ class TestReadingBackARowThisProgramWrote:
             ClosedSliceMother.merged_discarding_because_of(discarded), ts=_STAMP.isoformat()
         ).to_contract()
 
-        record = MetricsLedgerEntry.read(row)
+        record = self._read(row)
 
         assert record is not None
         assert record.discarded_call == discarded
@@ -127,7 +137,7 @@ class TestReadingBackARowThisProgramWrote:
             ts=_STAMP.isoformat(),
         ).to_contract()
 
-        record = MetricsLedgerEntry.read(row)
+        record = self._read(row)
 
         assert record is not None
         assert record.ci_indeterminate_cause is CiIndeterminateCause.COMMAND_FAILED
@@ -137,14 +147,14 @@ class TestReadingBackARowThisProgramWrote:
     ) -> None:
         row = MetricsEntryPayload.from_domain(ClosedSliceMother.merged(), ts=_STAMP.isoformat()).to_contract()
 
-        record = MetricsLedgerEntry.read(row)
+        record = self._read(row)
 
         assert record is not None
         assert record.budgets == row["budgets"]
         assert record.models_by_role == row["models_by_role"]
 
 
-class TestToleratingHistory:
+class TestToleratingHistory(ReadingARow):
     def test_a_row_written_before_the_step_existed_is_read_with_no_discarded_call(self) -> None:
         row = MetricsEntryPayload.from_domain(
             ClosedSliceMother.merged_discarding_because_of(DiscardedCallMother.of_a_failed_call()),
@@ -154,7 +164,7 @@ class TestToleratingHistory:
         assert isinstance(descartes, dict)
         row["descartes_verify_causa"] = descartes["causa"]
 
-        record = MetricsLedgerEntry.read(row)
+        record = self._read(row)
 
         assert record is not None
         assert record.discarded_call is None
@@ -165,7 +175,7 @@ class TestToleratingHistory:
         ).to_contract()
         row["veredicto"] = "bloqueada-puertas"
 
-        record = MetricsLedgerEntry.read(row)
+        record = self._read(row)
 
         assert record is not None
         assert record.state is RunState.BLOCKED_CONTROLS
@@ -175,7 +185,7 @@ class TestToleratingHistory:
         del row["reintentos_controles"]
         row["reintentos_puertas"] = 3
 
-        record = MetricsLedgerEntry.read(row)
+        record = self._read(row)
 
         assert record is not None
         assert record.control_retries == 3
@@ -186,7 +196,7 @@ class TestToleratingHistory:
         row = MetricsEntryPayload.from_domain(ClosedSliceMother.merged(), ts=_STAMP.isoformat()).to_contract()
         del row["debt"]
 
-        record = MetricsLedgerEntry.read(row)
+        record = self._read(row)
 
         assert record is not None
         assert record.debt == 0
@@ -198,7 +208,7 @@ class TestToleratingHistory:
         ).to_contract()
         row["deuda"] = row.pop("debt")
 
-        record = MetricsLedgerEntry.read(row)
+        record = self._read(row)
 
         assert record is not None
         assert record.debt == 2
@@ -209,7 +219,7 @@ class TestToleratingHistory:
         ).to_contract()
         row["reintentos_correcciones"] = row.pop("correction_retries")
 
-        record = MetricsLedgerEntry.read(row)
+        record = self._read(row)
 
         assert record is not None
         assert record.correction_retries == RunMother.that_went_back_for_every_reason().correction_retries
@@ -222,7 +232,7 @@ class TestToleratingHistory:
         row["hallazgos"] = row.pop("findings")
         row["hallazgos_ronda_final"] = row.pop("findings_of_the_last_round")
 
-        record = MetricsLedgerEntry.read(row)
+        record = self._read(row)
 
         assert record is not None
         assert record.findings == SeverityCount(high=1, medium=0, low=0)
@@ -239,7 +249,7 @@ class TestToleratingHistory:
             "lineas_borradas": row["diff"]["lines_deleted"],
         }
 
-        record = MetricsLedgerEntry.read(row)
+        record = self._read(row)
 
         assert record is not None
         assert record.diff == stats
@@ -251,7 +261,7 @@ class TestToleratingHistory:
         ).to_contract()
         row["presupuestos"] = row.pop("budgets")
 
-        record = MetricsLedgerEntry.read(row)
+        record = self._read(row)
 
         assert record is not None
         assert record.budgets == asdict(budgets)
@@ -263,7 +273,7 @@ class TestToleratingHistory:
         ).to_contract()
         row["modelos_por_papel"] = row.pop("models_by_role")
 
-        record = MetricsLedgerEntry.read(row)
+        record = self._read(row)
 
         assert record is not None
         assert record.models_by_role == {"understand": "haiku", "implement": "opus", "verify": "haiku"}
@@ -272,16 +282,16 @@ class TestToleratingHistory:
         row = MetricsEntryPayload.from_domain(ClosedSliceMother.merged(), ts=_STAMP.isoformat()).to_contract()
         del row["ts"]
 
-        assert MetricsLedgerEntry.read(row) is None
+        assert self._read(row) is None
 
     def test_a_row_without_a_verdict_cannot_be_classified_and_is_skipped(self) -> None:
         row = MetricsEntryPayload.from_domain(ClosedSliceMother.merged(), ts=_STAMP.isoformat()).to_contract()
         del row["veredicto"]
 
-        assert MetricsLedgerEntry.read(row) is None
+        assert self._read(row) is None
 
 
-class TestRejectingCorruption:
+class TestRejectingCorruption(ReadingARow):
     def test_a_harness_cost_that_is_not_a_number_is_rejected_instead_of_read_back_as_zero(self) -> None:
         row = MetricsEntryPayload.from_domain(
             ClosedSliceMother.merged_measuring(HarnessSpendMother.of_the_implementer_call()),
@@ -291,14 +301,14 @@ class TestRejectingCorruption:
         row["harness"]["coste_usd"] = "free"
 
         with pytest.raises(UnreadableMetricsLogError):
-            MetricsLedgerEntry.read(row)
+            self._read(row)
 
     def test_a_repo_that_is_not_text_is_rejected_instead_of_read_back_as_empty(self) -> None:
         row = MetricsEntryPayload.from_domain(ClosedSliceMother.merged(), ts=_STAMP.isoformat()).to_contract()
         row["repo"] = 12345
 
         with pytest.raises(UnreadableMetricsLogError):
-            MetricsLedgerEntry.read(row)
+            self._read(row)
 
     def test_a_model_list_holding_a_non_string_element_is_rejected_instead_of_dropped(self) -> None:
         row = MetricsEntryPayload.from_domain(
@@ -308,25 +318,25 @@ class TestRejectingCorruption:
         row["modelos"] = ["sonnet", 7]
 
         with pytest.raises(UnreadableMetricsLogError):
-            MetricsLedgerEntry.read(row)
+            self._read(row)
 
     def test_a_verdict_outside_the_known_vocabulary_is_rejected_instead_of_skipped(self) -> None:
         row = MetricsEntryPayload.from_domain(ClosedSliceMother.merged(), ts=_STAMP.isoformat()).to_contract()
         row["veredicto"] = "en-desacuerdo"
 
         with pytest.raises(UnreadableMetricsLogError):
-            MetricsLedgerEntry.read(row)
+            self._read(row)
 
     def test_a_timestamp_that_is_not_iso_formatted_is_rejected_instead_of_skipped(self) -> None:
         row = MetricsEntryPayload.from_domain(ClosedSliceMother.merged(), ts=_STAMP.isoformat()).to_contract()
         row["ts"] = "not-a-timestamp"
 
         with pytest.raises(UnreadableMetricsLogError):
-            MetricsLedgerEntry.read(row)
+            self._read(row)
 
     def test_a_key_this_program_never_wrote_is_rejected_instead_of_silently_tolerated(self) -> None:
         row = MetricsEntryPayload.from_domain(ClosedSliceMother.merged(), ts=_STAMP.isoformat()).to_contract()
         row["descartes_causa"] = "llamada-fallida"
 
         with pytest.raises(UnreadableMetricsLogError):
-            MetricsLedgerEntry.read(row)
+            self._read(row)

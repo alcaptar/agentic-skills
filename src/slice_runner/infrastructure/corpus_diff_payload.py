@@ -2,14 +2,14 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Self
 
-from slice_runner.infrastructure.contract_model import ContractModel
+from slice_runner.infrastructure.durable_ledger import LedgerRow
 from slice_runner.infrastructure.json_schema import JsonSchema
 
 if TYPE_CHECKING:
     from slice_runner.domain.corpus_entry import CorpusEntry
 
 
-class CorpusDiffPayload(ContractModel):
+class CorpusDiffPayload(LedgerRow):
     slice_id: str
     verify_round: int
     session: str

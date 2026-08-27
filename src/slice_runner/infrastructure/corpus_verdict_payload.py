@@ -6,6 +6,7 @@ from pydantic import AliasChoices, Field
 
 from slice_runner.domain.severity import Severity
 from slice_runner.infrastructure.contract_model import ContractModel
+from slice_runner.infrastructure.durable_ledger import LedgerRow
 from slice_runner.infrastructure.json_schema import JsonSchema
 from slice_runner.infrastructure.verdict_payload import VerdictPayload
 
@@ -30,7 +31,7 @@ class SeverityCountPayload(ContractModel):
         )
 
 
-class CorpusVerdictPayload(ContractModel):
+class CorpusVerdictPayload(LedgerRow):
     slice_id: str
     verify_round: int
     session: str

@@ -13,6 +13,10 @@ if TYPE_CHECKING:
 
 
 class LedgerRow(ContractModel):
+    pass
+
+
+class ReadableLedgerRow(LedgerRow):
     UNREADABLE: ClassVar[type[ValueError]]
 
     @classmethod
@@ -21,12 +25,12 @@ class LedgerRow(ContractModel):
 
 
 _Row = TypeVar("_Row", bound=LedgerRow)
+_Read = TypeVar("_Read", bound=ReadableLedgerRow)
 
 
 class DurableLedger(Generic[_Row]):
     def __init__(self, *, name: str, row: type[_Row]) -> None:
         self._name = name
-        self._row = row
 
     def path(self) -> Path:
         return ClaudeConfig.root() / "slice-runner" / "runs" / f"{self._name}.jsonl"
@@ -38,7 +42,7 @@ class DurableLedger(Generic[_Row]):
         with ledger.open("a", encoding="utf-8") as stream:
             stream.write(f"{json.dumps(row.to_contract(), ensure_ascii=False)}\n")
 
-    def rows(self) -> Iterator[_Row]:
+    def rows(self, as_row: type[_Read]) -> Iterator[_Read]:
         ledger = self.path()
         if not ledger.exists():
             return
@@ -47,17 +51,17 @@ class DurableLedger(Generic[_Row]):
             if not line.strip():
                 continue
 
-            yield self._row.from_dict(self._decoded(line, number))
+            yield as_row.from_dict(self._decoded(line, number, as_row))
 
-    def _decoded(self, line: str, number: int) -> dict[str, object]:
+    def _decoded(self, line: str, number: int, as_row: type[_Read]) -> dict[str, object]:
         try:
             data = json.loads(line)
         except json.JSONDecodeError as error:
-            raise self._row.UNREADABLE(
+            raise as_row.UNREADABLE(
                 f"the {self._name} ledger has a line at {number} that is not JSON: {error}"
             ) from error
         if not isinstance(data, dict):
-            raise self._row.UNREADABLE(
+            raise as_row.UNREADABLE(
                 f"the {self._name} ledger has a line at {number} that has to be an object, not {type(data).__name__}"
             )
 

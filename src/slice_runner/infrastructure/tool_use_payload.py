@@ -5,6 +5,8 @@ from typing import TYPE_CHECKING, Self
 from slice_runner.domain.step import Step
 from slice_runner.domain.unrecorded_conversation_cause import UnrecordedConversationCause
 from slice_runner.infrastructure.contract_model import ContractModel
+from slice_runner.infrastructure.durable_ledger import LedgerRow
+from slice_runner.infrastructure.json_schema import JsonSchema
 
 if TYPE_CHECKING:
     from slice_runner.infrastructure.tool_use_log import HarnessCallToolUse, ToolUse, UnrecordedCallToolUse
@@ -21,11 +23,15 @@ class ToolUsePayload(ContractModel):
         return cls(turn=use.turn, tool=use.tool, path=use.path, failed=use.failed or None)
 
 
-class CallToolUsePayload(ContractModel):
+class CallToolUsePayload(LedgerRow):
     slice_id: str
     step: Step
     session: str
     uses: tuple[ToolUsePayload, ...]
+
+    @classmethod
+    def json_schema(cls) -> dict[str, object]:
+        return JsonSchema.flat(cls)
 
     @classmethod
     def from_call(cls, call: HarnessCallToolUse) -> Self:
@@ -37,11 +43,15 @@ class CallToolUsePayload(ContractModel):
         )
 
 
-class UnrecordedCallToolUsePayload(ContractModel):
+class UnrecordedCallToolUsePayload(LedgerRow):
     slice_id: str
     step: Step
     session: str
     cause: UnrecordedConversationCause
+
+    @classmethod
+    def json_schema(cls) -> dict[str, object]:
+        return JsonSchema.flat(cls)
 
     @classmethod
     def from_call(cls, call: UnrecordedCallToolUse) -> Self:
