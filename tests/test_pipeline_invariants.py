@@ -27,14 +27,21 @@ writing the same row twice. It is not a list of stores either, and the tenth, it
 against synthetic source that a ledger naming that vocabulary trips it and a well-formed one does
 not.
 
-The eleventh scans every class inheriting `LedgerRow`, `ReadableLedgerRow`, `StampedRow`,
-`LegacyTolerantStampedRow` or `SliceStampedRow` for a coordinate -`ts`, `repo`, `issue`, `slice_id`-
-declared again instead of taken from the shared base those three narrow. It names what MAY
-redeclare a field, not what may not, so the twelfth, its meta-test, proves a class the scan has never
-seen still turns red by default. The thirteenth scans
-for the canonical slice text composed by hand -peeling `"slice-"` off a string, or `:02d`-formatting
-an ordinal- anywhere outside `CanonicalSliceId`, the one place that format is allowed to exist, and
-the fourteenth is its meta-test.
+The eleventh scans every class inheriting `LedgerRow`, `ReadableLedgerRow` or `StampedRow` for a
+coordinate -`ts`, `repo`, `issue`, `slice_id`- declared again instead of taken from `StampedRow`,
+the single base that now carries the four. It names what MAY redeclare a field, not what may not,
+so the twelfth, its meta-test, proves a class the scan has never seen still turns red by default.
+The thirteenth scans for the canonical slice text composed by hand -peeling `"slice-"` off a
+string, or `:02d`-formatting an ordinal- anywhere outside `CanonicalSliceId`, the one place that
+format is allowed to exist, and the fourteenth is its meta-test.
+
+The fifteenth scans every module of the program for `AliasChoices`, the shape that let a payload
+reread a key from an earlier generation of the log next to the one it writes today. With the
+reader and the writer collapsed into the same model, nothing left has a reason to carry it: a
+payload that uses it again is tolerating a shape this program no longer writes, which is the same
+regression `MetricsLedgerRowPayload` used to be. It is not a list of today's offenders -a
+well-formed payload that never imports `AliasChoices` never trips it-, which is what the
+sixteenth, its meta-test, proves against synthetic source.
 """
 
 from __future__ import annotations
@@ -600,21 +607,17 @@ def test_no_durable_ledger_names_the_vocabulary_of_a_harness_turn() -> None:
     )
 
 
-_STAMPED_ROW_BASES = frozenset(
-    {"LedgerRow", "ReadableLedgerRow", "StampedRow", "LegacyTolerantStampedRow", "SliceStampedRow"}
-)
+_STAMPED_ROW_BASES = frozenset({"LedgerRow", "ReadableLedgerRow", "StampedRow"})
 _COORDINATE_FIELDS = frozenset({"ts", "repo", "issue", "slice_id"})
-_STAMPED_ROW_BASE_CLASSES = frozenset({"_CoordinatedRow", "StampedRow", "LegacyTolerantStampedRow", "SliceStampedRow"})
+_STAMPED_ROW_BASE_CLASSES = frozenset({"StampedRow"})
 
 _MAY_REDECLARE_COORDINATES: dict[str, str] = {}
 """What is exempt from the scan below, each for a reason about what the class needs.
 
-Empty on purpose: with the four coordinates obligatory on `StampedRow`, the optionality that
-`spend.jsonl` and `metrics.jsonl` still need to tolerate carried by `LegacyTolerantStampedRow`, and
-the single coordinate `calls.jsonl` already had before this rule -while still tolerating the rest-
-carried by `SliceStampedRow`, no payload has a reason left to redeclare a coordinate. `StampedRow`,
-`LegacyTolerantStampedRow` and `SliceStampedRow` are not listed here: they never trip the scan, they
-are the three places the four fields are declared for the tree to inherit.
+Empty on purpose: with the four coordinates obligatory on `StampedRow` and no payload left that
+needs to tolerate any of them missing, no payload has a reason left to redeclare a coordinate.
+`StampedRow` is not listed here: it never trips the scan, it is the one place the four fields are
+declared for the tree to inherit.
 """
 
 
@@ -814,3 +817,51 @@ def test_the_scan_catches_every_shape_a_module_could_compose_the_canonical_slice
     assert _composes_the_canonical_slice_text_by_hand(formatting_the_ordinal)
     assert not _composes_the_canonical_slice_text_by_hand(an_unrelated_removeprefix)
     assert not _composes_the_canonical_slice_text_by_hand(an_unrelated_format_spec)
+
+
+def _uses_alias_choices(source: str) -> bool:
+    """A module trips this by importing or naming `AliasChoices` anywhere in its tree.
+
+    Its only job was rereading a key from an earlier generation of the log next to the one the
+    program writes today. With the reader and the writer collapsed into the same model, a payload
+    that still names it is tolerating a shape this program no longer writes.
+    """
+    return "AliasChoices" in _referenced_names(ast.parse(source))
+
+
+@pytest.mark.integration
+def test_no_payload_of_the_program_rereads_an_earlier_shape_with_alias_choices() -> None:
+    """`infrastructure.md`: a contract we fix ourselves has no earlier form left to tolerate.
+
+    Not hypothetical: `MetricsLedgerRowPayload` carried nine of these to reread the Spanish keys a
+    retired script used to write, and `SeverityCountPayload` carried three more for `alta`/`media`/
+    `baja`. This measures the tree instead of trusting that nobody reaches for the same shape the
+    next time a key changes.
+    """
+    candidates = [path for path in _tracked("src/slice_runner/*.py") if not path.startswith("src/slice_runner/tests/")]
+
+    offending = [path for path in candidates if _uses_alias_choices(_read(_ROOT / path))]
+
+    assert not offending, "these modules use AliasChoices to reread an earlier generation's key:\n" + (
+        "\n".join(f"  {path}" for path in offending)
+    )
+
+
+def test_the_scan_catches_alias_choices_wherever_it_is_imported_or_used() -> None:
+    importing_it = "\n".join(
+        [
+            "from pydantic import AliasChoices, Field",
+            "class Foo:",
+            "    x: int = Field(validation_alias=AliasChoices('x', 'y'))",
+        ]
+    )
+    a_well_formed_payload = "\n".join(
+        [
+            "from pydantic import Field",
+            "class Foo:",
+            "    x: int",
+        ]
+    )
+
+    assert _uses_alias_choices(importing_it)
+    assert not _uses_alias_choices(a_well_formed_payload)

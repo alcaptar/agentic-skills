@@ -252,11 +252,27 @@ ocho declaran su esquema con un `json_schema()` propio (`HarnessCallPayload`, `C
 `UnrecordedCallToolUsePayload`, `EventPayload`), asi que que campos trae esa fila se puede preguntar a un
 programa en vez de abrir el fichero.
 
-Y toda fila de los siete trae marca de tiempo, repo, issue y la slice a la que pertenece: `spend.jsonl` ya
+Y toda fila de los ocho trae marca de tiempo, repo, issue y la slice a la que pertenece: `spend.jsonl` ya
 no necesita cruzarse por sesion contra `calls.jsonl` para saber cuanto costo una slice, y
 `tool-uses.jsonl`/`unrecorded-tool-uses.jsonl` se leen solos aunque sean los que dicen que toco el
 implementador. Las cuatro se declaran una sola vez (`StampedRow`) y el texto que nombra la slice sale de
 `SliceIdentity`, nunca compuesto a mano fila por fila.
+
+Sus claves y sus valores salen en el idioma del código: no hay `AliasChoices` releyendo una forma anterior,
+porque un contrato que fijamos nosotros no tiene nada que traducir. Eso abre un segundo corte, este dentro
+de `runs/` y no entre generaciones de directorio: una fila escrita antes de este cambio y una escrita
+despues conviven en el mismo fichero, y la que hablaba castellano -o dejaba una coordenada sin escribir- ya
+no se lee a medias, falla nombrando que no es de esta generacion. Mientras eso no se archive a mano,
+`uv run slice-runner metrics`, `uv run slice-runner spend` y `uv run slice-runner read` salen con ese error
+en cuanto tocan una fila vieja de `~/.claude/slice-runner/runs/metrics.jsonl`, `spend.jsonl` o
+`calls.jsonl` respectivamente. Archivar esas filas -moverlas fuera de `runs/`- es decision de quien opera:
+el programa no lo hace por su cuenta.
+
+Colapsar lector y escritor de `metrics.jsonl` en un solo modelo con `extra="forbid"` tiene una consecuencia:
+las dos claves que la fila escribia siempre a `null` -`duracion_s` y `coste_tokens`- dejan de emitirse.
+Declararlas como campos las excluiria del volcado (`to_contract` usa `exclude_none=True`) y mantener el
+override que las anexaba las volveria clave desconocida al releerse, asi que no hay forma de conservarlas
+que no reintroduzca la tolerancia que esta slice quita.
 
 El log de un control fallido -lo unico que recibe el implementador para arreglarlo- vive tambien bajo
 `runs/`, en `~/.claude/slice-runner/runs/controls/` por defecto, con el repo y el issue del run ademas de

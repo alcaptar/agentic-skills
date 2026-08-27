@@ -91,6 +91,10 @@ class ClosedSliceMother:
         return cls._closed(RunState.MERGED, diff_stats=stats, spends=spends)
 
     @classmethod
+    def merged_discarding_and_measuring_the_diff(cls, discarded: DiscardedCall, stats: DiffStats) -> ClosedSlice:
+        return cls._closed(RunState.MERGED, discarded_call=discarded, diff_stats=stats)
+
+    @classmethod
     def merged_with_config(cls, *, budgets: Budgets | None = None, models: RoleModels | None = None) -> ClosedSlice:
         return cls._closed(RunState.MERGED, budgets=budgets, models=models)
 

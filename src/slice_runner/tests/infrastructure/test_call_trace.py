@@ -165,7 +165,7 @@ class TestFindingTheSessionOfAPastCall(WithTheTraceOutOfTheRealHome):
 
         assert found == (other_feature.session,)
 
-    def test_a_line_from_before_this_run_carried_identity_is_still_readable_and_never_matches_by_accident(
+    def test_a_line_from_before_this_run_carried_identity_is_rejected_instead_of_matched_by_accident(
         self, tmp_path: Path
     ) -> None:
         ledger = tmp_path / "slice-runner" / "runs" / "calls.jsonl"
@@ -175,14 +175,13 @@ class TestFindingTheSessionOfAPastCall(WithTheTraceOutOfTheRealHome):
             encoding="utf-8",
         )
 
-        found = LocalCallTrace(clock=self.frozen_at()).sessions_of(
-            repo=HarnessCallMother.REPO,
-            issue=HarnessCallMother.ISSUE,
-            slice_id=HarnessCallMother.SLICE_ID,
-            step=Step.IMPLEMENT,
-        )
-
-        assert found == ()
+        with pytest.raises(UnreadableCallTraceError):
+            LocalCallTrace(clock=self.frozen_at()).sessions_of(
+                repo=HarnessCallMother.REPO,
+                issue=HarnessCallMother.ISSUE,
+                slice_id=HarnessCallMother.SLICE_ID,
+                step=Step.IMPLEMENT,
+            )
 
     def test_a_call_recorded_with_a_slice_identifier_carrying_a_user_story_is_found_by_that_identifier(
         self, tmp_path: Path
@@ -207,6 +206,7 @@ class TestFindingTheSessionOfAPastCall(WithTheTraceOutOfTheRealHome):
         ledger.write_text(
             json.dumps(
                 {
+                    "ts": _STAMP.isoformat(),
                     "repo": HarnessCallMother.REPO,
                     "issue": HarnessCallMother.ISSUE,
                     "slice_id": "slice-05",

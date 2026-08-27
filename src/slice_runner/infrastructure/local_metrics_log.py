@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, ClassVar
 from slice_runner.domain.metrics_log import MetricsLog
 from slice_runner.infrastructure.durable_ledger import DurableLedger
 from slice_runner.infrastructure.metrics_entry_payload import MetricsEntryPayload
-from slice_runner.infrastructure.metrics_ledger_entry import MetricsLedgerEntry, MetricsLedgerRowPayload
+from slice_runner.infrastructure.metrics_ledger_entry import MetricsLedgerEntry
 
 if TYPE_CHECKING:
     from datetime import datetime
@@ -27,11 +27,9 @@ class LocalMetricsLog(MetricsLog):
         self._ledger.append(payload)
 
     def closed_slices(self, *, repo: str | None, since: datetime, until: datetime) -> tuple[ClosedSliceRecord, ...]:
-        records = (MetricsLedgerEntry.of(payload) for payload in self._ledger.rows(MetricsLedgerRowPayload))
+        records = (MetricsLedgerEntry.of(payload) for payload in self._ledger.rows(MetricsEntryPayload))
         within_window = (
-            record
-            for record in records
-            if record is not None and since <= record.ts <= until and (repo is None or record.repo == repo)
+            record for record in records if since <= record.ts <= until and (repo is None or record.repo == repo)
         )
         latest_by_identity: dict[tuple[str, int], ClosedSliceRecord] = {}
         for record in within_window:

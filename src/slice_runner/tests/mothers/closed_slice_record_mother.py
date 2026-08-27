@@ -98,7 +98,7 @@ class ClosedSliceRecordMother:
         ci_indeterminate_cause: CiIndeterminateCause | None = None,
         understand_discards: int = 0,
         implement_discards: int = 0,
-        variant: str | None = "programa",
+        variant: str | None = "program",
         models: tuple[str, ...] = ("claude-sonnet-5",),
     ) -> ClosedSliceRecord:
         return ClosedSliceRecord(

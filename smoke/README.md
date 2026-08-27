@@ -193,7 +193,7 @@ Al comprobar el "sin PR", filtra por estado: el nombre de rama se reutiliza entr
 que cuenta es `--state open`.
 
 Debe dejar: la slice `bloqueada: controles` en el issue, la metrica durable con
-`veredicto=bloqueada-controles`, `ci=none` y `--reintentos-controles` al tope del paso 6, y **ninguna PR ni ninguna
+`verdict=blocked-controls`, `ci=none` y `--reintentos-controles` al tope del paso 6, y **ninguna PR ni ninguna
 invocacion del verificador** -un fallo mecanico no se juzga, se arregla-. Comprueba tambien que lo que
 llega al orquestador del control en rojo es la **ruta** del log (`--out` a un directorio fuera del repo)
 y no el output del build.
@@ -221,7 +221,7 @@ Tres consecuencias al montar la sonda:
 - El reintento es **inutil por diseno**, igual que en `bloqueada: controles`: el implementador se
   encontraria el mismo conflicto imposible. Si acotas reintentos, declaralo.
 
-Debe dejar: la slice `bloqueada: verify`, la metrica con `veredicto=FALLA`, `ci=none`,
+Debe dejar: la slice `bloqueada: verify`, la metrica con `verdict=fail`, `ci=none`,
 `--hallazgos-alta` al menos en 1, y `--reintentos-verify` con lo que se haya gastado de verdad -y
 `--descartes-verify` en 0: un descarte es el agente devolviendo un JSON que no
 parsea, un fallo distinto que no debe acabar contado aqui-. Y **ni PR ni commit**: el commit va despues

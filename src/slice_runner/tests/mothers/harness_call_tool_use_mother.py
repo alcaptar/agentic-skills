@@ -29,3 +29,12 @@ class HarnessCallToolUseMother:
                 ToolUse(turn=2, tool="Bash", path=None),
             ),
         )
+
+    @classmethod
+    def of_the_implementer_with_a_failure(cls) -> HarnessCallToolUse:
+        return HarnessCallToolUse(
+            coordinates=cls.coordinates(),
+            step=Step.IMPLEMENT,
+            session=cls.SESSION,
+            uses=(ToolUse(turn=1, tool="Bash", path=None, failed=True),),
+        )

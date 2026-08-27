@@ -185,25 +185,18 @@ importar**: un smoke que solo importe el módulo lo da por bueno. Lo evita
   juntas a traves de un unico constructor (`_stamped`), nunca sueltas campo a campo. Cruzar dos almacenes
   por sesion para saber de que slice era una llamada es la arqueologia que esto reemplaza. El texto que
   nombra la slice sale de `SliceIdentity`/`CanonicalSliceId`, nunca compuesto a mano en un payload: **el
-  formato del identificador -el prefijo, el `-NN` final- vive en un solo sitio**, y un almacen que hoy no
-  tenga fila antigua que tolerar declara las cuatro obligatorias; el resto hereda opcional solo la
-  coordenada que de verdad le faltaba, y sigue exigiendo la que ya escribia, para no aflojar una garantia
-  que ya tenia mientras sigue leyendo lo que se escribio antes de esta regla.
+  formato del identificador -el prefijo, el `-NN` final- vive en un solo sitio**, y las cuatro coordenadas
+  son siempre obligatorias: ningun payload las redeclara opcionales para tolerar una fila que no las traiga.
 - **El registro durable lo escribe el programa el mismo**, con el mismo patrón que los demas almacenes y
   un payload de frontera que traduce el dominio a las claves del log. **No delega esa escritura en un
   script fuera de su paquete**: sería una dependencia fisica con código que no es referencia.
 
-  El lado que **relee** el log tolera las dos formas con `validation_alias`, para que una fila
-  ya escrita con la forma vieja se siga agregando.
-
-  **Desviación declarada: la clave legacy de un campo que crecio a value object con varios campos
-  atados no se tolera con `validation_alias`, se ignora entera.** `descartes_verify_causa` solo
-  llevaba la causa de un descarte; hoy esa causa viaja dentro de `DiscardedCall`, atada a un paso y a
-  un motivo que la fila vieja nunca escribió. Reconstruir el value object solo con la causa le
-  atribuiria un paso que nunca tuvo -exactamente el estado a medias que ese value object existe para
-  hacer irrepresentable-, así que la fila vieja se relee sin `discarded_call` en vez de con uno
-  incompleto. El precio es pequeño y a propósito: solo pierde el enriquecimiento las filas escritas
-  antes de esta migración, y esa perdida es más honesta que inventar un paso o un motivo.
+  **El lado que relee el log es el mismo modelo que lo escribe, y sus claves y sus valores salen en el
+  idioma del código.** No hay `AliasChoices` ni traduccion de un vocabulario anterior: un contrato que
+  fijamos nosotros no tiene nada que traducir. Una fila de una generacion anterior -de cuando el log
+  hablaba castellano, o de cuando una coordenada podia faltar- no se lee a medias: falla con un error que
+  nombra que esa fila no es de esta generacion, en vez de devolver un registro con la mitad de los campos
+  a cero. El histórico de esas filas se archiva aparte; este programa no lo interpreta.
 - **Un registro que debe tolerar que un value object crezca no nombra sus campos.** La regla general
   existe para que un contrato que cambia de forma rompa donde se declara; aquí se invierte a propósito
   cuando el criterio que trajo la fila pide justo lo contrario: que añadir un campo no obligue a tocar el
