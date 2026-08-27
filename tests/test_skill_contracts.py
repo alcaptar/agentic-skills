@@ -386,6 +386,7 @@ def test_validate_reports_the_missing_user_story_key_with_its_rule_and_location(
 _REPLACES_VALIDATE_ANCHORS = (
     "Ninguna slice sin `SUSTITUYE:`, y ninguna `SUSTITUYE: si` sin las dos mitades",
     "es la misma desviacion: sin el mecanismo de vuelta atras",
+    "tiene que ser la que corresponde al sujeto",
 )
 """Anchors for the checklist item that catches a missing `SUSTITUYE:` and an incomplete `SUSTITUYE: si`.
 

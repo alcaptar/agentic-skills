@@ -18,9 +18,13 @@ comportamiento observable, no una capa tecnica suelta que no vale nada hasta com
 
 Antes de dar una slice por buena, comprueba las cinco condiciones **y** el rasero INVEST:
 
-1. **Reversible** — `git revert` deja el sistema coherente. Si la slice sustituye comportamiento ya
-   en produccion, "reversible" incluye **reversible en runtime**: volver al anterior sin redeploy
-   (feature flag o expand-contract).
+1. **Reversible** — `git revert` deja el sistema coherente. Lo que "reversible" exige de mas depende
+   de como se distribuye el sujeto: en un **servicio desplegado** que sustituye comportamiento vivo,
+   incluye **reversible en runtime** -volver al anterior sin redeploy, con flag o expand-contract-; en un
+   **programa que se instala**, volver atras es reinstalar y eso ya es reversible, asi que lo que hay que
+   comprobar es otra cosa: **que lo ya escrito siga siendo legible por las dos versiones**, o que se diga
+   que no lo es y que se hace con ello. Un cambio de formato en un fichero que el programa relee no es
+   reversible por mucho que el binario si lo sea.
 2. **Desplegable sola** — no depende de codigo no mergeado ni de un orden de despliegue concreto.
 3. **Sin work in progress oculto** — no introduce clases, campos ni ramas muertas que solo cobran
    sentido en una slice futura.
@@ -152,6 +156,26 @@ fijo hardcodeado; (3) leer estado y elegir tax de una tabla; (4) primer tramo de
 resto de tramos; (6) formato de salida. Cada loncha se commitea, prueba y "entrega" antes de la
 siguiente.
 
+**Y hay una senal que se ve antes de estimar una sola linea: un criterio que cuantifica sobre un
+conjunto no pide un cambio, pide un barrido.** "Toda fila de todo almacen", "los seis restantes", "los
+siete", "cada payload del arbol". Un barrido es su propia slice, y la que lo lleva dentro de otra cosa
+es la que se pasa de tamano sin que nadie lo vea venir, porque **el criterio parece normal**: es
+falsable, esta bien redactado y cabe en una linea.
+
+Es la senal mas barata que hay, porque opera sobre el texto del criterio y no sobre una estimacion. Y
+es la que mas cuesta cuando se salta: medido en una feature real, las dos slices mas caras fueron las
+dos que barrian un conjunto -"los seis almacenes restantes" y "toda fila de todo almacen"- y se
+llevaron la mitad del presupuesto de las nueve. La segunda agoto su tope de coste **y** sus reintentos
+de verificacion sin converger, con tres rechazos del juez por defectos distintos, y hubo que terminarla
+a mano. La mas barata de la feature fue la que hacia una cosa sola.
+
+**El corte es partir el barrido de lo que lo habilita**: una slice que introduce la pieza compartida y
+la estrena en un solo caso, y otra que la aplica al resto. La primera prueba el diseno con un consumidor
+real; la segunda es mecanica y se juzga rapido. Al reves -barrer y disenar a la vez- cada rechazo del
+juez llega despues de haber tocado N sitios, y corregirlo los toca todos otra vez.
+
+**Y agotar el presupuesto sin converger es el sintoma, no la senal**: llega cuando ya lo has pagado.
+
 ## Observabilidad de la slice
 
 Cortar bien incluye decidir **como se vera vivo** lo que cortas. La regla: toda slice que cambia
@@ -176,12 +200,18 @@ Lo que si es del troceo:
 
 Ademas de validar cada slice contra los criterios, valida el **conjunto**:
 
-- **Prevuelo de sustitucion** — antes de dar cada slice por buena, pregunta si sustituye comportamiento
-  que ya vive en produccion. Si la respuesta es si, el mecanismo va por **Parallel changes** (ver
-  "Mecanismos de slicing seguro"), salvo que aplique alguna de las excepciones que ese mismo bullet
-  nombra para sustituir en el sitio. Es la pregunta que hoy se acaba haciendo cuando la slice ya esta
-  implementada y partirla en expand y contract cuesta rehacerla; hacerla aqui, con el corte todavia
-  abierto, es gratis.
+- **Prevuelo de sustitucion** — antes de dar cada slice por buena, pregunta si sustituye algo que ya
+  esta funcionando, **y hazlo con la pregunta que corresponde al sujeto**. En un servicio desplegado:
+  ¿sustituye comportamiento vivo? Si es si, el mecanismo va por **Parallel changes** (ver "Mecanismos de
+  slicing seguro"), salvo excepcion de las que ese bullet nombra. En un programa que se instala:
+  **¿deja ilegible o inservible algo que ya esta escrito?** -ficheros, filas de un almacen, estado
+  persistido, etiquetas- y si es si, **que pasa con lo que ya existe**.
+
+  Es la pregunta que se acaba haciendo cuando la slice ya esta implementada, y entonces cuesta rehacerla;
+  hacerla aqui es gratis. **Y hacerla con la forma equivocada es peor que no hacerla**: medido en una
+  feature real, la version de servicio aplicada a un programa que se instala no cazo ni una de sus tres
+  roturas de formato, y las tres se descubrieron en la maquina de quien lo usaba -una de ellas impidiendo
+  cerrar cualquier slice-.
 - **Test de despriorizacion** (Lawrence) — un buen set de slices tiene **al menos una que podrias
   tirar o posponer** sin perder el core. Si no puedes despriorizar ninguna, probablemente cortaste
   por trocear (horizontal disfrazado) en vez de por valor. Es el mejor detector de "slices sin
@@ -234,6 +264,14 @@ Como llega una slice vertical a prod siendo reversible y desplegable sola sin ro
 - Mezclar refactor con feature en la misma PR.
 - Sustituir in-place un adaptador/proveedor ya en produccion sin flag ni expand-contract cuando
   existe implementacion previa (rollback solo via redeploy = blast radius innecesario).
+- **Cambiar la forma de algo que el programa relee -un fichero, una fila, el estado persistido- sin
+  declarar que pasa con lo que ya esta escrito.** El equivalente del anterior para un programa que se
+  instala, y se cuela mas facil porque reinstalar parece rollback y no lo es: la version anterior
+  tampoco sabe leer lo que escribio la nueva, asi que volver atras mueve el fallo de un conjunto de
+  filas al otro en vez de quitarlo.
+- **Un criterio que cuantifica sobre un conjunto** ("toda fila de todo almacen", "los seis restantes")
+  **dentro de una slice que ademas introduce la pieza**. Son dos slices: la que estrena el diseno en un
+  caso real, y la que barre el resto.
 - Slices que solo aportan andamiaje y no son desplegables solas.
 - Anadir campos, metodos o clases "que necesitaremos en la slice siguiente".
 - PRs que dependen de un orden concreto de merge para no romper produccion.
