@@ -689,25 +689,53 @@ def test_the_rubric_lists_excludes_among_the_inputs_that_can_arrive_empty() -> N
     )
 
 
-def test_the_rubric_demands_the_rollback_mechanism_when_the_slice_declares_it_replaces_something() -> None:
-    """`SUSTITUYE: si` names the mechanism; item 2 has to fail a diff that does not bring it back.
+def test_the_rubric_demands_what_the_slice_declared_when_it_replaces_something() -> None:
+    """`SUSTITUYE: si` names what it owes; item 2 has to fail a diff that does not bring it.
 
-    Without this, a slice that declares it replaces live behaviour could still land as an in-place swap
-    with no way back except a redeploy -- exactly the anti-pattern `slicing.md` names, now with a
-    declared line the judge has no excuse to skip.
+    Without this, a slice that declares it replaces something live could still land with no way back --
+    the anti-pattern `slicing.md` names. And the second half is not always a rollback mechanism: it is
+    one for a deployed service, and what happens to what is already written for a program that gets
+    installed, where going back **is** reinstalling. A rubric that only knows the first shape turns
+    every slice of the second kind into an invented high-severity finding, which is worse than the
+    medium it was meant to replace.
     """
     rubric = " ".join(_program_rubric().split())
     assert "SUSTITUYE: si" in rubric, (
         "the program's rubric no longer contrasts item 2 against a `SUSTITUYE: si` declaration"
     )
-    assert "el mecanismo de vuelta atras que la linea nombra" in rubric, (
-        "the program's rubric no longer demands the diff bring back the rollback mechanism the "
-        "`SUSTITUYE: si` line names"
+    assert "lo que la segunda mitad de la linea nombra" in rubric, (
+        "the program's rubric no longer demands the diff bring what the `SUSTITUYE: si` line names"
     )
-    assert "Si no esta, es **FAIL (severity high)**, citando la linea de `SUSTITUYE`" in rubric, (
-        "the program's rubric demands the rollback mechanism but no longer blocks with severity high "
+    assert "Exigir un flag a un programa que se instala es un hallazgo inventado" in rubric, (
+        "the program's rubric no longer warns that the second half changes with the subject, so it "
+        "would demand a rollback flag from a program whose way back is reinstalling"
+    )
+    assert "es **FAIL (severity high)**, citando la linea de `SUSTITUYE`" in rubric, (
+        "the program's rubric demands what the line names but no longer blocks with severity high "
         "when it is missing from the diff"
     )
+
+
+def test_both_halves_of_the_replaces_contract_know_the_second_half_changes_with_the_subject() -> None:
+    """The skill writes the line and the rubric reads it: a shape only one of them knows is a trap.
+
+    Measured, and this test exists because it happened: the skill was taught that the second half of
+    `SUSTITUYE: si` is a rollback mechanism for a deployed service and what happens to what is already
+    written for a program that gets installed -- while the rubric still demanded the mechanism. That
+    combination turns every slice of the second kind into a high-severity finding for not bringing a
+    flag that cannot exist. Neither side alone is wrong; the pair is.
+    """
+    spec = " ".join(_read(_SPEC).split())
+    rubric = " ".join(_program_rubric().split())
+
+    for surface, text in (("the skill", spec), ("the program's rubric", rubric)):
+        assert "sin redeploy" in text, (
+            f"{surface} no longer names the deployed-service shape of the second half of `SUSTITUYE: si`"
+        )
+        assert "se instala" in text, (
+            f"{surface} no longer names the installed-program shape of the second half of "
+            f"`SUSTITUYE: si`, so one side would demand a rollback the other never asked for"
+        )
 
 
 def test_the_rubric_treats_a_declared_no_replacement_as_refutable_against_the_diff() -> None:
