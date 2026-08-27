@@ -33,9 +33,10 @@ class LocalCallTrace(CallTrace):
 
     def calls_of(self, *, repo: str, issue: int, slice_id: str) -> tuple[HarnessCall, ...]:
         coordinates = SliceCoordinates(repo=repo, issue=issue, slice_id=CanonicalSliceId.of_text(slice_id))
+        wanted = coordinates.slice_id.text
 
         return tuple(
             HarnessCall(coordinates=coordinates, step=call.step, session=call.session)
             for call in self._ledger.rows(HarnessCallPayload)
-            if call.repo == repo and call.issue == issue and call.slice_id == slice_id
+            if call.repo == coordinates.repo and call.issue == coordinates.issue and call.slice_id == wanted
         )

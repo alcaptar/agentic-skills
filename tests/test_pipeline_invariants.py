@@ -779,6 +779,7 @@ def test_the_scan_catches_a_durable_ledger_that_names_the_turn_vocabulary_and_le
     assert _builds_a_durable_ledger_naming_a_turn(a_turn_ledger)
     assert not _builds_a_durable_ledger_naming_a_turn(a_well_formed_ledger)
 
+
 def test_the_scan_catches_every_shape_a_module_could_compose_the_canonical_slice_text_with() -> None:
     peeling_the_prefix_off = "\n".join(
         [

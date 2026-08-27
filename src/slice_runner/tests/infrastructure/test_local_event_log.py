@@ -43,7 +43,7 @@ class TestWhatIsWrittenDownOfAnEvent(WithTheLogOutOfTheRealHome):
                 "repo": EventMother.REPO,
                 "issue": EventMother.ISSUE,
                 "step": "run-controls",
-                "at": "2024-01-01T12:30:45Z",
+                "ts": "2024-01-01T12:30:45+00:00",
                 "spend": {
                     "cost_usd": 0.3433209,
                     "turns": 9,
@@ -85,7 +85,7 @@ class TestTheSameEventStillReachesStandardError(WithTheLogOutOfTheRealHome):
             "repo": EventMother.REPO,
             "issue": EventMother.ISSUE,
             "step": "run-controls",
-            "at": "2024-01-01T12:30:45Z",
+            "ts": "2024-01-01T12:30:45+00:00",
             "spend": {
                 "cost_usd": 0.3433209,
                 "turns": 9,

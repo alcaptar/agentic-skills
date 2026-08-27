@@ -76,7 +76,7 @@ class TestEveryDurableLogDeclaresASchemaAProgramCanRead:
             "repo",
             "issue",
             "step",
-            "at",
+            "ts",
             "spend",
             "status",
         }
