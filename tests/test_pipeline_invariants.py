@@ -402,6 +402,10 @@ _NOT_A_DURABLE_STORE = {
     "src/slice_runner/infrastructure/local_skill_library.py": (
         "resuelve rutas de skills bajo la raiz de configuracion, no un log append-only"
     ),
+    "src/slice_runner/infrastructure/control_logs_directory.py": (
+        "el log de un control no es un almacen durable: no son filas JSON anexadas, es la salida de "
+        "texto de un build, escrita entera de una vez, que alguien lee para arreglar lo que fallo"
+    ),
 }
 """What is exempt from the scan below, each for a reason about what the module IS.
 
