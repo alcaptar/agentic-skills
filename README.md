@@ -564,6 +564,12 @@ Lo que hace, y por que asi:
   PATH. Con el ahi no hace falta saber donde vive el checkout para conducir una slice de otro repo.
   El `--reinstall` no sobra: la version es `0.0.0` fija, asi que sin el la rueda se reutiliza de cache
   y un `git pull` te deja corriendo el codigo anterior sin decirlo.
+
+  **Y no instala si hay runs en marcha**: para, los lista y no toca nada. Un run vivo tiene su codigo
+  ya cargado en memoria, asi que sigue escribiendo filas con el esquema anterior en los ficheros que
+  el codigo nuevo va a releer, y al reanudarse muere leyendo lo que el mismo escribio. Archivar antes
+  no evita nada, porque esas filas se escriben **despues** de archivar. Si sabes lo que haces,
+  `make install-program FORCE=1` lo salta.
 - **`make install-skills`** — enlaza **tres** directorios bajo la configuracion de Claude Code
   (`CLAUDE_CONFIG_DIR` si esta puesto, `~/.claude` si no), y solo dos de ellos son skills:
   - `slice-spec` y `deploy-watch`, las skills.
