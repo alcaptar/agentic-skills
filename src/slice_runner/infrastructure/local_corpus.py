@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, ClassVar
 from slice_runner.domain.corpus import Corpus
 from slice_runner.infrastructure.corpus_diff_payload import CorpusDiffPayload
 from slice_runner.infrastructure.corpus_verdict_payload import CorpusVerdictPayload
-from slice_runner.infrastructure.durable_ledger import DurableLedger
+from slice_runner.infrastructure.durable_ledger import DurableLedger, ReadableDurableLedger
 
 if TYPE_CHECKING:
     from slice_runner.domain.clock import Clock
@@ -21,7 +21,9 @@ class LocalCorpus(Corpus):
     def __init__(self, *, clock: Clock) -> None:
         self._clock = clock
         self._verdicts: DurableLedger[CorpusVerdictPayload] = DurableLedger(name=self.LEDGER, row=CorpusVerdictPayload)
-        self._diffs: DurableLedger[CorpusDiffPayload] = DurableLedger(name=self.DIFF_LEDGER, row=CorpusDiffPayload)
+        self._diffs: ReadableDurableLedger[CorpusDiffPayload] = ReadableDurableLedger(
+            name=self.DIFF_LEDGER, row=CorpusDiffPayload
+        )
 
     def record(self, entry: CorpusEntry) -> None:
         ts = self._clock.now().isoformat()
@@ -29,12 +31,9 @@ class LocalCorpus(Corpus):
         self._diffs.append(CorpusDiffPayload.from_domain(entry, ts=ts))
 
     def size_of_the_last_verification(self, coordinates: SliceCoordinates) -> DiffStats | None:
-        matching = self._diffs.rows_where(
-            CorpusDiffPayload, lambda data: CorpusDiffPayload.may_belong_to(data, coordinates)
-        )
+        matching = self._diffs.rows_where(lambda data: CorpusDiffPayload.may_belong_to(data, coordinates))
         latest: CorpusDiffPayload | None = None
         for row in matching:
-            if latest is None or row.verify_round >= latest.verify_round:
-                latest = row
+            latest = row
 
         return latest.stats.to_domain() if latest is not None else None

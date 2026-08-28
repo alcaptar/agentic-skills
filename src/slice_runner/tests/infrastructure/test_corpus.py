@@ -1,15 +1,12 @@
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime
 from typing import TYPE_CHECKING
-from unittest.mock import Mock, create_autospec
 
 import pytest
 
 from slice_runner.domain.budgets import Budgets
 from slice_runner.domain.canonical_slice_id import CanonicalSliceId
-from slice_runner.domain.clock import Clock
 from slice_runner.domain.diff_stats import DiffStats
 from slice_runner.domain.slice_coordinates import SliceCoordinates
 from slice_runner.infrastructure import local_corpus
@@ -21,6 +18,7 @@ from slice_runner.infrastructure.durable_ledger import DurableLedger
 from slice_runner.infrastructure.exit_code import ExitCode
 from slice_runner.infrastructure.local_corpus import LocalCorpus
 from slice_runner.tests.doubles import RealExceptTheJudge
+from slice_runner.tests.durable_store_home import WithTheDurableStoresOutOfTheRealHome
 from slice_runner.tests.git_repo import Git
 from slice_runner.tests.infrastructure.stub_ledger import WiredStubLedgers
 from slice_runner.tests.mothers.corpus_entry_mother import CorpusEntryMother
@@ -32,7 +30,7 @@ from slice_runner.tests.mothers.verification_mother import SliceDiffMother
 if TYPE_CHECKING:
     from pathlib import Path
 
-_STAMP = datetime(2026, 8, 10, 12, 0, 0, tzinfo=UTC)
+_STAMP = WithTheDurableStoresOutOfTheRealHome.STAMP
 
 
 class WrittenCorpus:
@@ -49,19 +47,7 @@ class WrittenCorpus:
         return [json.loads(line) for line in ledger.read_text(encoding="utf-8").splitlines()]
 
 
-class WithTheCorpusOutOfTheRealHome:
-    @pytest.fixture(autouse=True)
-    def corpus_root(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
-
-    @staticmethod
-    def frozen_at(stamp: datetime = _STAMP) -> Mock:
-        clock: Mock = create_autospec(Clock, spec_set=True, instance=True)
-        clock.now.return_value = stamp
-        return clock
-
-
-class TestTheRecordThatIsWritten(WithTheCorpusOutOfTheRealHome):
+class TestTheRecordThatIsWritten(WithTheDurableStoresOutOfTheRealHome):
     def test_a_verification_is_written_as_the_run_it_came_from_and_the_verdict_the_judge_gave(
         self, tmp_path: Path
     ) -> None:
@@ -116,7 +102,7 @@ class TestTheRecordThatIsWritten(WithTheCorpusOutOfTheRealHome):
         assert WrittenCorpus.verdicts_under(tmp_path)[0]["severity_counts"] == {"high": 2, "medium": 1, "low": 0}
 
 
-class TestTheCorpusOnlyGrows(WithTheCorpusOutOfTheRealHome):
+class TestTheCorpusOnlyGrows(WithTheDurableStoresOutOfTheRealHome):
     def test_a_second_verification_is_appended_instead_of_overwriting_the_first(self, tmp_path: Path) -> None:
         corpus = LocalCorpus(clock=self.frozen_at())
 
@@ -140,7 +126,7 @@ class TestTheCorpusOnlyGrows(WithTheCorpusOutOfTheRealHome):
         ]
 
 
-class TestTheSizeOfTheLastVerification(WithTheCorpusOutOfTheRealHome):
+class TestTheSizeOfTheLastVerification(WithTheDurableStoresOutOfTheRealHome):
     @staticmethod
     def _coordinates() -> SliceCoordinates:
         return SliceCoordinates(
@@ -172,6 +158,22 @@ class TestTheSizeOfTheLastVerification(WithTheCorpusOutOfTheRealHome):
 
         assert corpus.size_of_the_last_verification(self._coordinates()) == last
 
+    def test_after_a_reset_the_size_is_the_last_one_written_and_not_the_highest_round_of_the_abandoned_attempt(
+        self,
+    ) -> None:
+        corpus = LocalCorpus(clock=self.frozen_at())
+        abandoned = DiffStats(files_changed=9, lines_added=80, lines_deleted=30)
+        after_the_reset = DiffStats(files_changed=1, lines_added=2, lines_deleted=0)
+
+        corpus.record(
+            CorpusEntryMother.of_the_slice(verify_round=3, diff=SliceDiffMother.of_the_slice(stats=abandoned))
+        )
+        corpus.record(
+            CorpusEntryMother.of_the_slice(verify_round=1, diff=SliceDiffMother.of_the_slice(stats=after_the_reset))
+        )
+
+        assert corpus.size_of_the_last_verification(self._coordinates()) == after_the_reset
+
     def test_a_verification_of_a_different_slice_is_left_out(self) -> None:
         corpus = LocalCorpus(clock=self.frozen_at())
         stats = DiffStats(files_changed=3, lines_added=40, lines_deleted=12)
@@ -183,7 +185,7 @@ class TestTheSizeOfTheLastVerification(WithTheCorpusOutOfTheRealHome):
         assert corpus.size_of_the_last_verification(self._coordinates()) is None
 
 
-class TestTheHeavyDiffStaysOutOfTheVerdictLedger(WithTheCorpusOutOfTheRealHome):
+class TestTheHeavyDiffStaysOutOfTheVerdictLedger(WithTheDurableStoresOutOfTheRealHome):
     def test_counting_findings_never_needs_to_load_the_diff_of_any_verdict(self, tmp_path: Path) -> None:
         LocalCorpus(clock=self.frozen_at()).record(CorpusEntryMother.of_the_slice())
 
@@ -197,7 +199,7 @@ class TestWhereTheCorpusLives:
     ) -> None:
         monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path / "never-used-before"))
 
-        LocalCorpus(clock=WithTheCorpusOutOfTheRealHome.frozen_at()).record(CorpusEntryMother.of_the_slice())
+        LocalCorpus(clock=WithTheDurableStoresOutOfTheRealHome.frozen_at()).record(CorpusEntryMother.of_the_slice())
 
         assert (tmp_path / "never-used-before" / "slice-runner" / "runs" / "verdicts.jsonl").exists()
         assert (tmp_path / "never-used-before" / "slice-runner" / "runs" / "diffs.jsonl").exists()
@@ -208,7 +210,7 @@ class TestWhereTheCorpusLives:
         monkeypatch.delenv(ClaudeConfig.VARIABLE, raising=False)
         monkeypatch.setenv("HOME", str(tmp_path))
 
-        LocalCorpus(clock=WithTheCorpusOutOfTheRealHome.frozen_at()).record(CorpusEntryMother.of_the_slice())
+        LocalCorpus(clock=WithTheDurableStoresOutOfTheRealHome.frozen_at()).record(CorpusEntryMother.of_the_slice())
 
         assert (tmp_path / ".claude" / "slice-runner" / "runs" / "verdicts.jsonl").exists()
 
@@ -231,7 +233,7 @@ class TestTheAdapterOwnsOnlyItsNameAndItsPayload:
         monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
         created = WiredStubLedgers.on(local_corpus, monkeypatch)
 
-        LocalCorpus(clock=WithTheCorpusOutOfTheRealHome.frozen_at()).record(CorpusEntryMother.of_the_slice())
+        LocalCorpus(clock=WithTheDurableStoresOutOfTheRealHome.frozen_at()).record(CorpusEntryMother.of_the_slice())
 
         assert [(stub.name, stub.row) for stub in created] == [
             (LocalCorpus.LEDGER, CorpusVerdictPayload),
@@ -242,7 +244,7 @@ class TestTheAdapterOwnsOnlyItsNameAndItsPayload:
 
 
 @pytest.mark.integration
-class TestNothingOfTheCorpusCanReachAPullRequest(WithTheCorpusOutOfTheRealHome):
+class TestNothingOfTheCorpusCanReachAPullRequest(WithTheDurableStoresOutOfTheRealHome):
     @staticmethod
     def _verified(repo: Path) -> None:
         process = RealExceptTheJudge(HarnessEnvelopeMother.carrying(JudgeVerdictMother.passing()))
