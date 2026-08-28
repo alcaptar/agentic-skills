@@ -10,6 +10,7 @@ from slice_runner.infrastructure.published_finding_payload import PublishedFindi
 
 if TYPE_CHECKING:
     from slice_runner.domain.finding import Finding
+    from slice_runner.domain.findings_history import FindingsHistory, GroupedFinding
 
 
 class VetoFindingsComment:
@@ -17,17 +18,25 @@ class VetoFindingsComment:
     _BLOCK: ClassVar[re.Pattern[str]] = re.compile(r"<!-- slice-runner:hallazgos-json\n(.*?)\n-->", re.DOTALL)
 
     @classmethod
-    def rendered(cls, findings: tuple[Finding, ...]) -> str:
-        numbered = tuple(enumerate(findings, start=1))
-
-        return "\n\n".join(
-            [
-                "\n".join(cls._line(index, finding) for index, finding in numbered),
-                cls._block(numbered),
-                cls.MARKER,
-                AutomationMark.TEXT,
-            ]
+    def rendered(cls, history: FindingsHistory) -> str:
+        numbered = tuple(enumerate(history.entries, start=1))
+        standing = tuple((index, entry) for index, entry in numbered if entry.seen_in_the_last_round(history.rounds))
+        not_standing = tuple(
+            (index, entry) for index, entry in numbered if not entry.seen_in_the_last_round(history.rounds)
         )
+
+        sections = [cls._header(history)]
+        if standing:
+            sections.append(cls._section("Hallazgos vigentes tras la ultima ronda", standing))
+        if not_standing:
+            sections.append(
+                cls._section("Hallazgos de rondas anteriores que no reaparecieron en la ultima ronda", not_standing)
+            )
+        sections.append(cls._block(numbered))
+        sections.append(cls.MARKER)
+        sections.append(AutomationMark.TEXT)
+
+        return "\n\n".join(sections)
 
     @classmethod
     def is_the_veto_findings(cls, body: str) -> bool:
@@ -42,17 +51,54 @@ class VetoFindingsComment:
         return None
 
     @staticmethod
-    def _line(index: int, finding: Finding) -> str:
-        return f"- `f{index}` {finding.severity}: {finding.rule} - {finding.detail} ({finding.path})"
+    def _header(history: FindingsHistory) -> str:
+        return (
+            f"Este veto reune los hallazgos de {history.rounds} ronda(s) de esta invocacion, "
+            f"con {len(history.entries)} hallazgo(s) tras agrupar.\n"
+            "Esto es lo que paso en esta invocacion: las rondas de invocaciones anteriores a esta "
+            "no estan aqui, porque el programa no las conserva entre invocaciones."
+        )
+
+    @classmethod
+    def _section(cls, title: str, entries: tuple[tuple[int, GroupedFinding], ...]) -> str:
+        lines = [f"## {title}"]
+        for index, entry in entries:
+            lines.append(cls._entry_header(index, entry))
+            lines.extend(cls._evidence_lines(entry))
+
+        return "\n".join(lines)
 
     @staticmethod
-    def _block(numbered: tuple[tuple[int, Finding], ...]) -> str:
-        payload = [
-            PublishedFindingPayload.from_domain(id=f"f{index}", finding=finding).to_contract()
-            for index, finding in numbered
+    def _entry_header(index: int, entry: GroupedFinding) -> str:
+        last = entry.last_appearance.finding
+
+        return f"- `f{index}` {last.severity}: {last.rule} - {last.detail} ({last.path})"
+
+    @staticmethod
+    def _evidence_lines(entry: GroupedFinding) -> list[str]:
+        return [
+            f"  - ronda {appearance.round} ({appearance.finding.severity}): {appearance.finding.evidence}"
+            for appearance in entry.appearances
         ]
 
+    @classmethod
+    def _block(cls, numbered: tuple[tuple[int, GroupedFinding], ...]) -> str:
+        payload = [item for index, entry in numbered for item in cls._payloads_of(index, entry)]
+
         return f"<!-- slice-runner:hallazgos-json\n{json.dumps(payload, ensure_ascii=False)}\n-->"
+
+    @staticmethod
+    def _payloads_of(index: int, entry: GroupedFinding) -> list[dict[str, object]]:
+        displayed = entry.last_appearance
+        others = tuple(appearance for appearance in entry.appearances if appearance is not displayed)
+
+        return [
+            PublishedFindingPayload.from_domain(id=f"f{index}", finding=displayed.finding).to_contract(),
+            *(
+                PublishedFindingPayload.from_domain(id=f"f{index}-{position}", finding=appearance.finding).to_contract()
+                for position, appearance in enumerate(others, start=1)
+            ),
+        ]
 
     @classmethod
     def _decoded(cls, body: str) -> tuple[PublishedFindingPayload, ...]:

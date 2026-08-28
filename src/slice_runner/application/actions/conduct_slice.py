@@ -26,6 +26,7 @@ from slice_runner.domain.exceptions import (
     NoPullRequestError,
     NoSliceLeftError,
 )
+from slice_runner.domain.findings_history import FindingsHistory
 from slice_runner.domain.halt import Halt
 from slice_runner.domain.harness_spend import HarnessSpend
 from slice_runner.domain.issue_label import IssueLabel
@@ -124,8 +125,8 @@ class ConductSliceProgress:
         return self.verdicts[-1].findings if self.verdicts else ()
 
     @property
-    def findings_of_every_round(self) -> tuple[Finding, ...]:
-        return tuple(finding for verdict in self.verdicts for finding in verdict.findings)
+    def findings_history(self) -> FindingsHistory:
+        return FindingsHistory.of_verdicts(self.verdicts)
 
     @property
     def subissue(self) -> SubIssue:
@@ -766,8 +767,7 @@ class ConductSlice:
                 run=progress.run,
                 budgets=self._budgets,
                 models=self._models,
-                findings=progress.findings_of_every_round,
-                findings_of_the_last_round=progress.findings_of_the_last_round,
+                findings_history=progress.findings_history,
                 discarded_call=progress.discarded_call,
                 ci_indeterminate_cause=progress.ci_indeterminate_cause,
                 debt=progress.debt,

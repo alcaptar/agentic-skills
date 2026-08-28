@@ -30,6 +30,7 @@ if TYPE_CHECKING:
     from datetime import datetime
 
     from slice_runner.domain.finding import Finding
+    from slice_runner.domain.findings_history import FindingsHistory
     from slice_runner.domain.malformed_reason import MalformedReason
     from slice_runner.domain.precheck_outcome import PrecheckOutcome
     from slice_runner.domain.run import Run
@@ -266,10 +267,10 @@ class GhRunRepository(RunRepository):
             safe_to_repeat=False,
         )
 
-    def publish_findings(self, *, repo: str, issue: int, findings: tuple[Finding, ...]) -> None:
+    def publish_findings(self, *, repo: str, issue: int, history: FindingsHistory) -> None:
         self._run(
             ["gh", "issue", "comment", str(issue), "--repo", repo, "--body-file", "-"],
-            stdin=VetoFindingsComment.rendered(findings),
+            stdin=VetoFindingsComment.rendered(history),
             safe_to_repeat=False,
         )
 
