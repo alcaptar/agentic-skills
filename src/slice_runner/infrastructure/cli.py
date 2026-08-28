@@ -697,6 +697,7 @@ class Cli:
             sources=(),
             checklist=(),
             prior_findings=(),
+            debt=(),
         )
 
     @staticmethod

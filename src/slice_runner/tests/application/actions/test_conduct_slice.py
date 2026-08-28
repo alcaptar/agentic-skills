@@ -882,6 +882,15 @@ class TestConductSliceResumingAnInterruptedRun:
         assert (conductor.implement.execute.call_count, conductor.controls.run.call_count) == (0, 0)
         assert conductor.verify.execute.call_count == 1
 
+    def test_a_run_resumed_directly_at_verify_carries_no_debt_because_no_implementation_ran_this_invocation(
+        self,
+    ) -> None:
+        conductor = self._conductor()
+
+        conductor.conduct()
+
+        assert conductor.verify.execute.call_args.args[0].debt == ()
+
     def test_a_run_that_was_already_aligned_does_not_go_through_the_prechecks_again(self) -> None:
         conductor = self._conductor()
 
@@ -1214,6 +1223,14 @@ class TestConductSliceOnTheHappyPath:
         conductor.conduct()
 
         assert conductor.pull_request.body.call_args.kwargs["debt"] == ImplementationMother.with_debt().left_out
+
+    def test_the_judge_gets_what_the_implementer_declared_left_out_this_invocation(self) -> None:
+        conductor = self._conductor()
+        conductor.implement.execute.return_value = ImplementationMother.with_debt()
+
+        conductor.conduct()
+
+        assert conductor.verify.execute.call_args.args[0].debt == ImplementationMother.with_debt().left_out
 
     def test_the_pull_request_it_just_opened_is_the_one_it_asks_the_ci_and_the_merge_about(self) -> None:
         conductor = self._conductor()

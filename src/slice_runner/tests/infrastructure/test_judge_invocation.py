@@ -195,6 +195,24 @@ class TestWhatTravelsOnStandardInput:
 
         assert finding.detail in text
 
+    def test_two_declared_gaps_are_distinguishable_entries_in_the_prompt(self) -> None:
+        review = SliceUnderReviewMother.of_the_slice(debt=SliceUnderReviewMother.two_declared_gaps())
+
+        text = JudgeInvocation(judge=_JUDGE, review=review, reader=_READER).text
+
+        assert (
+            "- lo que el implementador declaro dejar fuera (2):\n"
+            "  - el cableado del subcomando queda para otra slice\n"
+            "  - la migracion de datos historicos\n"
+        ) in text
+
+    def test_no_declared_gaps_is_distinguishable_from_a_missing_input_by_the_zero_count(self) -> None:
+        review = SliceUnderReviewMother.of_the_slice(debt=())
+
+        text = JudgeInvocation(judge=_JUDGE, review=review, reader=_READER).text
+
+        assert "- lo que el implementador declaro dejar fuera (0):\n" in text
+
     def test_the_prompt_does_not_also_travel_in_the_argv(self) -> None:
         invocation = JudgeInvocation(
             judge=JudgeMother.reading_the_repo_and_its_yardstick(),

@@ -581,6 +581,7 @@ class ConductSlice:
                     sources=progress.parent.sources,
                     checklist=progress.chosen.checklist,
                     prior_findings=progress.findings_of_the_last_round,
+                    debt=progress.debt,
                 )
             )
         except MeasuredCallError as rejection:

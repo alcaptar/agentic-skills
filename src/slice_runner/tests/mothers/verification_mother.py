@@ -62,6 +62,7 @@ class VerifySliceParamsMother:
             sources=SliceUnderReviewMother.sources(),
             checklist=SliceUnderReviewMother.checklist(),
             prior_findings=(),
+            debt=(),
         )
 
 
@@ -83,6 +84,7 @@ class SliceUnderReviewMother:
         excludes: str | None = None,
         replaces: str | None = None,
         prior_findings: tuple[Finding, ...] | None = None,
+        debt: tuple[str, ...] | None = None,
     ) -> SliceUnderReview:
         return SliceUnderReview(
             slice_id=slice_id or cls.SLICE_ID,
@@ -98,6 +100,7 @@ class SliceUnderReviewMother:
             sources=cls.sources(),
             checklist=cls.checklist(),
             prior_findings=prior_findings if prior_findings is not None else (),
+            debt=debt if debt is not None else (),
         )
 
     @staticmethod
@@ -123,6 +126,10 @@ class SliceUnderReviewMother:
     @staticmethod
     def checklist() -> tuple[ChecklistEntry, ...]:
         return (ChecklistEntry.of(SubIssueMother.closed()), ChecklistEntry.of(SubIssueMother.of_another_repo()))
+
+    @staticmethod
+    def two_declared_gaps() -> tuple[str, ...]:
+        return ("el cableado del subcomando queda para otra slice", "la migracion de datos historicos")
 
 
 class JudgeMother:
