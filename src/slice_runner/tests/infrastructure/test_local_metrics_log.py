@@ -4,13 +4,11 @@ import json
 from dataclasses import asdict
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
-from unittest.mock import Mock, create_autospec
 
 import pytest
 
 from slice_runner.domain.budgets import Budgets
 from slice_runner.domain.ci_indeterminate_cause import CiIndeterminateCause
-from slice_runner.domain.clock import Clock
 from slice_runner.domain.diff_stats import DiffStats
 from slice_runner.domain.exceptions import RunNotClosedError, UnreadableMetricsLogError
 from slice_runner.domain.role_models import RoleModels
@@ -21,6 +19,7 @@ from slice_runner.infrastructure.claude_config import ClaudeConfig
 from slice_runner.infrastructure.durable_ledger import DurableLedger
 from slice_runner.infrastructure.local_metrics_log import LocalMetricsLog
 from slice_runner.infrastructure.metrics_entry_payload import MetricsEntryPayload
+from slice_runner.tests.durable_store_home import WithTheDurableStoresOutOfTheRealHome
 from slice_runner.tests.infrastructure.retired_ledger_directory import RetiredLedgerDirectory
 from slice_runner.tests.infrastructure.stub_ledger import WiredStubLedgers
 from slice_runner.tests.mothers.closed_slice_mother import ClosedSliceMother
@@ -32,7 +31,7 @@ from slice_runner.tests.mothers.verdict_mother import FindingMother
 if TYPE_CHECKING:
     from pathlib import Path
 
-_STAMP = datetime(2026, 8, 10, 12, 0, 0, tzinfo=UTC)
+_STAMP = WithTheDurableStoresOutOfTheRealHome.STAMP
 
 
 class WrittenMetricsLog:
@@ -51,26 +50,14 @@ class WrittenMetricsLog:
         return rows[0]
 
 
-class WithTheLedgerOutOfTheRealHome:
-    @pytest.fixture(autouse=True)
-    def ledger_root(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
-
-    @staticmethod
-    def frozen_at(stamp: datetime = _STAMP) -> Mock:
-        clock: Mock = create_autospec(Clock, spec_set=True, instance=True)
-        clock.now.return_value = stamp
-        return clock
-
-
-class TestWhereTheDurableLogIsWrittenFrom(WithTheLedgerOutOfTheRealHome):
+class TestWhereTheDurableLogIsWrittenFrom(WithTheDurableStoresOutOfTheRealHome):
     def test_the_log_is_written_by_the_program_itself_and_not_by_launching_a_process(self, tmp_path: Path) -> None:
         LocalMetricsLog(clock=self.frozen_at()).record(ClosedSliceMother.merged())
 
         assert (tmp_path / "slice-runner" / "runs" / "metrics.jsonl").exists()
 
 
-class TestHowEachClosureIsRecorded(WithTheLedgerOutOfTheRealHome):
+class TestHowEachClosureIsRecorded(WithTheDurableStoresOutOfTheRealHome):
     @pytest.mark.parametrize(
         ("state", "verdict", "ci"),
         [
@@ -134,7 +121,7 @@ class TestHowEachClosureIsRecorded(WithTheLedgerOutOfTheRealHome):
         assert WrittenMetricsLog.row_under(tmp_path)["ts"] == _STAMP.isoformat()
 
 
-class TestWhatOfTheHarnessIsWritten(WithTheLedgerOutOfTheRealHome):
+class TestWhatOfTheHarnessIsWritten(WithTheDurableStoresOutOfTheRealHome):
     def test_the_spend_of_every_call_of_the_slice_travels_summed_and_not_only_the_last_one(
         self, tmp_path: Path
     ) -> None:
@@ -187,14 +174,14 @@ class TestWhatOfTheHarnessIsWritten(WithTheLedgerOutOfTheRealHome):
         assert harness["models"] == ["claude-haiku-4-5-20251001", "claude-sonnet-5"]
 
 
-class TestWhatVariantIsWritten(WithTheLedgerOutOfTheRealHome):
+class TestWhatVariantIsWritten(WithTheDurableStoresOutOfTheRealHome):
     def test_every_row_the_program_writes_names_the_variant_that_is_conducting_the_slice(self, tmp_path: Path) -> None:
         LocalMetricsLog(clock=self.frozen_at()).record(ClosedSliceMother.merged())
 
         assert WrittenMetricsLog.row_under(tmp_path)["variant"] == MetricsEntryPayload.VARIANT
 
 
-class TestHowMuchTheSliceChanged(WithTheLedgerOutOfTheRealHome):
+class TestHowMuchTheSliceChanged(WithTheDurableStoresOutOfTheRealHome):
     def test_what_the_implementer_declared_left_out_travels_as_a_count_and_not_as_the_reasons(
         self, tmp_path: Path
     ) -> None:
@@ -230,7 +217,7 @@ class TestHowMuchTheSliceChanged(WithTheLedgerOutOfTheRealHome):
         assert "diff" not in WrittenMetricsLog.row_under(tmp_path)
 
 
-class TestWhatConfigurationTheRunWasConductedWith(WithTheLedgerOutOfTheRealHome):
+class TestWhatConfigurationTheRunWasConductedWith(WithTheDurableStoresOutOfTheRealHome):
     def test_the_budgets_the_run_was_conducted_with_travel_whole_and_not_one_field_at_a_time(
         self, tmp_path: Path
     ) -> None:
@@ -264,7 +251,7 @@ class TestWhatConfigurationTheRunWasConductedWith(WithTheLedgerOutOfTheRealHome)
         assert rows[0]["models_by_role"] != rows[1]["models_by_role"]
 
 
-class TestWhatTheRunAlreadyCounted(WithTheLedgerOutOfTheRealHome):
+class TestWhatTheRunAlreadyCounted(WithTheDurableStoresOutOfTheRealHome):
     def test_the_retries_of_implementing_are_the_sum_of_the_five_ways_back_to_that_step(self, tmp_path: Path) -> None:
         run = RunMother.that_went_back_for_every_reason()
 
@@ -323,7 +310,7 @@ class TestWhatTheRunAlreadyCounted(WithTheLedgerOutOfTheRealHome):
         assert row["findings_of_the_last_round"] == {"high": 0, "medium": 0, "low": 0}
 
 
-class TestWhyTheJudgeWasReinvoked(WithTheLedgerOutOfTheRealHome):
+class TestWhyTheJudgeWasReinvoked(WithTheDurableStoresOutOfTheRealHome):
     @staticmethod
     def _discarded_call(row: dict[str, object]) -> dict[str, object]:
         discarded_call = row["discarded_call"]
@@ -377,7 +364,7 @@ class TestWhyTheJudgeWasReinvoked(WithTheLedgerOutOfTheRealHome):
         assert "discarded_call" not in row
 
 
-class TestWhyTheCiCouldNotBeRead(WithTheLedgerOutOfTheRealHome):
+class TestWhyTheCiCouldNotBeRead(WithTheDurableStoresOutOfTheRealHome):
     def test_the_command_itself_failing_is_recorded_with_its_own_cause(self, tmp_path: Path) -> None:
         LocalMetricsLog(clock=self.frozen_at()).record(
             ClosedSliceMother.blocked_indeterminate_because_of(CiIndeterminateCause.COMMAND_FAILED)
@@ -402,7 +389,7 @@ class TestWhyTheCiCouldNotBeRead(WithTheLedgerOutOfTheRealHome):
         assert "ci_indeterminate_cause" not in row
 
 
-class TestTheLedgerOnlyGrows(WithTheLedgerOutOfTheRealHome):
+class TestTheLedgerOnlyGrows(WithTheDurableStoresOutOfTheRealHome):
     def test_a_second_closure_is_appended_instead_of_overwriting_the_first(self, tmp_path: Path) -> None:
         log = LocalMetricsLog(clock=self.frozen_at())
 
@@ -412,7 +399,7 @@ class TestTheLedgerOnlyGrows(WithTheLedgerOutOfTheRealHome):
         assert [row["verdict"] for row in WrittenMetricsLog.rows_under(tmp_path)] == ["pass", "fail"]
 
 
-class TestReadingBackTheClosedSlices(WithTheLedgerOutOfTheRealHome):
+class TestReadingBackTheClosedSlices(WithTheDurableStoresOutOfTheRealHome):
     def test_a_slice_never_recorded_returns_nothing_instead_of_failing(self, tmp_path: Path) -> None:
         found = LocalMetricsLog(clock=self.frozen_at()).closed_slices(
             repo=None, since=datetime(2000, 1, 1, tzinfo=UTC), until=datetime(2100, 1, 1, tzinfo=UTC)
@@ -498,7 +485,7 @@ class TestReadingBackTheClosedSlices(WithTheLedgerOutOfTheRealHome):
             log.closed_slices(repo=None, since=datetime(2000, 1, 1, tzinfo=UTC), until=datetime(2100, 1, 1, tzinfo=UTC))
 
 
-class TestDeduplicatingRepeatedClosuresOfTheSameSlice(WithTheLedgerOutOfTheRealHome):
+class TestDeduplicatingRepeatedClosuresOfTheSameSlice(WithTheDurableStoresOutOfTheRealHome):
     def test_two_closures_of_the_same_slice_within_the_window_collapse_into_the_last_one_written(
         self, tmp_path: Path
     ) -> None:
@@ -542,7 +529,7 @@ class TestDeduplicatingRepeatedClosuresOfTheSameSlice(WithTheLedgerOutOfTheRealH
         assert [record.slice_id for record in found] == ["PROJ-1234-07"]
 
 
-class TestTheRetiredLogDirectoryIsNeverTouched(WithTheLedgerOutOfTheRealHome):
+class TestTheRetiredLogDirectoryIsNeverTouched(WithTheDurableStoresOutOfTheRealHome):
     def test_a_closure_written_under_the_retired_directory_is_neither_found_nor_touched(self, tmp_path: Path) -> None:
         old_ledger = RetiredLedgerDirectory.path(tmp_path, "metrics")
         old_line = (
@@ -565,7 +552,7 @@ class TestWhereTheLedgerLives:
     ) -> None:
         monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path / "never-used-before"))
 
-        LocalMetricsLog(clock=WithTheLedgerOutOfTheRealHome.frozen_at()).record(ClosedSliceMother.merged())
+        LocalMetricsLog(clock=WithTheDurableStoresOutOfTheRealHome.frozen_at()).record(ClosedSliceMother.merged())
 
         assert (tmp_path / "never-used-before" / "slice-runner" / "runs" / "metrics.jsonl").exists()
 
@@ -586,7 +573,7 @@ class TestTheAdapterOwnsOnlyItsNameAndItsPayload:
         monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
         created = WiredStubLedgers.on(local_metrics_log, monkeypatch)
 
-        LocalMetricsLog(clock=WithTheLedgerOutOfTheRealHome.frozen_at()).record(ClosedSliceMother.merged())
+        LocalMetricsLog(clock=WithTheDurableStoresOutOfTheRealHome.frozen_at()).record(ClosedSliceMother.merged())
 
         assert len(created) == 1
         stub = created[0]

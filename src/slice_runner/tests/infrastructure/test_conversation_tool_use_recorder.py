@@ -2,18 +2,12 @@ from __future__ import annotations
 
 import json
 from dataclasses import replace
-from datetime import UTC, datetime
 from typing import TYPE_CHECKING
-from unittest.mock import Mock, create_autospec
-
-import pytest
 
 from slice_runner.domain.alignment import Alignment
 from slice_runner.domain.canonical_slice_id import CanonicalSliceId
-from slice_runner.domain.clock import Clock
 from slice_runner.domain.slice_coordinates import SliceCoordinates
 from slice_runner.domain.step import Step
-from slice_runner.infrastructure.claude_config import ClaudeConfig
 from slice_runner.infrastructure.claude_implementer import ClaudeImplementer
 from slice_runner.infrastructure.claude_understanding import ClaudeUnderstanding
 from slice_runner.infrastructure.claude_verifier import ClaudeVerifier
@@ -29,6 +23,7 @@ from slice_runner.tests.doubles import (
     RecordedTrace,
     RecordedTurnLog,
 )
+from slice_runner.tests.durable_store_home import WithTheDurableStoresOutOfTheRealHome
 from slice_runner.tests.mothers.assignment_mother import AssignmentMother
 from slice_runner.tests.mothers.conversation_transcript_mother import ConversationTranscriptMother
 from slice_runner.tests.mothers.judge_output_mother import HarnessEnvelopeMother, JudgeVerdictMother
@@ -44,17 +39,11 @@ _WORKTREE = ConversationTranscriptMother.WORKTREE
 _REPO = "alcaptar/agentic-skills"
 _ISSUE = 45
 _SLICE_ID = "slice-05"
-_STAMP = datetime(2026, 8, 10, 12, 0, 0, tzinfo=UTC)
+_STAMP = WithTheDurableStoresOutOfTheRealHome.STAMP
 _SUBJECT = HarnessCallSubject(
     coordinates=SliceCoordinates(repo=_REPO, issue=_ISSUE, slice_id=CanonicalSliceId.of_text(_SLICE_ID)),
     worktree=_WORKTREE,
 )
-
-
-def _frozen_at(stamp: datetime = _STAMP) -> Mock:
-    clock: Mock = create_autospec(Clock, spec_set=True, instance=True)
-    clock.now.return_value = stamp
-    return clock
 
 
 class WrittenToolUses:
@@ -69,19 +58,14 @@ class WrittenToolUses:
         return [json.loads(line) for line in ledger.read_text(encoding="utf-8").splitlines()]
 
 
-class WithTheToolUseLogOutOfTheRealHome:
-    @pytest.fixture(autouse=True)
-    def roots(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
-
-
-class TestARecordedConversation(WithTheToolUseLogOutOfTheRealHome):
+class TestARecordedConversation(WithTheDurableStoresOutOfTheRealHome):
     def test_every_tool_use_of_the_conversation_lands_in_the_log_labelled_with_the_slice_step_and_session(
         self, tmp_path: Path
     ) -> None:
         ConversationTranscriptMother.written_under(tmp_path)
         recorder = ConversationToolUseRecorder(
-            conversations=LocalConversationLog(), tool_use_log=LocalToolUseLog(clock=_frozen_at())
+            conversations=LocalConversationLog(),
+            tool_use_log=LocalToolUseLog(clock=WithTheDurableStoresOutOfTheRealHome.frozen_at()),
         )
 
         recorder.record_after(_SUBJECT, step=Step.IMPLEMENT, session=ConversationTranscriptMother.SESSION)
@@ -108,7 +92,8 @@ class TestARecordedConversation(WithTheToolUseLogOutOfTheRealHome):
             tmp_path, recorded=ConversationTranscriptMother.REJECTED_STRUCTURED_OUTPUT
         )
         recorder = ConversationToolUseRecorder(
-            conversations=LocalConversationLog(), tool_use_log=LocalToolUseLog(clock=_frozen_at())
+            conversations=LocalConversationLog(),
+            tool_use_log=LocalToolUseLog(clock=WithTheDurableStoresOutOfTheRealHome.frozen_at()),
         )
 
         recorder.record_after(_SUBJECT, step=Step.UNDERSTAND, session=ConversationTranscriptMother.SESSION)
@@ -130,10 +115,11 @@ class WrittenUnrecordedToolUses:
         return [json.loads(line) for line in ledger.read_text(encoding="utf-8").splitlines()]
 
 
-class TestATranscriptThatCannotBeRead(WithTheToolUseLogOutOfTheRealHome):
+class TestATranscriptThatCannotBeRead(WithTheDurableStoresOutOfTheRealHome):
     def test_a_session_never_recorded_leaves_the_run_going_instead_of_raising(self, tmp_path: Path) -> None:
         recorder = ConversationToolUseRecorder(
-            conversations=LocalConversationLog(), tool_use_log=LocalToolUseLog(clock=_frozen_at())
+            conversations=LocalConversationLog(),
+            tool_use_log=LocalToolUseLog(clock=WithTheDurableStoresOutOfTheRealHome.frozen_at()),
         )
 
         recorder.record_after(_SUBJECT, step=Step.IMPLEMENT, session="never-recorded")
@@ -142,7 +128,8 @@ class TestATranscriptThatCannotBeRead(WithTheToolUseLogOutOfTheRealHome):
 
     def test_a_session_never_recorded_is_not_abandoned_in_silence_but_says_so(self, tmp_path: Path) -> None:
         recorder = ConversationToolUseRecorder(
-            conversations=LocalConversationLog(), tool_use_log=LocalToolUseLog(clock=_frozen_at())
+            conversations=LocalConversationLog(),
+            tool_use_log=LocalToolUseLog(clock=WithTheDurableStoresOutOfTheRealHome.frozen_at()),
         )
 
         recorder.record_after(_SUBJECT, step=Step.IMPLEMENT, session="never-recorded")
@@ -165,7 +152,8 @@ class TestATranscriptThatCannotBeRead(WithTheToolUseLogOutOfTheRealHome):
             "not json at all\n", encoding="utf-8"
         )
         recorder = ConversationToolUseRecorder(
-            conversations=LocalConversationLog(), tool_use_log=LocalToolUseLog(clock=_frozen_at())
+            conversations=LocalConversationLog(),
+            tool_use_log=LocalToolUseLog(clock=WithTheDurableStoresOutOfTheRealHome.frozen_at()),
         )
 
         recorder.record_after(_SUBJECT, step=Step.IMPLEMENT, session=session)
@@ -180,7 +168,8 @@ class TestATranscriptThatCannotBeRead(WithTheToolUseLogOutOfTheRealHome):
             "not json at all\n", encoding="utf-8"
         )
         recorder = ConversationToolUseRecorder(
-            conversations=LocalConversationLog(), tool_use_log=LocalToolUseLog(clock=_frozen_at())
+            conversations=LocalConversationLog(),
+            tool_use_log=LocalToolUseLog(clock=WithTheDurableStoresOutOfTheRealHome.frozen_at()),
         )
 
         recorder.record_after(_SUBJECT, step=Step.IMPLEMENT, session=session)
@@ -198,7 +187,7 @@ class TestATranscriptThatCannotBeRead(WithTheToolUseLogOutOfTheRealHome):
         ]
 
 
-class TestARunThatCallsAllThreeStepsOfTheHarness(WithTheToolUseLogOutOfTheRealHome):
+class TestARunThatCallsAllThreeStepsOfTheHarness(WithTheDurableStoresOutOfTheRealHome):
     _WORKTREE = ConversationTranscriptMother.WORKTREE
     _SESSION = ConversationTranscriptMother.SESSION
 
@@ -216,7 +205,8 @@ class TestARunThatCallsAllThreeStepsOfTheHarness(WithTheToolUseLogOutOfTheRealHo
     def _run_all_three(cls, tmp_path: Path) -> None:
         ConversationTranscriptMother.written_under(tmp_path)
         tool_uses = ConversationToolUseRecorder(
-            conversations=LocalConversationLog(), tool_use_log=LocalToolUseLog(clock=_frozen_at())
+            conversations=LocalConversationLog(),
+            tool_use_log=LocalToolUseLog(clock=WithTheDurableStoresOutOfTheRealHome.frozen_at()),
         )
         telemetry = HarnessTelemetry(
             trace=RecordedTrace(), turns=RecordedTurnLog(), spend_log=RecordedSpendLog(), tool_uses=tool_uses

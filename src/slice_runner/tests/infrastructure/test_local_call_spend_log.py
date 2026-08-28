@@ -1,14 +1,11 @@
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime
 from typing import TYPE_CHECKING
-from unittest.mock import Mock, create_autospec
 
 import pytest
 
 from slice_runner.domain.call_spend_log import HarnessCallSpend
-from slice_runner.domain.clock import Clock
 from slice_runner.domain.exceptions import UnreadableCallSpendLogError
 from slice_runner.domain.harness_spend import HarnessSpend
 from slice_runner.infrastructure import local_call_spend_log
@@ -17,6 +14,7 @@ from slice_runner.infrastructure.claude_config import ClaudeConfig
 from slice_runner.infrastructure.durable_ledger import DurableLedger
 from slice_runner.infrastructure.harness_output import HarnessOutput
 from slice_runner.infrastructure.local_call_spend_log import LocalCallSpendLog
+from slice_runner.tests.durable_store_home import WithTheDurableStoresOutOfTheRealHome
 from slice_runner.tests.infrastructure.retired_ledger_directory import RetiredLedgerDirectory
 from slice_runner.tests.infrastructure.stub_ledger import WiredStubLedgers
 from slice_runner.tests.mothers.harness_call_spend_mother import HarnessCallSpendMother
@@ -26,7 +24,7 @@ from slice_runner.tests.mothers.judge_output_mother import HarnessEnvelopeMother
 if TYPE_CHECKING:
     from pathlib import Path
 
-_STAMP = datetime(2026, 8, 10, 12, 0, 0, tzinfo=UTC)
+_STAMP = WithTheDurableStoresOutOfTheRealHome.STAMP
 
 
 class WrittenLedger:
@@ -37,19 +35,7 @@ class WrittenLedger:
         return [json.loads(line) for line in ledger.read_text(encoding="utf-8").splitlines()]
 
 
-class WithTheLedgerOutOfTheRealHome:
-    @pytest.fixture(autouse=True)
-    def ledger_root(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
-
-    @staticmethod
-    def frozen_at(stamp: datetime = _STAMP) -> Mock:
-        clock: Mock = create_autospec(Clock, spec_set=True, instance=True)
-        clock.now.return_value = stamp
-        return clock
-
-
-class TestWhatIsWrittenDownOfACall(WithTheLedgerOutOfTheRealHome):
+class TestWhatIsWrittenDownOfACall(WithTheDurableStoresOutOfTheRealHome):
     def test_a_call_is_written_as_the_run_it_came_from_its_session_and_what_the_harness_spent_on_it(
         self, tmp_path: Path
     ) -> None:
@@ -81,7 +67,7 @@ class TestWhatIsWrittenDownOfACall(WithTheLedgerOutOfTheRealHome):
         ]
 
 
-class TestTheLedgerOnlyGrows(WithTheLedgerOutOfTheRealHome):
+class TestTheLedgerOnlyGrows(WithTheDurableStoresOutOfTheRealHome):
     def test_the_two_calls_of_a_slice_are_both_kept_so_the_judge_does_not_overwrite_the_implementer(
         self, tmp_path: Path
     ) -> None:
@@ -96,7 +82,7 @@ class TestTheLedgerOnlyGrows(WithTheLedgerOutOfTheRealHome):
         ]
 
 
-class TestAddingUpTheSpendOfSomeSessions(WithTheLedgerOutOfTheRealHome):
+class TestAddingUpTheSpendOfSomeSessions(WithTheDurableStoresOutOfTheRealHome):
     def test_the_spend_of_a_single_session_asked_for_is_returned(self, tmp_path: Path) -> None:
         ledger = LocalCallSpendLog(clock=self.frozen_at())
         ledger.record(HarnessCallSpendMother.of_the_implementer())
@@ -194,7 +180,7 @@ class TestAddingUpTheSpendOfSomeSessions(WithTheLedgerOutOfTheRealHome):
             LocalCallSpendLog(clock=self.frozen_at()).spend_of((HarnessCallSpendMother.of_the_implementer().session,))
 
 
-class TestAddingUpTheSpendOfASlice(WithTheLedgerOutOfTheRealHome):
+class TestAddingUpTheSpendOfASlice(WithTheDurableStoresOutOfTheRealHome):
     def test_the_spend_of_a_slice_is_summed_by_reading_only_the_spend_ledger(self, tmp_path: Path) -> None:
         ledger = LocalCallSpendLog(clock=self.frozen_at())
         ledger.record(HarnessCallSpendMother.of_the_implementer())
@@ -267,7 +253,7 @@ class TestAddingUpTheSpendOfASlice(WithTheLedgerOutOfTheRealHome):
         assert found == HarnessSpendMother.of_the_implementer_call()
 
 
-class TestASessionDuplicatedInTheLedgerIsCountedOnce(WithTheLedgerOutOfTheRealHome):
+class TestASessionDuplicatedInTheLedgerIsCountedOnce(WithTheDurableStoresOutOfTheRealHome):
     def test_a_session_written_twice_by_a_stale_reinvocation_is_summed_only_once(self, tmp_path: Path) -> None:
         ledger = LocalCallSpendLog(clock=self.frozen_at())
         call = HarnessCallSpendMother.of_the_implementer()
@@ -294,7 +280,7 @@ class TestASessionDuplicatedInTheLedgerIsCountedOnce(WithTheLedgerOutOfTheRealHo
         )
 
 
-class TestTheRetiredLogDirectoryIsNeverTouched(WithTheLedgerOutOfTheRealHome):
+class TestTheRetiredLogDirectoryIsNeverTouched(WithTheDurableStoresOutOfTheRealHome):
     def test_a_spend_written_under_the_retired_directory_is_neither_found_nor_touched(self, tmp_path: Path) -> None:
         old_ledger = RetiredLedgerDirectory.path(tmp_path, "spend")
         old_call = HarnessCallSpendMother.of_the_implementer()
@@ -314,7 +300,7 @@ class TestTheRetiredLogDirectoryIsNeverTouched(WithTheLedgerOutOfTheRealHome):
         assert RetiredLedgerDirectory.read_without_opening(old_ledger) == old_line
 
 
-class TestARealEnvelopeReachesTheLedger(WithTheLedgerOutOfTheRealHome):
+class TestARealEnvelopeReachesTheLedger(WithTheDurableStoresOutOfTheRealHome):
     def test_the_tokens_and_the_latencies_a_real_envelope_brings_survive_to_the_durable_ledger(
         self, tmp_path: Path
     ) -> None:
@@ -354,7 +340,9 @@ class TestWhereTheLedgerLives:
     ) -> None:
         monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path / "never-used-before"))
 
-        LocalCallSpendLog(clock=WithTheLedgerOutOfTheRealHome.frozen_at()).record(HarnessCallSpendMother.of_the_judge())
+        LocalCallSpendLog(clock=WithTheDurableStoresOutOfTheRealHome.frozen_at()).record(
+            HarnessCallSpendMother.of_the_judge()
+        )
 
         assert (tmp_path / "never-used-before" / "slice-runner" / "runs" / "spend.jsonl").exists()
 
@@ -375,7 +363,9 @@ class TestTheAdapterOwnsOnlyItsNameAndItsPayload:
         monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
         created = WiredStubLedgers.on(local_call_spend_log, monkeypatch)
 
-        LocalCallSpendLog(clock=WithTheLedgerOutOfTheRealHome.frozen_at()).record(HarnessCallSpendMother.of_the_judge())
+        LocalCallSpendLog(clock=WithTheDurableStoresOutOfTheRealHome.frozen_at()).record(
+            HarnessCallSpendMother.of_the_judge()
+        )
 
         assert len(created) == 1
         stub = created[0]
@@ -390,7 +380,7 @@ class TestTheAdapterOwnsOnlyItsNameAndItsPayload:
         monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
         WiredStubLedgers.on(local_call_spend_log, monkeypatch)
 
-        ledger = LocalCallSpendLog(clock=WithTheLedgerOutOfTheRealHome.frozen_at())
+        ledger = LocalCallSpendLog(clock=WithTheDurableStoresOutOfTheRealHome.frozen_at())
         ledger.record(HarnessCallSpendMother.of_the_judge())
 
         found = ledger.spend_of((HarnessCallSpendMother.of_the_judge().session,))
