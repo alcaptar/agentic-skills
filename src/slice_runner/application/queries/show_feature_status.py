@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
+from slice_runner.domain.closed_slice_scope import ClosedSliceScope
 from slice_runner.domain.slice_coordinates import SliceCoordinates
 from slice_runner.domain.slice_status import SliceStatus
 
@@ -43,9 +43,8 @@ class ShowFeatureStatus:
         )
         pulls = self._forum.open_pull_requests(repo=params.repo, branches=tuple(child.branch for child in children))
         pull_request_of = {pull.branch: pull.number for pull in pulls}
-        records = self._metrics.closed_slices(
-            repo=params.repo, since=datetime.min.replace(tzinfo=UTC), until=datetime.max.replace(tzinfo=UTC)
-        )
+        scope = ClosedSliceScope.of_these_issues(repo=params.repo, issues=tuple(child.number for child in children))
+        records = self._metrics.closed_slices(scope)
         record_of = {record.issue: record for record in records}
 
         return tuple(

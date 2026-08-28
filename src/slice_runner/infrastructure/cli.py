@@ -37,6 +37,7 @@ from slice_runner.application.queries.spend_by_role import SpendByRole, SpendByR
 from slice_runner.application.queries.spend_of_step import SpendOfStep, SpendOfStepParams
 from slice_runner.domain.budgets import Budgets
 from slice_runner.domain.closed_slice_metrics import ClosedSliceMetrics
+from slice_runner.domain.closed_slice_scope import ClosedSliceScope
 from slice_runner.domain.exceptions import (
     BranchMismatchError,
     ConversationNotFoundError,
@@ -363,9 +364,11 @@ class Cli:
     @classmethod
     def metrics(cls, *, repo: str | None, since: datetime, until: datetime, out: Path) -> int:
         clock = SystemClock()
-        scope = ListClosedSlicesParams(repo=repo, since=since, until=until)
+        scope = ClosedSliceScope.of_a_repo_between(repo=repo, since=since, until=until)
         try:
-            records = ListClosedSlices(metrics_log=LocalMetricsLog(clock=clock)).execute(scope)
+            records = ListClosedSlices(metrics_log=LocalMetricsLog(clock=clock)).execute(
+                ListClosedSlicesParams(scope=scope)
+            )
             role_spend = SpendByRole(
                 trace=LocalCallTrace(clock=clock), spend_log=LocalCallSpendLog(clock=clock)
             ).execute(SpendByRoleParams(records=records))
