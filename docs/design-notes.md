@@ -251,8 +251,9 @@ mide. Las reglas que salen de estas decisiones siguen en su capa.
   por bloques consecutivos del mismo identificador de slice, que es lo único posible mientras el corpus no
   tenga identidad ni instante por fila. **El bullet siguiente cuenta como acabo ese contador.**
 - **Y por que la ronda de correccion se retiro entera.** Repartir el contador trato el sintoma. Medido
-  sobre los 91 hallazgos de los 27 veredictos del corpus -10 `high`, 28 `medium`, 53 `low`-, **10 de los
-  27 veredictos eran un PASS que mandaba una ronda de correccion completa sin ser un veto**, y al leer
+  sobre los 91 hallazgos de los 27 veredictos que el corpus de veredictos tenia hasta el 2026-08-28 a las
+  13:00 -10 `high`, 28 `medium`, 53 `low`; el corpus es append-only, asi que sin ese corte el recuento de
+  hoy ya es otro-, **10 de los 27 veredictos eran un PASS que mandaba una ronda de correccion completa sin ser un veto**, y al leer
   los 28 `medium` uno a uno, **20 escriben literalmente que no bloquean** -"no lo subo a high porque...",
   "no lo trato como bloqueante", "No bloquea"- y **ninguno** alega que le faltara evidencia. Es decir: el
   juez estaba siendo coherente con lo que la rubrica le decia -"los `medium`/`low` se reportan pero no
@@ -269,10 +270,16 @@ mide. Las reglas que salen de estas decisiones siguen en su capa.
   consecuencia y no por lo grave que suenen. Lo que impide que vuelva a divergir no es la redaccion: es
   el contrato de `tests/test_skill_contracts.py` que compara la escala escrita con lo que
   `Outcome.of_the_verdict` decide, y que se puso rojo al mutar cada una de las dos mitades por separado.
-  La regla "un `high` es un veto" no se perdio al quitar el umbral de `outcome.py`: vivia un piso mas
-  abajo, en `Verdict.__post_init__`, que rechaza un PASS con un `high` antes de que ningun `Outcome` lo
-  mire. Linea base contra la que medir si esto sirvio: **0,48 rondas de verificacion extra y 0,85 de
-  correccion por slice, y 19 de 66 slices a la primera**.
+  La regla "un `high` es un veto" no se perdio al quitar el umbral de `outcome.py`: al reves, **dejo de
+  estar declarada dos veces con dos particiones distintas** -`verdict.py` decia solo `HIGH` y
+  `outcome.py` decia todo lo que no fuera `LOW`, que es el antipatron de `docs/conventions/architecture.md`-
+  y se quedo en un solo sitio, `Verdict.__post_init__`, que rechaza un PASS con un `high` antes de que
+  ningun `Outcome` lo mire. Linea base contra la que medir si esto sirvio, **con su definicion, porque sin
+  ella no se recalcula**: sobre las filas de metricas que llevan `correction_retries` -la generacion en la
+  que ese contador existio-, quedandose con la ultima fila de cada `(repo, issue, slice_id, name)`, salen
+  **70 slices, 0,84 rondas de correccion por slice y 30 sin ninguna vuelta extra**. La media de reintentos
+  de verificacion en esa misma ventana es **0,03**, tan baja porque el veto casi nunca se reintento: lo que
+  se pagaba eran las correcciones.
 - **Los reintentos de una llamada a `gh`, y la espera entre ellos.** No hay corpus de fallos transitorios
   de la interfaz de programación de GitHub del que medir un percentil, al contrario que el resto de esta
   lista: la intención que trajo la slice es explícita en que se quiere cubrir -"un parpadeo de red, un

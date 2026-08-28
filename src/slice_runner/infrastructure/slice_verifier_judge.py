@@ -232,12 +232,15 @@ Recorrela **entera** y reporta item a item. No la amplies con criterios propios 
      libreria), no con un cliente o contador ad-hoc en paralelo. Instrumentacion paralela cuando existe
      libreria es **FAIL (high)**, citando regla + path.
    - **¿Nombre y cardinalidad sanos?** Labels que meten identificadores de alta cardinalidad (ids,
-     emails, uuids) o naming que contradice la convencion del repo: `medium` normalmente, `high` si la
-     convencion lo prohibe explicitamente.
+     emails, uuids) o naming que contradice la convencion del repo. La severidad sale de la regla del
+     apartado "Veredicto" -¿esto se entrega asi, o vuelve al implementador?-: `high` cuando la
+     convencion lo prohibe, o cuando la cardinalidad rompe el almacen de metricas; `medium` cuando con
+     ese nombre se puede vivir hasta la siguiente slice.
    - **Si la senal apunta a algo que ya existia** (metrica que la libreria emite sola, log ya presente),
      **no hay nada que exigir al diff**: no es hallazgo. Tampoco lo es una `SENAL: exenta` con motivo
      coherente con el diff -pero si el motivo dice "refactor puro" y el diff cambia comportamiento
-     observable, eso si es hallazgo (`medium`, o `high` si el cambio es de cara al usuario).
+     observable, eso si es hallazgo, y su severidad sale de la misma regla: `high` si eso deja el cambio
+     sin forma de comprobarse vivo, `medium` si lo que falta lo cubre una senal que ya existe.
    - **Si la spec no declara `SENAL`**, no es tu hallazgo: es una spec anterior al mecanismo y el
      orquestador ya avisa. No lo reportes.
 
@@ -267,8 +270,9 @@ fichero a medias, y arrastrar la cita vieja reportaria algo que ya no es cierto.
   tres niveles se definen por su consecuencia, y no hay otra:
 
   - `high` -> **el veredicto es FAIL y la slice vuelve al implementador.** Esto no se fusiona.
-  - `medium` -> **la slice se fusiona con el defecto dentro**, y el hallazgo viaja al cuerpo de la pull
-    request, bajo "Hallazgos que el juez dejo pasar sin corregir", para que quien decide el merge lo lea.
+  - `medium` -> **la slice se entrega con el defecto dentro**: se abre su pull request y el hallazgo
+    viaja al cuerpo, en la seccion de deuda aceptada, para que lo lea quien decide el merge -que es una
+    persona, no el programa-.
   - `low` -> lo mismo que `medium`, pero es un aviso menor y no una deuda que nadie deberia olvidar.
 
   **Nada que no sea `high` manda corregir a nadie.** Un hallazgo que crees que hay que arreglar antes de
@@ -285,7 +289,7 @@ fichero a medias, y arrastrar la cita vieja reportaria algo que ya no es cierto.
 - **Evidencia antes de bloquear (calibracion).** Un hallazgo `severity: high` **exige evidencia
   citable**: regla + path + linea + por que, en el campo `evidence`. Si no puedes citarla
   concretamente, **degrada la severidad** en vez de bloquear, sabiendo lo que eso significa aqui: que la
-  slice se fusiona con el defecto dentro y el hallazgo se lee en la pull request. A un verificador al que
+  slice se entrega con el defecto dentro y el hallazgo se lee en la pull request. A un verificador al que
   se le pide encontrar fallos siempre encuentra alguno; obligar a citar evidencia hace que el bloqueo sea
   real y no defensivo.
 
