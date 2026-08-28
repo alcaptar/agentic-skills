@@ -580,6 +580,57 @@ def test_every_command_slice_spec_teaches_parses_and_names_the_worktree_it_runs_
         )
 
 
+_WORKTREE_SECTION = "## El worktree de una slice"
+_MOUNTS_A_WORKTREE = re.compile(r"git worktree add")
+_NEXT_STEP = re.compile(r"\n\d+[a-z]?\. \*\*|\n## ")
+_STEPS_THAT_ORDER_A_WORKTREE = (
+    "6. **Cierra**",
+    "7. **Propon el reparto en paralelo",
+)
+
+
+def test_the_recipe_for_mounting_a_worktree_lives_in_one_place_and_every_step_that_orders_one_cites_it() -> None:
+    """The three conditions on where a worktree goes fail silently, so they cannot sit in a doc.
+
+    They were written in `docs/design-notes.md` and nowhere the skill reads, and the result is
+    measured: following this skill, a tree for a real slice got mounted outside the repo root and
+    without a leading dot -- breaking two of the three -- and nothing said anything, because nothing
+    does. It only survived because this repo runs its controls outside a container; the same tree
+    under `docker compose` would not have existed inside it at all.
+
+    So the recipe and its conditions live in one section, and the steps that order a tree cite it
+    instead of restating it. Restating is what this file already caught once, in the launch command
+    the skill taught on four surfaces and three of them stale: a second copy of the recipe is a
+    second place the conditions can go missing from. This measures the shape, not the wording --
+    where the recipe lives, and that nobody orders a tree without pointing at it.
+    """
+    spec = _read(_SPEC)
+    section_at = spec.find(_WORKTREE_SECTION)
+
+    assert section_at != -1, f"{_rel(_SPEC)} has no `{_WORKTREE_SECTION}` section"
+    mounted_at = [m.start() for m in _MOUNTS_A_WORKTREE.finditer(spec)]
+    assert len(mounted_at) == 1, (
+        f"{_rel(_SPEC)} spells out `git worktree add` {len(mounted_at)} times: the recipe belongs to "
+        f"`{_WORKTREE_SECTION}` alone, and every other place cites it"
+    )
+    assert mounted_at[0] > section_at, f"the recipe in {_rel(_SPEC)} sits outside `{_WORKTREE_SECTION}`"
+    for step in _STEPS_THAT_ORDER_A_WORKTREE:
+        at = spec.find(step)
+        assert at != -1, f"{_rel(_SPEC)} no longer has the step starting `{step}`"
+        # Scoped to the NEXT numbered step, not the next `##`: step 6 runs until step 7, which cites
+        # the section, so a scope that reaches the heading reads 7's citation as 6's and passes.
+        rest = spec[at + len(step) :]
+        ends_at = min(
+            (m.start() for m in _NEXT_STEP.finditer(rest) if m.start() > 0),
+            default=len(rest),
+        )
+        following = rest[:ends_at]
+        assert _WORKTREE_SECTION.removeprefix("## ") in following, (
+            f"the step starting `{step}` orders a worktree without citing "
+            f"`{_WORKTREE_SECTION}`, where its three silent conditions live"
+        )
+
+
 _GRACE_WINDOW_IS_WRITTEN_IN = (
     _ROOT / "docs" / "design-notes.md",
     _ROOT / "README.md",

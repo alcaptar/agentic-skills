@@ -357,6 +357,71 @@ SUSTITUYE: no
   repo del padre. Toda slice con `REPO:` exige la subseccion de fuentes **y de controles** de su repo.
 - Una feature de **una sola slice** = un padre con una sola subissue.
 
+## El worktree de una slice
+
+Todo run vive en un worktree: el `CLAUDE.md` del repo dice *"no asumir worktree"* y en la practica es
+falso, se conducen varias en paralelo. Quien monta el arbol es hoy quien invoca -el programa aun no lo
+hace, y esa es la intencion de otro issue-, asi que **las tres condiciones de abajo las cumple una
+persona o no las cumple nadie**. Las tres fallan **en silencio**: un arbol mal colocado no da ningun
+error, simplemente hace que los controles midan otra cosa o no encuentren el codigo.
+
+**Donde va.** `<raiz-del-repo>/.worktrees/<NN-name>`, o el nombre que uses, con estas tres condiciones:
+
+- **Bajo la raiz del repo, o Docker no lo ve.** Cuando los controles corren en contenedor, el compose
+  monta la raiz y el arbol solo existe dentro si cuelga de ella. Un arbol hermano fuera del repo no
+  estaria montado y los controles no podrian correr.
+- **Con punto delante, o los controles se lo comen.** `pytest` y `ruff` no recursan dentro de un
+  directorio oculto y si dentro de uno visible: sin el punto, `make test` desde la raiz mide tambien
+  las copias de los tests de cada worktree.
+- **Ignorado, porque git no lo hace solo.** Un arbol anidado sale como `?? .worktrees/` en el
+  `git status` del clon principal. Su casa es `.git/info/exclude`, que es por clon y no se versiona,
+  asi que no obliga a tocar el `.gitignore` de nadie. **Preguntale a git donde esta ese fichero**
+  (`git rev-parse --git-common-dir`): dentro de un worktree, el punto de entrada de git es un
+  **fichero** que apunta al clon principal, no un directorio, asi que componer la ruta a mano escribe
+  donde nadie lee.
+
+Las mediciones que sostienen las tres estan en `docs/design-notes.md`, seccion "El worktree del
+programa".
+
+**Como se monta.** Un arbol por slice:
+
+```bash
+git worktree add <ruta-del-worktree> --detach origin/<base>
+```
+
+**El `--detach` vale para una slice que arranca de cero, y solo para esa.** El programa crea la rama el
+mismo antes de implementar, asi que ahi el worktree suelto es lo limpio. Pero una slice **que ya tiene
+estado persistido** -porque un run anterior murio, o quedo esperando algo- **retoma por su paso y no
+vuelve a crear la rama**: si el worktree esta suelto, implementa entero sobre nada y revienta al
+commitear, con el trabajo hecho, el juez pasado y el harness ya pagado. Antes de relanzar una slice
+asi, **ponla en su rama**: `slice/NN-name`, o `slice/AS-255-NN-name` si la feature tiene historia de
+usuario.
+
+```bash
+git -C <ruta-del-worktree> switch slice/NN-name
+```
+
+**Como se retira, y por que no a ciegas.** El programa commitea **solo al entregar**, asi que todo run
+bloqueado o abortado tiene su trabajo sin commitear y borrar su arbol lo perderia entero. Antes de
+retirar, comprueba **las dos condiciones**, no las supongas:
+
+```bash
+git -C <ruta-del-worktree> status --porcelain          # vacio: no hay nada sin commitear
+git merge-base --is-ancestor <rama-de-la-slice> origin/<base>   # exito: nada existe solo en local
+```
+
+Con las dos cumplidas:
+
+```bash
+git worktree remove <ruta-del-worktree>
+git branch -d <rama-de-la-slice>
+```
+
+Si falla cualquiera de las dos, **el arbol se queda** y se dice en que ruta y por que. Nada de esto lo
+hace el programa todavia, asi que un arbol que nadie retire se queda para siempre: en la maquina donde
+se escribio esto habia **treinta y siete**, de dias distintos, y decidir cual se podia tirar costaba
+mirarlos uno a uno.
+
 ## Steps — modo autoria (por defecto)
 
 1. **Invoca `superpowers:brainstorming`** y sigue su proceso para entender intencion, proponer
@@ -524,8 +589,10 @@ SUSTITUYE: no
    omision es el directorio actual, asi que un run lanzado sin ella conduce donde estes parado: medido
    en dos maquinas, es el mecanismo por el que el juez leyo **31 de 32 veces** una rama que no tenia
    nada que ver con la slice que juzgaba. Quien copie el comando de aqui no puede caer en eso. El paso
-   siguiente monta el worktree; si no vas a paralelizar, monta uno igual -en la practica todo run vive
-   en uno- o pasa la ruta del arbol en el que ya estes trabajando.
+   siguiente monta el worktree cuando se reparte en paralelo; **si no vas a paralelizar, monta uno
+   igual** -en la practica todo run vive en uno-. Donde va, como se monta y como se retira estan en
+   **"El worktree de una slice"**, y sus tres condiciones fallan en silencio: leelas antes de montarlo,
+   no despues.
 
 7. **Propon el reparto en paralelo y, si te lo confirman, montalo tu.** Una invocacion conduce **una**
    slice, asi que una feature de ocho son ocho invocaciones; en serie eso es toda la tarde. Se pueden
@@ -554,23 +621,12 @@ SUSTITUYE: no
    **Espera confirmacion** (`check-alignment`): crear worktrees y lanzar runs gasta dinero en el
    harness de otra persona.
 
-   Con la confirmacion dada, montalo tu, un worktree por slice de la tanda:
+   Con la confirmacion dada, montalo tu, un worktree por slice de la tanda, **con las tres condiciones
+   de "El worktree de una slice"** -donde va, y si arranca de cero o retoma con estado persistido-, y
+   lanza cada run:
 
    ```bash
-   git worktree add <ruta-del-worktree> --detach origin/<base>
    slice-runner run <padre> --repo <org>/<repo> --base <base> --slice <identificador> --worktree <ruta-del-worktree>
-   ```
-
-   **El `--detach` vale para una slice que arranca de cero, y solo para esa.** El programa crea la rama
-   el mismo antes de implementar, asi que ahi el worktree suelto es lo limpio. Pero una slice **que ya
-   tiene estado persistido** -porque un run anterior murio, o quedo esperando algo- **retoma por su paso
-   y no vuelve a crear la rama**: si el worktree esta suelto, implementa entero sobre nada y revienta al
-   commitear, con el trabajo hecho, el juez pasado y el harness ya pagado. Antes de relanzar una slice
-   asi, **ponla en su rama**: `slice/NN-name`, o `slice/AS-255-NN-name` si la feature tiene historia
-   de usuario.
-
-   ```bash
-   git -C <ruta-del-worktree> switch slice/NN-name
    ```
 
    Cada run **en background**, nunca encadenados en una shell que bloquee: son procesos largos y el
