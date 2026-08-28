@@ -8,11 +8,10 @@ from slice_runner.infrastructure.metrics_entry_payload import MetricsEntryPayloa
 from slice_runner.infrastructure.metrics_ledger_entry import MetricsLedgerEntry
 
 if TYPE_CHECKING:
-    from datetime import datetime
-
     from slice_runner.domain.clock import Clock
     from slice_runner.domain.closed_slice import ClosedSlice
     from slice_runner.domain.closed_slice_record import ClosedSliceRecord
+    from slice_runner.domain.closed_slice_scope import ClosedSliceScope
 
 
 class LocalMetricsLog(MetricsLog):
@@ -28,11 +27,10 @@ class LocalMetricsLog(MetricsLog):
         payload = MetricsEntryPayload.from_domain(closed, ts=self._clock.now().isoformat())
         self._ledger.append(payload)
 
-    def closed_slices(self, *, repo: str | None, since: datetime, until: datetime) -> tuple[ClosedSliceRecord, ...]:
-        records = (MetricsLedgerEntry.of(payload) for payload in self._ledger.rows())
-        within_window = (
-            record for record in records if since <= record.ts <= until and (repo is None or record.repo == repo)
-        )
+    def closed_slices(self, scope: ClosedSliceScope) -> tuple[ClosedSliceRecord, ...]:
+        matching = self._ledger.rows_where(lambda data: MetricsEntryPayload.may_belong_to_the_scope(data, scope))
+        records = (MetricsLedgerEntry.of(payload) for payload in matching)
+        within_window = (record for record in records if scope.contains(record.ts))
         latest_by_identity: dict[tuple[str, int], ClosedSliceRecord] = {}
         for record in within_window:
             latest_by_identity[record.repo, record.issue] = record

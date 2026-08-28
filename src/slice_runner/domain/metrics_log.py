@@ -4,10 +4,9 @@ from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from datetime import datetime
-
     from slice_runner.domain.closed_slice import ClosedSlice
     from slice_runner.domain.closed_slice_record import ClosedSliceRecord
+    from slice_runner.domain.closed_slice_scope import ClosedSliceScope
 
 
 class MetricsLog(ABC):
@@ -15,4 +14,4 @@ class MetricsLog(ABC):
     def record(self, closed: ClosedSlice) -> None: ...
 
     @abstractmethod
-    def closed_slices(self, *, repo: str | None, since: datetime, until: datetime) -> tuple[ClosedSliceRecord, ...]: ...
+    def closed_slices(self, scope: ClosedSliceScope) -> tuple[ClosedSliceRecord, ...]: ...

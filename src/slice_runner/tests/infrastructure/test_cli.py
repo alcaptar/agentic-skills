@@ -1060,6 +1060,22 @@ class TestTheCommandThatEmitsClosedSliceMetrics:
 
         assert "the following arguments are required: --out" in capsys.readouterr().err
 
+    def test_a_row_from_another_repo_of_an_earlier_generation_does_not_break_metrics_scoped_to_this_one(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        self._append_row({"repo": "another/repo", "issue": 1, "name": "old-shape"})
+        self._closed()
+        out = tmp_path / "view.html"
+
+        code = Cli.metrics(
+            repo=ClosedSliceMother.REPO,
+            since=datetime(2000, 1, 1, tzinfo=UTC),
+            until=datetime(2100, 1, 1, tzinfo=UTC),
+            out=out,
+        )
+
+        assert code == ExitCode.OK
+
 
 class TestTheTransitionOfEveryPair:
     @pytest.mark.parametrize(("step", "outcome", "spent", "expected"), _TABLE)
@@ -2498,6 +2514,20 @@ class TestTheCommandThatShowsFeatureStatus:
 
         assert code == ExitCode.USAGE_ERROR
         assert "not JSON" in capsys.readouterr().err
+
+    def test_a_row_of_an_earlier_generation_belonging_to_an_issue_outside_this_feature_does_not_break_status(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
+        ledger = DurableLedger(name=LocalMetricsLog.LEDGER, row=MetricsEntryPayload).path()
+        ledger.parent.mkdir(parents=True, exist_ok=True)
+        with ledger.open("a", encoding="utf-8") as fh:
+            fh.write(f"{json.dumps({'repo': self._REPO, 'issue': 999, 'name': 'old-shape'})}\n")
+
+        code = Cli(process=self._process(), budgets=Budgets()).status(repo=self._REPO, issue=self._ISSUE)
+
+        assert code == ExitCode.OK
+        assert capsys.readouterr().err == ""
 
 
 class TestTheStatusCommandParsing:

@@ -3,9 +3,9 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from slice_runner.application.queries.list_closed_slices import ListClosedSlicesParams
     from slice_runner.domain.closed_slice_metrics import ClosedSliceMetrics
     from slice_runner.domain.closed_slice_record import ClosedSliceRecord
+    from slice_runner.domain.closed_slice_scope import ClosedSliceScope
     from slice_runner.domain.grouped_metrics import GroupedMetrics
     from slice_runner.domain.measurement import Measurement
     from slice_runner.domain.role_spend import RoleSpend
@@ -21,7 +21,7 @@ class ClosedSliceMetricsView:
     def rendered(
         cls,
         *,
-        scope: ListClosedSlicesParams,
+        scope: ClosedSliceScope,
         records: tuple[ClosedSliceRecord, ...],
         role_spend: tuple[RoleSpend, ...],
         metrics: ClosedSliceMetrics,
@@ -39,7 +39,7 @@ class ClosedSliceMetricsView:
         )
 
     @staticmethod
-    def _header(*, scope: ListClosedSlicesParams, records: tuple[ClosedSliceRecord, ...]) -> str:
+    def _header(*, scope: ClosedSliceScope, records: tuple[ClosedSliceRecord, ...]) -> str:
         named_repo = scope.repo or "every repo"
         return (
             f"<section><h1>slice-runner metrics</h1>"
