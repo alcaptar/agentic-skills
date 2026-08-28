@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, ClassVar
 
 from slice_runner.domain.metrics_log import MetricsLog
-from slice_runner.infrastructure.durable_ledger import DurableLedger
+from slice_runner.infrastructure.durable_ledger import ReadableDurableLedger
 from slice_runner.infrastructure.metrics_entry_payload import MetricsEntryPayload
 from slice_runner.infrastructure.metrics_ledger_entry import MetricsLedgerEntry
 
@@ -20,14 +20,16 @@ class LocalMetricsLog(MetricsLog):
 
     def __init__(self, *, clock: Clock) -> None:
         self._clock = clock
-        self._ledger: DurableLedger[MetricsEntryPayload] = DurableLedger(name=self.LEDGER, row=MetricsEntryPayload)
+        self._ledger: ReadableDurableLedger[MetricsEntryPayload] = ReadableDurableLedger(
+            name=self.LEDGER, row=MetricsEntryPayload
+        )
 
     def record(self, closed: ClosedSlice) -> None:
         payload = MetricsEntryPayload.from_domain(closed, ts=self._clock.now().isoformat())
         self._ledger.append(payload)
 
     def closed_slices(self, *, repo: str | None, since: datetime, until: datetime) -> tuple[ClosedSliceRecord, ...]:
-        records = (MetricsLedgerEntry.of(payload) for payload in self._ledger.rows(MetricsEntryPayload))
+        records = (MetricsLedgerEntry.of(payload) for payload in self._ledger.rows())
         within_window = (
             record for record in records if since <= record.ts <= until and (repo is None or record.repo == repo)
         )

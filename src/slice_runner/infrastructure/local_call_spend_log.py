@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, ClassVar
 from slice_runner.domain.call_spend_log import CallSpendLog
 from slice_runner.domain.harness_spend import HarnessSpend
 from slice_runner.infrastructure.call_spend_payload import CallSpendPayload
-from slice_runner.infrastructure.durable_ledger import DurableLedger
+from slice_runner.infrastructure.durable_ledger import ReadableDurableLedger
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -20,7 +20,9 @@ class LocalCallSpendLog(CallSpendLog):
 
     def __init__(self, *, clock: Clock) -> None:
         self._clock = clock
-        self._ledger: DurableLedger[CallSpendPayload] = DurableLedger(name=self.LEDGER, row=CallSpendPayload)
+        self._ledger: ReadableDurableLedger[CallSpendPayload] = ReadableDurableLedger(
+            name=self.LEDGER, row=CallSpendPayload
+        )
 
     def record(self, call: HarnessCallSpend) -> None:
         payload = CallSpendPayload.from_call(call, ts=self._clock.now().isoformat())
@@ -29,12 +31,10 @@ class LocalCallSpendLog(CallSpendLog):
     def spend_of(self, sessions: tuple[str, ...]) -> HarnessSpend:
         wanted = frozenset(sessions)
 
-        return HarnessSpend.summing(self._once_per_session(self._ledger.rows(CallSpendPayload), wanted=wanted))
+        return HarnessSpend.summing(self._once_per_session(self._ledger.rows(), wanted=wanted))
 
     def spend_of_the_slice(self, coordinates: SliceCoordinates) -> HarnessSpend:
-        matching = self._ledger.rows_where(
-            CallSpendPayload, lambda data: CallSpendPayload.may_belong_to(data, coordinates)
-        )
+        matching = self._ledger.rows_where(lambda data: CallSpendPayload.may_belong_to(data, coordinates))
 
         return HarnessSpend.summing(self._once_per_session(matching, wanted=None))
 

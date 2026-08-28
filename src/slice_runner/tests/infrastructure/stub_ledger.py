@@ -22,17 +22,17 @@ class StubLedger(Generic[_Row]):
     def append(self, row: _Row) -> None:
         self.appended.append(row)
 
-    def rows(self, as_row: type[object]) -> Iterator[_Row]:
+    def rows(self) -> Iterator[_Row]:
         yield from self.appended
 
-    def rows_where(self, as_row: type[object], keep: Callable[[dict[str, object]], bool]) -> Iterator[_Row]:
+    def rows_where(self, keep: Callable[[dict[str, object]], bool]) -> Iterator[_Row]:
         for row in self.appended:
             if keep(row.to_contract()):
                 yield row
 
 
 class WiredStubLedgers:
-    _PATCHED_NAMES = ("DurableLedger",)
+    _PATCHED_NAMES = ("DurableLedger", "ReadableDurableLedger")
 
     @staticmethod
     def on(module: ModuleType, monkeypatch: pytest.MonkeyPatch) -> list[StubLedger[Any]]:
