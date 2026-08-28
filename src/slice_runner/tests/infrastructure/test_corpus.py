@@ -142,7 +142,7 @@ class TestTheCorpusOnlyGrows(WithTheDurableStoresOutOfTheRealHome):
         ]
 
 
-class TestTheSizeOfTheLastVerification(WithTheDurableStoresOutOfTheRealHome):
+class AskingTheCorpusAboutOneSlice(WithTheDurableStoresOutOfTheRealHome):
     @staticmethod
     def _coordinates() -> SliceCoordinates:
         return SliceCoordinates(
@@ -151,6 +151,21 @@ class TestTheSizeOfTheLastVerification(WithTheDurableStoresOutOfTheRealHome):
             slice_id=CanonicalSliceId.of_text(CorpusEntryMother.SLICE_ID),
         )
 
+    @staticmethod
+    def _verdict_row_without_diff_stats() -> dict[str, object]:
+        return {
+            "ts": _STAMP.isoformat(),
+            "repo": CorpusEntryMother.REPO,
+            "issue": CorpusEntryMother.ISSUE,
+            "slice_id": CorpusEntryMother.SLICE_ID,
+            "verify_round": CorpusEntryMother.VERIFY_ROUND,
+            "session": CorpusEntryMother.SESSION,
+            "verdict": {"ruling": "PASS", "findings": []},
+            "severity_counts": {"high": 0, "medium": 0, "low": 0},
+        }
+
+
+class TestTheSizeOfTheLastVerification(AskingTheCorpusAboutOneSlice):
     def test_a_slice_with_no_verification_recorded_answers_with_nothing(self) -> None:
         corpus = LocalCorpus(clock=self.frozen_at())
 
@@ -201,7 +216,7 @@ class TestTheSizeOfTheLastVerification(WithTheDurableStoresOutOfTheRealHome):
         assert corpus.size_of_the_last_verification(self._coordinates()) is None
 
 
-class TestTheHeavyDiffStaysOutOfTheVerdictLedger(WithTheDurableStoresOutOfTheRealHome):
+class TestTheHeavyDiffStaysOutOfTheVerdictLedger(AskingTheCorpusAboutOneSlice):
     def test_counting_findings_never_needs_to_load_the_diff_of_any_verdict(self, tmp_path: Path) -> None:
         LocalCorpus(clock=self.frozen_at()).record(CorpusEntryMother.of_the_slice())
 
@@ -209,43 +224,36 @@ class TestTheHeavyDiffStaysOutOfTheVerdictLedger(WithTheDurableStoresOutOfTheRea
             assert "diff" not in record
 
     def test_answering_the_size_of_a_slice_never_needs_to_load_the_heavy_diff_ledger(self, tmp_path: Path) -> None:
-        coordinates = SliceCoordinates(
-            repo=CorpusEntryMother.REPO,
-            issue=CorpusEntryMother.ISSUE,
-            slice_id=CanonicalSliceId.of_text(CorpusEntryMother.SLICE_ID),
-        )
         stats = DiffStats(files_changed=3, lines_added=40, lines_deleted=12)
         corpus = LocalCorpus(clock=self.frozen_at())
         corpus.record(CorpusEntryMother.of_the_slice(diff=SliceDiffMother.of_the_slice(stats=stats)))
         diffs_ledger = tmp_path / "slice-runner" / "runs" / "diffs.jsonl"
         diffs_ledger.write_text("not json\n", encoding="utf-8")
 
-        assert corpus.size_of_the_last_verification(coordinates) == stats
+        assert corpus.size_of_the_last_verification(self._coordinates()) == stats
+
+    def test_a_row_the_program_wrote_before_the_schema_changed_does_not_kill_a_closure_whose_last_row_is_readable(
+        self, tmp_path: Path
+    ) -> None:
+        stats = DiffStats(files_changed=3, lines_added=40, lines_deleted=12)
+        corpus = LocalCorpus(clock=self.frozen_at())
+        corpus.record(CorpusEntryMother.of_the_slice(diff=SliceDiffMother.of_the_slice(stats=stats)))
+        ledger = tmp_path / "slice-runner" / "runs" / "verdicts.jsonl"
+        earlier = self._verdict_row_without_diff_stats()
+        ledger.write_text(json.dumps(earlier) + "\n" + ledger.read_text(encoding="utf-8"), encoding="utf-8")
+
+        assert corpus.size_of_the_last_verification(self._coordinates()) == stats
 
     def test_a_verdict_row_from_before_the_size_moved_in_is_rejected_instead_of_read_without_it(
         self, tmp_path: Path
     ) -> None:
         ledger = tmp_path / "slice-runner" / "runs" / "verdicts.jsonl"
         ledger.parent.mkdir(parents=True)
-        without_diff_stats = {
-            "ts": _STAMP.isoformat(),
-            "repo": CorpusEntryMother.REPO,
-            "issue": CorpusEntryMother.ISSUE,
-            "slice_id": CorpusEntryMother.SLICE_ID,
-            "verify_round": CorpusEntryMother.VERIFY_ROUND,
-            "session": CorpusEntryMother.SESSION,
-            "verdict": {"ruling": "PASS", "findings": []},
-            "severity_counts": {"high": 0, "medium": 0, "low": 0},
-        }
+        without_diff_stats = self._verdict_row_without_diff_stats()
         ledger.write_text(json.dumps(without_diff_stats) + "\n", encoding="utf-8")
-        coordinates = SliceCoordinates(
-            repo=CorpusEntryMother.REPO,
-            issue=CorpusEntryMother.ISSUE,
-            slice_id=CanonicalSliceId.of_text(CorpusEntryMother.SLICE_ID),
-        )
 
         with pytest.raises(UnreadableCorpusError, match="generation"):
-            LocalCorpus(clock=self.frozen_at()).size_of_the_last_verification(coordinates)
+            LocalCorpus(clock=self.frozen_at()).size_of_the_last_verification(self._coordinates())
 
 
 class TestWhereTheCorpusLives:

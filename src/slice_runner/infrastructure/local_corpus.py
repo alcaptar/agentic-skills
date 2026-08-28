@@ -31,9 +31,6 @@ class LocalCorpus(Corpus):
         self._diffs.append(CorpusDiffPayload.from_domain(entry, ts=ts))
 
     def size_of_the_last_verification(self, coordinates: SliceCoordinates) -> DiffStats | None:
-        matching = self._verdicts.rows_where(lambda data: CorpusVerdictPayload.may_belong_to(data, coordinates))
-        latest: CorpusVerdictPayload | None = None
-        for row in matching:
-            latest = row
+        latest = self._verdicts.last_row_where(lambda data: CorpusVerdictPayload.may_belong_to(data, coordinates))
 
         return latest.diff_stats.to_domain() if latest is not None else None
