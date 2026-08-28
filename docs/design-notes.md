@@ -726,6 +726,30 @@ obligatorio de la carcasa -siempre está presente-, así que contarlo haría imp
 inventar una causa cuando el sobre no trae ninguna": con `is_error` en la lista, esa lista nunca
 estaría vacía.
 
+### El tamano de la ultima verificacion se muda de `diffs.jsonl` a `verdicts.jsonl` (2026-08-28)
+
+Medido antes de tocar nada: cerrar una slice abria `runs/diffs.jsonl` entero para sacar tres numeros
+-`files_changed`, `lines_added`, `lines_deleted`-, y ese fichero mide ~68 KB por fila con una fila por
+ronda de cada slice de cada feature verificada alguna vez en la maquina. `size_of_the_last_verification`
+ya preguntaba solo por esas tres cifras, pero las resolvia leyendo el ledger pesado -el mismo que la
+slice-09 (#415) partio en dos precisamente para que contar algo ligero no cargase el diff entero-, así
+que el coste de cerrar crecia con todo lo verificado alguna vez, no con el tamano de la slice que se
+cierra.
+
+El arreglo mueve las tres cifras a `CorpusVerdictPayload` -la fila ligera, que ya viajaba con
+`verify_round`, las cuatro coordenadas de `StampedRow` y el mismo sello que la pesada- y se las quita a
+`CorpusDiffPayload`, que deja de declarar `UNREADABLE`/`from_dict`: sin lectores, la capacidad de releerse
+se retira en vez de quedar sin usar. `LocalCorpus.size_of_the_last_verification` pasa a iterar
+`verdicts.jsonl` con el mismo filtro por identidad (`may_belong_to`) que ya usaba sobre el pesado, así que
+la semantica -ultima fila escrita que cuadra con las coordenadas- no cambia, solo el fichero que se abre
+para responderla.
+
+Consecuencia aceptada: `verdicts.jsonl` hereda el corte de generacion que ya tenia `diffs.jsonl` -una fila
+escrita antes de este cambio no trae `diff_stats`, así que `from_dict` la rechaza nombrando la generacion
+en vez de leerla sin esas cifras-. Y lo que **no** se retira: el cierre sigue recorriendo una linea por
+ronda de cada slice; lo que deja de pagar es el coste por byte de diff, no el crecimiento por numero de
+verificaciones.
+
 ## deploy-watch
 
 ### Decisiones clave

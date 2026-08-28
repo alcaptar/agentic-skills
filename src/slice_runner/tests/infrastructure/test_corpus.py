@@ -8,6 +8,7 @@ import pytest
 from slice_runner.domain.budgets import Budgets
 from slice_runner.domain.canonical_slice_id import CanonicalSliceId
 from slice_runner.domain.diff_stats import DiffStats
+from slice_runner.domain.exceptions import UnreadableCorpusError
 from slice_runner.domain.slice_coordinates import SliceCoordinates
 from slice_runner.infrastructure import local_corpus
 from slice_runner.infrastructure.claude_config import ClaudeConfig
@@ -62,6 +63,11 @@ class TestTheRecordThatIsWritten(WithTheDurableStoresOutOfTheRealHome):
                 "session": CorpusEntryMother.SESSION,
                 "verdict": {"ruling": "PASS", "findings": []},
                 "severity_counts": {"high": 0, "medium": 0, "low": 0},
+                "diff_stats": {
+                    "files_changed": SliceDiffMother.STATS.files_changed,
+                    "lines_added": SliceDiffMother.STATS.lines_added,
+                    "lines_deleted": SliceDiffMother.STATS.lines_deleted,
+                },
                 "ts": _STAMP.isoformat(),
             }
         ]
@@ -75,11 +81,6 @@ class TestTheRecordThatIsWritten(WithTheDurableStoresOutOfTheRealHome):
             {
                 "slice_id": CorpusEntryMother.SLICE_ID,
                 "diff": SliceDiffMother.TEXT,
-                "stats": {
-                    "files_changed": SliceDiffMother.STATS.files_changed,
-                    "lines_added": SliceDiffMother.STATS.lines_added,
-                    "lines_deleted": SliceDiffMother.STATS.lines_deleted,
-                },
                 "repo": CorpusEntryMother.REPO,
                 "issue": CorpusEntryMother.ISSUE,
                 "verify_round": CorpusEntryMother.VERIFY_ROUND,
@@ -100,6 +101,21 @@ class TestTheRecordThatIsWritten(WithTheDurableStoresOutOfTheRealHome):
         LocalCorpus(clock=self.frozen_at()).record(CorpusEntryMother.of_the_slice(verdict=vetoed))
 
         assert WrittenCorpus.verdicts_under(tmp_path)[0]["severity_counts"] == {"high": 2, "medium": 1, "low": 0}
+
+    def test_the_size_of_the_diff_travels_written_down_in_the_verdict_row_not_the_diff_row(
+        self, tmp_path: Path
+    ) -> None:
+        stats = DiffStats(files_changed=3, lines_added=40, lines_deleted=12)
+
+        LocalCorpus(clock=self.frozen_at()).record(
+            CorpusEntryMother.of_the_slice(diff=SliceDiffMother.of_the_slice(stats=stats))
+        )
+
+        assert WrittenCorpus.verdicts_under(tmp_path)[0]["diff_stats"] == {
+            "files_changed": stats.files_changed,
+            "lines_added": stats.lines_added,
+            "lines_deleted": stats.lines_deleted,
+        }
 
 
 class TestTheCorpusOnlyGrows(WithTheDurableStoresOutOfTheRealHome):
@@ -191,6 +207,45 @@ class TestTheHeavyDiffStaysOutOfTheVerdictLedger(WithTheDurableStoresOutOfTheRea
 
         for record in WrittenCorpus.verdicts_under(tmp_path):
             assert "diff" not in record
+
+    def test_answering_the_size_of_a_slice_never_needs_to_load_the_heavy_diff_ledger(self, tmp_path: Path) -> None:
+        coordinates = SliceCoordinates(
+            repo=CorpusEntryMother.REPO,
+            issue=CorpusEntryMother.ISSUE,
+            slice_id=CanonicalSliceId.of_text(CorpusEntryMother.SLICE_ID),
+        )
+        stats = DiffStats(files_changed=3, lines_added=40, lines_deleted=12)
+        corpus = LocalCorpus(clock=self.frozen_at())
+        corpus.record(CorpusEntryMother.of_the_slice(diff=SliceDiffMother.of_the_slice(stats=stats)))
+        diffs_ledger = tmp_path / "slice-runner" / "runs" / "diffs.jsonl"
+        diffs_ledger.write_text("not json\n", encoding="utf-8")
+
+        assert corpus.size_of_the_last_verification(coordinates) == stats
+
+    def test_a_verdict_row_from_before_the_size_moved_in_is_rejected_instead_of_read_without_it(
+        self, tmp_path: Path
+    ) -> None:
+        ledger = tmp_path / "slice-runner" / "runs" / "verdicts.jsonl"
+        ledger.parent.mkdir(parents=True)
+        without_diff_stats = {
+            "ts": _STAMP.isoformat(),
+            "repo": CorpusEntryMother.REPO,
+            "issue": CorpusEntryMother.ISSUE,
+            "slice_id": CorpusEntryMother.SLICE_ID,
+            "verify_round": CorpusEntryMother.VERIFY_ROUND,
+            "session": CorpusEntryMother.SESSION,
+            "verdict": {"ruling": "PASS", "findings": []},
+            "severity_counts": {"high": 0, "medium": 0, "low": 0},
+        }
+        ledger.write_text(json.dumps(without_diff_stats) + "\n", encoding="utf-8")
+        coordinates = SliceCoordinates(
+            repo=CorpusEntryMother.REPO,
+            issue=CorpusEntryMother.ISSUE,
+            slice_id=CanonicalSliceId.of_text(CorpusEntryMother.SLICE_ID),
+        )
+
+        with pytest.raises(UnreadableCorpusError, match="generation"):
+            LocalCorpus(clock=self.frozen_at()).size_of_the_last_verification(coordinates)
 
 
 class TestWhereTheCorpusLives:

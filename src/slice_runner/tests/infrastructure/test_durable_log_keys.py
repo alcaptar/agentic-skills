@@ -190,6 +190,10 @@ class TestNoDurableStoreWritesAKeyInSpanish(ReadingTheLedger):
             "severity_counts.high",
             "severity_counts.medium",
             "severity_counts.low",
+            "diff_stats",
+            "diff_stats.files_changed",
+            "diff_stats.lines_added",
+            "diff_stats.lines_deleted",
         }
 
     def test_the_corpus_diff_keys_are_the_identity_of_the_round_and_the_text_it_judged(self, tmp_path: Path) -> None:
@@ -205,10 +209,6 @@ class TestNoDurableStoreWritesAKeyInSpanish(ReadingTheLedger):
             "verify_round",
             "session",
             "diff",
-            "stats",
-            "stats.files_changed",
-            "stats.lines_added",
-            "stats.lines_deleted",
         }
 
     def test_the_tool_use_keys_cover_a_use_that_touched_a_path_and_one_that_failed(self, tmp_path: Path) -> None:
