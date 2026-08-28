@@ -335,7 +335,7 @@ echo '{"run": {"step": "run-controls", "control_retries": 2}, "outcome": "failed
 ```json
 {"run": {"step": "run-controls", "corrected": "", "understanding_pending": false,
  "previous_call_died": false, "catching_up_the_branch": false, "control_retries": 2,
- "hygiene_retries": 0, "verify_retries": 0, "correction_retries": 0, "ci_retries": 0, "catch_up_retries": 0,
+ "hygiene_retries": 0, "verify_retries": 0, "ci_retries": 0, "catch_up_retries": 0,
  "indeterminate_ticks": 0, "verify_discards": 0, "understand_discards": 0, "implement_discards": 0,
  "control_rounds_logged": 1, "verify_rounds_logged": 0, "last_reviewed_id": 0, "requested_changes": []},
  "state": "blocked-controls",
@@ -345,8 +345,7 @@ echo '{"run": {"step": "run-controls", "control_retries": 2}, "outcome": "failed
 La respuesta trae **el run entero** (con los contadores ya gastados), el estado en el que queda -`open`
 mientras siga vivo, y si no, el cierre concreto- y **cuantos segundos hay que esperar** antes del
 proximo tick, para que el numero de la ventana de gracia no lo decida quien tickea. Los presupuestos son
-dos reintentos de controles, dos de verificacion del veto del juez, dos de correcciones que el juez pide
-sin vetar -presupuesto propio, agotarlo entrega igual y no cierra la slice-, uno de integracion continua
+dos reintentos de controles, dos de verificacion del veto del juez, uno de integracion continua
 roja, y 10 ticks indeterminados consecutivos con 30 s o mas entre tick y tick. Por encima de todos ellos
 hay dos topes que no cuentan intentos sino gasto: **50 $ de harness por slice**, que cierra el run como abortado y es el
 backstop del unico bucle sin cierre propio -el descarte de un veredicto incoherente, que no gasta reintento

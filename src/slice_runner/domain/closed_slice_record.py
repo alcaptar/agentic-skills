@@ -29,7 +29,6 @@ class ClosedSliceRecord:
     control_retries: int
     ci_retries: int
     verify_retries: int
-    correction_retries: int
     verify_discards: int
     understand_discards: int
     implement_discards: int

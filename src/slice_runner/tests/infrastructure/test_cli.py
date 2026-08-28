@@ -102,28 +102,9 @@ _TABLE: list[tuple[Step, Outcome, dict[str, int], tuple[Step, RunState, int]]] =
     (Step.RUN_CONTROLS, Outcome.CONFLICTING, {}, (Step.RUN_CONTROLS, RunState.BLOCKED_CI_CONFLICT, 0)),
     (Step.VERIFY, Outcome.DONE, {}, (Step.OPEN_PULL_REQUEST, RunState.OPEN, 0)),
     (Step.VERIFY, Outcome.DISCARDED, {}, (Step.VERIFY, RunState.OPEN, 0)),
-    (Step.VERIFY, Outcome.CORRECTIONS_ORDERED, {}, (Step.IMPLEMENT, RunState.OPEN, 0)),
-    (
-        Step.VERIFY,
-        Outcome.CORRECTIONS_ORDERED,
-        {"correction_retries": 2},
-        (Step.OPEN_PULL_REQUEST, RunState.OPEN, 0),
-    ),
-    (
-        Step.VERIFY,
-        Outcome.CORRECTIONS_ORDERED,
-        {"verify_retries": 2},
-        (Step.IMPLEMENT, RunState.OPEN, 0),
-    ),
     (Step.VERIFY, Outcome.FAILED, {}, (Step.IMPLEMENT, RunState.OPEN, 0)),
     (Step.VERIFY, Outcome.FAILED, {"verify_retries": 1}, (Step.IMPLEMENT, RunState.OPEN, 0)),
     (Step.VERIFY, Outcome.FAILED, {"verify_retries": 2}, (Step.VERIFY, RunState.BLOCKED_VERIFY, 0)),
-    (
-        Step.VERIFY,
-        Outcome.FAILED,
-        {"correction_retries": 2},
-        (Step.IMPLEMENT, RunState.OPEN, 0),
-    ),
     (Step.VERIFY, Outcome.OVER_BUDGET, {}, (Step.VERIFY, RunState.ABORTED_BUDGET, 0)),
     (
         Step.VERIFY,
@@ -1110,7 +1091,6 @@ class TestTheTransitionOfEveryPair:
                 "control_retries": 1,
                 "hygiene_retries": 0,
                 "verify_retries": 0,
-                "correction_retries": 0,
                 "ci_retries": 0,
                 "catch_up_retries": 0,
                 "indeterminate_ticks": 0,
@@ -1166,14 +1146,6 @@ class TestWhatEachBudgetPays:
         spent = json.loads(capsys.readouterr().out)["run"]
         assert (spent["verify_retries"], spent["control_retries"]) == (1, 0)
 
-    def test_a_veto_spends_a_retry_of_its_own_and_not_one_of_the_corrections(
-        self, capsys: pytest.CaptureFixture[str]
-    ) -> None:
-        Cli.explain(request=TransitionRequestMother.asking(Step.VERIFY, Outcome.FAILED), budgets=Budgets())
-
-        spent = json.loads(capsys.readouterr().out)["run"]
-        assert (spent["verify_retries"], spent["correction_retries"]) == (1, 0)
-
     def test_a_discarded_verdict_is_counted_apart_because_the_code_was_never_touched(
         self, capsys: pytest.CaptureFixture[str]
     ) -> None:
@@ -1185,36 +1157,6 @@ class TestWhatEachBudgetPays:
         emitted = json.loads(capsys.readouterr().out)
         assert emitted["state"] == RunState.OPEN
         assert (emitted["run"]["verify_discards"], emitted["run"]["verify_retries"]) == (1, 2)
-
-    def test_a_round_of_corrections_spends_a_retry_of_its_own_and_not_one_of_the_veto(
-        self, capsys: pytest.CaptureFixture[str]
-    ) -> None:
-        asked = TransitionRequestMother.asking(Step.VERIFY, Outcome.CORRECTIONS_ORDERED, correction_retries=1)
-
-        Cli.explain(request=asked, budgets=Budgets())
-
-        spent = json.loads(capsys.readouterr().out)["run"]
-        assert (spent["correction_retries"], spent["verify_retries"]) == (2, 0)
-
-    def test_the_last_corrections_become_debt_instead_of_blocking_a_slice_the_judge_did_not_veto(
-        self, capsys: pytest.CaptureFixture[str]
-    ) -> None:
-        asked = TransitionRequestMother.asking(Step.VERIFY, Outcome.CORRECTIONS_ORDERED, correction_retries=2)
-
-        Cli.explain(request=asked, budgets=Budgets())
-
-        emitted = json.loads(capsys.readouterr().out)
-        assert (emitted["run"]["step"], emitted["state"]) == (Step.OPEN_PULL_REQUEST, RunState.OPEN)
-
-    def test_the_correction_budget_is_configured_apart_from_the_veto_and_does_not_borrow_its_value(
-        self, capsys: pytest.CaptureFixture[str]
-    ) -> None:
-        asked = TransitionRequestMother.asking(Step.VERIFY, Outcome.CORRECTIONS_ORDERED, correction_retries=1)
-
-        Cli.explain(request=asked, budgets=Budgets(correction_retries=1, verify_retries=5))
-
-        emitted = json.loads(capsys.readouterr().out)
-        assert (emitted["run"]["step"], emitted["state"]) == (Step.OPEN_PULL_REQUEST, RunState.OPEN)
 
     def test_an_answer_from_the_ci_clears_the_ticks_that_had_none_because_the_window_wants_them_consecutive(
         self, capsys: pytest.CaptureFixture[str]

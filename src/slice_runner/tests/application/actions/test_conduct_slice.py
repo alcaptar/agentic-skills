@@ -1772,14 +1772,16 @@ class TestConductSliceWhenTheJudgeSpeaks:
 
         assert conductor.implement.execute.call_args.args[0].findings == (raised,)
 
-    def test_a_pass_that_still_raised_findings_corrects_them_before_delivering(self) -> None:
+    def test_a_pass_whose_findings_the_judge_did_not_veto_delivers_without_asking_the_implementer_again(
+        self,
+    ) -> None:
         raised = FindingMother.with_line()
-        conductor = self._conductor(budgets=Budgets(correction_retries=1))
-        conductor.verify.execute.return_value = VerificationMother.ordering_corrections(raised)
+        conductor = self._conductor(budgets=Budgets(verify_retries=1))
+        conductor.verify.execute.return_value = VerificationMother.approving_with_accepted_debt(raised)
 
         conductor.conduct()
 
-        assert conductor.implement.execute.call_args.args[0].findings == (raised,)
+        assert conductor.implement.execute.call_count == 0
         assert conductor.deliver.execute.call_count == 1
 
     def test_a_pass_whose_findings_are_all_low_severity_delivers_without_asking_the_implementer_again(self) -> None:
@@ -2038,9 +2040,11 @@ class TestConductSliceWhenTheCostOfTheSliceRunsOut:
         assert conductor.verify.execute.call_count == 1
         assert result.state is RunState.MERGED
 
-    def test_a_pass_with_corrections_still_delivers_over_budget_because_delivering_costs_no_harness(self) -> None:
-        conductor = self._judging(budgets=Budgets(slice_cost_usd=0.01, correction_retries=0))
-        conductor.verify.execute.return_value = VerificationMother.ordering_corrections(FindingMother.with_line())
+    def test_a_pass_with_accepted_debt_still_delivers_over_budget_because_delivering_costs_no_harness(self) -> None:
+        conductor = self._judging(budgets=Budgets(slice_cost_usd=0.01))
+        conductor.verify.execute.return_value = VerificationMother.approving_with_accepted_debt(
+            FindingMother.with_line()
+        )
 
         result = conductor.conduct()
 

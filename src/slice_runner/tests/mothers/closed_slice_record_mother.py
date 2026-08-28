@@ -114,7 +114,6 @@ class ClosedSliceRecordMother:
             control_retries=0,
             ci_retries=0,
             verify_retries=verify_retries,
-            correction_retries=0,
             verify_discards=0,
             understand_discards=understand_discards,
             implement_discards=implement_discards,

@@ -26,10 +26,13 @@ import pytest
 from conftest import _ROOT, _read, _rel, _tracked
 
 from slice_runner.domain.budgets import Budgets
+from slice_runner.domain.exceptions import InvalidVerdictError
 from slice_runner.domain.issue_label import IssueLabel
+from slice_runner.domain.outcome import Outcome
 from slice_runner.domain.ruling import Ruling
 from slice_runner.domain.severity import Severity
 from slice_runner.domain.state_machine import StateMachine
+from slice_runner.domain.verdict import Verdict
 from slice_runner.infrastructure.cited_finding import CitedFinding
 from slice_runner.infrastructure.cli import Cli
 from slice_runner.infrastructure.exit_code import ExitCode
@@ -1194,6 +1197,68 @@ def test_the_finding_keys_in_the_rubric_are_the_ones_the_program_maps_its_fields
     assert documented == mapped, (
         f"the finding in the program's rubric and the aliases of `FindingPayload` disagree: "
         f"only in the rubric {sorted(documented - mapped)}, only in the program {sorted(mapped - documented)}"
+    )
+
+
+_SEVERITY_CONSEQUENCE = re.compile(r"^  - `(high|medium|low)` -> (.+)$", re.MULTILINE)
+_SENDS_IT_BACK = "vuelve al implementador"
+_IS_A_VETO = f"el veredicto es {Ruling.FAIL}"
+
+
+def _documented_consequence_of() -> dict[Severity, str]:
+    return {Severity(level): said for level, said in _SEVERITY_CONSEQUENCE.findall(_program_rubric())}
+
+
+def _forces_a_veto(severity: Severity) -> bool:
+    try:
+        Verdict(ruling=Ruling.PASS, findings=(FindingMother.without_line(severity=severity),))
+    except InvalidVerdictError:
+        return True
+
+    return False
+
+
+def _sends_the_slice_back(severity: Severity) -> bool:
+    """What the program really does with one finding of this severity, both halves of it.
+
+    A `PASS` carrying a `high` is refused by `Verdict` itself, so the severity that forces `FAIL` is
+    read from that refusal rather than restated here; the rest go through `Outcome.of_the_verdict`.
+    """
+    if _forces_a_veto(severity):
+        return True
+
+    passing = Verdict(ruling=Ruling.PASS, findings=(FindingMother.without_line(severity=severity),))
+
+    return Outcome.of_the_verdict(passing) is not Outcome.DONE
+
+
+def test_the_severity_the_rubric_says_sends_the_slice_back_is_the_only_one_the_program_sends_back() -> None:
+    """The rubric tells the judge what each level costs, and the program is what makes that true.
+
+    This is the drift that already happened once and nobody could see: the rubric promised that
+    `medium` and `low` "no bloquean por si solos" while `Outcome.of_the_verdict` sent every non-`low`
+    finding back for a round of corrections. The judge was writing "esto no bloquea" next to a
+    `medium` and the program was ordering a correction for it, ten times out of ten, because neither
+    side can observe the other: the judge never sees what its own verdict caused.
+    """
+    documented = {severity: _SENDS_IT_BACK in said for severity, said in _documented_consequence_of().items()}
+
+    assert documented == {severity: _sends_the_slice_back(severity) for severity in Severity}, (
+        "the rubric and the program disagree on which severity sends the slice back to the implementer"
+    )
+
+
+def test_the_severity_the_rubric_calls_a_veto_is_the_one_a_passing_verdict_cannot_carry() -> None:
+    """The other half of the same scale, and the one a level's destination alone does not pin.
+
+    A rubric that told the judge to emit `PASS` with a `high` still sends the slice back, so the test
+    above passes while the judge is being asked for a verdict `Verdict.__post_init__` throws away as
+    incoherent -- it would burn a call per round and never reach the implementer.
+    """
+    documented = {severity: _IS_A_VETO in said for severity, said in _documented_consequence_of().items()}
+
+    assert documented == {severity: _forces_a_veto(severity) for severity in Severity}, (
+        "the rubric and the program disagree on which severity a passing verdict cannot carry"
     )
 
 

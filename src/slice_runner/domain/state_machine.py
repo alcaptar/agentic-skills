@@ -232,8 +232,6 @@ class StateMachine:
                 return self._moving_to(self._logged_a_verify_round(run), Step.OPEN_PULL_REQUEST)
             case Outcome.DISCARDED:
                 return self._moving_to(replace(run, verify_discards=run.verify_discards + 1), Step.VERIFY)
-            case Outcome.CORRECTIONS_ORDERED:
-                return self._correcting_what_does_not_block(self._logged_a_verify_round(run))
             case Outcome.FAILED:
                 return self._retrying_a_veto(self._logged_a_verify_round(run))
             case Outcome.CALL_NOT_MEASURED:
@@ -244,12 +242,6 @@ class StateMachine:
     @staticmethod
     def _logged_a_verify_round(run: Run) -> Run:
         return replace(run, verify_rounds_logged=run.verify_rounds_logged + 1)
-
-    def _correcting_what_does_not_block(self, run: Run) -> Transition:
-        if run.correction_retries < self.budgets.correction_retries:
-            return self._moving_to(replace(run, correction_retries=run.correction_retries + 1), Step.IMPLEMENT)
-
-        return self._moving_to(run, Step.OPEN_PULL_REQUEST)
 
     def _retrying_a_veto(self, run: Run) -> Transition:
         if run.verify_retries < self.budgets.verify_retries:

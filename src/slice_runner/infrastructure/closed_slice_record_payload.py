@@ -69,7 +69,6 @@ class ClosedSliceRecordPayload(ContractModel):
     control_retries: int
     ci_retries: int
     verify_retries: int
-    correction_retries: int
     verify_discards: int
     understand_discards: int
     implement_discards: int
@@ -99,7 +98,6 @@ class ClosedSliceRecordPayload(ContractModel):
                 "control_retries": record.control_retries,
                 "ci_retries": record.ci_retries,
                 "verify_retries": record.verify_retries,
-                "correction_retries": record.correction_retries,
                 "verify_discards": record.verify_discards,
                 "understand_discards": record.understand_discards,
                 "implement_discards": record.implement_discards,

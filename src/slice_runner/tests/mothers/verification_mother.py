@@ -167,14 +167,6 @@ class VerificationMother:
         )
 
     @classmethod
-    def ordering_corrections(cls, *findings: Finding) -> Verification:
-        return Verification(
-            verdict=VerdictMother.passing_with(*findings),
-            spend=HarnessSpendMother.of_the_judge_call(),
-            session=cls.SESSION,
-        )
-
-    @classmethod
     def approving_with_accepted_debt(cls, *findings: Finding) -> Verification:
         chosen = findings or (FindingMother.low_severity(),)
 

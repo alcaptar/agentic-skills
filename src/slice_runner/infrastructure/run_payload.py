@@ -24,7 +24,6 @@ class RunPayload(ContractModel):
     control_retries: Spent = 0
     hygiene_retries: Spent = 0
     verify_retries: Spent = 0
-    correction_retries: Spent = 0
     ci_retries: Spent = 0
     catch_up_retries: Spent = 0
     indeterminate_ticks: Spent = 0
@@ -53,7 +52,6 @@ class RunPayload(ContractModel):
             control_retries=run.control_retries,
             hygiene_retries=run.hygiene_retries,
             verify_retries=run.verify_retries,
-            correction_retries=run.correction_retries,
             ci_retries=run.ci_retries,
             catch_up_retries=run.catch_up_retries,
             indeterminate_ticks=run.indeterminate_ticks,
@@ -77,7 +75,6 @@ class RunPayload(ContractModel):
             control_retries=self.control_retries,
             hygiene_retries=self.hygiene_retries,
             verify_retries=self.verify_retries,
-            correction_retries=self.correction_retries,
             ci_retries=self.ci_retries,
             catch_up_retries=self.catch_up_retries,
             indeterminate_ticks=self.indeterminate_ticks,

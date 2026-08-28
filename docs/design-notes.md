@@ -249,7 +249,37 @@ mide. Las reglas que salen de estas decisiones siguen en su capa.
   devuelven los mismos hallazgos dos veces seguidas-. De ahi que las dos causas dejaran de compartir
   contador, que es la misma regla que ya separaba la higiene de los controles. La reconstrucción se hizo
   por bloques consecutivos del mismo identificador de slice, que es lo único posible mientras el corpus no
-  tenga identidad ni instante por fila.
+  tenga identidad ni instante por fila. **El bullet siguiente cuenta como acabo ese contador.**
+- **Y por que la ronda de correccion se retiro entera.** Repartir el contador trato el sintoma. Medido
+  sobre los 91 hallazgos de los 27 veredictos que el corpus de veredictos tenia hasta el 2026-08-28 a las
+  13:00 -10 `high`, 28 `medium`, 53 `low`; el corpus es append-only, asi que sin ese corte el recuento de
+  hoy ya es otro-, **10 de los 27 veredictos eran un PASS que mandaba una ronda de correccion completa sin ser un veto**, y al leer
+  los 28 `medium` uno a uno, **20 escriben literalmente que no bloquean** -"no lo subo a high porque...",
+  "no lo trato como bloqueante", "No bloquea"- y **ninguno** alega que le faltara evidencia. Es decir: el
+  juez estaba siendo coherente con lo que la rubrica le decia -"los `medium`/`low` se reportan pero no
+  bloquean por si solos"- y el programa hacia lo contrario. La desalineacion no vivia en ninguno de los
+  dos, sino **entre el prompt y el codigo**, y era invisible para ambos porque el juez nunca ve la
+  consecuencia de su veredicto. Los dos bucles de tres rondas del corpus salen de ahi: `rollout@README.md`
+  en la slice-05 de #393 y `convenciones@local_corpus.py` en la slice-06 de #394, los dos con "no bloquea"
+  escrito al lado y los dos apuntando a algo que el implementador no podia tocar -la linea `SUSTITUYE` de
+  la spec, y un criterio de aceptacion que fijaba donde iba el dato-. La rubrica ya le daba al juez la
+  facultad de subir a FAIL cuando varios `medium` se acumulan, y **la uso cero veces de diez**: el
+  mecanismo para pedir otra vuelta ya existia y el juez ya habia decidido no usarlo. Por eso `medium` deja
+  de mandar a nadie a ningun sitio y viaja al cuerpo de la pull request, donde ya habia sitio para el
+  ("Hallazgos que el juez dejo pasar sin corregir"), y por eso los tres niveles se definen ahora por su
+  consecuencia y no por lo grave que suenen. Lo que impide que vuelva a divergir no es la redaccion: es
+  el contrato de `tests/test_skill_contracts.py` que compara la escala escrita con lo que
+  `Outcome.of_the_verdict` decide, y que se puso rojo al mutar cada una de las dos mitades por separado.
+  La regla "un `high` es un veto" no se perdio al quitar el umbral de `outcome.py`: al reves, **dejo de
+  estar declarada dos veces con dos particiones distintas** -`verdict.py` decia solo `HIGH` y
+  `outcome.py` decia todo lo que no fuera `LOW`, que es el antipatron de `docs/conventions/architecture.md`-
+  y se quedo en un solo sitio, `Verdict.__post_init__`, que rechaza un PASS con un `high` antes de que
+  ningun `Outcome` lo mire. Linea base contra la que medir si esto sirvio, **con su definicion, porque sin
+  ella no se recalcula**: sobre las filas de metricas que llevan `correction_retries` -la generacion en la
+  que ese contador existio-, quedandose con la ultima fila de cada `(repo, issue, slice_id, name)`, salen
+  **70 slices, 0,84 rondas de correccion por slice y 30 sin ninguna vuelta extra**. La media de reintentos
+  de verificacion en esa misma ventana es **0,03**, tan baja porque el veto casi nunca se reintento: lo que
+  se pagaba eran las correcciones.
 - **Los reintentos de una llamada a `gh`, y la espera entre ellos.** No hay corpus de fallos transitorios
   de la interfaz de programación de GitHub del que medir un percentil, al contrario que el resto de esta
   lista: la intención que trajo la slice es explícita en que se quiere cubrir -"un parpadeo de red, un
