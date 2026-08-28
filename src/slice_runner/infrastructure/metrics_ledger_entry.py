@@ -36,7 +36,6 @@ class MetricsLedgerEntry:
             control_retries=payload.control_retries,
             ci_retries=payload.ci_retries,
             verify_retries=payload.verify_retries,
-            correction_retries=payload.correction_retries,
             verify_discards=payload.verify_discards,
             understand_discards=payload.understand_discards,
             implement_discards=payload.implement_discards,

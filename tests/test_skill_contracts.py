@@ -26,10 +26,13 @@ import pytest
 from conftest import _ROOT, _read, _rel, _tracked
 
 from slice_runner.domain.budgets import Budgets
+from slice_runner.domain.exceptions import InvalidVerdictError
 from slice_runner.domain.issue_label import IssueLabel
+from slice_runner.domain.outcome import Outcome
 from slice_runner.domain.ruling import Ruling
 from slice_runner.domain.severity import Severity
 from slice_runner.domain.state_machine import StateMachine
+from slice_runner.domain.verdict import Verdict
 from slice_runner.infrastructure.cited_finding import CitedFinding
 from slice_runner.infrastructure.cli import Cli
 from slice_runner.infrastructure.exit_code import ExitCode
@@ -1194,6 +1197,43 @@ def test_the_finding_keys_in_the_rubric_are_the_ones_the_program_maps_its_fields
     assert documented == mapped, (
         f"the finding in the program's rubric and the aliases of `FindingPayload` disagree: "
         f"only in the rubric {sorted(documented - mapped)}, only in the program {sorted(mapped - documented)}"
+    )
+
+
+_SEVERITY_CONSEQUENCE = re.compile(r"^  - `(high|medium|low)` -> (.+)$", re.MULTILINE)
+_SENDS_IT_BACK = "vuelve al implementador"
+
+
+def _sends_the_slice_back(severity: Severity) -> bool:
+    """What the program really does with one finding of this severity, both halves of it.
+
+    A `PASS` carrying a `high` is refused by `Verdict` itself, so the severity that forces `FAIL` is
+    read from that refusal rather than restated here; the rest go through `Outcome.of_the_verdict`.
+    """
+    try:
+        passing = Verdict(ruling=Ruling.PASS, findings=(FindingMother.without_line(severity=severity),))
+    except InvalidVerdictError:
+        return True
+
+    return Outcome.of_the_verdict(passing) is not Outcome.DONE
+
+
+def test_the_severity_the_rubric_says_sends_the_slice_back_is_the_only_one_the_program_sends_back() -> None:
+    """The rubric tells the judge what each level costs, and the program is what makes that true.
+
+    This is the drift that already happened once and nobody could see: the rubric promised that
+    `medium` and `low` "no bloquean por si solos" while `Outcome.of_the_verdict` sent every non-`low`
+    finding back for a round of corrections. The judge was writing "esto no bloquea" next to a
+    `medium` and the program was ordering a correction for it, ten times out of ten, because neither
+    side can observe the other: the judge never sees what its own verdict caused.
+    """
+    documented = {
+        Severity(level): _SENDS_IT_BACK in consequence
+        for level, consequence in _SEVERITY_CONSEQUENCE.findall(_program_rubric())
+    }
+
+    assert documented == {severity: _sends_the_slice_back(severity) for severity in Severity}, (
+        "the rubric and the program disagree on which severity sends the slice back to the implementer"
     )
 
 

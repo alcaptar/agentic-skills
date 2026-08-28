@@ -181,7 +181,6 @@ class MetricsEntryPayload(StampedRow, ReadableLedgerRow):
     control_retries: int
     ci_retries: int
     verify_retries: int
-    correction_retries: int
     verify_discards: int
     understand_discards: int
     implement_discards: int
@@ -230,7 +229,6 @@ class MetricsEntryPayload(StampedRow, ReadableLedgerRow):
                 "control_retries": closed.run.control_retries,
                 "ci_retries": closed.run.ci_retries,
                 "verify_retries": closed.run.verify_retries,
-                "correction_retries": closed.run.correction_retries,
                 "verify_discards": closed.run.verify_discards,
                 "understand_discards": closed.run.understand_discards,
                 "implement_discards": closed.run.implement_discards,
