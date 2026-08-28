@@ -35,6 +35,7 @@ class TestEveryDurableLogDeclaresASchemaAProgramCanRead:
             "session",
             "verdict",
             "severity_counts",
+            "diff_stats",
         }
 
     def test_the_corpus_diff_schema_requires_the_slice_and_the_diff_that_was_judged(self) -> None:
@@ -46,7 +47,6 @@ class TestEveryDurableLogDeclaresASchemaAProgramCanRead:
             "verify_round",
             "session",
             "diff",
-            "stats",
         }
 
     def test_the_tool_use_schema_requires_the_identity_of_the_call_and_the_uses_it_carries(self) -> None:

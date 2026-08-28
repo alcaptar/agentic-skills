@@ -20,10 +20,10 @@ class LocalCorpus(Corpus):
 
     def __init__(self, *, clock: Clock) -> None:
         self._clock = clock
-        self._verdicts: DurableLedger[CorpusVerdictPayload] = DurableLedger(name=self.LEDGER, row=CorpusVerdictPayload)
-        self._diffs: ReadableDurableLedger[CorpusDiffPayload] = ReadableDurableLedger(
-            name=self.DIFF_LEDGER, row=CorpusDiffPayload
+        self._verdicts: ReadableDurableLedger[CorpusVerdictPayload] = ReadableDurableLedger(
+            name=self.LEDGER, row=CorpusVerdictPayload
         )
+        self._diffs: DurableLedger[CorpusDiffPayload] = DurableLedger(name=self.DIFF_LEDGER, row=CorpusDiffPayload)
 
     def record(self, entry: CorpusEntry) -> None:
         ts = self._clock.now().isoformat()
@@ -31,9 +31,9 @@ class LocalCorpus(Corpus):
         self._diffs.append(CorpusDiffPayload.from_domain(entry, ts=ts))
 
     def size_of_the_last_verification(self, coordinates: SliceCoordinates) -> DiffStats | None:
-        matching = self._diffs.rows_where(lambda data: CorpusDiffPayload.may_belong_to(data, coordinates))
-        latest: CorpusDiffPayload | None = None
+        matching = self._verdicts.rows_where(lambda data: CorpusVerdictPayload.may_belong_to(data, coordinates))
+        latest: CorpusVerdictPayload | None = None
         for row in matching:
             latest = row
 
-        return latest.stats.to_domain() if latest is not None else None
+        return latest.diff_stats.to_domain() if latest is not None else None

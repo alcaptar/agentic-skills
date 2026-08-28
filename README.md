@@ -216,10 +216,11 @@ error, nunca mezclados. Ademas escribe: cada verificacion anexa una linea a
 `~/.claude/slice-runner/runs/verdicts.jsonl` -o al equivalente bajo `CLAUDE_CONFIG_DIR`- con el repo y el
 issue del run, el identificador de la slice, la ronda de verificacion -empieza en 1 y sube una por cada
 veredicto de la misma slice-, el identificador de sesion de la
-llamada que lo produjo, el veredicto entero, su conteo por severidad y cuando se escribio; el diff juzgado
-se anexa aparte, a `~/.claude/slice-runner/runs/diffs.jsonl`, unido a su fila por el mismo identificador de
-slice y la misma marca de tiempo -es lo que pesa, y separarlo es lo que deja contar hallazgos sin
-cargarlo-. Los dos son un registro append-only, y viven **fuera del repo** para que ningun `git add` de la
+llamada que lo produjo, el veredicto entero, su conteo por severidad, el tamano del diff juzgado -ficheros,
+lineas anadidas y lineas borradas- y cuando se escribio; el texto del diff se anexa aparte, a
+`~/.claude/slice-runner/runs/diffs.jsonl`, unido a su fila por el mismo identificador de slice y la misma
+marca de tiempo -es lo que pesa, y separarlo es lo que deja contar hallazgos y responder por el tamano de
+una slice sin cargarlo-. Los dos son un registro append-only, y viven **fuera del repo** para que ningun `git add` de la
 slice se los lleve a la pull request. Un `verify` suelto -invocado sin que `run` este conduciendo ningun
 issue- escribe esas filas con el repo vacio, el issue a `0` y la ronda siempre a `1`: no hay identidad real
 que registrar fuera de un run conducido. El identificador de sesion es lo que une esa fila con la suya de
@@ -265,9 +266,10 @@ despues conviven en el mismo fichero, y la que hablaba castellano -o dejaba una 
 no se lee a medias, falla nombrando que no es de esta generacion. Mientras eso no se archive a mano,
 `uv run slice-runner metrics`, `uv run slice-runner spend` y `uv run slice-runner read` salen con ese error
 en cuanto tocan una fila vieja de `~/.claude/slice-runner/runs/metrics.jsonl`, `spend.jsonl` o
-`calls.jsonl` respectivamente. Lo mismo le pasa a `diffs.jsonl` desde que el cierre pasa a leer ahi el
-tamano de la ultima verificacion: una fila vieja de esa slice no lee a medias, y el error no sale por un
-comando de lectura sino por `uv run slice-runner run` al cerrar. Archivar esas filas -moverlas fuera de
+`calls.jsonl` respectivamente. Lo mismo le pasa a `verdicts.jsonl` desde que el tamano de la ultima
+verificacion viaja en esa fila y el cierre lee de ahi: una fila vieja de esa slice, escrita antes de que el
+tamano se moviera a la fila ligera, no lee a medias, y el error no sale por un comando de lectura sino por
+`uv run slice-runner run` al cerrar. Archivar esas filas -moverlas fuera de
 `runs/`- es decision de quien opera: el programa no lo hace por su cuenta.
 
 Colapsar lector y escritor de `metrics.jsonl` en un solo modelo con `extra="forbid"` tiene una consecuencia:
