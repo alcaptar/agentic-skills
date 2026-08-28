@@ -1,8 +1,8 @@
 """Invariants against the tree itself, not two copies of the same prose.
 
-Three of the tests here scan the repo instead of comparing a script to a skill: that no call to an
-external process is launched without a cap, that every repo path cited in the docs still exists,
-and that the smoke fixture is linted with the same yardstick as the root. `CLAUDE.md` names the
+Two of the tests here scan the repo instead of comparing a script to a skill: that no call to an
+external process is launched without a cap, and that every repo path cited in the docs still
+exists. `CLAUDE.md` names the
 cap on every external call one of the principles the pipeline does not break, and
 `docs/conventions/como-se-escribe.md` cites this file as the contract of cited paths. The fourth
 test pins what counts as "launching a process" for the cap check, so a scan that only knows
@@ -49,14 +49,9 @@ from __future__ import annotations
 import ast
 import fnmatch
 import re
-import tomllib
-from typing import TYPE_CHECKING
 
 import pytest
-from conftest import _ROOT, _read, _rel, _tracked
-
-if TYPE_CHECKING:
-    from pathlib import Path
+from conftest import _ROOT, _read, _tracked
 
 _UNSCANNED = {
     "skills/slice-spec/references/observabilidad.md": "documenta rutas de otros repos",
@@ -72,14 +67,13 @@ moves would destroy the only thing that makes the numbers comparable -- a rerun 
 the same experiment. A path going stale there is the point, not a defect.
 """
 
-_EXEMPT = {
-    "tests/test_core.py": "ruta de la fixture de smoke, que la slice crea al correr",
-}
-"""One token is exempt rather than its whole file.
+_EXEMPT: dict[str, str] = {}
+"""No token is exempt today.
 
-`smoke/README.md` is worth scanning (it cites `tests/` paths of ours, among others) but it also
-speaks in the smoke fixture's own coordinates, and the fixture happens to have a `tests/`
-directory just like the repo root.
+The only exemption this ever needed was a path of the smoke fixture, which spoke in its own
+coordinates while living under our tree; the smoke was retired on 2026-08-28. The map stays because
+the check names what does NOT count rather than what does, and a new document that speaks in
+someone else's coordinates would need its entry here rather than a widened scan.
 """
 
 _BACKTICKED = re.compile(r"`([^`\n]+)`")
@@ -156,47 +150,7 @@ def test_every_repo_path_cited_in_the_docs_still_exists() -> None:
     )
 
 
-_FIXTURE_PYPROJECT = _ROOT / "smoke" / "fixture" / "pyproject.toml"
-
-
-def _ruff_lint(path: Path) -> dict[str, object]:
-    section = tomllib.loads(_read(path)).get("tool", {}).get("ruff", {}).get("lint", {})
-    assert isinstance(section, dict), f"{_rel(path)} has no [tool.ruff.lint] section"
-
-    return section
-
-
-def _selected_rules(path: Path) -> list[str]:
-    selected = _ruff_lint(path).get("select")
-    assert isinstance(selected, list), f"{_rel(path)} does not select any ruff rule explicitly"
-
-    return sorted(str(rule) for rule in selected)
-
-
-def test_the_smoke_fixture_is_linted_with_the_same_yardstick_as_the_repo() -> None:
-    """`architecture.md`: "the smoke fixture carries the same `select` as the root. Touch one, touch
-    the other", because the fixture is the subject the runner slices in the smoke -- a laxer yardstick
-    there "would give the runner a pass that is not worth anything".
-
-    The convention was written and nothing measured it: adding `TID` to the root and forgetting the
-    fixture was caught by the judge, not by `make check`. A convention nothing measures does not
-    measure anything -- which is the failure this repo already paid for once, in Spanish identifiers.
-    """
-    root_pyproject = _ROOT / "pyproject.toml"
-
-    assert _selected_rules(root_pyproject) == _selected_rules(_FIXTURE_PYPROJECT), (
-        f"the `select` of pyproject.toml and {_rel(_FIXTURE_PYPROJECT)} have diverged: the fixture "
-        f"would be measured with a different yardstick than the repo it stands in for"
-    )
-
-    root, fixture = _ruff_lint(root_pyproject), _ruff_lint(_FIXTURE_PYPROJECT)
-    assert root.get("flake8-tidy-imports") == fixture.get("flake8-tidy-imports"), (
-        f"a rule in the `select` is configured differently in {_rel(_FIXTURE_PYPROJECT)}, so the same "
-        f"code would pass in one and fail in the other"
-    )
-
-
-_LAUNCHERS = _tracked("src/slice_runner/*.py", "skills/*/scripts/*.py", "smoke/fixture/*.py", "tests/*.py")
+_LAUNCHERS = _tracked("src/slice_runner/*.py", "skills/*/scripts/*.py", "tests/*.py")
 
 
 _LAUNCHING_CALLS = {

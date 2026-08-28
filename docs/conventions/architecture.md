@@ -177,9 +177,6 @@ Razonadas en `pyproject.toml`:
 - **Las reglas `S` (bandit) están desactivadas**: sus hallazgos son inherentes al cometido de los
   scripts de `skills/` que lanzan procesos externos, y obligarian a sembrarlos de `noqa` sin cambiar
   una sola decisión.
-- **`smoke/fixture/pyproject.toml` lleva el mismo `select`** que la raíz: la fixture es el sujeto que
-  trocea el runner en el smoke, así que relajarla ahi le daria al runner un aprobado que no vale. Si
-  tocas uno, toca el otro.
 
 ## Antipatrones
 
@@ -187,7 +184,6 @@ Razonadas en `pyproject.toml`:
   con stdlib.**
 - Pydantic en `domain/` o en los `Params` de un caso de uso.
 - `domain/` importando de `application/` o de `infrastructure/`.
-- Relajar el `select` de `ruff` en `smoke/fixture/` sin tocar el de la raíz.
 - Una regla de negocio escrita en dos sitios, **aunque las dos redacciones sean distintas**.
 - La misma partición de un vocabulario cerrado declarada en más de un sitio. **El `match` exhaustivo no
   protege de esto.**
