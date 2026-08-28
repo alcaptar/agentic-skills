@@ -4,6 +4,7 @@ import json
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar
 
+from slice_runner.infrastructure.cited_finding import CitedFinding
 from slice_runner.infrastructure.cited_sources import CitedSources
 from slice_runner.infrastructure.counted_lines import CountedLines
 from slice_runner.infrastructure.harness_invocation_runner import HarnessInvocation
@@ -11,7 +12,6 @@ from slice_runner.infrastructure.prior_art_block import PriorArtBlock
 from slice_runner.infrastructure.verdict_payload import VerdictPayload
 
 if TYPE_CHECKING:
-    from slice_runner.domain.finding import Finding
     from slice_runner.domain.judge import Judge
     from slice_runner.domain.slice_under_review import SliceUnderReview
     from slice_runner.domain.source_reader import SourceReader
@@ -86,16 +86,11 @@ class JudgeInvocation(HarnessInvocation):
                     "directorios que puedes leer", tuple(str(directory) for directory in self.judge.readable)
                 ),
                 *CountedLines.of(
-                    "hallazgos de la ronda anterior", tuple(self._cited(finding) for finding in review.prior_findings)
+                    "hallazgos de la ronda anterior",
+                    tuple(CitedFinding.of(finding) for finding in review.prior_findings),
                 ),
             ]
         )
-
-    @classmethod
-    def _cited(cls, finding: Finding) -> str:
-        where = f"{finding.path}:{finding.line}" if finding.line is not None else finding.path
-
-        return f"[{finding.severity}] {finding.rule} en {where}"
 
     @property
     def _diff(self) -> str:

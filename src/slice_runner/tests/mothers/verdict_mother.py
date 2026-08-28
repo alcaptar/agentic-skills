@@ -34,6 +34,17 @@ class FindingMother:
         )
 
     @staticmethod
+    def with_a_very_long_detail() -> Finding:
+        return Finding(
+            rule="cobertura-capa",
+            path="src/y.py",
+            severity=Severity.HIGH,
+            evidence="a finding with a detail nobody should truncate",
+            detail="d" * 20000,
+            line=7,
+        )
+
+    @staticmethod
     def low_severity(*, path: str = "src/x.py") -> Finding:
         return Finding(
             rule="nombrado",

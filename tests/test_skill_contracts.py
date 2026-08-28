@@ -30,6 +30,7 @@ from slice_runner.domain.issue_label import IssueLabel
 from slice_runner.domain.ruling import Ruling
 from slice_runner.domain.severity import Severity
 from slice_runner.domain.state_machine import StateMachine
+from slice_runner.infrastructure.cited_finding import CitedFinding
 from slice_runner.infrastructure.cli import Cli
 from slice_runner.infrastructure.exit_code import ExitCode
 from slice_runner.infrastructure.gh_run_repository import GhRunRepository
@@ -42,6 +43,7 @@ from slice_runner.infrastructure.transition_payload import TransitionPayload
 from slice_runner.infrastructure.transition_request_payload import TransitionRequestPayload
 from slice_runner.infrastructure.verdict_payload import FindingPayload
 from slice_runner.tests.doubles import GhCallDoubles, ScriptedProcess
+from slice_runner.tests.mothers.verdict_mother import FindingMother
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -913,6 +915,59 @@ def test_the_rubric_treats_prior_findings_as_precedent_and_not_as_a_yardstick_to
     assert "vuelve a citarlo contra el diff de esta ronda" in rubric, (
         "the program's rubric no longer requires re-citing a finding that still stands against the "
         "current diff instead of dragging the old citation forward"
+    )
+
+
+_PRIOR_FINDING_VOCABULARY = {
+    "regla": "rule",
+    "ruta": "path",
+    "linea": "line",
+    "severidad": "severity",
+    "evidencia": "evidence",
+    "detalle": "detail",
+}
+
+
+def _prior_findings_bullet() -> str:
+    """The rubric's own description of what a prior finding carries."""
+    bullet = re.search(
+        r"^- \*\*Los hallazgos que tu mismo levantaste en la ronda anterior\*\*(.*?)\n\n",
+        _program_rubric(),
+        re.DOTALL | re.MULTILINE,
+    )
+    assert bullet, "cannot find the prior-findings bullet in the program's rubric"
+    return bullet.group(1)
+
+
+def test_the_prior_finding_fields_the_rubric_names_are_the_ones_the_prompt_actually_carries() -> None:
+    """The bullet states what a prior finding brings; `CitedFinding` is what actually composes it.
+
+    `evidence` and `detail` used to be thrown away composing the cite, while the bullet only ever
+    promised regla/ruta/linea/severidad -- the two sides agreed by both being incomplete. Extracting a
+    field here without saying so in the bullet is silent again, the other way round.
+
+    The comparison is against the cite `CitedFinding` composes, not against the whole prompt: the
+    rubric's own JSON example already contains a `"line": 42` and a `"medium"`, so measuring against
+    the full text would mark those fields as carried regardless of what the cite actually says.
+    """
+    bullet = _prior_findings_bullet()
+    documented = {field for word, field in _PRIOR_FINDING_VOCABULARY.items() if re.search(rf"\b{word}\b", bullet)}
+
+    finding = FindingMother.with_line(line=42)
+    cite = CitedFinding.of(finding)
+    carried_values = {
+        "rule": finding.rule,
+        "path": finding.path,
+        "line": str(finding.line),
+        "severity": str(finding.severity),
+        "evidence": finding.evidence,
+        "detail": finding.detail,
+    }
+    carried = {field for field, value in carried_values.items() if value in cite}
+
+    assert documented == carried, (
+        f"the rubric's description of a prior finding and what the prompt actually carries disagree: "
+        f"only in the rubric {sorted(documented - carried)}, only in the prompt {sorted(carried - documented)}"
     )
 
 

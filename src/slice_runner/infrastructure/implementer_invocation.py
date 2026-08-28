@@ -4,6 +4,7 @@ import json
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar
 
+from slice_runner.infrastructure.cited_finding import CitedFinding
 from slice_runner.infrastructure.cited_sources import CitedSources
 from slice_runner.infrastructure.counted_lines import CountedLines
 from slice_runner.infrastructure.harness_invocation_runner import HarnessInvocation
@@ -13,7 +14,6 @@ from slice_runner.infrastructure.slice_implementer_brief import SliceImplementer
 
 if TYPE_CHECKING:
     from slice_runner.domain.assignment import Assignment
-    from slice_runner.domain.finding import Finding
     from slice_runner.domain.pull_request_review_comment import PullRequestReviewComment
     from slice_runner.domain.requested_change import RequestedChange
     from slice_runner.domain.source_reader import SourceReader
@@ -166,7 +166,9 @@ class ImplementerInvocation(HarnessInvocation):
         if not findings:
             return ["- hallazgos de la vuelta anterior: ninguno, esta es la primera"]
 
-        return CountedLines.of("hallazgos de la vuelta anterior", tuple(self._raised(finding) for finding in findings))
+        return CountedLines.of(
+            "hallazgos de la vuelta anterior", tuple(CitedFinding.of(finding) for finding in findings)
+        )
 
     @property
     def _control_logs(self) -> list[str]:
@@ -199,12 +201,6 @@ class ImplementerInvocation(HarnessInvocation):
             "que nadie declaro",
             *(f"  - {path}" for path in files),
         ]
-
-    @classmethod
-    def _raised(cls, finding: Finding) -> str:
-        where = cls._location(path=finding.path, line=finding.line)
-
-        return f"[{finding.severity}] {finding.rule} en {where}: {finding.evidence} (detalle: {finding.detail})"
 
     @staticmethod
     def _location(*, path: str, line: int | None) -> str:
