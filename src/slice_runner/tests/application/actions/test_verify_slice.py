@@ -214,6 +214,16 @@ class TestVerifySlice:
 
         assert self._recorded(corpus).session == VerificationMother.SESSION
 
+    def test_the_recorded_pair_carries_how_many_prior_findings_the_judge_was_given(
+        self, action: VerifySlice, corpus: Mock
+    ) -> None:
+        findings = (FindingMother.with_line(), FindingMother.without_line())
+        params = replace(_PARAMS, prior_findings=findings)
+
+        action.execute(params)
+
+        assert self._recorded(corpus).prior_findings_given == len(findings)
+
     def test_a_vetoed_verification_is_recorded_too_because_the_corpus_is_not_only_the_clean_pairs(
         self, action: VerifySlice, corpus: Mock, verifier: Mock
     ) -> None:

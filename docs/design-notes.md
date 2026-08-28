@@ -1078,6 +1078,54 @@ conductor**. Esa segunda es duplicación declarada, no un agujero: hay un invari
 falla si nace una cuarta llamada sin su descarte, que es más de lo que sostiene la prosa. Lo que no existe
 es la pieza que lo escribiría una sola vez.
 
+## El juez dice de lo suyo fuera de los hallazgos (2026-08-28, lo que se midió)
+
+El juez ya tenía mandado pronunciarse sobre cada hallazgo de la ronda anterior -corregido, sigue o
+retirado, con motivo si lo retira-, pero el único hueco donde cabía esa frase en el `structured_output`
+era un `finding` más. **Que se midió.** De los 53 hallazgos de severidad `low` del corpus, 9 eran eso: el
+juez diciendo que un defecto ya no está, contado por `SeverityCountPayload` como si el defecto siguiera
+vivo. `docs/conventions/architecture.md` ya nombra el sitio donde vive una decisión que se repite: aquí no
+era la decisión la que estaba repartida, era el **vocabulario** el que le faltaba un miembro, y por eso el
+programa metía en `findings` algo que no lo era.
+
+**Que se hizo.** Un campo propio del veredicto, `prior_rulings`, con su identificador, su desenlace y un
+motivo opcional. No toca `count_of`, `Verdict.__post_init__` ni `ruling`: un pronunciamiento nunca bloquea,
+así que no entra en la cuenta que sí lo hace.
+
+**Por qué el conteo de hallazgos previos se escribe ausente y no a cero.** La fila del corpus trae también
+`prior_findings_given`, cuántos hallazgos previos recibió el juez en esa verificación, para poder medir
+después cuántas veces se pronuncia y cuántas calla. Una fila escrita por una versión anterior de este
+programa no tiene ese dato -no es que hubiera cero hallazgos previos, es que la pregunta no existía
+todavía-, y un `= 0` por defecto habría fundido esas dos cosas en el mismo valor: quien mida después no
+podría distinguir "no había nada que pronunciar" de "esta fila no sabe contestar". El mismo patrón que ya
+usa `HarnessSpend` con un gasto no medido.
+
+**La frontera del identificador, y por qué las dos numeraciones no se cruzan.** El `id` que el juez cita en
+`prior_rulings` numera `progress.findings_of_the_last_round`: la última ronda de esta invocación, sin
+agrupar. Lo antepone `JudgeInvocation` -`` f"`f{position}` {CitedFinding.of(finding)}" ``-, no
+`CitedFinding.of`, que sigue devolviendo solo la cita sin identificador: es también el que compone el
+hallazgo en el prompt del implementador, y ese prompt no promete ningún identificador -el implementador no
+emite `prior_rulings`, así que citarle uno sería un token sin significado en un contrato con un agente
+distinto (`docs/conventions/infrastructure.md`)-. El `f{n}` que ve una persona en el comentario del veto
+numera `FindingsHistory.entries`: los hallazgos agrupados por regla y ruta sobre **todas** las rondas de
+la invocación, compuesto por separado en `VetoFindingsComment._payloads_of`. Un `f2` de un sitio y un `f2`
+del otro pueden ser hallazgos distintos. Compartir el formato entre los dos -o peor, la numeración- habría
+invitado a cruzarlos, que es más caro que la duplicación del prefijo `f{n}`.
+
+**Lo que queda declarado.** Contar cuántas rondas lleva un hallazgo en `sigue` para declararlo atascado -lo
+que motivó el #440- no es esta slice: esta solo le da el insumo, el identificador y el desenlace por
+ronda. Y bloquear o descartar un veredicto por un pronunciamiento que falta o por un retirado sin motivo
+tampoco: la rúbrica lo pide, esta slice solo lo mide.
+
+**Qué pasa si se revierte.** `prior_rulings` y `prior_findings_given` entran con default, así que una
+fila escrita por esta versión sigue en `extra="forbid"` intacta mientras nadie toque el modelo. Pero si se
+reinstala la versión anterior del programa, ese modelo no conoce ninguno de los dos campos, y
+`extra="forbid"` los rechaza: una fila escrita después de esta slice se vuelve ilegible
+(`UnreadableCorpusError`) para quien reinstale. No hay migración que lo resuelva -el histórico de otra
+generación no lo interpreta este programa, ver `docs/conventions/infrastructure.md`-, así que revertir
+exige archivar a mano las filas escritas entre el despliegue de esta slice y el revert, igual que ya se
+archiva el histórico de una generación anterior del log.
+
 ## Roadmap de autonomia (pendiente)
 
 Estado actual: **Nivel 1** — una slice por invocación, todo bajo control manual. Subir de nivel solo cuando el anterior sea fiable; el cuello de botella nunca es implementar, es la calidad del gate de verificación.

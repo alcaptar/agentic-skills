@@ -25,7 +25,7 @@ from slice_runner.tests.infrastructure.stub_ledger import WiredStubLedgers
 from slice_runner.tests.mothers.corpus_entry_mother import CorpusEntryMother
 from slice_runner.tests.mothers.judge_output_mother import HarnessEnvelopeMother, JudgeVerdictMother
 from slice_runner.tests.mothers.repo_mother import RepoMother
-from slice_runner.tests.mothers.verdict_mother import FindingMother, VerdictMother
+from slice_runner.tests.mothers.verdict_mother import FindingMother, PriorFindingRulingMother, VerdictMother
 from slice_runner.tests.mothers.verification_mother import SliceDiffMother
 
 if TYPE_CHECKING:
@@ -61,13 +61,14 @@ class TestTheRecordThatIsWritten(WithTheDurableStoresOutOfTheRealHome):
                 "slice_id": CorpusEntryMother.SLICE_ID,
                 "verify_round": CorpusEntryMother.VERIFY_ROUND,
                 "session": CorpusEntryMother.SESSION,
-                "verdict": {"ruling": "PASS", "findings": []},
+                "verdict": {"ruling": "PASS", "findings": [], "prior_rulings": []},
                 "severity_counts": {"high": 0, "medium": 0, "low": 0},
                 "diff_stats": {
                     "files_changed": SliceDiffMother.STATS.files_changed,
                     "lines_added": SliceDiffMother.STATS.lines_added,
                     "lines_deleted": SliceDiffMother.STATS.lines_deleted,
                 },
+                "prior_findings_given": CorpusEntryMother.PRIOR_FINDINGS_GIVEN,
                 "ts": _STAMP.isoformat(),
             }
         ]
@@ -101,6 +102,22 @@ class TestTheRecordThatIsWritten(WithTheDurableStoresOutOfTheRealHome):
         LocalCorpus(clock=self.frozen_at()).record(CorpusEntryMother.of_the_slice(verdict=vetoed))
 
         assert WrittenCorpus.verdicts_under(tmp_path)[0]["severity_counts"] == {"high": 2, "medium": 1, "low": 0}
+
+    def test_the_pronouncement_on_a_prior_finding_travels_written_down_in_the_verdict_row(self, tmp_path: Path) -> None:
+        pronouncing = VerdictMother.pronouncing_on(PriorFindingRulingMother.retired())
+
+        LocalCorpus(clock=self.frozen_at()).record(CorpusEntryMother.of_the_slice(verdict=pronouncing))
+
+        assert WrittenCorpus.verdicts_under(tmp_path)[0]["verdict"] == {
+            "ruling": "PASS",
+            "findings": [],
+            "prior_rulings": [{"id": "f1", "state": "retirado", "reason": "el criterio que citaba ya no existe"}],
+        }
+
+    def test_the_number_of_prior_findings_given_to_the_judge_travels_written_down(self, tmp_path: Path) -> None:
+        LocalCorpus(clock=self.frozen_at()).record(CorpusEntryMother.of_the_slice(prior_findings_given=3))
+
+        assert WrittenCorpus.verdicts_under(tmp_path)[0]["prior_findings_given"] == 3
 
     def test_the_size_of_the_diff_travels_written_down_in_the_verdict_row_not_the_diff_row(
         self, tmp_path: Path
@@ -162,6 +179,24 @@ class AskingTheCorpusAboutOneSlice(WithTheDurableStoresOutOfTheRealHome):
             "session": CorpusEntryMother.SESSION,
             "verdict": {"ruling": "PASS", "findings": []},
             "severity_counts": {"high": 0, "medium": 0, "low": 0},
+        }
+
+    @staticmethod
+    def _verdict_row_written_before_the_pronouncement_existed(*, stats: DiffStats) -> dict[str, object]:
+        return {
+            "ts": _STAMP.isoformat(),
+            "repo": CorpusEntryMother.REPO,
+            "issue": CorpusEntryMother.ISSUE,
+            "slice_id": CorpusEntryMother.SLICE_ID,
+            "verify_round": CorpusEntryMother.VERIFY_ROUND,
+            "session": CorpusEntryMother.SESSION,
+            "verdict": {"ruling": "PASS", "findings": []},
+            "severity_counts": {"high": 0, "medium": 0, "low": 0},
+            "diff_stats": {
+                "files_changed": stats.files_changed,
+                "lines_added": stats.lines_added,
+                "lines_deleted": stats.lines_deleted,
+            },
         }
 
 
@@ -254,6 +289,15 @@ class TestTheHeavyDiffStaysOutOfTheVerdictLedger(AskingTheCorpusAboutOneSlice):
 
         with pytest.raises(UnreadableCorpusError, match="generation"):
             LocalCorpus(clock=self.frozen_at()).size_of_the_last_verification(self._coordinates())
+
+    def test_a_row_written_before_the_pronouncement_existed_is_still_read_without_it(self) -> None:
+        stats = DiffStats(files_changed=3, lines_added=40, lines_deleted=12)
+        row = self._verdict_row_written_before_the_pronouncement_existed(stats=stats)
+
+        read = CorpusVerdictPayload.from_dict(row)
+
+        assert read.verdict.prior_rulings == []
+        assert read.prior_findings_given is None
 
 
 class TestWhereTheCorpusLives:

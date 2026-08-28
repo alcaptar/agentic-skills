@@ -69,10 +69,11 @@ El programa te pasa, en el prompt de invocacion:
 - **Las fuentes de convencion**: los punteros a la vara principal del item 1, ya filtrados por el repo
   de la slice. Son rutas y nombres, asi que tienes que abrirlos tu.
 - **Los hallazgos que tu mismo levantaste en la ronda anterior**, si la hay: uno por hallazgo, con su
-  regla, su ruta, su linea cuando la tiene, su severidad, la evidencia con la que lo levantaste y el
-  detalle que la ampliaba. Las dos ultimas son lo que te deja comparar contra lo que decias entonces y
-  no solo contra lo que hay hoy en esa linea. Es el antecedente del repaso que pide "Hallazgos de la
-  ronda anterior", mas abajo: no una vara nueva ni una lista que haya que aprobar tal cual.
+  identificador dentro de esta verificacion, su regla, su ruta, su linea cuando la tiene, su severidad,
+  la evidencia con la que lo levantaste y el detalle que la ampliaba. Las dos ultimas son lo que te deja
+  comparar contra lo que decias entonces y no solo contra lo que hay hoy en esa linea. Es el antecedente
+  del repaso que pide "Hallazgos de la ronda anterior", mas abajo: no una vara nueva ni una lista que
+  haya que aprobar tal cual.
 - **Lo que el implementador declaro dejar fuera** (`left_out` en su informe), justo detras de los
   hallazgos de la ronda anterior: lo que quien implemento la slice registro como hueco que no construyo.
   Es contexto para el item 5, no una prohibicion ni un permiso: te deja separar, ahi, un hueco declarado
@@ -254,10 +255,16 @@ Recorrela **entera** y reporta item a item. No la amplies con criterios propios 
 ## Hallazgos de la ronda anterior
 
 Si la lista que recibiste no esta vacia, pronunciate sobre **cada uno** de sus hallazgos antes de
-cerrar el veredicto. Marca cada uno como **corregido** (el diff ya no incurre en el), **sigue** (el
-diff sigue incurriendo en el; cita el mismo hallazgo otra vez) o **retirado**. Si lo retiras, el
-`detail` del veredicto tiene que decir por que: retirar un hallazgo sin motivo escrito es exactamente
-el desdecirse que esta seccion existe para cerrar.
+cerrar el veredicto, en el campo `prior_rulings` del JSON de salida y no como un hallazgo mas: un
+pronunciamiento no es un defecto de la slice, y meterlo en `findings` es contar como si el defecto
+siguiera vivo justo la frase que dice que ya no lo esta. Cada entrada de `prior_rulings` cita, en `id`,
+el identificador del hallazgo al que se refiere -el que trae "Hallazgos de la ronda anterior" en "Lo
+que recibes"-, y ese identificador **solo vale dentro de esta verificacion**: no lo cruces con ningun
+otro identificador que veas en otro sitio, como el de un veto publicado. En `state`, marca cada uno como
+**corregido** (el diff ya no incurre en el), **sigue** (el diff sigue incurriendo en el; cita el mismo
+hallazgo otra vez) o **retirado**. Si lo retiras, el `reason` de la entrada tiene que decir por que:
+retirar un hallazgo sin motivo escrito es exactamente el desdecirse que esta seccion existe para cerrar.
+Solo retirar lo exige: en los otros dos estados, `reason` puede quedar vacio.
 
 **Son antecedente, no vara.** Un hallazgo de la ronda anterior no se hereda por inercia: si sigue,
 vuelve a citarlo contra el diff de esta ronda -regla, ruta y linea de **esta** verificacion- en vez de
@@ -302,13 +309,17 @@ bloque de codigo que lo envuelva. El orquestador lo consume como dato.
   "findings": [
     {"rule": "boundaries", "path": "src/infra/x.py", "line": 42,
      "severity": "high | medium | low", "evidence": "...", "detail": "..."}
+  ],
+  "prior_rulings": [
+    {"id": "f1", "state": "corregido | sigue | retirado", "reason": "..."}
   ]
 }
 ```
 
 `rule` es el nombre corto del item de la rubrica que se incumple (`convenciones`, `rollout`,
 `boundaries`, `cobertura-capa`, `conformidad-ac`, `manipulacion-tests`, `fixture-theater`,
-`test-desiderata`, `observabilidad`). Con `ruling: PASS` y ningun hallazgo, `findings` es una lista vacia.
+`test-desiderata`, `observabilidad`). Con `ruling: PASS` y ningun hallazgo, `findings` es una lista
+vacia. `prior_rulings` es una lista vacia cuando "hallazgos de la ronda anterior" tambien lo es.
 """
 
 

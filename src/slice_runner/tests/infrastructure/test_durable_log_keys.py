@@ -21,7 +21,7 @@ from slice_runner.tests.mothers.event_mother import EventMother
 from slice_runner.tests.mothers.harness_call_mother import HarnessCallMother
 from slice_runner.tests.mothers.harness_call_spend_mother import HarnessCallSpendMother
 from slice_runner.tests.mothers.harness_call_tool_use_mother import HarnessCallToolUseMother
-from slice_runner.tests.mothers.verdict_mother import FindingMother, VerdictMother
+from slice_runner.tests.mothers.verdict_mother import FindingMother, PriorFindingRulingMother, VerdictMother
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -163,7 +163,11 @@ class TestNoDurableStoreWritesAKeyInSpanish(ReadingTheLedger):
         }
 
     def test_the_corpus_verdict_keys_cover_the_findings_a_verdict_carries(self, tmp_path: Path) -> None:
-        entry = CorpusEntryMother.of_the_slice(verdict=VerdictMother.passing_with(FindingMother.with_line()))
+        entry = CorpusEntryMother.of_the_slice(
+            verdict=VerdictMother.pronouncing_on(
+                PriorFindingRulingMother.retired(), findings=(FindingMother.with_line(),)
+            )
+        )
         LocalCorpus(clock=self.frozen_at()).record(entry)
 
         keys = self.flattened(self.rows_of(tmp_path, "verdicts")[0])
@@ -184,6 +188,10 @@ class TestNoDurableStoreWritesAKeyInSpanish(ReadingTheLedger):
             "verdict.findings.evidence",
             "verdict.findings.detail",
             "verdict.findings.line",
+            "verdict.prior_rulings",
+            "verdict.prior_rulings.id",
+            "verdict.prior_rulings.state",
+            "verdict.prior_rulings.reason",
             "severity_counts",
             "severity_counts.high",
             "severity_counts.medium",
@@ -192,6 +200,7 @@ class TestNoDurableStoreWritesAKeyInSpanish(ReadingTheLedger):
             "diff_stats.files_changed",
             "diff_stats.lines_added",
             "diff_stats.lines_deleted",
+            "prior_findings_given",
         }
 
     def test_the_corpus_diff_keys_are_the_identity_of_the_round_and_the_text_it_judged(self, tmp_path: Path) -> None:

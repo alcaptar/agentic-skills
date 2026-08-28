@@ -172,7 +172,7 @@ class TestWhatTravelsOnStandardInput:
 
         assert (
             "- hallazgos de la ronda anterior (1):\n"
-            "  - [medium] convenciones en src/x.py:42: prose in a `.py` (detalle: the why lives in the "
+            "  - `f1` [medium] convenciones en src/x.py:42: prose in a `.py` (detalle: the why lives in the "
             "pull request body)\n"
         ) in text
 
@@ -183,9 +183,19 @@ class TestWhatTravelsOnStandardInput:
 
         assert (
             "- hallazgos de la ronda anterior (1):\n"
-            "  - [high] cobertura-capa en src/x.py: the acceptance criterion has no test (detalle: the test "
+            "  - `f1` [high] cobertura-capa en src/x.py: the acceptance criterion has no test (detalle: the test "
             "that accredits it is missing)\n"
         ) in text
+
+    def test_two_prior_findings_get_distinguishable_identifiers_so_the_judge_can_cite_them_apart(self) -> None:
+        review = SliceUnderReviewMother.of_the_slice(
+            prior_findings=(FindingMother.with_line(line=42), FindingMother.without_line())
+        )
+
+        text = JudgeInvocation(judge=_JUDGE, review=review, reader=_READER).text
+
+        assert "`f1` [medium]" in text
+        assert "`f2` [high]" in text
 
     def test_a_prior_finding_with_a_very_long_detail_carries_it_whole_without_being_truncated(self) -> None:
         finding = FindingMother.with_a_very_long_detail()

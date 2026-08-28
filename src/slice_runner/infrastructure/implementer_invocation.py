@@ -167,7 +167,8 @@ class ImplementerInvocation(HarnessInvocation):
             return ["- hallazgos de la vuelta anterior: ninguno, esta es la primera"]
 
         return CountedLines.of(
-            "hallazgos de la vuelta anterior", tuple(CitedFinding.of(finding) for finding in findings)
+            "hallazgos de la vuelta anterior",
+            tuple(CitedFinding.of(finding) for finding in findings),
         )
 
     @property

@@ -87,7 +87,10 @@ class JudgeInvocation(HarnessInvocation):
                 ),
                 *CountedLines.of(
                     "hallazgos de la ronda anterior",
-                    tuple(CitedFinding.of(finding) for finding in review.prior_findings),
+                    tuple(
+                        f"`f{position}` {CitedFinding.of(finding)}"
+                        for position, finding in enumerate(review.prior_findings, start=1)
+                    ),
                 ),
                 *CountedLines.of("lo que el implementador declaro dejar fuera", review.debt),
             ]
