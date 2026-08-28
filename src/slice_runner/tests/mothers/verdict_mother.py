@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from slice_runner.domain.finding import Finding
+from slice_runner.domain.prior_finding_ruling import PriorFindingRuling, PriorFindingState
 from slice_runner.domain.ruling import Ruling
 from slice_runner.domain.severity import Severity
 from slice_runner.domain.verdict import Verdict
@@ -56,6 +57,16 @@ class FindingMother:
         )
 
 
+class PriorFindingRulingMother:
+    @staticmethod
+    def fixed(*, id: str = "f1") -> PriorFindingRuling:
+        return PriorFindingRuling(id=id, state=PriorFindingState.FIXED)
+
+    @staticmethod
+    def retired(*, id: str = "f1", reason: str = "el criterio que citaba ya no existe") -> PriorFindingRuling:
+        return PriorFindingRuling(id=id, state=PriorFindingState.RETIRED, reason=reason)
+
+
 class VerdictMother:
     @staticmethod
     def passing() -> Verdict:
@@ -68,3 +79,11 @@ class VerdictMother:
     @staticmethod
     def passing_with(*findings: Finding) -> Verdict:
         return Verdict(ruling=Ruling.PASS, findings=findings or (FindingMother.with_line(),))
+
+    @staticmethod
+    def pronouncing_on(*prior_rulings: PriorFindingRuling, findings: tuple[Finding, ...] = ()) -> Verdict:
+        return Verdict(
+            ruling=Ruling.PASS,
+            findings=findings,
+            prior_rulings=prior_rulings or (PriorFindingRulingMother.fixed(),),
+        )

@@ -17,6 +17,7 @@ class CorpusEntryMother:
     SLICE_ID: ClassVar[str] = "slice-11"
     VERIFY_ROUND: ClassVar[int] = 1
     SESSION: ClassVar[str] = "e3f6a3d0-1c8a-4a7b-9c2e-5f6a7b8c9d0e"
+    PRIOR_FINDINGS_GIVEN: ClassVar[int] = 0
 
     @classmethod
     def of_the_slice(
@@ -29,6 +30,7 @@ class CorpusEntryMother:
         session: str | None = None,
         verdict: Verdict | None = None,
         diff: SliceDiff | None = None,
+        prior_findings_given: int | None = None,
     ) -> CorpusEntry:
         return CorpusEntry(
             repo=repo or cls.REPO,
@@ -38,4 +40,5 @@ class CorpusEntryMother:
             session=session or cls.SESSION,
             diff=diff or SliceDiffMother.of_the_slice(),
             verdict=verdict or VerdictMother.passing(),
+            prior_findings_given=cls.PRIOR_FINDINGS_GIVEN if prior_findings_given is None else prior_findings_given,
         )

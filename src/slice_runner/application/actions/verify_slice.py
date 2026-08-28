@@ -78,6 +78,7 @@ class VerifySlice:
                 session=verification.session,
                 diff=diff,
                 verdict=verification.verdict,
+                prior_findings_given=len(params.prior_findings),
             )
         )
 

@@ -42,6 +42,7 @@ class CorpusVerdictPayload(StampedRow, ReadableLedgerRow):
     verdict: VerdictPayload
     severity_counts: SeverityCountPayload
     diff_stats: DiffStatsPayload
+    prior_findings_given: int | None = None
 
     @classmethod
     def json_schema(cls) -> dict[str, object]:
@@ -61,6 +62,7 @@ class CorpusVerdictPayload(StampedRow, ReadableLedgerRow):
             verdict=VerdictPayload.from_domain(entry.verdict),
             severity_counts=SeverityCountPayload.from_domain(entry.verdict),
             diff_stats=DiffStatsPayload.from_domain(entry.diff.stats),
+            prior_findings_given=entry.prior_findings_given,
         )
 
     @classmethod

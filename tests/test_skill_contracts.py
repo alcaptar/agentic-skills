@@ -29,6 +29,7 @@ from slice_runner.domain.budgets import Budgets
 from slice_runner.domain.exceptions import InvalidVerdictError
 from slice_runner.domain.issue_label import IssueLabel
 from slice_runner.domain.outcome import Outcome
+from slice_runner.domain.prior_finding_ruling import PriorFindingState
 from slice_runner.domain.ruling import Ruling
 from slice_runner.domain.severity import Severity
 from slice_runner.domain.state_machine import StateMachine
@@ -44,7 +45,7 @@ from slice_runner.infrastructure.slice_verifier_judge import SliceVerifierJudge
 from slice_runner.infrastructure.subissue_body import SubissueBody
 from slice_runner.infrastructure.transition_payload import TransitionPayload
 from slice_runner.infrastructure.transition_request_payload import TransitionRequestPayload
-from slice_runner.infrastructure.verdict_payload import FindingPayload
+from slice_runner.infrastructure.verdict_payload import FindingPayload, PriorFindingRulingPayload, VerdictPayload
 from slice_runner.tests.doubles import GhCallDoubles, ScriptedProcess
 from slice_runner.tests.mothers.verdict_mother import FindingMother
 
@@ -951,8 +952,8 @@ def test_the_rubric_demands_a_verdict_on_every_prior_finding_with_a_reason_to_re
     )
     for fate in ("**corregido**", "**sigue**", "**retirado**"):
         assert fate in rubric, f"the program's rubric no longer offers {fate} as a fate for a prior finding"
-    assert "el `detail` del veredicto tiene que decir por que" in rubric, (
-        "the program's rubric no longer demands a written reason in `detail` when a prior finding is retired"
+    assert "el `reason` de la entrada tiene que decir por que" in rubric, (
+        "the program's rubric no longer demands a written reason in `reason` when a prior finding is retired"
     )
 
 
@@ -973,6 +974,7 @@ def test_the_rubric_treats_prior_findings_as_precedent_and_not_as_a_yardstick_to
 
 
 _PRIOR_FINDING_VOCABULARY = {
+    "identificador": "id",
     "regla": "rule",
     "ruta": "path",
     "linea": "line",
@@ -1047,16 +1049,20 @@ def test_the_prior_finding_fields_the_rubric_names_are_the_ones_the_prompt_actua
     promised regla/ruta/linea/severidad -- the two sides agreed by both being incomplete. Extracting a
     field here without saying so in the bullet is silent again, the other way round.
 
-    The comparison is against the cite `CitedFinding` composes, not against the whole prompt: the
+    The comparison is against the cite the judge's invocation sends, not against the whole prompt: the
     rubric's own JSON example already contains a `"line": 42` and a `"medium"`, so measuring against
-    the full text would mark those fields as carried regardless of what the cite actually says.
+    the full text would mark those fields as carried regardless of what the cite actually says. The
+    identifier is composed by `JudgeInvocation` itself, not by `CitedFinding`: it is the judge's own
+    numbering of that round, and the implementer's prompt -- the other consumer of `CitedFinding` --
+    never carries it.
     """
     bullet = _prior_findings_bullet()
     documented = {field for word, field in _PRIOR_FINDING_VOCABULARY.items() if re.search(rf"\b{word}\b", bullet)}
 
     finding = FindingMother.with_line(line=42)
-    cite = CitedFinding.of(finding)
+    cite = f"`f1` {CitedFinding.of(finding)}"
     carried_values = {
+        "id": "f1",
         "rule": finding.rule,
         "path": finding.path,
         "line": str(finding.line),
@@ -1198,6 +1204,55 @@ def test_the_finding_keys_in_the_rubric_are_the_ones_the_program_maps_its_fields
         f"the finding in the program's rubric and the aliases of `FindingPayload` disagree: "
         f"only in the rubric {sorted(documented - mapped)}, only in the program {sorted(mapped - documented)}"
     )
+
+
+def test_the_verdict_top_level_keys_in_the_rubric_are_the_ones_the_program_emits() -> None:
+    """The rubric's example JSON is the whole verdict, not just its findings.
+
+    Adding `prior_rulings` to `VerdictPayload` without touching this example -- or the other way
+    round -- leaves one side of the contract stale: the judge would be told a shape the program does
+    not parse, or the program would accept a field the judge is never shown.
+    """
+    schema = _sole_json_block_in(_program_rubric())
+    assert isinstance(schema, dict)
+
+    documented = set(schema)
+    emitted = set(VerdictPayload.model_fields)
+    assert documented == emitted, (
+        f"the top-level keys of the rubric's example verdict and `VerdictPayload` disagree: only in the "
+        f"rubric {sorted(documented - emitted)}, only in the program {sorted(emitted - documented)}"
+    )
+
+
+def _documented_pronouncement() -> dict[str, object]:
+    """The single example pronouncement in the rubric, where a prior ruling's fields are stated."""
+    schema = _sole_json_block_in(_program_rubric())
+    assert isinstance(schema, dict)
+    prior_rulings = schema["prior_rulings"]
+    assert isinstance(prior_rulings, list)
+    assert prior_rulings
+    first = prior_rulings[0]
+    assert isinstance(first, dict)
+    return first
+
+
+def test_the_pronouncement_keys_in_the_rubric_are_the_ones_the_program_maps_its_fields_to() -> None:
+    """Same drift the finding keys test guards against, on the pronouncement the judge emits per finding."""
+    documented = set(_documented_pronouncement())
+
+    mapped = PriorFindingRulingPayload.contract_keys()
+    assert documented == mapped, (
+        f"the pronouncement in the program's rubric and the aliases of `PriorFindingRulingPayload` "
+        f"disagree: only in the rubric {sorted(documented - mapped)}, only in the program "
+        f"{sorted(mapped - documented)}"
+    )
+
+
+def test_the_pronouncement_states_in_the_rubric_are_the_ones_the_program_accepts() -> None:
+    """Same drift as the ruling/severity vocabularies, on the three fates a prior finding can be given."""
+    documented = {value.strip() for value in str(_documented_pronouncement()["state"]).split("|")}
+
+    assert documented == set(PriorFindingState)
 
 
 _SEVERITY_CONSEQUENCE = re.compile(r"^  - `(high|medium|low)` -> (.+)$", re.MULTILINE)
