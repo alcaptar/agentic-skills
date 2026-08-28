@@ -1,13 +1,8 @@
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime
 from typing import TYPE_CHECKING
-from unittest.mock import Mock, create_autospec
 
-import pytest
-
-from slice_runner.domain.clock import Clock
 from slice_runner.domain.step import Step
 from slice_runner.domain.unrecorded_conversation_cause import UnrecordedConversationCause
 from slice_runner.infrastructure import local_tool_use_log
@@ -16,13 +11,16 @@ from slice_runner.infrastructure.durable_ledger import DurableLedger
 from slice_runner.infrastructure.local_tool_use_log import LocalToolUseLog
 from slice_runner.infrastructure.tool_use_log import UnrecordedCallToolUse
 from slice_runner.infrastructure.tool_use_payload import CallToolUsePayload, UnrecordedCallToolUsePayload
+from slice_runner.tests.durable_store_home import WithTheDurableStoresOutOfTheRealHome
 from slice_runner.tests.infrastructure.stub_ledger import WiredStubLedgers
 from slice_runner.tests.mothers.harness_call_tool_use_mother import HarnessCallToolUseMother
 
 if TYPE_CHECKING:
     from pathlib import Path
 
-_STAMP = datetime(2026, 8, 10, 12, 0, 0, tzinfo=UTC)
+    import pytest
+
+_STAMP = WithTheDurableStoresOutOfTheRealHome.STAMP
 
 
 class WrittenToolUses:
@@ -33,19 +31,7 @@ class WrittenToolUses:
         return [json.loads(line) for line in ledger.read_text(encoding="utf-8").splitlines()]
 
 
-class WithTheLogOutOfTheRealHome:
-    @pytest.fixture(autouse=True)
-    def log_root(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
-
-    @staticmethod
-    def frozen_at(stamp: datetime = _STAMP) -> Mock:
-        clock: Mock = create_autospec(Clock, spec_set=True, instance=True)
-        clock.now.return_value = stamp
-        return clock
-
-
-class TestWhatIsWrittenDownOfACall(WithTheLogOutOfTheRealHome):
+class TestWhatIsWrittenDownOfACall(WithTheDurableStoresOutOfTheRealHome):
     def test_a_call_is_written_as_the_slice_the_step_the_session_and_every_tool_use_it_made(
         self, tmp_path: Path
     ) -> None:
@@ -67,7 +53,7 @@ class TestWhatIsWrittenDownOfACall(WithTheLogOutOfTheRealHome):
         ]
 
 
-class TestTheLogOnlyGrows(WithTheLogOutOfTheRealHome):
+class TestTheLogOnlyGrows(WithTheDurableStoresOutOfTheRealHome):
     def test_a_second_call_is_appended_instead_of_overwriting_the_first(self, tmp_path: Path) -> None:
         log = LocalToolUseLog(clock=self.frozen_at())
 
@@ -83,7 +69,7 @@ class TestWhereTheLogLives:
     ) -> None:
         monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path / "never-used-before"))
 
-        LocalToolUseLog(clock=WithTheLogOutOfTheRealHome.frozen_at()).record(
+        LocalToolUseLog(clock=WithTheDurableStoresOutOfTheRealHome.frozen_at()).record(
             HarnessCallToolUseMother.of_the_implementer()
         )
 
@@ -108,7 +94,7 @@ class TestTheAdapterOwnsOnlyItsNameAndItsPayload:
         monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
         created = WiredStubLedgers.on(local_tool_use_log, monkeypatch)
 
-        LocalToolUseLog(clock=WithTheLogOutOfTheRealHome.frozen_at()).record(
+        LocalToolUseLog(clock=WithTheDurableStoresOutOfTheRealHome.frozen_at()).record(
             HarnessCallToolUseMother.of_the_implementer()
         )
 
@@ -128,7 +114,7 @@ class TestTheAdapterOwnsOnlyItsNameAndItsPayload:
         monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
         created = WiredStubLedgers.on(local_tool_use_log, monkeypatch)
 
-        LocalToolUseLog(clock=WithTheLogOutOfTheRealHome.frozen_at()).record_unrecorded(
+        LocalToolUseLog(clock=WithTheDurableStoresOutOfTheRealHome.frozen_at()).record_unrecorded(
             UnrecordedCallToolUse(
                 coordinates=HarnessCallToolUseMother.coordinates(),
                 step=Step.IMPLEMENT,

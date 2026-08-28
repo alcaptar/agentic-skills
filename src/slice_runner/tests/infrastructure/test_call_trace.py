@@ -3,14 +3,11 @@ from __future__ import annotations
 import io
 import json
 import os
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
-from unittest.mock import Mock, create_autospec
 
 import pytest
 
-from slice_runner.domain.clock import Clock
 from slice_runner.domain.exceptions import UnreadableCallTraceError
 from slice_runner.domain.step import Step
 from slice_runner.infrastructure import local_call_trace
@@ -18,6 +15,7 @@ from slice_runner.infrastructure.claude_config import ClaudeConfig
 from slice_runner.infrastructure.durable_ledger import DurableLedger
 from slice_runner.infrastructure.harness_call_payload import HarnessCallPayload
 from slice_runner.infrastructure.local_call_trace import LocalCallTrace
+from slice_runner.tests.durable_store_home import WithTheDurableStoresOutOfTheRealHome
 from slice_runner.tests.infrastructure.retired_ledger_directory import RetiredLedgerDirectory
 from slice_runner.tests.infrastructure.stub_ledger import WiredStubLedgers
 from slice_runner.tests.mothers.harness_call_mother import HarnessCallMother
@@ -40,7 +38,7 @@ def _forbid_opening_the_retired_log_directory(monkeypatch: pytest.MonkeyPatch) -
     monkeypatch.setattr("builtins.open", guarded)
 
 
-_STAMP = datetime(2026, 8, 10, 12, 0, 0, tzinfo=UTC)
+_STAMP = WithTheDurableStoresOutOfTheRealHome.STAMP
 
 
 class WrittenTrace:
@@ -51,19 +49,7 @@ class WrittenTrace:
         return [json.loads(line) for line in ledger.read_text(encoding="utf-8").splitlines()]
 
 
-class WithTheTraceOutOfTheRealHome:
-    @pytest.fixture(autouse=True)
-    def trace_root(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
-
-    @staticmethod
-    def frozen_at(stamp: datetime = _STAMP) -> Mock:
-        clock: Mock = create_autospec(Clock, spec_set=True, instance=True)
-        clock.now.return_value = stamp
-        return clock
-
-
-class TestWhatIsWrittenDownOfACall(WithTheTraceOutOfTheRealHome):
+class TestWhatIsWrittenDownOfACall(WithTheDurableStoresOutOfTheRealHome):
     def test_a_call_is_written_as_the_run_it_came_from_the_step_it_served_and_the_session_of_its_conversation(
         self, tmp_path: Path
     ) -> None:
@@ -81,7 +67,7 @@ class TestWhatIsWrittenDownOfACall(WithTheTraceOutOfTheRealHome):
         ]
 
 
-class TestTheTraceOnlyGrows(WithTheTraceOutOfTheRealHome):
+class TestTheTraceOnlyGrows(WithTheDurableStoresOutOfTheRealHome):
     def test_the_two_calls_of_a_slice_are_both_kept_so_the_judge_does_not_overwrite_the_implementer(
         self, tmp_path: Path
     ) -> None:
@@ -96,7 +82,7 @@ class TestTheTraceOnlyGrows(WithTheTraceOutOfTheRealHome):
         ]
 
 
-class TestFindingTheSessionOfAPastCall(WithTheTraceOutOfTheRealHome):
+class TestFindingTheSessionOfAPastCall(WithTheDurableStoresOutOfTheRealHome):
     def test_the_session_of_the_call_that_served_that_run_and_step_is_returned(self, tmp_path: Path) -> None:
         trace = LocalCallTrace(clock=self.frozen_at())
         trace.record(HarnessCallMother.of_the_implementer())
@@ -260,7 +246,7 @@ class TestFindingTheSessionOfAPastCall(WithTheTraceOutOfTheRealHome):
             )
 
 
-class TestAnEarlierGenerationInTheSameLedger(WithTheTraceOutOfTheRealHome):
+class TestAnEarlierGenerationInTheSameLedger(WithTheDurableStoresOutOfTheRealHome):
     def test_a_line_of_another_slice_that_this_generation_cannot_read_does_not_block_finding_ours(
         self, tmp_path: Path
     ) -> None:
@@ -282,7 +268,7 @@ class TestAnEarlierGenerationInTheSameLedger(WithTheTraceOutOfTheRealHome):
         assert found == (mine.session,)
 
 
-class TestFindingTheCallsOfAPastSlice(WithTheTraceOutOfTheRealHome):
+class TestFindingTheCallsOfAPastSlice(WithTheDurableStoresOutOfTheRealHome):
     def test_every_call_of_the_slice_across_every_step_is_returned_in_the_order_it_was_recorded(
         self, tmp_path: Path
     ) -> None:
@@ -350,7 +336,7 @@ class TestWhereTheTraceLives:
     ) -> None:
         monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path / "never-used-before"))
 
-        LocalCallTrace(clock=WithTheTraceOutOfTheRealHome.frozen_at()).record(HarnessCallMother.of_the_judge())
+        LocalCallTrace(clock=WithTheDurableStoresOutOfTheRealHome.frozen_at()).record(HarnessCallMother.of_the_judge())
 
         assert (tmp_path / "never-used-before" / "slice-runner" / "runs" / "calls.jsonl").exists()
 
@@ -371,7 +357,7 @@ class TestTheAdapterOwnsOnlyItsNameAndItsPayload:
         monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
         created = WiredStubLedgers.on(local_call_trace, monkeypatch)
 
-        trace = LocalCallTrace(clock=WithTheTraceOutOfTheRealHome.frozen_at())
+        trace = LocalCallTrace(clock=WithTheDurableStoresOutOfTheRealHome.frozen_at())
         trace.record(HarnessCallMother.of_the_implementer())
 
         assert len(created) == 1
@@ -387,7 +373,7 @@ class TestTheAdapterOwnsOnlyItsNameAndItsPayload:
         monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
         WiredStubLedgers.on(local_call_trace, monkeypatch)
 
-        trace = LocalCallTrace(clock=WithTheTraceOutOfTheRealHome.frozen_at())
+        trace = LocalCallTrace(clock=WithTheDurableStoresOutOfTheRealHome.frozen_at())
         trace.record(HarnessCallMother.of_the_implementer())
 
         found = trace.sessions_of(
@@ -401,7 +387,7 @@ class TestTheAdapterOwnsOnlyItsNameAndItsPayload:
         assert not (tmp_path / "slice-runner").exists()
 
 
-class TestTheRetiredLogDirectoryIsNeverTouched(WithTheTraceOutOfTheRealHome):
+class TestTheRetiredLogDirectoryIsNeverTouched(WithTheDurableStoresOutOfTheRealHome):
     def test_a_session_written_under_the_retired_directory_is_neither_found_nor_touched(self, tmp_path: Path) -> None:
         old_ledger = RetiredLedgerDirectory.path(tmp_path, "calls")
         old_line = (

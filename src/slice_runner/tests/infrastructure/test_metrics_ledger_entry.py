@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -16,6 +15,7 @@ from slice_runner.domain.severity_count import SeverityCount
 from slice_runner.domain.step import Step
 from slice_runner.infrastructure.metrics_entry_payload import MetricsEntryPayload
 from slice_runner.infrastructure.metrics_ledger_entry import MetricsLedgerEntry
+from slice_runner.tests.durable_store_home import WithTheDurableStoresOutOfTheRealHome
 from slice_runner.tests.mothers.closed_slice_mother import ClosedSliceMother
 from slice_runner.tests.mothers.discarded_call_mother import DiscardedCallMother
 from slice_runner.tests.mothers.harness_spend_mother import HarnessSpendMother
@@ -24,7 +24,7 @@ from slice_runner.tests.mothers.verdict_mother import FindingMother
 if TYPE_CHECKING:
     from slice_runner.domain.closed_slice_record import ClosedSliceRecord
 
-_STAMP = datetime(2026, 8, 10, 12, 0, 0, tzinfo=UTC)
+_STAMP = WithTheDurableStoresOutOfTheRealHome.STAMP
 _LEGACY_ROW = Path(__file__).resolve().parents[1] / "payloads" / "legacy-metrics-row.json"
 
 

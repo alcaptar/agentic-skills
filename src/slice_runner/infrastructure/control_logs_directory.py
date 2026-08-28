@@ -2,15 +2,15 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, ClassVar
 
-from slice_runner.infrastructure.claude_config import ClaudeConfig
+from slice_runner.infrastructure.durable_ledger import DurableLedger
 
 if TYPE_CHECKING:
     from pathlib import Path
 
 
 class ControlLogsDirectory:
-    SEGMENTS: ClassVar[tuple[str, ...]] = ("slice-runner", "runs", "controls")
+    SEGMENT: ClassVar[str] = "controls"
 
     @classmethod
     def default(cls) -> Path:
-        return ClaudeConfig.root().joinpath(*cls.SEGMENTS)
+        return DurableLedger.root() / cls.SEGMENT

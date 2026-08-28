@@ -3,18 +3,19 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING
 
-import pytest
-
 from slice_runner.infrastructure import local_event_log
 from slice_runner.infrastructure.claude_config import ClaudeConfig
 from slice_runner.infrastructure.durable_ledger import DurableLedger
 from slice_runner.infrastructure.event_payload import EventPayload
 from slice_runner.infrastructure.local_event_log import LocalEventLog
+from slice_runner.tests.durable_store_home import WithTheDurableStoresOutOfTheRealHome
 from slice_runner.tests.infrastructure.stub_ledger import WiredStubLedgers
 from slice_runner.tests.mothers.event_mother import EventMother
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+    import pytest
 
 
 class WrittenEvents:
@@ -25,13 +26,7 @@ class WrittenEvents:
         return [json.loads(line) for line in ledger.read_text(encoding="utf-8").splitlines()]
 
 
-class WithTheLogOutOfTheRealHome:
-    @pytest.fixture(autouse=True)
-    def log_root(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
-
-
-class TestWhatIsWrittenDownOfAnEvent(WithTheLogOutOfTheRealHome):
+class TestWhatIsWrittenDownOfAnEvent(WithTheDurableStoresOutOfTheRealHome):
     def test_an_event_is_written_with_the_repo_the_issue_the_slice_the_step_the_spend_and_the_status(
         self, tmp_path: Path
     ) -> None:
@@ -62,7 +57,7 @@ class TestWhatIsWrittenDownOfAnEvent(WithTheLogOutOfTheRealHome):
         ]
 
 
-class TestTheLogOnlyGrows(WithTheLogOutOfTheRealHome):
+class TestTheLogOnlyGrows(WithTheDurableStoresOutOfTheRealHome):
     def test_a_second_event_is_appended_instead_of_overwriting_the_first(self, tmp_path: Path) -> None:
         log = LocalEventLog()
 
@@ -72,7 +67,7 @@ class TestTheLogOnlyGrows(WithTheLogOutOfTheRealHome):
         assert len(WrittenEvents.records_under(tmp_path)) == 2
 
 
-class TestTheSameEventStillReachesStandardError(WithTheLogOutOfTheRealHome):
+class TestTheSameEventStillReachesStandardError(WithTheDurableStoresOutOfTheRealHome):
     def test_the_event_reaches_standard_error_as_the_contract_payload_and_never_standard_output(
         self, capsys: pytest.CaptureFixture[str]
     ) -> None:

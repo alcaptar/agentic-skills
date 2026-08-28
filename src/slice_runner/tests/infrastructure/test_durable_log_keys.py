@@ -1,17 +1,11 @@
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime
 from typing import TYPE_CHECKING
-from unittest.mock import Mock, create_autospec
-
-import pytest
 
 from slice_runner.domain.ci_indeterminate_cause import CiIndeterminateCause
-from slice_runner.domain.clock import Clock
 from slice_runner.domain.diff_stats import DiffStats
 from slice_runner.domain.unrecorded_conversation_cause import UnrecordedConversationCause
-from slice_runner.infrastructure.claude_config import ClaudeConfig
 from slice_runner.infrastructure.local_call_spend_log import LocalCallSpendLog
 from slice_runner.infrastructure.local_call_trace import LocalCallTrace
 from slice_runner.infrastructure.local_corpus import LocalCorpus
@@ -19,6 +13,7 @@ from slice_runner.infrastructure.local_event_log import LocalEventLog
 from slice_runner.infrastructure.local_metrics_log import LocalMetricsLog
 from slice_runner.infrastructure.local_tool_use_log import LocalToolUseLog
 from slice_runner.infrastructure.tool_use_log import UnrecordedCallToolUse
+from slice_runner.tests.durable_store_home import WithTheDurableStoresOutOfTheRealHome
 from slice_runner.tests.mothers.closed_slice_mother import ClosedSliceMother
 from slice_runner.tests.mothers.corpus_entry_mother import CorpusEntryMother
 from slice_runner.tests.mothers.discarded_call_mother import DiscardedCallMother
@@ -31,20 +26,10 @@ from slice_runner.tests.mothers.verdict_mother import FindingMother, VerdictMoth
 if TYPE_CHECKING:
     from pathlib import Path
 
-_STAMP = datetime(2026, 8, 10, 12, 0, 0, tzinfo=UTC)
+_STAMP = WithTheDurableStoresOutOfTheRealHome.STAMP
 
 
-class ReadingTheLedger:
-    @pytest.fixture(autouse=True)
-    def ledger_root(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
-
-    @staticmethod
-    def frozen_at(stamp: datetime = _STAMP) -> Mock:
-        clock: Mock = create_autospec(Clock, spec_set=True, instance=True)
-        clock.now.return_value = stamp
-        return clock
-
+class ReadingTheLedger(WithTheDurableStoresOutOfTheRealHome):
     @staticmethod
     def rows_of(root: Path, name: str) -> list[dict[str, object]]:
         ledger = root / "slice-runner" / "runs" / f"{name}.jsonl"
