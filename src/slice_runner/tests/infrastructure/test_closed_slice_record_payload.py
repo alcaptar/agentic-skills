@@ -32,6 +32,8 @@ class TestTheContractEmittedForOneClosedSlice:
             "turns": record.spend.turns,  # type: ignore[union-attr]
             "duration_ms": record.spend.duration_ms,  # type: ignore[union-attr]
             "cache_read_tokens": record.spend.cache_read_tokens,  # type: ignore[union-attr]
+            "input_tokens": record.spend.input_tokens,  # type: ignore[union-attr]
+            "output_tokens": record.spend.output_tokens,  # type: ignore[union-attr]
         }
 
     def test_a_slice_with_nothing_measured_omits_the_spend_instead_of_writing_a_zero_one(self) -> None:

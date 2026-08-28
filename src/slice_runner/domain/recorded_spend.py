@@ -9,3 +9,5 @@ class RecordedSpend:
     turns: int
     duration_ms: int
     cache_read_tokens: int
+    input_tokens: int
+    output_tokens: int

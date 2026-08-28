@@ -1262,6 +1262,15 @@ class TestConductSliceOnTheHappyPath:
         assert conductor.verify.execute.call_args.args[0].slice_id == "PROJ-1234-05"
         assert conductor.closed.slice_id == "PROJ-1234-05"
 
+    def test_a_slice_resumed_past_verify_still_closes_with_the_size_the_corpus_already_holds(self) -> None:
+        conductor = Conductor(chosen=SelectSliceResultMother.resumed_at(RunMother.awaiting_merge()))
+        conductor.corpus.size_of_the_last_verification.return_value = SliceDiffMother.STATS
+
+        conductor.conduct()
+
+        assert conductor.verify.execute.call_count == 0
+        assert conductor.closed.diff_stats == SliceDiffMother.STATS
+
     def test_a_merged_run_writes_no_label_because_github_closes_the_subissue_on_the_merge(self) -> None:
         conductor = Conductor(chosen=SelectSliceResultMother.resumed_at(RunMother.awaiting_merge()))
 
@@ -1324,6 +1333,7 @@ class TestConductSliceOnTheHappyPath:
 
     def test_the_durable_row_carries_how_much_the_verified_diff_changed(self) -> None:
         conductor = self._conductor()
+        conductor.corpus.size_of_the_last_verification.return_value = SliceDiffMother.STATS
 
         conductor.conduct()
 

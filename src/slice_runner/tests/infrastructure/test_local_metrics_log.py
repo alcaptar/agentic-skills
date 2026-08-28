@@ -149,7 +149,14 @@ class TestWhatOfTheHarnessIsWritten(WithTheLedgerOutOfTheRealHome):
             "cost_usd": 0.3951979,
             "turns": 14,
             "duration_ms": 65652,
+            "calls": 2,
+            "models": ["claude-haiku-4-5-20251001", "claude-sonnet-5"],
+            "input_tokens": 30,
+            "output_tokens": 4602,
+            "cache_creation_tokens": 58798,
             "cache_read_tokens": 256813,
+            "ttft_ms": 10972,
+            "duration_api_ms": 61094,
         }
 
     def test_with_nothing_measured_no_group_of_the_harness_is_written(self, tmp_path: Path) -> None:
@@ -164,7 +171,9 @@ class TestWhatOfTheHarnessIsWritten(WithTheLedgerOutOfTheRealHome):
             ClosedSliceMother.merged_measuring(HarnessSpendMother.of_the_implementer_call())
         )
 
-        assert WrittenMetricsLog.row_under(tmp_path)["models"] == ["claude-sonnet-5"]
+        harness = WrittenMetricsLog.row_under(tmp_path)["harness"]
+        assert isinstance(harness, dict)
+        assert harness["models"] == ["claude-sonnet-5"]
 
     def test_a_slice_that_used_more_than_one_model_writes_every_one_of_them(self, tmp_path: Path) -> None:
         closed = ClosedSliceMother.merged_measuring(
@@ -173,12 +182,9 @@ class TestWhatOfTheHarnessIsWritten(WithTheLedgerOutOfTheRealHome):
 
         LocalMetricsLog(clock=self.frozen_at()).record(closed)
 
-        assert WrittenMetricsLog.row_under(tmp_path)["models"] == ["claude-haiku-4-5-20251001", "claude-sonnet-5"]
-
-    def test_with_nothing_measured_no_model_is_written(self, tmp_path: Path) -> None:
-        LocalMetricsLog(clock=self.frozen_at()).record(ClosedSliceMother.merged_measuring_nothing())
-
-        assert "models" not in WrittenMetricsLog.row_under(tmp_path)
+        harness = WrittenMetricsLog.row_under(tmp_path)["harness"]
+        assert isinstance(harness, dict)
+        assert harness["models"] == ["claude-haiku-4-5-20251001", "claude-sonnet-5"]
 
 
 class TestWhatVariantIsWritten(WithTheLedgerOutOfTheRealHome):

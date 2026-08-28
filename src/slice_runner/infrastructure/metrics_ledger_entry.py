@@ -4,15 +4,12 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 from slice_runner.domain.closed_slice_record import ClosedSliceRecord
-from slice_runner.domain.diff_stats import DiffStats
 from slice_runner.domain.exceptions import UnreadableMetricsLogError
 from slice_runner.domain.recorded_spend import RecordedSpend
 from slice_runner.domain.severity_count import SeverityCount
 from slice_runner.infrastructure.metrics_entry_payload import (
-    DiffStatsPayload,
     DurableCiIndeterminateCause,
     DurableClosure,
-    HarnessMeasurementPayload,
     MetricsEntryPayload,
 )
 
@@ -20,6 +17,7 @@ if TYPE_CHECKING:
     from slice_runner.domain.ci_indeterminate_cause import CiIndeterminateCause
     from slice_runner.domain.discarded_call import DiscardedCall
     from slice_runner.infrastructure.corpus_verdict_payload import SeverityCountPayload
+    from slice_runner.infrastructure.spend_payload import SpendPayload
 
 
 class MetricsLedgerEntry:
@@ -46,9 +44,9 @@ class MetricsLedgerEntry:
             ci_indeterminate_cause=cls._ci_indeterminate_cause(payload.ci_indeterminate_cause),
             spend=cls._spend(payload.harness) if payload.harness is not None else None,
             variant=payload.variant,
-            models=tuple(payload.models or ()),
+            models=tuple(payload.harness.models) if payload.harness is not None else (),
             debt=payload.debt,
-            diff=cls._diff_stats(payload.diff) if payload.diff is not None else None,
+            diff=payload.diff.to_domain() if payload.diff is not None else None,
             budgets=payload.budgets,
             models_by_role=payload.models_by_role,
         )
@@ -69,20 +67,14 @@ class MetricsLedgerEntry:
         return cause.to_domain() if cause is not None else None
 
     @staticmethod
-    def _spend(harness: HarnessMeasurementPayload) -> RecordedSpend:
+    def _spend(harness: SpendPayload) -> RecordedSpend:
         return RecordedSpend(
             cost_usd=harness.cost_usd,
             turns=harness.turns,
             duration_ms=harness.duration_ms,
             cache_read_tokens=harness.cache_read_tokens,
-        )
-
-    @staticmethod
-    def _diff_stats(diff: DiffStatsPayload) -> DiffStats:
-        return DiffStats(
-            files_changed=diff.files_changed,
-            lines_added=diff.lines_added,
-            lines_deleted=diff.lines_deleted,
+            input_tokens=harness.input_tokens,
+            output_tokens=harness.output_tokens,
         )
 
     @staticmethod

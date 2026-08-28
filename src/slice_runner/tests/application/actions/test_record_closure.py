@@ -7,6 +7,7 @@ from slice_runner.application.actions.record_closure import RecordClosure, Recor
 from slice_runner.domain.budgets import Budgets
 from slice_runner.domain.call_spend_log import CallSpendLog
 from slice_runner.domain.canonical_slice_id import CanonicalSliceId
+from slice_runner.domain.corpus import Corpus
 from slice_runner.domain.diff_stats import DiffStats
 from slice_runner.domain.harness_spend import HarnessSpend
 from slice_runner.domain.metrics_log import MetricsLog
@@ -36,10 +37,14 @@ class _Closer:
         self.repository: Mock = create_autospec(RunRepository, spec_set=True, instance=True)
         self.spend_log: Mock = create_autospec(CallSpendLog, spec_set=True, instance=True)
         self.spend_log.spend_of_the_slice.return_value = HarnessSpend.nothing()
+        self.corpus: Mock = create_autospec(Corpus, spec_set=True, instance=True)
+        self.corpus.size_of_the_last_verification.return_value = None
 
     @property
     def action(self) -> RecordClosure:
-        return RecordClosure(metrics=self.metrics, repository=self.repository, spend_log=self.spend_log)
+        return RecordClosure(
+            metrics=self.metrics, repository=self.repository, spend_log=self.spend_log, corpus=self.corpus
+        )
 
     def close(self, **overrides: object) -> ClosedSlice:
         params = {
@@ -105,12 +110,13 @@ class TestTheRowItWrites:
     def test_the_size_of_the_diff_measured_at_the_last_verify_reaches_the_row(self) -> None:
         closer = _Closer()
         stats = DiffStats(files_changed=3, lines_added=40, lines_deleted=12)
+        closer.corpus.size_of_the_last_verification.return_value = stats
 
-        written = closer.close(diff_stats=stats)
+        written = closer.close()
 
         assert written.diff_stats == stats
 
-    def test_a_closure_with_no_verify_measured_this_invocation_carries_no_diff_stats_instead_of_a_zero_one(
+    def test_a_closure_with_no_verification_recorded_for_the_slice_carries_no_diff_stats_instead_of_a_zero_one(
         self,
     ) -> None:
         closer = _Closer()
@@ -118,6 +124,13 @@ class TestTheRowItWrites:
         written = closer.close()
 
         assert written.diff_stats is None
+
+    def test_the_size_is_asked_from_the_corpus_and_not_from_a_parameter_carried_in_memory(self) -> None:
+        closer = _Closer()
+
+        closer.close()
+
+        closer.corpus.size_of_the_last_verification.assert_called_once_with(_COORDINATES)
 
     def test_the_budgets_the_run_was_conducted_with_reach_the_row(self) -> None:
         closer = _Closer()

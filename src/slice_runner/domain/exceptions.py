@@ -145,6 +145,10 @@ class UnreadableMetricsLogError(ValueError):
     pass
 
 
+class UnreadableCorpusError(ValueError):
+    pass
+
+
 class UnreadablePluginRegistryError(ValueError):
     pass
 

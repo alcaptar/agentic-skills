@@ -49,6 +49,8 @@ class SpendAveragesPayload(ContractModel):
     turns: MeasurementPayload
     duration_ms: MeasurementPayload
     cache_read_tokens: MeasurementPayload
+    input_tokens: MeasurementPayload
+    output_tokens: MeasurementPayload
 
     @classmethod
     def from_domain(cls, spend: SpendAverages) -> Self:
@@ -57,6 +59,8 @@ class SpendAveragesPayload(ContractModel):
             turns=MeasurementPayload.from_domain(spend.turns),
             duration_ms=MeasurementPayload.from_domain(spend.duration_ms),
             cache_read_tokens=MeasurementPayload.from_domain(spend.cache_read_tokens),
+            input_tokens=MeasurementPayload.from_domain(spend.input_tokens),
+            output_tokens=MeasurementPayload.from_domain(spend.output_tokens),
         )
 
 

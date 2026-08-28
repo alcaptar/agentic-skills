@@ -10,6 +10,8 @@ from slice_runner.infrastructure.durable_ledger import DurableLedger
 if TYPE_CHECKING:
     from slice_runner.domain.clock import Clock
     from slice_runner.domain.corpus_entry import CorpusEntry
+    from slice_runner.domain.diff_stats import DiffStats
+    from slice_runner.domain.slice_coordinates import SliceCoordinates
 
 
 class LocalCorpus(Corpus):
@@ -25,3 +27,14 @@ class LocalCorpus(Corpus):
         ts = self._clock.now().isoformat()
         self._verdicts.append(CorpusVerdictPayload.from_domain(entry, ts=ts))
         self._diffs.append(CorpusDiffPayload.from_domain(entry, ts=ts))
+
+    def size_of_the_last_verification(self, coordinates: SliceCoordinates) -> DiffStats | None:
+        matching = self._diffs.rows_where(
+            CorpusDiffPayload, lambda data: CorpusDiffPayload.may_belong_to(data, coordinates)
+        )
+        latest: CorpusDiffPayload | None = None
+        for row in matching:
+            if latest is None or row.verify_round >= latest.verify_round:
+                latest = row
+
+        return latest.stats.to_domain() if latest is not None else None

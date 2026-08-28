@@ -15,14 +15,14 @@ from slice_runner.domain.slice_coordinates import SliceCoordinates
 from slice_runner.domain.step import Step
 from slice_runner.infrastructure.contract_model import ContractModel
 from slice_runner.infrastructure.corpus_verdict_payload import SeverityCountPayload
+from slice_runner.infrastructure.diff_stats_payload import DiffStatsPayload
 from slice_runner.infrastructure.durable_ledger import ReadableLedgerRow
 from slice_runner.infrastructure.json_schema import JsonSchema
+from slice_runner.infrastructure.spend_payload import SpendPayload
 from slice_runner.infrastructure.stamped_row import StampedRow
 
 if TYPE_CHECKING:
     from slice_runner.domain.closed_slice import ClosedSlice
-    from slice_runner.domain.diff_stats import DiffStats
-    from slice_runner.domain.harness_spend import HarnessSpend
 
 
 class DurableVerdict(StrEnum):
@@ -153,24 +153,6 @@ class DurableClosure:
                 return cls._STATES_WITH_NO_CI[verdict]
 
 
-class HarnessMeasurementPayload(ContractModel):
-    cost_usd: float
-    turns: int
-    duration_ms: int
-    cache_read_tokens: int
-
-    @classmethod
-    def from_domain(cls, spend: HarnessSpend) -> Self:
-        return cls.model_validate(
-            {
-                "cost_usd": spend.cost_usd,
-                "turns": spend.turns,
-                "duration_ms": spend.duration_ms,
-                "cache_read_tokens": spend.cache_read_tokens,
-            }
-        )
-
-
 class DiscardedCallPayload(ContractModel):
     step: Step
     cause: DurableDiscardCause
@@ -184,22 +166,6 @@ class DiscardedCallPayload(ContractModel):
 
     def to_domain(self) -> DiscardedCall:
         return DiscardedCall(step=self.step, cause=self.cause.to_domain(), reason=self.reason)
-
-
-class DiffStatsPayload(ContractModel):
-    files_changed: int
-    lines_added: int
-    lines_deleted: int
-
-    @classmethod
-    def from_domain(cls, stats: DiffStats) -> Self:
-        return cls.model_validate(
-            {
-                "files_changed": stats.files_changed,
-                "lines_added": stats.lines_added,
-                "lines_deleted": stats.lines_deleted,
-            }
-        )
 
 
 class MetricsEntryPayload(StampedRow, ReadableLedgerRow):
@@ -219,10 +185,9 @@ class MetricsEntryPayload(StampedRow, ReadableLedgerRow):
     verify_discards: int
     understand_discards: int
     implement_discards: int
-    harness: HarnessMeasurementPayload | None = None
+    harness: SpendPayload | None = None
     discarded_call: DiscardedCallPayload | None = None
     ci_indeterminate_cause: DurableCiIndeterminateCause | None = None
-    models: list[str] | None = None
     variant: str
     debt: int
     diff: DiffStatsPayload | None = None
@@ -269,14 +234,13 @@ class MetricsEntryPayload(StampedRow, ReadableLedgerRow):
                 "verify_discards": closed.run.verify_discards,
                 "understand_discards": closed.run.understand_discards,
                 "implement_discards": closed.run.implement_discards,
-                "harness": HarnessMeasurementPayload.from_domain(spend) if spend.measured else None,
+                "harness": SpendPayload.from_domain(spend) if spend.measured else None,
                 "discarded_call": DiscardedCallPayload.from_domain(closed.discarded_call)
                 if closed.discarded_call is not None
                 else None,
                 "ci_indeterminate_cause": DurableCiIndeterminateCause.of(closed.ci_indeterminate_cause)
                 if closed.ci_indeterminate_cause
                 else None,
-                "models": list(spend.models) or None,
                 "variant": cls.VARIANT,
                 "debt": len(closed.debt),
                 "diff": DiffStatsPayload.from_domain(closed.diff_stats) if closed.diff_stats is not None else None,

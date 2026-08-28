@@ -972,7 +972,14 @@ class TestTheCommandThatEmitsClosedSliceMetrics:
             "verify_discards",
             "ci_red",
         }
-        assert set(summary["spend"]) == {"cost_usd", "turns", "duration_ms", "cache_read_tokens"}
+        assert set(summary["spend"]) == {
+            "cost_usd",
+            "turns",
+            "duration_ms",
+            "cache_read_tokens",
+            "input_tokens",
+            "output_tokens",
+        }
 
     def test_a_corrupt_line_in_the_call_trace_exits_with_a_usage_error_instead_of_a_stack_dump(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]

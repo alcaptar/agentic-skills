@@ -148,7 +148,6 @@ class VerificationMother:
         return Verification(
             verdict=VerdictMother.passing(),
             spend=HarnessSpendMother.of_the_judge_call(),
-            diff_stats=SliceDiffMother.STATS,
             session=cls.SESSION,
         )
 
@@ -157,7 +156,6 @@ class VerificationMother:
         return Verification(
             verdict=verdict,
             spend=HarnessSpendMother.of_the_judge_call(),
-            diff_stats=SliceDiffMother.STATS,
             session=cls.SESSION,
         )
 
@@ -166,7 +164,6 @@ class VerificationMother:
         return Verification(
             verdict=VerdictMother.passing_with(*findings),
             spend=HarnessSpendMother.of_the_judge_call(),
-            diff_stats=SliceDiffMother.STATS,
             session=cls.SESSION,
         )
 
@@ -177,7 +174,6 @@ class VerificationMother:
         return Verification(
             verdict=VerdictMother.passing_with(*chosen),
             spend=HarnessSpendMother.of_the_judge_call(),
-            diff_stats=SliceDiffMother.STATS,
             session=cls.SESSION,
         )
 
@@ -186,7 +182,6 @@ class VerificationMother:
         return Verification(
             verdict=VerdictMother.failing(),
             spend=HarnessSpendMother.of_the_judge_call(),
-            diff_stats=SliceDiffMother.STATS,
             session=cls.SESSION,
             denied_reads=(cls.DENIED_READ,),
         )

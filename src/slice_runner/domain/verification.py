@@ -4,7 +4,6 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from slice_runner.domain.diff_stats import DiffStats
     from slice_runner.domain.harness_spend import HarnessSpend
     from slice_runner.domain.verdict import Verdict
 
@@ -13,6 +12,5 @@ if TYPE_CHECKING:
 class Verification:
     verdict: Verdict
     spend: HarnessSpend
-    diff_stats: DiffStats
     session: str
     denied_reads: tuple[str, ...] = field(default=())

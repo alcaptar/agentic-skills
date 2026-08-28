@@ -7,6 +7,7 @@ from slice_runner.tests.mothers.verdict_mother import VerdictMother
 from slice_runner.tests.mothers.verification_mother import SliceDiffMother
 
 if TYPE_CHECKING:
+    from slice_runner.domain.slice_diff import SliceDiff
     from slice_runner.domain.verdict import Verdict
 
 
@@ -27,6 +28,7 @@ class CorpusEntryMother:
         verify_round: int | None = None,
         session: str | None = None,
         verdict: Verdict | None = None,
+        diff: SliceDiff | None = None,
     ) -> CorpusEntry:
         return CorpusEntry(
             repo=repo or cls.REPO,
@@ -34,6 +36,6 @@ class CorpusEntryMother:
             slice_id=slice_id or cls.SLICE_ID,
             verify_round=cls.VERIFY_ROUND if verify_round is None else verify_round,
             session=session or cls.SESSION,
-            diff=SliceDiffMother.of_the_slice(),
+            diff=diff or SliceDiffMother.of_the_slice(),
             verdict=verdict or VerdictMother.passing(),
         )
