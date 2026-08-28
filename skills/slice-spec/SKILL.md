@@ -307,6 +307,20 @@ SUSTITUYE: no
   `ACEPTACION: cada comportamiento que cubria un test retirado lo cubre otro test que esta en el diff`:
   dice lo mismo, se comprueba leyendo el diff, y el implementador lo declara igualmente en su informe
   porque es donde declara lo que toca.
+- **Y un criterio que pide una cantidad dice cuantas.** Cuando el comportamiento que pide **solo se
+  distingue con mas de una ocurrencia**, el numero es parte del criterio y no un detalle del test.
+
+  `ACEPTACION: cada X que ocurra deja su propio Y, y hay test` se cumple con un test de una sola X
+  -que produce un solo Y, y eso es lo que el programa ya hacia- y tambien con uno de dos. Quien
+  implementa pinea la lectura barata y quien juzga exige la otra, **los dos cumpliendo el criterio tal
+  como esta escrito**, asi que ninguno puede ceder citandolo y el desacuerdo no sale hasta que el
+  presupuesto esta gastado. Paso de verdad, y se llevo un run entero. Hay que reescribirla como
+  `ACEPTACION: dos X que ocurran dejan DOS Y, y hay test que assertea exactamente ese numero`.
+
+  **La pregunta que lo caza: *¿el caso de uno se distingue de lo que el programa ya hacia?*** Cuando la
+  respuesta es que no, el criterio dice el numero. Y cuando si se distingue -"cada Y stagea solo lo
+  declarado" falla con uno solo mal stageado-, el cuantificador no necesita numero: la vara no es la
+  palabra, es si el caso de uno discrimina.
 - **Una slice que traslada logica declara que se retira de donde estaba.** Cuando el trabajo es mover
   algo de A a B -un paso que se va a su caso de uso, una regla que baja al dominio-, el criterio sobre
   tests dice **que sale de A**, no solo que A sigue verde. "Los tests de A siguen verdes sin tocarlos"
@@ -738,6 +752,12 @@ trabajo. Ofrece corregirlas. Checklist:
   reescribelo con la persona hasta que sea refutable (o pregunta que se pretendia). Un criterio vago
   pasa el check de existencia pero deja sin dientes el mapeo criterio↔test del verificador de
   slice-runner.
+- **Un criterio que pide una cantidad dice cuantas.** Si el comportamiento que pide solo se distingue
+  de lo que ya hacia el programa con **mas de una ocurrencia** -"cada vuelta deja su commit", "por cada
+  X hay un Y"- y el criterio no dice cuantas hay que ver, **es la desviacion a corregir**: el
+  implementador lo pinea con una y quien juzga exige varias, los dos cumpliendo lo escrito, y el
+  desacuerdo no se ve hasta que el presupuesto esta gastado. Se reconoce con una pregunta: *¿el caso de uno se distingue de lo que el programa ya hacia?* Si con una
+  sola ocurrencia el criterio lo cumpliria tambien el codigo de antes, el numero va escrito.
 - **Y cada criterio cae dentro de lo que el implementador puede hacer.** Si pide un commit, un mensaje
   de commit, una rama o texto del cuerpo de la pull request, **es la desviacion a corregir**: no lo
   puede cumplir nadie, y se descubre tarde, cuando la vuelta ya esta pagada. Reescribelo apuntando a lo

@@ -386,6 +386,52 @@ def test_validate_reports_the_missing_user_story_key_with_its_rule_and_location(
     )
 
 
+_QUANTITY_RULE_ANCHORS = (
+    "el numero es parte del criterio y no un detalle del test",
+    "assertea exactamente ese numero",
+    "la vara no es la palabra, es si el caso de uno discrimina",
+)
+"""Anchors for the rule that a criterion asking for a quantity has to say how many."""
+
+_QUANTITY_VALIDATE_ANCHORS = (
+    "Un criterio que pide una cantidad dice cuantas",
+    "el implementador lo pinea con una y quien juzga exige varias",
+)
+"""Anchors for the same yardstick as a `validate` checklist item, which is what makes it run."""
+
+_QUANTITY_QUESTION = "¿el caso de uno se distingue de lo que el programa ya hacia?"
+"""The question both halves share, so neither can drift into its own wording."""
+
+
+def test_the_quantity_yardstick_is_both_explained_and_run_when_a_spec_is_validated() -> None:
+    """A yardstick that is explained but never executed is the failure this repo is built around.
+
+    The two halves have to move together: the rule states why a criterion asking for a quantity has to
+    say how many -- with the case that measured it -- and the `validate` checklist is what applies it to
+    a spec. Writing only the rule leaves it as advice nobody runs; writing only the checklist item
+    leaves the deviation reported without the reason that makes it obvious. Anchoring the same question
+    in both is what keeps the two from drifting into different rules with the same name.
+    """
+    rules = " ".join(_spec_prose("### Reglas duras").split())
+    validate = " ".join(_spec_prose(_VALIDATE).split())
+
+    missing_rule = [anchor for anchor in _QUANTITY_RULE_ANCHORS if anchor not in rules]
+    missing_check = [anchor for anchor in _QUANTITY_VALIDATE_ANCHORS if anchor not in validate]
+
+    assert not missing_rule, f"the rules of {_rel(_SPEC)} no longer state {missing_rule}"
+    assert not missing_check, (
+        f"the `validate` mode of {_rel(_SPEC)} no longer states {missing_check}: without it the "
+        f"yardstick is explained but never applied to a spec"
+    )
+    without_the_question = [
+        half for half, prose in (("las reglas", rules), ("`validate`", validate)) if _QUANTITY_QUESTION not in prose
+    ]
+    assert not without_the_question, (
+        f"{without_the_question} de {_rel(_SPEC)} ya no hacen la pregunta que reconoce la desviacion: "
+        f"con una sola de las dos mitades son dos reglas con un nombre"
+    )
+
+
 _REPLACES_VALIDATE_ANCHORS = (
     "Ninguna slice sin `SUSTITUYE:`, y ninguna `SUSTITUYE: si` sin las dos mitades",
     "es la misma desviacion: sin el mecanismo de vuelta atras",
