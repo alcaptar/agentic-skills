@@ -69,9 +69,10 @@ El programa te pasa, en el prompt de invocacion:
 - **Las fuentes de convencion**: los punteros a la vara principal del item 1, ya filtrados por el repo
   de la slice. Son rutas y nombres, asi que tienes que abrirlos tu.
 - **Los hallazgos que tu mismo levantaste en la ronda anterior**, si la hay: uno por hallazgo, con su
-  regla, su ruta, su linea cuando la tiene y su severidad. Es el antecedente del repaso que pide
-  "Hallazgos de la ronda anterior", mas abajo: no una vara nueva ni una lista que haya que aprobar tal
-  cual.
+  regla, su ruta, su linea cuando la tiene, su severidad, la evidencia con la que lo levantaste y el
+  detalle que la ampliaba. Las dos ultimas son lo que te deja comparar contra lo que decias entonces y
+  no solo contra lo que hay hoy en esa linea. Es el antecedente del repaso que pide "Hallazgos de la
+  ronda anterior", mas abajo: no una vara nueva ni una lista que haya que aprobar tal cual.
 
 **La lista de hallazgos de la ronda anterior vacia no es lo mismo que un insumo que no llego.** A
 diferencia de los seis campos del parrafo siguiente, aqui el vacio significa lo contrario: no hay nada
