@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 
 from slice_runner.domain.canonical_slice_id import CanonicalSliceId
 from slice_runner.domain.closed_slice import ClosedSlice
+from slice_runner.domain.findings_history import FindingsHistory
 from slice_runner.domain.run_state import RunState
 from slice_runner.domain.slice_coordinates import SliceCoordinates
 
@@ -15,7 +16,6 @@ if TYPE_CHECKING:
     from slice_runner.domain.corpus import Corpus
     from slice_runner.domain.diff_stats import DiffStats
     from slice_runner.domain.discarded_call import DiscardedCall
-    from slice_runner.domain.finding import Finding
     from slice_runner.domain.harness_spend import HarnessSpend
     from slice_runner.domain.metrics_log import MetricsLog
     from slice_runner.domain.role_models import RoleModels
@@ -33,8 +33,7 @@ class RecordClosureParams:
     run: Run
     budgets: Budgets
     models: RoleModels
-    findings: tuple[Finding, ...] = field(default=())
-    findings_of_the_last_round: tuple[Finding, ...] = field(default=())
+    findings_history: FindingsHistory = field(default_factory=FindingsHistory)
     discarded_call: DiscardedCall | None = None
     ci_indeterminate_cause: CiIndeterminateCause | None = None
     debt: tuple[str, ...] = field(default=())
@@ -52,6 +51,7 @@ class RecordClosure:
 
     def execute(self, params: RecordClosureParams) -> None:
         spend = self._spend_of(params)
+        history = params.findings_history
         self._metrics.record(
             ClosedSlice(
                 repo=params.repo,
@@ -63,18 +63,18 @@ class RecordClosure:
                 budgets=params.budgets,
                 models=params.models,
                 spends=(spend,) if spend.measured else (),
-                findings=params.findings,
-                findings_of_the_last_round=params.findings_of_the_last_round,
+                findings=tuple(appearance.finding for appearance in history.every_appearance),
+                findings_of_the_last_round=tuple(
+                    appearance.finding for appearance in history.appearances_of_the_last_round
+                ),
                 discarded_call=params.discarded_call,
                 ci_indeterminate_cause=params.ci_indeterminate_cause,
                 debt=params.debt,
                 diff_stats=self._size_of(params),
             )
         )
-        if params.state is RunState.BLOCKED_VERIFY and params.findings_of_the_last_round:
-            self._repository.publish_findings(
-                repo=params.repo, issue=params.issue, findings=params.findings_of_the_last_round
-            )
+        if params.state is RunState.BLOCKED_VERIFY and not history.is_empty:
+            self._repository.publish_findings(repo=params.repo, issue=params.issue, history=history)
         if params.state is RunState.BLOCKED_CI_CONFLICT and params.conflicting_paths:
             self._repository.publish_catch_up_conflict(
                 repo=params.repo, issue=params.issue, paths=params.conflicting_paths

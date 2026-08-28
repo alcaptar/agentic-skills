@@ -17,6 +17,7 @@ from slice_runner.domain.run_state import RunState
 from slice_runner.domain.severity import Severity
 from slice_runner.domain.slice_coordinates import SliceCoordinates
 from slice_runner.tests.mothers.discarded_call_mother import DiscardedCallMother
+from slice_runner.tests.mothers.findings_history_mother import FindingsHistoryMother
 from slice_runner.tests.mothers.harness_spend_mother import HarnessSpendMother
 from slice_runner.tests.mothers.run_mother import RunMother
 from slice_runner.tests.mothers.verdict_mother import FindingMother
@@ -77,10 +78,9 @@ class TestTheRowItWrites:
 
     def test_the_findings_of_every_round_and_of_the_last_one_travel_apart_so_a_fixed_one_is_not_lost(self) -> None:
         closer = _Closer()
-        every = (FindingMother.without_line(), FindingMother.low_severity())
-        last = (FindingMother.low_severity(),)
+        history = FindingsHistoryMother.of_a_high_severity_finding_fixed_before_a_low_severity_one_appears()
 
-        written = closer.close(findings=every, findings_of_the_last_round=last)
+        written = closer.close(findings_history=history)
 
         assert written.count_findings(Severity.HIGH) == 1
         assert written.count_findings_of_the_last_round(Severity.HIGH) == 0
@@ -216,25 +216,25 @@ class TestPublishingTheCatchUpConflict:
 
 
 class TestPublishingTheVetoFindings:
-    def test_a_closure_by_veto_with_findings_of_the_last_round_publishes_them(self) -> None:
+    def test_a_closure_by_veto_with_findings_publishes_the_whole_history(self) -> None:
         closer = _Closer()
-        last = (FindingMother.without_line(), FindingMother.low_severity())
+        history = FindingsHistoryMother.of_a_single_round(FindingMother.without_line(), FindingMother.low_severity())
 
-        closer.close(state=RunState.BLOCKED_VERIFY, findings_of_the_last_round=last)
+        closer.close(state=RunState.BLOCKED_VERIFY, findings_history=history)
 
-        closer.repository.publish_findings.assert_called_once_with(repo=_REPO, issue=_ISSUE, findings=last)
+        closer.repository.publish_findings.assert_called_once_with(repo=_REPO, issue=_ISSUE, history=history)
 
-    def test_a_closure_by_veto_with_no_findings_of_the_last_round_publishes_nothing(self) -> None:
+    def test_a_closure_by_veto_with_no_findings_at_all_publishes_nothing(self) -> None:
         closer = _Closer()
 
-        closer.close(state=RunState.BLOCKED_VERIFY, findings_of_the_last_round=())
+        closer.close(state=RunState.BLOCKED_VERIFY)
 
         closer.repository.publish_findings.assert_not_called()
 
-    def test_a_closure_in_another_state_never_publishes_even_if_findings_of_the_last_round_arrived(self) -> None:
+    def test_a_closure_in_another_state_never_publishes_even_if_findings_arrived(self) -> None:
         closer = _Closer()
-        last = (FindingMother.without_line(),)
+        history = FindingsHistoryMother.of_a_single_round(FindingMother.without_line())
 
-        closer.close(state=RunState.MERGED, findings_of_the_last_round=last)
+        closer.close(state=RunState.MERGED, findings_history=history)
 
         closer.repository.publish_findings.assert_not_called()

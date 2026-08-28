@@ -13,12 +13,13 @@ class FindingMother:
         rule: str = "cobertura-capa",
         path: str = "src/x.py",
         severity: Severity = Severity.HIGH,
+        evidence: str = "the acceptance criterion has no test",
     ) -> Finding:
         return Finding(
             rule=rule,
             path=path,
             severity=severity,
-            evidence="the acceptance criterion has no test",
+            evidence=evidence,
             detail="the test that accredits it is missing",
         )
 
