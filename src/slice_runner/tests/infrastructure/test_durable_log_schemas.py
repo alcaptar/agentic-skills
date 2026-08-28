@@ -46,6 +46,7 @@ class TestEveryDurableLogDeclaresASchemaAProgramCanRead:
             "verify_round",
             "session",
             "diff",
+            "stats",
         }
 
     def test_the_tool_use_schema_requires_the_identity_of_the_call_and_the_uses_it_carries(self) -> None:

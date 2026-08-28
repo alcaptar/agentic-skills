@@ -62,7 +62,6 @@ if TYPE_CHECKING:
     from slice_runner.domain.ci_indeterminate_cause import CiIndeterminateCause
     from slice_runner.domain.clock import Clock
     from slice_runner.domain.deploy_watch import DeployWatch
-    from slice_runner.domain.diff_stats import DiffStats
     from slice_runner.domain.finding import Finding
     from slice_runner.domain.forum import Forum
     from slice_runner.domain.parent_issue import ParentIssue
@@ -114,7 +113,6 @@ class ConductSliceProgress:
     waited_seconds: int = 0
     discarded_call: DiscardedCall | None = None
     ci_indeterminate_cause: CiIndeterminateCause | None = None
-    diff_stats: DiffStats | None = None
     conflicting_paths: tuple[str, ...] = field(default=())
 
     @property
@@ -596,7 +594,6 @@ class ConductSlice:
             progress,
             spends=(*progress.spends, verification.spend),
             verdicts=(*progress.verdicts, verification.verdict),
-            diff_stats=verification.diff_stats,
         )
         stepped = SteppedSlice(
             progress=judged, outcome=Outcome.of_the_verdict(verification.verdict), verdict_recorded=True
@@ -773,7 +770,6 @@ class ConductSlice:
                 discarded_call=progress.discarded_call,
                 ci_indeterminate_cause=progress.ci_indeterminate_cause,
                 debt=progress.debt,
-                diff_stats=progress.diff_stats,
                 conflicting_paths=progress.conflicting_paths,
             )
         )

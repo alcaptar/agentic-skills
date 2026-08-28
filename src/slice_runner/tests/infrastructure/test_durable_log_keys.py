@@ -138,13 +138,19 @@ class TestNoDurableStoreWritesAKeyInSpanish(ReadingTheLedger):
             "harness.cost_usd",
             "harness.turns",
             "harness.duration_ms",
+            "harness.calls",
+            "harness.models",
+            "harness.input_tokens",
+            "harness.output_tokens",
+            "harness.cache_creation_tokens",
             "harness.cache_read_tokens",
+            "harness.ttft_ms",
+            "harness.duration_api_ms",
             "discarded_call",
             "discarded_call.step",
             "discarded_call.cause",
             "discarded_call.reason",
             "ci_indeterminate_cause",
-            "models",
             "variant",
             "debt",
             "diff",
@@ -206,7 +212,19 @@ class TestNoDurableStoreWritesAKeyInSpanish(ReadingTheLedger):
 
         keys = self.flattened(self.rows_of(tmp_path, "diffs")[0])
 
-        assert keys == {"ts", "repo", "issue", "slice_id", "verify_round", "session", "diff"}
+        assert keys == {
+            "ts",
+            "repo",
+            "issue",
+            "slice_id",
+            "verify_round",
+            "session",
+            "diff",
+            "stats",
+            "stats.files_changed",
+            "stats.lines_added",
+            "stats.lines_deleted",
+        }
 
     def test_the_tool_use_keys_cover_a_use_that_touched_a_path_and_one_that_failed(self, tmp_path: Path) -> None:
         log = LocalToolUseLog(clock=self.frozen_at())

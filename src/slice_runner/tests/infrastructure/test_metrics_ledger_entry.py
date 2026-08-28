@@ -209,6 +209,24 @@ class TestRejectingAnEarlierGeneration(ReadingARow):
         with pytest.raises(UnreadableMetricsLogError, match="descartes_verify_causa"):
             self._read(row)
 
+    def test_a_harness_group_with_only_the_earlier_four_measures_fails_instead_of_defaulting_the_rest_to_zero(
+        self,
+    ) -> None:
+        spend = HarnessSpendMother.of_the_implementer_call()
+        row = MetricsEntryPayload.from_domain(
+            ClosedSliceMother.merged_measuring(spend),
+            ts=_STAMP.isoformat(),
+        ).to_contract()
+        row["harness"] = {
+            "cost_usd": spend.cost_usd,
+            "turns": spend.turns,
+            "duration_ms": spend.duration_ms,
+            "cache_read_tokens": spend.cache_read_tokens,
+        }
+
+        with pytest.raises(UnreadableMetricsLogError, match="generation"):
+            self._read(row)
+
 
 class TestRejectingCorruption(ReadingARow):
     def test_a_harness_cost_that_is_not_a_number_is_rejected_instead_of_read_back_as_zero(self) -> None:

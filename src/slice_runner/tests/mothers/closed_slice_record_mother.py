@@ -22,7 +22,7 @@ class ClosedSliceRecordMother:
     TS: ClassVar[datetime] = datetime(2026, 8, 10, 12, 0, 0, tzinfo=UTC)
     NO_FINDINGS: ClassVar[SeverityCount] = SeverityCount(high=0, medium=0, low=0)
     DEFAULT_SPEND: ClassVar[RecordedSpend] = RecordedSpend(
-        cost_usd=0.4, turns=10, duration_ms=50000, cache_read_tokens=200000
+        cost_usd=0.4, turns=10, duration_ms=50000, cache_read_tokens=200000, input_tokens=15, output_tokens=1200
     )
 
     @classmethod

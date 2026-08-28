@@ -11,13 +11,13 @@ class SpendPayload(ContractModel):
     turns: int
     duration_ms: int
     calls: int
-    models: tuple[str, ...] = ()
-    input_tokens: int = 0
-    output_tokens: int = 0
-    cache_creation_tokens: int = 0
-    cache_read_tokens: int = 0
-    ttft_ms: int = 0
-    duration_api_ms: int = 0
+    models: tuple[str, ...]
+    input_tokens: int
+    output_tokens: int
+    cache_creation_tokens: int
+    cache_read_tokens: int
+    ttft_ms: int
+    duration_api_ms: int
 
     @classmethod
     def from_domain(cls, spend: HarnessSpend) -> Self:

@@ -54,12 +54,17 @@ class TestTheHeaderOfTheView(RenderingTheView):
 
 
 class TestTheGapsTheDataCannotFill(RenderingTheView):
-    def test_the_three_known_gaps_are_declared_regardless_of_what_is_in_the_window(self) -> None:
+    def test_the_configuration_gap_is_declared_regardless_of_what_is_in_the_window(self) -> None:
         rendered = self._rendered()
 
-        assert "diff size" in rendered
         assert "configuration" in rendered
-        assert "input and output tokens" in rendered
+
+    def test_the_retired_claims_about_tokens_and_a_resumed_slices_size_no_longer_appear(self) -> None:
+        rendered = self._rendered()
+
+        assert "input and output tokens" not in rendered
+        assert "diff size" not in rendered
+        assert "a resumed slice closes with no size measured" not in rendered
 
 
 class TestWhatTheLedgerLetsCountTwice(RenderingTheView):
@@ -137,6 +142,12 @@ class TestHowTheRoundsEvolveOverTime(RenderingTheView):
 
 
 class TestTheRatesSection(RenderingTheView):
+    def test_the_input_and_output_tokens_are_painted_alongside_the_other_spend_measures(self) -> None:
+        rendered = self._rendered(records=(ClosedSliceRecordMother.merged(),))
+
+        assert 'data-spend="input_tokens" data-samples="1">input_tokens: 15.0 (1 samples)' in rendered
+        assert 'data-spend="output_tokens" data-samples="1">output_tokens: 1200.0 (1 samples)' in rendered
+
     def test_each_rate_is_painted_with_the_number_of_samples_it_comes_from(self) -> None:
         records = (
             ClosedSliceRecordMother.merged(),

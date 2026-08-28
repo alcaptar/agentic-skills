@@ -7,10 +7,10 @@ from slice_runner.domain.discard_cause import DiscardCause
 from slice_runner.domain.run_state import RunState
 from slice_runner.domain.step import Step
 from slice_runner.infrastructure.contract_model import ContractModel
+from slice_runner.infrastructure.diff_stats_payload import DiffStatsPayload
 
 if TYPE_CHECKING:
     from slice_runner.domain.closed_slice_record import ClosedSliceRecord
-    from slice_runner.domain.diff_stats import DiffStats
     from slice_runner.domain.discarded_call import DiscardedCall
     from slice_runner.domain.recorded_spend import RecordedSpend
     from slice_runner.domain.severity_count import SeverityCount
@@ -21,6 +21,8 @@ class RecordedSpendPayload(ContractModel):
     turns: int
     duration_ms: int
     cache_read_tokens: int
+    input_tokens: int
+    output_tokens: int
 
     @classmethod
     def from_domain(cls, spend: RecordedSpend) -> Self:
@@ -29,6 +31,8 @@ class RecordedSpendPayload(ContractModel):
             turns=spend.turns,
             duration_ms=spend.duration_ms,
             cache_read_tokens=spend.cache_read_tokens,
+            input_tokens=spend.input_tokens,
+            output_tokens=spend.output_tokens,
         )
 
 
@@ -40,16 +44,6 @@ class SeverityCountPayload(ContractModel):
     @classmethod
     def from_domain(cls, count: SeverityCount) -> Self:
         return cls(high=count.high, medium=count.medium, low=count.low)
-
-
-class DiffStatsPayload(ContractModel):
-    files_changed: int
-    lines_added: int
-    lines_deleted: int
-
-    @classmethod
-    def from_domain(cls, stats: DiffStats) -> Self:
-        return cls(files_changed=stats.files_changed, lines_added=stats.lines_added, lines_deleted=stats.lines_deleted)
 
 
 class DiscardedCallPayload(ContractModel):

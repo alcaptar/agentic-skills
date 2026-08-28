@@ -8,7 +8,10 @@ from unittest.mock import Mock, create_autospec
 import pytest
 
 from slice_runner.domain.budgets import Budgets
+from slice_runner.domain.canonical_slice_id import CanonicalSliceId
 from slice_runner.domain.clock import Clock
+from slice_runner.domain.diff_stats import DiffStats
+from slice_runner.domain.slice_coordinates import SliceCoordinates
 from slice_runner.infrastructure import local_corpus
 from slice_runner.infrastructure.claude_config import ClaudeConfig
 from slice_runner.infrastructure.cli import Cli
@@ -86,6 +89,11 @@ class TestTheRecordThatIsWritten(WithTheCorpusOutOfTheRealHome):
             {
                 "slice_id": CorpusEntryMother.SLICE_ID,
                 "diff": SliceDiffMother.TEXT,
+                "stats": {
+                    "files_changed": SliceDiffMother.STATS.files_changed,
+                    "lines_added": SliceDiffMother.STATS.lines_added,
+                    "lines_deleted": SliceDiffMother.STATS.lines_deleted,
+                },
                 "repo": CorpusEntryMother.REPO,
                 "issue": CorpusEntryMother.ISSUE,
                 "verify_round": CorpusEntryMother.VERIFY_ROUND,
@@ -130,6 +138,49 @@ class TestTheCorpusOnlyGrows(WithTheCorpusOutOfTheRealHome):
             ("alcaptar/agentic-skills", 45),
             ("alcaptar/another-feature", 99),
         ]
+
+
+class TestTheSizeOfTheLastVerification(WithTheCorpusOutOfTheRealHome):
+    @staticmethod
+    def _coordinates() -> SliceCoordinates:
+        return SliceCoordinates(
+            repo=CorpusEntryMother.REPO,
+            issue=CorpusEntryMother.ISSUE,
+            slice_id=CanonicalSliceId.of_text(CorpusEntryMother.SLICE_ID),
+        )
+
+    def test_a_slice_with_no_verification_recorded_answers_with_nothing(self) -> None:
+        corpus = LocalCorpus(clock=self.frozen_at())
+
+        assert corpus.size_of_the_last_verification(self._coordinates()) is None
+
+    def test_a_single_verification_answers_with_its_own_size(self) -> None:
+        corpus = LocalCorpus(clock=self.frozen_at())
+        stats = DiffStats(files_changed=3, lines_added=40, lines_deleted=12)
+
+        corpus.record(CorpusEntryMother.of_the_slice(diff=SliceDiffMother.of_the_slice(stats=stats)))
+
+        assert corpus.size_of_the_last_verification(self._coordinates()) == stats
+
+    def test_two_rounds_of_different_sizes_answer_with_the_last_round_and_not_the_first(self) -> None:
+        corpus = LocalCorpus(clock=self.frozen_at())
+        first = DiffStats(files_changed=1, lines_added=2, lines_deleted=0)
+        last = DiffStats(files_changed=9, lines_added=80, lines_deleted=30)
+
+        corpus.record(CorpusEntryMother.of_the_slice(verify_round=1, diff=SliceDiffMother.of_the_slice(stats=first)))
+        corpus.record(CorpusEntryMother.of_the_slice(verify_round=2, diff=SliceDiffMother.of_the_slice(stats=last)))
+
+        assert corpus.size_of_the_last_verification(self._coordinates()) == last
+
+    def test_a_verification_of_a_different_slice_is_left_out(self) -> None:
+        corpus = LocalCorpus(clock=self.frozen_at())
+        stats = DiffStats(files_changed=3, lines_added=40, lines_deleted=12)
+
+        corpus.record(
+            CorpusEntryMother.of_the_slice(slice_id="slice-99", diff=SliceDiffMother.of_the_slice(stats=stats))
+        )
+
+        assert corpus.size_of_the_last_verification(self._coordinates()) is None
 
 
 class TestTheHeavyDiffStaysOutOfTheVerdictLedger(WithTheCorpusOutOfTheRealHome):

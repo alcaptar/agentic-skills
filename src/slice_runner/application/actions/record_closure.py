@@ -12,6 +12,7 @@ if TYPE_CHECKING:
     from slice_runner.domain.budgets import Budgets
     from slice_runner.domain.call_spend_log import CallSpendLog
     from slice_runner.domain.ci_indeterminate_cause import CiIndeterminateCause
+    from slice_runner.domain.corpus import Corpus
     from slice_runner.domain.diff_stats import DiffStats
     from slice_runner.domain.discarded_call import DiscardedCall
     from slice_runner.domain.finding import Finding
@@ -37,15 +38,17 @@ class RecordClosureParams:
     discarded_call: DiscardedCall | None = None
     ci_indeterminate_cause: CiIndeterminateCause | None = None
     debt: tuple[str, ...] = field(default=())
-    diff_stats: DiffStats | None = None
     conflicting_paths: tuple[str, ...] = field(default=())
 
 
 class RecordClosure:
-    def __init__(self, *, metrics: MetricsLog, repository: RunRepository, spend_log: CallSpendLog) -> None:
+    def __init__(
+        self, *, metrics: MetricsLog, repository: RunRepository, spend_log: CallSpendLog, corpus: Corpus
+    ) -> None:
         self._metrics = metrics
         self._repository = repository
         self._spend_log = spend_log
+        self._corpus = corpus
 
     def execute(self, params: RecordClosureParams) -> None:
         spend = self._spend_of(params)
@@ -65,7 +68,7 @@ class RecordClosure:
                 discarded_call=params.discarded_call,
                 ci_indeterminate_cause=params.ci_indeterminate_cause,
                 debt=params.debt,
-                diff_stats=params.diff_stats,
+                diff_stats=self._size_of(params),
             )
         )
         if params.state is RunState.BLOCKED_VERIFY and params.findings_of_the_last_round:
@@ -78,8 +81,13 @@ class RecordClosure:
             )
 
     def _spend_of(self, params: RecordClosureParams) -> HarnessSpend:
-        coordinates = SliceCoordinates(
+        return self._spend_log.spend_of_the_slice(self._coordinates_of(params))
+
+    def _size_of(self, params: RecordClosureParams) -> DiffStats | None:
+        return self._corpus.size_of_the_last_verification(self._coordinates_of(params))
+
+    @staticmethod
+    def _coordinates_of(params: RecordClosureParams) -> SliceCoordinates:
+        return SliceCoordinates(
             repo=params.repo, issue=params.issue, slice_id=CanonicalSliceId.of_text(params.slice_id)
         )
-
-        return self._spend_log.spend_of_the_slice(coordinates)

@@ -36,6 +36,7 @@ from slice_runner.domain.ci import Ci
 from slice_runner.domain.ci_status import CiStatus
 from slice_runner.domain.clock import Clock
 from slice_runner.domain.control_runner import ControlRunner
+from slice_runner.domain.corpus import Corpus
 from slice_runner.domain.deploy_watch import DeployWatch
 from slice_runner.domain.event_log import EventLog
 from slice_runner.domain.forum import Forum
@@ -113,6 +114,8 @@ class Conductor:
         self.clock.now.return_value = self.NOW
         self.metrics: Mock = create_autospec(MetricsLog, spec_set=True, instance=True)
         self.spend_log = RecordedSpendLog()
+        self.corpus: Mock = create_autospec(Corpus, spec_set=True, instance=True)
+        self.corpus.size_of_the_last_verification.return_value = None
         self.understanding: Mock = create_autospec(UnderstandingWriter, spec_set=True, instance=True)
         self.understanding.write.return_value = UnderstandingMother.of_the_chosen_slice()
         self.pull_request: Mock = create_autospec(PullRequestWriter, spec_set=True, instance=True)
@@ -160,7 +163,7 @@ class Conductor:
                 close=self.close,
                 record_step=RecordStep(repository=self.repository, events=self.events, clock=self.clock),
                 record_closure=RecordClosure(
-                    metrics=self.metrics, repository=self.repository, spend_log=self.spend_log
+                    metrics=self.metrics, repository=self.repository, spend_log=self.spend_log, corpus=self.corpus
                 ),
                 read_ci=ReadCiStatus(ci=self.ci, forum=self.forum),
                 read_pull_request=ReadPullRequestStatus(forum=self.forum),

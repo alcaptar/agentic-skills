@@ -52,12 +52,8 @@ class ClosedSliceMetricsView:
     def _gaps() -> str:
         return (
             "<section><h2>what this view cannot say</h2><ul>"
-            "<li>diff size: only present when a verify ran in the invocation that closed the slice; "
-            "a resumed slice closes with no size measured</li>"
             "<li>configuration: budgets and models by role travel as the snapshot the run closed with, "
             "and today every run shares the same defaults, so no variation is shown yet</li>"
-            "<li>input and output tokens: the durable log never carried them, only cost, turns, "
-            "duration and cache reads</li>"
             "</ul></section>"
         )
 
@@ -183,6 +179,8 @@ class ClosedSliceMetricsView:
             ("turns", spend.turns),
             ("duration_ms", spend.duration_ms),
             ("cache_read_tokens", spend.cache_read_tokens),
+            ("input_tokens", spend.input_tokens),
+            ("output_tokens", spend.output_tokens),
         )
         return "".join(
             f'<li data-spend="{name}" data-samples="{measurement.samples}">{name}: {cls._measurement(measurement)}</li>'

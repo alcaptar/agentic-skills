@@ -265,8 +265,10 @@ despues conviven en el mismo fichero, y la que hablaba castellano -o dejaba una 
 no se lee a medias, falla nombrando que no es de esta generacion. Mientras eso no se archive a mano,
 `uv run slice-runner metrics`, `uv run slice-runner spend` y `uv run slice-runner read` salen con ese error
 en cuanto tocan una fila vieja de `~/.claude/slice-runner/runs/metrics.jsonl`, `spend.jsonl` o
-`calls.jsonl` respectivamente. Archivar esas filas -moverlas fuera de `runs/`- es decision de quien opera:
-el programa no lo hace por su cuenta.
+`calls.jsonl` respectivamente. Lo mismo le pasa a `diffs.jsonl` desde que el cierre pasa a leer ahi el
+tamano de la ultima verificacion: una fila vieja de esa slice no lee a medias, y el error no sale por un
+comando de lectura sino por `uv run slice-runner run` al cerrar. Archivar esas filas -moverlas fuera de
+`runs/`- es decision de quien opera: el programa no lo hace por su cuenta.
 
 Colapsar lector y escritor de `metrics.jsonl` en un solo modelo con `extra="forbid"` tiene una consecuencia:
 las dos claves que la fila escribia siempre a `null` -`duracion_s` y `coste_tokens`- dejan de emitirse.

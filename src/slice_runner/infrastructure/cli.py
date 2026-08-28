@@ -124,6 +124,7 @@ from slice_runner.infrastructure.verdict_payload import VerdictPayload
 if TYPE_CHECKING:
     from slice_runner.application.actions.conduct_slice import ConductSliceResult
     from slice_runner.domain.clock import Clock
+    from slice_runner.domain.corpus import Corpus
     from slice_runner.infrastructure.process import Process
 
 
@@ -577,6 +578,7 @@ class Cli:
         workspace = GitWorkspace(process=self._process)
         machine = StateMachine(budgets=self._budgets)
         reader = ProcessSourceReader(process=self._process, budgets=self._budgets)
+        corpus = LocalCorpus(clock=clock)
         calls = HarnessInvocationRunner(
             process=self._process,
             telemetry=HarnessTelemetry(
@@ -598,7 +600,7 @@ class Cli:
                 ),
                 stage=StageSlice(workspace=workspace),
                 run_controls=RunControls(controls=LocalControlRunner(process=self._process)),
-                verify=self._action(clock=clock),
+                verify=self._action(clock=clock, corpus=corpus),
                 deliver=DeliverSlice(workspace=workspace, forum=forum),
                 close=CloseParent(repository=repository),
                 record_step=RecordStep(repository=repository, events=LocalEventLog(), clock=clock),
@@ -606,6 +608,7 @@ class Cli:
                     metrics=LocalMetricsLog(clock=clock),
                     repository=repository,
                     spend_log=LocalCallSpendLog(clock=clock),
+                    corpus=corpus,
                 ),
                 read_ci=ReadCiStatus(ci=GhCi(call=gh_call), forum=forum),
                 read_pull_request=ReadPullRequestStatus(forum=forum),
@@ -635,7 +638,7 @@ class Cli:
     def _gh_call(self, *, clock: Clock) -> GhCall:
         return GhCall(process=self._process, policy=GhRetryPolicy(budgets=self._budgets), clock=clock)
 
-    def _action(self, *, clock: Clock | None = None) -> VerifySlice:
+    def _action(self, *, clock: Clock | None = None, corpus: Corpus | None = None) -> VerifySlice:
         used = clock or SystemClock()
 
         return VerifySlice(
@@ -654,7 +657,7 @@ class Cli:
             ),
             judge=SliceVerifierJudge.adversarial(),
             skills=LocalSkillLibrary(),
-            corpus=LocalCorpus(clock=used),
+            corpus=corpus or LocalCorpus(clock=used),
         )
 
     @staticmethod
