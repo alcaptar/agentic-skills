@@ -62,6 +62,15 @@ class ReadableDurableLedger(DurableLedger[_Read]):
 
             yield self._row.from_dict(data)
 
+    def last_row_where(self, keep: Callable[[dict[str, object]], bool]) -> _Read | None:
+        latest: dict[str, object] | None = None
+        for number, line in self._numbered_lines():
+            data = self._decoded(line, number)
+            if keep(data):
+                latest = data
+
+        return self._row.from_dict(latest) if latest is not None else None
+
     @staticmethod
     def _anything(data: dict[str, object]) -> bool:
         return True
