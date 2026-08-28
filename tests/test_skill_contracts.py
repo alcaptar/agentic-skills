@@ -817,15 +817,20 @@ def test_the_rubric_lists_excludes_among_the_inputs_that_can_arrive_empty() -> N
     the two need different verdicts (see the paragraph on reporting missing inputs).
     """
     rubric = _program_rubric()
-    assert "Seis de esos campos pueden llegarte vacios" in rubric, (
-        "the program's rubric still says five fields can arrive empty, but `SUSTITUYE` joined `EXCLUYE` "
-        "and `SENAL` on the same fail-soft path and needs to be counted among them"
+    assert "Siete de esos campos pueden llegarte vacios" in rubric, (
+        "the program's rubric still says a different count of fields can arrive empty, but "
+        "`SUSTITUYE`, `EXCLUYE`, `SENAL` and what the implementer declared left out all travel the "
+        "same fail-soft path and need to be counted together"
     )
     assert "el `EXCLUYE`" in rubric, (
         "the program's rubric no longer names `EXCLUYE` among the inputs that can arrive empty"
     )
     assert "el `SUSTITUYE`" in rubric, (
         "the program's rubric no longer names `SUSTITUYE` among the inputs that can arrive empty"
+    )
+    assert "lo que el implementador declaro dejar fuera" in rubric, (
+        "the program's rubric no longer names what the implementer declared left out among the inputs "
+        "that can arrive empty, so a slice resumed straight into verify has no reading for it"
     )
 
 
@@ -977,12 +982,59 @@ _PRIOR_FINDING_VOCABULARY = {
 def _prior_findings_bullet() -> str:
     """The rubric's own description of what a prior finding carries."""
     bullet = re.search(
-        r"^- \*\*Los hallazgos que tu mismo levantaste en la ronda anterior\*\*(.*?)\n\n",
+        r"^- \*\*Los hallazgos que tu mismo levantaste en la ronda anterior\*\*(.*?)\n(?=- |\n)",
         _program_rubric(),
         re.DOTALL | re.MULTILINE,
     )
     assert bullet, "cannot find the prior-findings bullet in the program's rubric"
     return bullet.group(1)
+
+
+def _excludes_bullet() -> str:
+    """The rubric's own description of what `EXCLUYE` is: a prohibition, never a permission."""
+    bullet = re.search(
+        r"^- \*\*El `EXCLUYE` que declaro la slice\*\*(.*?)\n(?=- |\n)",
+        _program_rubric(),
+        re.DOTALL | re.MULTILINE,
+    )
+    assert bullet, "cannot find the EXCLUYE bullet in the program's rubric"
+    return bullet.group(1)
+
+
+def _debt_bullet() -> str:
+    """The rubric's own description of what the implementer declared left out."""
+    bullet = re.search(
+        r"^- \*\*Lo que el implementador declaro dejar fuera\*\*(.*?)\n(?=- |\n)",
+        _program_rubric(),
+        re.DOTALL | re.MULTILINE,
+    )
+    assert bullet, "cannot find the debt bullet in the program's rubric"
+    return bullet.group(1)
+
+
+_PROHIBITION_NOT_PERMISSION_VOCABULARY = {"prohibicion", "permiso"}
+
+
+def test_the_debt_bullet_shares_the_polarity_the_excludes_bullet_already_declares() -> None:
+    """A declared gap cannot buy its way out of a criterion any more than `EXCLUYE` can buy its way in.
+
+    `EXCLUYE` already tells the judge that a declared exclusion is a prohibition, never a permission --
+    the diff still fails for building what it named. `left_out` needs the same reading, or a slice could
+    dodge a criterion just by writing the gap down in its report instead of an unexplained omission.
+    Comparing the two bullets' vocabulary, instead of asserting a literal sentence in only one of them,
+    is what catches a rewrite that keeps the words in the excludes bullet but drops them from the debt
+    one -- or the other way round.
+    """
+    excludes_words = {word for word in _PROHIBITION_NOT_PERMISSION_VOCABULARY if word in _excludes_bullet()}
+    debt_words = {word for word in _PROHIBITION_NOT_PERMISSION_VOCABULARY if word in _debt_bullet()}
+
+    assert excludes_words == _PROHIBITION_NOT_PERMISSION_VOCABULARY, (
+        "the excludes bullet lost the prohibition/permission vocabulary this contract compares against"
+    )
+    assert debt_words == excludes_words, (
+        f"the debt bullet and the excludes bullet disagree on polarity: only in excludes "
+        f"{sorted(excludes_words - debt_words)}, only in debt {sorted(debt_words - excludes_words)}"
+    )
 
 
 def test_the_prior_finding_fields_the_rubric_names_are_the_ones_the_prompt_actually_carries() -> None:

@@ -17,6 +17,7 @@ from slice_runner.tests.mothers.verdict_mother import FindingMother, VerdictMoth
 from slice_runner.tests.mothers.verification_mother import (
     JudgeMother,
     SliceDiffMother,
+    SliceUnderReviewMother,
     VerificationMother,
     VerifySliceParamsMother,
 )
@@ -166,6 +167,16 @@ class TestVerifySlice:
         action.execute(params)
 
         assert self._reviewed(verifier).prior_findings == findings
+
+    def test_what_the_implementer_declared_left_out_travels_to_the_judge_too(
+        self, action: VerifySlice, verifier: Mock
+    ) -> None:
+        debt = SliceUnderReviewMother.two_declared_gaps()
+        params = replace(_PARAMS, debt=debt)
+
+        action.execute(params)
+
+        assert self._reviewed(verifier).debt == debt
 
     def test_the_verification_comes_back_without_being_reinterpreted(self, action: VerifySlice, verifier: Mock) -> None:
         expected = VerificationMother.failing_after_a_denied_read()

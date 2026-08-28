@@ -25,3 +25,4 @@ class SliceUnderReview:
     sources: tuple[Source, ...]
     checklist: tuple[ChecklistEntry, ...]
     prior_findings: tuple[Finding, ...]
+    debt: tuple[str, ...]

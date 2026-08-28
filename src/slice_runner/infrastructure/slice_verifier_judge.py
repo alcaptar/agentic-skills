@@ -73,20 +73,29 @@ El programa te pasa, en el prompt de invocacion:
   detalle que la ampliaba. Las dos ultimas son lo que te deja comparar contra lo que decias entonces y
   no solo contra lo que hay hoy en esa linea. Es el antecedente del repaso que pide "Hallazgos de la
   ronda anterior", mas abajo: no una vara nueva ni una lista que haya que aprobar tal cual.
+- **Lo que el implementador declaro dejar fuera** (`left_out` en su informe), justo detras de los
+  hallazgos de la ronda anterior: lo que quien implemento la slice registro como hueco que no construyo.
+  Es contexto para el item 5, no una prohibicion ni un permiso: te deja separar, ahi, un hueco declarado
+  de una omision sin explicar -las dos llegan igual, como algo que falta en el diff-. Declararlo **no**
+  convierte el hueco en conforme ni exime a la slice de ningun criterio de aceptacion, la misma polaridad
+  que ya fija el `EXCLUYE` con "prohibicion, no permiso".
 
 **La lista de hallazgos de la ronda anterior vacia no es lo mismo que un insumo que no llego.** A
-diferencia de los seis campos del parrafo siguiente, aqui el vacio significa lo contrario: no hay nada
+diferencia de los siete campos del parrafo siguiente, aqui el vacio significa lo contrario: no hay nada
 que arrastrar porque esta es la primera verificacion de la slice. Un descarte de la llamada anterior al
 juez -la sesion se cayo antes de dejar un veredicto legible- tambien deja la lista vacia sin que esta
 sea la primera ronda; no hay forma de distinguir los dos casos desde este insumo, y no hace falta: en
 ambos no queda nada que citar, asi que el repaso de mas abajo no tiene hallazgos que recorrer.
 
-**Seis de esos campos pueden llegarte vacios: los criterios de aceptacion, el checklist, las fuentes
-de convencion, la `SENAL`, el `EXCLUYE` y el `SUSTITUYE`.** Van siempre en "Datos del run", pero como
-una lista con `(0)` entradas o como una linea sin nada detras de los dos puntos. El identificador de la
-slice no esta en esa lista: ese llega siempre. Vacio **no** significa que la slice no declarase nada,
-significa que el insumo no te ha llegado, y lo que se hace con el esta dos parrafos mas abajo. Lo que no
-vale es leer una lista vacia como "no habia criterios" y dar el item por conforme.
+**Siete de esos campos pueden llegarte vacios: los criterios de aceptacion, el checklist, las fuentes
+de convencion, la `SENAL`, el `EXCLUYE`, el `SUSTITUYE` y lo que el implementador declaro dejar fuera.**
+Van siempre en "Datos del run", pero como una lista con `(0)` entradas o como una linea sin nada detras
+de los dos puntos. El identificador de la slice no esta en esa lista: ese llega siempre. Vacio **no**
+significa que no se declarase nada, significa que el insumo no te ha llegado, y lo que se hace con el
+esta dos parrafos mas abajo. Lo que no vale es leer una lista vacia como "no habia criterios" -o, para
+el ultimo campo, como "no se dejo nada fuera"- y dar el item por conforme: una verificacion que arranca
+sin haber pasado por una implementacion de esta invocacion -una slice reanudada que va directa a
+verificar- deja ese ultimo campo vacio sin que eso diga nada sobre lo que el diff construyo.
 
 **Los directorios que puedes leer van listados en "Datos del run"**, y son los unicos: el repo de la
 slice y la biblioteca de skills de esta maquina. Si una skill que esta rubrica te manda cargar no esta
@@ -176,6 +185,14 @@ Recorrela **entera** y reporta item a item. No la amplies con criterios propios 
    juzgaba antes de que la linea existiera -por lo que ningun criterio pide- y sigue adelante: la mayoria
    de las specs vivas son anteriores a este mecanismo, asi que devolver por eso el item central de la
    rubrica sin veredicto lo dejaria mudo en casi todos los runs.
+
+   **Lo que el implementador declaro dejar fuera no exime tampoco.** Es lo que separa, en este mismo
+   item, un hueco que el informe de implementacion escribio explicitamente -`left_out`- de una omision
+   sin explicar: las dos llegan igual, como algo que falta en el diff, y este dato es lo unico que las
+   distingue. Pero que este declarado **no** lo convierte en conforme ni te exime de fallar el criterio
+   al que ese hueco afecta: si lo que falta hacia falta para cumplir el criterio, sigue siendo FAIL
+   (severity high) aunque el implementador lo haya escrito, y `detail` es donde citas que estaba
+   declarado en vez de asumido en silencio.
 
 6. **Manipulacion de tests (regla de hierro; siempre alta).** En el diff, mira las lineas `-` de
    los ficheros de test: comprueba que ningun test **preexistente** se haya debilitado para acomodar la
