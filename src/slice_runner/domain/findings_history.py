@@ -4,8 +4,8 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Self
 
 if TYPE_CHECKING:
+    from slice_runner.domain.corpus import JudgedRound
     from slice_runner.domain.finding import Finding
-    from slice_runner.domain.verdict import Verdict
 
 
 @dataclass(frozen=True, kw_only=True, slots=True)
@@ -24,33 +24,35 @@ class GroupedFinding:
     def last_appearance(self) -> FindingAppearance:
         return max(self.appearances, key=lambda appearance: appearance.round)
 
-    def seen_in_the_last_round(self, rounds: int) -> bool:
-        return self.last_appearance.round == rounds
+    def seen_in_the_last_round(self, last_round: int) -> bool:
+        return self.last_appearance.round == last_round
 
 
 @dataclass(frozen=True, kw_only=True, slots=True)
 class FindingsHistory:
-    rounds: int = 0
+    last_round: int = 0
+    composed_rounds: int = 0
     entries: tuple[GroupedFinding, ...] = field(default=())
 
     @classmethod
-    def of_verdicts(cls, verdicts: tuple[Verdict, ...]) -> Self:
+    def of_rounds(cls, rounds: tuple[JudgedRound, ...]) -> Self:
         appearances_of: dict[tuple[str, str], list[FindingAppearance]] = {}
         order: list[tuple[str, str]] = []
-        for round_number, verdict in enumerate(verdicts, start=1):
-            for finding in verdict.findings:
+        for judged in rounds:
+            for finding in judged.verdict.findings:
                 key = (finding.rule, finding.path)
                 if key not in appearances_of:
                     appearances_of[key] = []
                     order.append(key)
-                appearances_of[key].append(FindingAppearance(round=round_number, finding=finding))
+                appearances_of[key].append(FindingAppearance(round=judged.round, finding=finding))
 
         entries = tuple(
             GroupedFinding(rule=rule, path=path, appearances=tuple(appearances_of[(rule, path)]))
             for rule, path in order
         )
+        last_round = max((judged.round for judged in rounds), default=0)
 
-        return cls(rounds=len(verdicts), entries=entries)
+        return cls(last_round=last_round, composed_rounds=len(rounds), entries=entries)
 
     @property
     def every_appearance(self) -> tuple[FindingAppearance, ...]:
@@ -63,7 +65,7 @@ class FindingsHistory:
 
     @property
     def appearances_of_the_last_round(self) -> tuple[FindingAppearance, ...]:
-        return tuple(appearance for appearance in self.every_appearance if appearance.round == self.rounds)
+        return tuple(appearance for appearance in self.every_appearance if appearance.round == self.last_round)
 
     @property
     def is_empty(self) -> bool:

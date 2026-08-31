@@ -618,6 +618,19 @@ class TestConductSliceClosingAMergeMissedBetweenInvocations:
             dangling.run,
         )
 
+    def test_a_dangling_subissue_whose_pull_request_merged_writes_the_findings_the_corpus_already_had_for_it(
+        self,
+    ) -> None:
+        dangling = SubIssueMother.dangling()
+        conductor = self._conductor(dangling=(dangling,))
+        raised = FindingMother.without_line()
+        conductor.seed_verdict(round=1, verdict=VerdictMother.failing(raised))
+
+        conductor.conduct()
+
+        recorded = conductor.metrics.record.call_args_list[0].args[0]
+        assert recorded.findings == (raised,)
+
     def test_a_dangling_subissue_whose_pull_request_merged_writes_the_budgets_and_models_this_invocation_ran_with(
         self,
     ) -> None:
@@ -1281,7 +1294,7 @@ class TestConductSliceOnTheHappyPath:
 
     def test_a_slice_resumed_past_verify_still_closes_with_the_size_the_corpus_already_holds(self) -> None:
         conductor = Conductor(chosen=SelectSliceResultMother.resumed_at(RunMother.awaiting_merge()))
-        conductor.corpus.size_of_the_last_verification.return_value = SliceDiffMother.STATS
+        conductor.seed_verdict(round=1, verdict=VerdictMother.passing())
 
         conductor.conduct()
 
@@ -1350,7 +1363,7 @@ class TestConductSliceOnTheHappyPath:
 
     def test_the_durable_row_carries_how_much_the_verified_diff_changed(self) -> None:
         conductor = self._conductor()
-        conductor.corpus.size_of_the_last_verification.return_value = SliceDiffMother.STATS
+        conductor.seed_verdict(round=1, verdict=VerdictMother.passing())
 
         conductor.conduct()
 
@@ -1814,6 +1827,8 @@ class TestConductSliceWhenTheJudgeSpeaks:
             VerificationMother.vetoing(VerdictMother.failing(raised)),
             VerificationMother.passing(),
         ]
+        conductor.seed_verdict(round=1, verdict=VerdictMother.failing(raised))
+        conductor.seed_verdict(round=2, verdict=VerdictMother.passing())
 
         conductor.conduct()
 
@@ -1828,6 +1843,8 @@ class TestConductSliceWhenTheJudgeSpeaks:
             VerificationMother.vetoing(VerdictMother.failing(raised)),
             VerificationMother.passing(),
         ]
+        conductor.seed_verdict(round=1, verdict=VerdictMother.failing(raised))
+        conductor.seed_verdict(round=2, verdict=VerdictMother.passing())
 
         conductor.conduct()
 
@@ -1846,6 +1863,9 @@ class TestConductSliceWhenTheJudgeSpeaks:
             VerificationMother.vetoing(VerdictMother.failing(second)),
             VerificationMother.passing(),
         ]
+        conductor.seed_verdict(round=1, verdict=VerdictMother.failing(first))
+        conductor.seed_verdict(round=2, verdict=VerdictMother.failing(second))
+        conductor.seed_verdict(round=3, verdict=VerdictMother.passing())
 
         conductor.conduct()
 
@@ -1855,6 +1875,7 @@ class TestConductSliceWhenTheJudgeSpeaks:
     def test_a_veto_with_no_budget_left_closes_the_run_as_blocked_by_the_judge(self) -> None:
         conductor = self._conductor(budgets=Budgets(verify_retries=0))
         conductor.verify.execute.return_value = VerificationMother.vetoing(VerdictMother.failing())
+        conductor.seed_verdict(round=1, verdict=VerdictMother.failing())
 
         result = conductor.conduct()
 
