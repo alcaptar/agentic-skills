@@ -1370,14 +1370,25 @@ class TestConductSliceOnTheHappyPath:
         recorded = conductor.closed
         assert recorded.diff_stats == SliceDiffMother.STATS
 
-    def test_the_durable_row_carries_what_the_implementer_declared_left_out_as_debt(self) -> None:
+    def test_the_durable_row_carries_no_debt_the_conductor_never_asked_the_ledger_to_write(self) -> None:
         conductor = self._conductor()
         conductor.implement.execute.return_value = ImplementationMother.with_debt()
 
         conductor.conduct()
 
         recorded = conductor.closed
-        assert recorded.debt == ImplementationMother.with_debt().left_out
+        assert (recorded.debt.declared, recorded.debt.left_out) == (False, ())
+
+    def test_the_durable_row_carries_what_was_already_written_to_the_ledger_before_the_run_was_conducted(
+        self,
+    ) -> None:
+        conductor = self._conductor()
+        conductor.seed_debt(left_out=("el cableado del subcomando queda para otra slice",))
+
+        conductor.conduct()
+
+        recorded = conductor.closed
+        assert recorded.debt.left_out == ("el cableado del subcomando queda para otra slice",)
 
     def test_the_verification_asked_for_carries_the_subissue_number_and_not_the_parent_issue(self) -> None:
         conductor = self._conductor()

@@ -44,7 +44,7 @@ class MetricsLedgerEntry:
             spend=cls._spend(payload.harness) if payload.harness is not None else None,
             variant=payload.variant,
             models=tuple(payload.harness.models) if payload.harness is not None else (),
-            debt=payload.debt,
+            declared_debt=payload.declared_debt,
             diff=payload.diff.to_domain() if payload.diff is not None else None,
             budgets=payload.budgets,
             models_by_role=payload.models_by_role,

@@ -241,18 +241,28 @@ marcha-, pero ahora tambien dura: reconstruir cuanto tardo o cuanto espero una s
 tener la terminal abierta cuando corrio. Lo que no anexa esta fila es el turno del arnes -numero, herramienta
 y objetivo-, porque eso ya lo escribe `tool-uses.jsonl` al terminar cada llamada.
 
-Los ocho almacenes durables del programa -`metrics.jsonl`, `calls.jsonl`, `spend.jsonl`, `events.jsonl`, el
-par `verdicts.jsonl`/`diffs.jsonl` y el par `tool-uses.jsonl`/`unrecorded-tool-uses.jsonl`- comparten el
-mismo patron de nombre, `~/.claude/slice-runner/runs/<concepto>.jsonl`, y lo comparten porque pasan por la
-misma pieza (`DurableLedger`): un adaptador solo le da su nombre y el payload de su fila, y es la pieza la
-que compone la ruta, crea el directorio si falta y anexa. Los ficheros de las dos generaciones anteriores
--bajo `log/` y `trace/`- no se leen ni se escriben mas: quedan como archivo, sin moverse ni borrarse. Los
-ocho declaran su esquema con un `json_schema()` propio (`HarnessCallPayload`, `CallSpendPayload`,
-`MetricsEntryPayload`, `CorpusVerdictPayload`, `CorpusDiffPayload`, `CallToolUsePayload`,
-`UnrecordedCallToolUsePayload`, `EventPayload`), asi que que campos trae esa fila se puede preguntar a un
-programa en vez de abrir el fichero.
+Y **lo que el implementador declara dejar fuera** anexa su linea a `~/.claude/slice-runner/runs/debt.jsonl`
+en la misma llamada en que llega -con el repo y el issue del run, la slice y la lista de huecos declarados,
+aunque venga vacia-, que es lo que hace que sobreviva a un run reiniciado entre la implementacion y el
+cierre: antes solo vivia en memoria del conductor, y una invocacion que se caia entre medias lo perdia
+entero y sin dejar rastro. La fila de cierre no compone esta deuda del progreso en memoria: pregunta a este
+almacen por las declaraciones de la slice entera y las une deduplicando por texto exacto, asi que dos
+vueltas que declaren huecos distintos aparecen las dos en la fila de cierre y la misma frase repetida en dos
+vueltas cuenta una sola vez. Una slice que nunca llego a declarar nada se distingue de una que declaro
+explicitamente que no dejo nada fuera: la primera no deja fila en este almacen.
 
-Y toda fila de los ocho trae marca de tiempo, repo, issue y la slice a la que pertenece: `spend.jsonl` ya
+Los nueve almacenes durables del programa -`metrics.jsonl`, `calls.jsonl`, `spend.jsonl`, `events.jsonl`,
+`debt.jsonl`, el par `verdicts.jsonl`/`diffs.jsonl` y el par `tool-uses.jsonl`/`unrecorded-tool-uses.jsonl`-
+comparten el mismo patron de nombre, `~/.claude/slice-runner/runs/<concepto>.jsonl`, y lo comparten porque
+pasan por la misma pieza (`DurableLedger`): un adaptador solo le da su nombre y el payload de su fila, y es
+la pieza la que compone la ruta, crea el directorio si falta y anexa. Los ficheros de las dos generaciones
+anteriores -bajo `log/` y `trace/`- no se leen ni se escriben mas: quedan como archivo, sin moverse ni
+borrarse. Los nueve declaran su esquema con un `json_schema()` propio (`HarnessCallPayload`,
+`CallSpendPayload`, `MetricsEntryPayload`, `CorpusVerdictPayload`, `CorpusDiffPayload`, `DebtPayload`,
+`CallToolUsePayload`, `UnrecordedCallToolUsePayload`, `EventPayload`), asi que que campos trae esa fila se
+puede preguntar a un programa en vez de abrir el fichero.
+
+Y toda fila de los nueve trae marca de tiempo, repo, issue y la slice a la que pertenece: `spend.jsonl` ya
 no necesita cruzarse por sesion contra `calls.jsonl` para saber cuanto costo una slice, y
 `tool-uses.jsonl`/`unrecorded-tool-uses.jsonl` se leen solos aunque sean los que dicen que toco el
 implementador. Las cuatro se declaran una sola vez (`StampedRow`) y el texto que nombra la slice sale de
@@ -268,8 +278,10 @@ en cuanto tocan una fila vieja de `~/.claude/slice-runner/runs/metrics.jsonl`, `
 `calls.jsonl` respectivamente. Lo mismo le pasa a `verdicts.jsonl` desde que el tamano de la ultima
 verificacion viaja en esa fila y el cierre lee de ahi: una fila vieja de esa slice, escrita antes de que el
 tamano se moviera a la fila ligera, no lee a medias, y el error no sale por un comando de lectura sino por
-`uv run slice-runner run` al cerrar. Archivar esas filas -moverlas fuera de
-`runs/`- es decision de quien opera: el programa no lo hace por su cuenta.
+`uv run slice-runner run` al cerrar. Y una fila de `metrics.jsonl` escrita antes de que `debt` se renombrara
+a `declared_debt` -otra cifra, la de los huecos unicos de la slice entera y no la de la vuelta que cerro-
+cae en el mismo corte: `uv run slice-runner metrics` sale con ese error en cuanto la toca. Archivar esas
+filas -moverlas fuera de `runs/`- es decision de quien opera: el programa no lo hace por su cuenta.
 
 Colapsar lector y escritor de `metrics.jsonl` en un solo modelo con `extra="forbid"` tiene una consecuencia:
 las dos claves que la fila escribia siempre a `null` -`duracion_s` y `coste_tokens`- dejan de emitirse.

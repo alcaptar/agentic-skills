@@ -5,6 +5,7 @@ import json
 from slice_runner.infrastructure.call_spend_payload import CallSpendPayload
 from slice_runner.infrastructure.corpus_diff_payload import CorpusDiffPayload
 from slice_runner.infrastructure.corpus_verdict_payload import CorpusVerdictPayload
+from slice_runner.infrastructure.debt_payload import DebtPayload
 from slice_runner.infrastructure.event_payload import EventPayload
 from slice_runner.infrastructure.harness_call_payload import HarnessCallPayload
 from slice_runner.infrastructure.metrics_entry_payload import MetricsEntryPayload
@@ -49,6 +50,9 @@ class TestEveryDurableLogDeclaresASchemaAProgramCanRead:
             "diff",
         }
 
+    def test_the_debt_ledger_schema_requires_the_slice_and_what_was_left_out(self) -> None:
+        assert self._required(DebtPayload.json_schema()) == {"ts", "repo", "issue", "slice_id", "left_out"}
+
     def test_the_tool_use_schema_requires_the_identity_of_the_call_and_the_uses_it_carries(self) -> None:
         assert self._required(CallToolUsePayload.json_schema()) == {
             "ts",
@@ -84,13 +88,14 @@ class TestEveryDurableLogDeclaresASchemaAProgramCanRead:
             "status",
         }
 
-    def test_none_of_the_eight_schemas_leaves_a_reference_unresolved(self) -> None:
+    def test_none_of_the_nine_schemas_leaves_a_reference_unresolved(self) -> None:
         for payload in (
             HarnessCallPayload,
             CallSpendPayload,
             MetricsEntryPayload,
             CorpusVerdictPayload,
             CorpusDiffPayload,
+            DebtPayload,
             CallToolUsePayload,
             UnrecordedCallToolUsePayload,
             EventPayload,

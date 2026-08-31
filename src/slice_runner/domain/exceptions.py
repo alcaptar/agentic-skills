@@ -149,6 +149,10 @@ class UnreadableCorpusError(ValueError):
     pass
 
 
+class UnreadableDebtLedgerError(ValueError):
+    pass
+
+
 class UnreadablePluginRegistryError(ValueError):
     pass
 

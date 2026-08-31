@@ -193,12 +193,21 @@ class TestHowMuchTheSliceChanged(WithTheDurableStoresOutOfTheRealHome):
             ClosedSliceMother.merged_leaving_out("no cubri el binario", "falta el caso de rename")
         )
 
-        assert WrittenMetricsLog.row_under(tmp_path)["debt"] == 2
+        assert WrittenMetricsLog.row_under(tmp_path)["declared_debt"] == 2
 
-    def test_a_slice_that_left_nothing_out_writes_zero_debt_instead_of_omitting_it(self, tmp_path: Path) -> None:
+    def test_a_slice_that_declared_leaving_nothing_out_writes_zero_declared_debt_instead_of_omitting_it(
+        self, tmp_path: Path
+    ) -> None:
+        LocalMetricsLog(clock=self.frozen_at()).record(ClosedSliceMother.merged_declaring_nothing_left_out())
+
+        assert WrittenMetricsLog.row_under(tmp_path)["declared_debt"] == 0
+
+    def test_a_slice_whose_declaration_was_never_written_omits_declared_debt_instead_of_writing_zero(
+        self, tmp_path: Path
+    ) -> None:
         LocalMetricsLog(clock=self.frozen_at()).record(ClosedSliceMother.merged())
 
-        assert WrittenMetricsLog.row_under(tmp_path)["debt"] == 0
+        assert "declared_debt" not in WrittenMetricsLog.row_under(tmp_path)
 
     def test_the_size_of_the_diff_measured_at_the_verify_that_passed_travels_as_its_own_group(
         self, tmp_path: Path

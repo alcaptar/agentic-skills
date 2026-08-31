@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 
 from slice_runner.domain.canonical_slice_id import CanonicalSliceId
 from slice_runner.domain.closed_slice import ClosedSlice
+from slice_runner.domain.declared_debt import DeclaredDebt
 from slice_runner.domain.findings_history import FindingsHistory
 from slice_runner.domain.run_state import RunState
 from slice_runner.domain.slice_coordinates import SliceCoordinates
@@ -14,6 +15,7 @@ if TYPE_CHECKING:
     from slice_runner.domain.call_spend_log import CallSpendLog
     from slice_runner.domain.ci_indeterminate_cause import CiIndeterminateCause
     from slice_runner.domain.corpus import Corpus
+    from slice_runner.domain.debt_ledger import DebtLedger
     from slice_runner.domain.diff_stats import DiffStats
     from slice_runner.domain.discarded_call import DiscardedCall
     from slice_runner.domain.harness_spend import HarnessSpend
@@ -35,18 +37,24 @@ class RecordClosureParams:
     models: RoleModels
     discarded_call: DiscardedCall | None = None
     ci_indeterminate_cause: CiIndeterminateCause | None = None
-    debt: tuple[str, ...] = field(default=())
     conflicting_paths: tuple[str, ...] = field(default=())
 
 
 class RecordClosure:
     def __init__(
-        self, *, metrics: MetricsLog, repository: RunRepository, spend_log: CallSpendLog, corpus: Corpus
+        self,
+        *,
+        metrics: MetricsLog,
+        repository: RunRepository,
+        spend_log: CallSpendLog,
+        corpus: Corpus,
+        debt_ledger: DebtLedger,
     ) -> None:
         self._metrics = metrics
         self._repository = repository
         self._spend_log = spend_log
         self._corpus = corpus
+        self._debt_ledger = debt_ledger
 
     def execute(self, params: RecordClosureParams) -> None:
         spend = self._spend_of(params)
@@ -68,7 +76,7 @@ class RecordClosure:
                 ),
                 discarded_call=params.discarded_call,
                 ci_indeterminate_cause=params.ci_indeterminate_cause,
-                debt=params.debt,
+                debt=self._debt_of(params),
                 diff_stats=self._size_of(params),
             )
         )
@@ -87,6 +95,9 @@ class RecordClosure:
 
     def _history_of(self, params: RecordClosureParams) -> FindingsHistory:
         return FindingsHistory.of_rounds(self._corpus.rounds_of_the_slice(self._coordinates_of(params)))
+
+    def _debt_of(self, params: RecordClosureParams) -> DeclaredDebt:
+        return DeclaredDebt.of_declarations(self._debt_ledger.declarations_of_the_slice(self._coordinates_of(params)))
 
     @staticmethod
     def _coordinates_of(params: RecordClosureParams) -> SliceCoordinates:

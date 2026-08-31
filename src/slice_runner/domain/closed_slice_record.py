@@ -37,7 +37,7 @@ class ClosedSliceRecord:
     spend: RecordedSpend | None
     variant: str | None
     models: tuple[str, ...]
-    debt: int
+    declared_debt: int | None
     diff: DiffStats | None
     budgets: dict[str, object]
     models_by_role: dict[str, object]
