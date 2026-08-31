@@ -7,6 +7,7 @@ import pytest
 
 from slice_runner.domain.budgets import Budgets
 from slice_runner.domain.canonical_slice_id import CanonicalSliceId
+from slice_runner.domain.corpus import JudgedRound
 from slice_runner.domain.diff_stats import DiffStats
 from slice_runner.domain.exceptions import UnreadableCorpusError
 from slice_runner.domain.slice_coordinates import SliceCoordinates
@@ -249,6 +250,43 @@ class TestTheSizeOfTheLastVerification(AskingTheCorpusAboutOneSlice):
         )
 
         assert corpus.size_of_the_last_verification(self._coordinates()) is None
+
+
+class TestTheRoundsOfTheSlice(AskingTheCorpusAboutOneSlice):
+    def test_a_slice_with_no_verification_recorded_answers_with_no_rounds(self) -> None:
+        corpus = LocalCorpus(clock=self.frozen_at())
+
+        assert corpus.rounds_of_the_slice(self._coordinates()) == ()
+
+    def test_two_rounds_recorded_answer_both_numbered_by_their_own_verify_round(self) -> None:
+        corpus = LocalCorpus(clock=self.frozen_at())
+        first = VerdictMother.failing(FindingMother.without_line(rule="regla-uno"))
+        second = VerdictMother.failing(FindingMother.without_line(rule="regla-dos"))
+
+        corpus.record(CorpusEntryMother.of_the_slice(verify_round=1, verdict=first))
+        corpus.record(CorpusEntryMother.of_the_slice(verify_round=2, verdict=second))
+
+        assert corpus.rounds_of_the_slice(self._coordinates()) == (
+            JudgedRound(round=1, verdict=first),
+            JudgedRound(round=2, verdict=second),
+        )
+
+    def test_a_verification_of_a_different_slice_is_left_out(self) -> None:
+        corpus = LocalCorpus(clock=self.frozen_at())
+
+        corpus.record(CorpusEntryMother.of_the_slice(slice_id="slice-99"))
+
+        assert corpus.rounds_of_the_slice(self._coordinates()) == ()
+
+    def test_two_rows_written_for_the_same_round_count_once_as_the_last_one_written(self) -> None:
+        corpus = LocalCorpus(clock=self.frozen_at())
+        discarded = VerdictMother.failing(FindingMother.without_line(rule="descartado"))
+        kept = VerdictMother.failing(FindingMother.without_line(rule="definitivo"))
+
+        corpus.record(CorpusEntryMother.of_the_slice(verify_round=1, verdict=discarded))
+        corpus.record(CorpusEntryMother.of_the_slice(verify_round=1, verdict=kept))
+
+        assert corpus.rounds_of_the_slice(self._coordinates()) == (JudgedRound(round=1, verdict=kept),)
 
 
 class TestTheHeavyDiffStaysOutOfTheVerdictLedger(AskingTheCorpusAboutOneSlice):

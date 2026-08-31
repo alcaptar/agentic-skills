@@ -101,14 +101,16 @@ tocar la misma pieza. La medición que lo sostiene, en `docs/design-notes.md`.
   deriva de ellos.
 
   **Lo único que el conductor acumula por invocación es lo que nadie más ve**, y cada acumulador lleva su
-  motivo escrito donde vive: lo que acota la invocación y no el run, lo que todavía no viaja en el `Run`
-  persistido, y lo que necesita la fila durable al cerrar. Un acumulador nuevo sin ese motivo es estado
-  del conductor que debería estar en el `Run`.
+  motivo escrito donde vive: lo que acota la invocación y no el run, y lo que todavía no viaja en el `Run`
+  persistido. Un acumulador nuevo sin ese motivo es estado del conductor que debería estar en el `Run`.
 
-  De los veredictos acumulados salen **vistas, no campos**, y a propósito: lo que la vuelta siguiente tiene
-  que arreglar son los hallazgos de la última ronda -las anteriores pueden estar ya corregidas, así que
-  mandarlas al implementador sería mandarle trabajo hecho-, y lo que se escribe al cerrar son los de todas.
-  Llevar las dos cosas como campos guardaria dos veces el mismo dato y dejaría que una se quedase vieja.
+  De los veredictos acumulados sale una **vista, no un campo**: lo que la vuelta siguiente tiene que
+  arreglar son los hallazgos de la última ronda -las anteriores pueden estar ya corregidas, así que
+  mandarlas al implementador sería mandarle trabajo hecho-, y esa misma vista es la que lleva el cuerpo de
+  la pull request. **Lo que se escribe al cerrar no sale de este acumulador**: la fila durable pregunta al
+  puerto del corpus de veredictos por las rondas de la slice entera, así que una invocación que no verificó
+  nada -porque el run venía reiniciado, o porque cierra al descubrir la pull request ya fusionada- cierra
+  con lo que el corpus ya tenía escrito, y no con cero.
 
 ## Escrituras y lecturas
 

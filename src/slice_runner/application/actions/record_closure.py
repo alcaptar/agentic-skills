@@ -33,7 +33,6 @@ class RecordClosureParams:
     run: Run
     budgets: Budgets
     models: RoleModels
-    findings_history: FindingsHistory = field(default_factory=FindingsHistory)
     discarded_call: DiscardedCall | None = None
     ci_indeterminate_cause: CiIndeterminateCause | None = None
     debt: tuple[str, ...] = field(default=())
@@ -51,7 +50,7 @@ class RecordClosure:
 
     def execute(self, params: RecordClosureParams) -> None:
         spend = self._spend_of(params)
-        history = params.findings_history
+        history = self._history_of(params)
         self._metrics.record(
             ClosedSlice(
                 repo=params.repo,
@@ -85,6 +84,9 @@ class RecordClosure:
 
     def _size_of(self, params: RecordClosureParams) -> DiffStats | None:
         return self._corpus.size_of_the_last_verification(self._coordinates_of(params))
+
+    def _history_of(self, params: RecordClosureParams) -> FindingsHistory:
+        return FindingsHistory.of_rounds(self._corpus.rounds_of_the_slice(self._coordinates_of(params)))
 
     @staticmethod
     def _coordinates_of(params: RecordClosureParams) -> SliceCoordinates:

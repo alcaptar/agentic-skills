@@ -20,9 +20,11 @@ class VetoFindingsComment:
     @classmethod
     def rendered(cls, history: FindingsHistory) -> str:
         numbered = tuple(enumerate(history.entries, start=1))
-        standing = tuple((index, entry) for index, entry in numbered if entry.seen_in_the_last_round(history.rounds))
+        standing = tuple(
+            (index, entry) for index, entry in numbered if entry.seen_in_the_last_round(history.last_round)
+        )
         not_standing = tuple(
-            (index, entry) for index, entry in numbered if not entry.seen_in_the_last_round(history.rounds)
+            (index, entry) for index, entry in numbered if not entry.seen_in_the_last_round(history.last_round)
         )
 
         sections = [cls._header(history)]
@@ -53,10 +55,8 @@ class VetoFindingsComment:
     @staticmethod
     def _header(history: FindingsHistory) -> str:
         return (
-            f"Este veto reune los hallazgos de {history.rounds} ronda(s) de esta invocacion, "
-            f"con {len(history.entries)} hallazgo(s) tras agrupar.\n"
-            "Esto es lo que paso en esta invocacion: las rondas de invocaciones anteriores a esta "
-            "no estan aqui, porque el programa no las conserva entre invocaciones."
+            f"Este veto reune los hallazgos de {history.composed_rounds} ronda(s) de esta slice, "
+            f"con {len(history.entries)} hallazgo(s) tras agrupar."
         )
 
     @classmethod

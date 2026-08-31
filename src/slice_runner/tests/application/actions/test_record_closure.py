@@ -19,6 +19,7 @@ from slice_runner.domain.slice_coordinates import SliceCoordinates
 from slice_runner.tests.mothers.discarded_call_mother import DiscardedCallMother
 from slice_runner.tests.mothers.findings_history_mother import FindingsHistoryMother
 from slice_runner.tests.mothers.harness_spend_mother import HarnessSpendMother
+from slice_runner.tests.mothers.judged_round_mother import JudgedRoundMother
 from slice_runner.tests.mothers.run_mother import RunMother
 from slice_runner.tests.mothers.verdict_mother import FindingMother
 
@@ -40,6 +41,7 @@ class _Closer:
         self.spend_log.spend_of_the_slice.return_value = HarnessSpend.nothing()
         self.corpus: Mock = create_autospec(Corpus, spec_set=True, instance=True)
         self.corpus.size_of_the_last_verification.return_value = None
+        self.corpus.rounds_of_the_slice.return_value = ()
 
     @property
     def action(self) -> RecordClosure:
@@ -78,9 +80,12 @@ class TestTheRowItWrites:
 
     def test_the_findings_of_every_round_and_of_the_last_one_travel_apart_so_a_fixed_one_is_not_lost(self) -> None:
         closer = _Closer()
-        history = FindingsHistoryMother.of_a_high_severity_finding_fixed_before_a_low_severity_one_appears()
+        closer.corpus.rounds_of_the_slice.return_value = (
+            JudgedRoundMother.of_the_round(1, FindingMother.without_line()),
+            JudgedRoundMother.of_the_round(2, FindingMother.low_severity()),
+        )
 
-        written = closer.close(findings_history=history)
+        written = closer.close()
 
         assert written.count_findings(Severity.HIGH) == 1
         assert written.count_findings_of_the_last_round(Severity.HIGH) == 0
@@ -147,6 +152,51 @@ class TestTheRowItWrites:
         written = closer.close(models=models)
 
         assert written.models == models
+
+
+class TestFindingsComeFromTheCorpus:
+    def test_a_closure_whose_invocation_verified_nothing_still_carries_what_the_corpus_already_had(self) -> None:
+        closer = _Closer()
+        closer.corpus.rounds_of_the_slice.return_value = (
+            JudgedRoundMother.of_the_round(1, FindingMother.without_line()),
+        )
+
+        written = closer.close()
+
+        assert written.count_findings(Severity.HIGH) == 1
+
+    def test_two_invocations_worth_of_rounds_in_the_corpus_sum_instead_of_only_the_last_one(self) -> None:
+        closer = _Closer()
+        first_invocation = FindingMother.without_line(rule="regla-uno")
+        second_invocation = FindingMother.without_line(rule="regla-dos", path="src/y.py")
+        closer.corpus.rounds_of_the_slice.return_value = (
+            JudgedRoundMother.of_the_round(1, first_invocation),
+            JudgedRoundMother.of_the_round(2, second_invocation),
+        )
+
+        written = closer.close()
+
+        assert written.count_findings(Severity.HIGH) == 2
+
+    def test_the_last_round_that_travels_is_the_one_with_the_highest_verify_round_not_the_tuple_order(self) -> None:
+        closer = _Closer()
+        earlier = FindingMother.without_line(rule="regla-uno")
+        later = FindingMother.without_line(rule="regla-dos", path="src/y.py")
+        closer.corpus.rounds_of_the_slice.return_value = (
+            JudgedRoundMother.of_the_round(5, later),
+            JudgedRoundMother.of_the_round(4, earlier),
+        )
+
+        written = closer.close()
+
+        assert written.findings_of_the_last_round == (later,)
+
+    def test_the_reading_is_asked_from_the_corpus_port_and_not_from_a_field_carried_in_memory(self) -> None:
+        closer = _Closer()
+
+        closer.close()
+
+        closer.corpus.rounds_of_the_slice.assert_called_once_with(_COORDINATES)
 
 
 class TestWhichSpendsCount:
@@ -218,11 +268,15 @@ class TestPublishingTheCatchUpConflict:
 class TestPublishingTheVetoFindings:
     def test_a_closure_by_veto_with_findings_publishes_the_whole_history(self) -> None:
         closer = _Closer()
-        history = FindingsHistoryMother.of_a_single_round(FindingMother.without_line(), FindingMother.low_severity())
+        high = FindingMother.without_line()
+        low = FindingMother.low_severity()
+        closer.corpus.rounds_of_the_slice.return_value = (JudgedRoundMother.of_the_round(1, high, low),)
 
-        closer.close(state=RunState.BLOCKED_VERIFY, findings_history=history)
+        closer.close(state=RunState.BLOCKED_VERIFY)
 
-        closer.repository.publish_findings.assert_called_once_with(repo=_REPO, issue=_ISSUE, history=history)
+        closer.repository.publish_findings.assert_called_once_with(
+            repo=_REPO, issue=_ISSUE, history=FindingsHistoryMother.of_a_single_round(high, low)
+        )
 
     def test_a_closure_by_veto_with_no_findings_at_all_publishes_nothing(self) -> None:
         closer = _Closer()
@@ -233,8 +287,10 @@ class TestPublishingTheVetoFindings:
 
     def test_a_closure_in_another_state_never_publishes_even_if_findings_arrived(self) -> None:
         closer = _Closer()
-        history = FindingsHistoryMother.of_a_single_round(FindingMother.without_line())
+        closer.corpus.rounds_of_the_slice.return_value = (
+            JudgedRoundMother.of_the_round(1, FindingMother.without_line()),
+        )
 
-        closer.close(state=RunState.MERGED, findings_history=history)
+        closer.close(state=RunState.MERGED)
 
         closer.repository.publish_findings.assert_not_called()

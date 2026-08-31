@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, ClassVar
 
-from slice_runner.domain.corpus import Corpus
+from slice_runner.domain.corpus import Corpus, JudgedRound
 from slice_runner.infrastructure.corpus_diff_payload import CorpusDiffPayload
 from slice_runner.infrastructure.corpus_verdict_payload import CorpusVerdictPayload
 from slice_runner.infrastructure.durable_ledger import DurableLedger, ReadableDurableLedger
@@ -34,3 +34,13 @@ class LocalCorpus(Corpus):
         latest = self._verdicts.last_row_where(lambda data: CorpusVerdictPayload.may_belong_to(data, coordinates))
 
         return latest.diff_stats.to_domain() if latest is not None else None
+
+    def rounds_of_the_slice(self, coordinates: SliceCoordinates) -> tuple[JudgedRound, ...]:
+        last_row_of: dict[int, CorpusVerdictPayload] = {}
+        for row in self._verdicts.rows_where(lambda data: CorpusVerdictPayload.may_belong_to(data, coordinates)):
+            last_row_of[row.verify_round] = row
+
+        return tuple(
+            JudgedRound(round=verify_round, verdict=row.verdict.to_domain())
+            for verify_round, row in sorted(last_row_of.items())
+        )

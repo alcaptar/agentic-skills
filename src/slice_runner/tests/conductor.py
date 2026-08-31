@@ -36,7 +36,7 @@ from slice_runner.domain.ci import Ci
 from slice_runner.domain.ci_status import CiStatus
 from slice_runner.domain.clock import Clock
 from slice_runner.domain.control_runner import ControlRunner
-from slice_runner.domain.corpus import Corpus
+from slice_runner.domain.corpus_entry import CorpusEntry
 from slice_runner.domain.deploy_watch import DeployWatch
 from slice_runner.domain.event_log import EventLog
 from slice_runner.domain.forum import Forum
@@ -49,14 +49,14 @@ from slice_runner.domain.run_repository import RunRepository
 from slice_runner.domain.slice_coordinates import SliceCoordinates
 from slice_runner.domain.state_machine import StateMachine
 from slice_runner.domain.understanding_writer import UnderstandingWriter
-from slice_runner.tests.doubles import RecordedSpendLog
+from slice_runner.tests.doubles import RecordedCorpus, RecordedSpendLog
 from slice_runner.tests.mothers.branch_catch_up_mother import BranchCatchUpMother
 from slice_runner.tests.mothers.control_outcome_mother import ControlOutcomeMother
 from slice_runner.tests.mothers.implementation_mother import ImplementationMother
 from slice_runner.tests.mothers.pull_request_status_mother import PullRequestStatusMother
 from slice_runner.tests.mothers.sub_issue_mother import SubIssueMother
 from slice_runner.tests.mothers.understanding_mother import UnderstandingMother
-from slice_runner.tests.mothers.verification_mother import VerificationMother
+from slice_runner.tests.mothers.verification_mother import SliceDiffMother, VerificationMother
 
 if TYPE_CHECKING:
     from slice_runner.application.actions.conduct_slice import ConductSliceResult
@@ -65,6 +65,7 @@ if TYPE_CHECKING:
     from slice_runner.domain.event import Event
     from slice_runner.domain.harness_spend import HarnessSpend
     from slice_runner.domain.slice_identity import SliceIdentity
+    from slice_runner.domain.verdict import Verdict
 
 
 class Conductor:
@@ -114,8 +115,7 @@ class Conductor:
         self.clock.now.return_value = self.NOW
         self.metrics: Mock = create_autospec(MetricsLog, spec_set=True, instance=True)
         self.spend_log = RecordedSpendLog()
-        self.corpus: Mock = create_autospec(Corpus, spec_set=True, instance=True)
-        self.corpus.size_of_the_last_verification.return_value = None
+        self.corpus = RecordedCorpus()
         self.understanding: Mock = create_autospec(UnderstandingWriter, spec_set=True, instance=True)
         self.understanding.write.return_value = UnderstandingMother.of_the_chosen_slice()
         self.pull_request: Mock = create_autospec(PullRequestWriter, spec_set=True, instance=True)
@@ -133,6 +133,20 @@ class Conductor:
             repo=self.REPO, issue=self.SLICE_ISSUE, slice_id=CanonicalSliceId.of_text(self.SLICE_ID)
         )
         self.spend_log.record(HarnessCallSpend(coordinates=coordinates, session=session, spend=spend))
+
+    def seed_verdict(self, *, round: int, verdict: Verdict) -> None:
+        self.corpus.record(
+            CorpusEntry(
+                repo=self.REPO,
+                issue=self.SLICE_ISSUE,
+                slice_id=self.SLICE_ID,
+                verify_round=round,
+                session="seeded",
+                diff=SliceDiffMother.of_the_slice(),
+                verdict=verdict,
+                prior_findings_given=0,
+            )
+        )
 
     @property
     def emitted_events(self) -> list[Event]:

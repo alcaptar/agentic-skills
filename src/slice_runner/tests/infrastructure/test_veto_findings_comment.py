@@ -76,14 +76,15 @@ class TestTheHeaderStatesHowItWasComposed:
         assert "3 ronda" in rendered
         assert "1 hallazgo" in rendered
 
-
-class TestTheScopeIsDeclared:
-    def test_the_body_says_earlier_invocations_are_not_carried(self) -> None:
-        history = FindingsHistoryMother.of_a_single_round(FindingMother.without_line())
+    def test_the_number_of_rounds_published_is_how_many_are_composed_and_not_the_highest_round_number_seen(
+        self,
+    ) -> None:
+        history = FindingsHistoryMother.of_rounds_four_and_five_with_no_earlier_rounds_archived()
 
         rendered = VetoFindingsComment.rendered(history)
 
-        assert "invocaciones anteriores" in rendered
+        assert "2 ronda" in rendered
+        assert "5 ronda" not in rendered
 
 
 class TestASingleRoundKeepsPublishingWhatItDoesToday:
