@@ -9,6 +9,7 @@ from slice_runner.domain.unrecorded_conversation_cause import UnrecordedConversa
 from slice_runner.infrastructure.local_call_spend_log import LocalCallSpendLog
 from slice_runner.infrastructure.local_call_trace import LocalCallTrace
 from slice_runner.infrastructure.local_corpus import LocalCorpus
+from slice_runner.infrastructure.local_debt_ledger import LocalDebtLedger
 from slice_runner.infrastructure.local_event_log import LocalEventLog
 from slice_runner.infrastructure.local_metrics_log import LocalMetricsLog
 from slice_runner.infrastructure.local_tool_use_log import LocalToolUseLog
@@ -16,6 +17,7 @@ from slice_runner.infrastructure.tool_use_log import UnrecordedCallToolUse
 from slice_runner.tests.durable_store_home import WithTheDurableStoresOutOfTheRealHome
 from slice_runner.tests.mothers.closed_slice_mother import ClosedSliceMother
 from slice_runner.tests.mothers.corpus_entry_mother import CorpusEntryMother
+from slice_runner.tests.mothers.debt_entry_mother import DebtEntryMother
 from slice_runner.tests.mothers.discarded_call_mother import DiscardedCallMother
 from slice_runner.tests.mothers.event_mother import EventMother
 from slice_runner.tests.mothers.harness_call_mother import HarnessCallMother
@@ -91,9 +93,10 @@ class TestNoDurableStoreWritesAKeyInSpanish(ReadingTheLedger):
             ClosedSliceMother.merged_discarding_and_measuring_the_diff(DiscardedCallMother.of_a_failed_call(), stats)
         )
         log.record(ClosedSliceMother.blocked_indeterminate_because_of(CiIndeterminateCause.COMMAND_FAILED))
+        log.record(ClosedSliceMother.merged_leaving_out("no cubri el binario"))
 
         rows = self.rows_of(tmp_path, "metrics")
-        keys = self.flattened(rows[0]) | self.flattened(rows[1])
+        keys = self.flattened(rows[0]) | self.flattened(rows[1]) | self.flattened(rows[2])
 
         assert keys == {
             "ts",
@@ -136,7 +139,7 @@ class TestNoDurableStoreWritesAKeyInSpanish(ReadingTheLedger):
             "discarded_call.reason",
             "ci_indeterminate_cause",
             "variant",
-            "debt",
+            "declared_debt",
             "diff",
             "diff.files_changed",
             "diff.lines_added",
@@ -202,6 +205,13 @@ class TestNoDurableStoreWritesAKeyInSpanish(ReadingTheLedger):
             "diff_stats.lines_deleted",
             "prior_findings_given",
         }
+
+    def test_the_debt_ledger_keys_are_the_identity_of_the_slice_and_what_was_left_out(self, tmp_path: Path) -> None:
+        LocalDebtLedger(clock=self.frozen_at()).record(DebtEntryMother.of_the_slice(left_out=("un hueco",)))
+
+        keys = self.flattened(self.rows_of(tmp_path, "debt")[0])
+
+        assert keys == {"ts", "repo", "issue", "slice_id", "left_out"}
 
     def test_the_corpus_diff_keys_are_the_identity_of_the_round_and_the_text_it_judged(self, tmp_path: Path) -> None:
         LocalCorpus(clock=self.frozen_at()).record(CorpusEntryMother.of_the_slice())

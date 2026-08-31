@@ -37,6 +37,7 @@ from slice_runner.domain.ci_status import CiStatus
 from slice_runner.domain.clock import Clock
 from slice_runner.domain.control_runner import ControlRunner
 from slice_runner.domain.corpus_entry import CorpusEntry
+from slice_runner.domain.debt_entry import DebtEntry
 from slice_runner.domain.deploy_watch import DeployWatch
 from slice_runner.domain.event_log import EventLog
 from slice_runner.domain.forum import Forum
@@ -49,7 +50,7 @@ from slice_runner.domain.run_repository import RunRepository
 from slice_runner.domain.slice_coordinates import SliceCoordinates
 from slice_runner.domain.state_machine import StateMachine
 from slice_runner.domain.understanding_writer import UnderstandingWriter
-from slice_runner.tests.doubles import RecordedCorpus, RecordedSpendLog
+from slice_runner.tests.doubles import RecordedCorpus, RecordedDebtLedger, RecordedSpendLog
 from slice_runner.tests.mothers.branch_catch_up_mother import BranchCatchUpMother
 from slice_runner.tests.mothers.control_outcome_mother import ControlOutcomeMother
 from slice_runner.tests.mothers.implementation_mother import ImplementationMother
@@ -116,6 +117,7 @@ class Conductor:
         self.metrics: Mock = create_autospec(MetricsLog, spec_set=True, instance=True)
         self.spend_log = RecordedSpendLog()
         self.corpus = RecordedCorpus()
+        self.debt_ledger = RecordedDebtLedger()
         self.understanding: Mock = create_autospec(UnderstandingWriter, spec_set=True, instance=True)
         self.understanding.write.return_value = UnderstandingMother.of_the_chosen_slice()
         self.pull_request: Mock = create_autospec(PullRequestWriter, spec_set=True, instance=True)
@@ -133,6 +135,12 @@ class Conductor:
             repo=self.REPO, issue=self.SLICE_ISSUE, slice_id=CanonicalSliceId.of_text(self.SLICE_ID)
         )
         self.spend_log.record(HarnessCallSpend(coordinates=coordinates, session=session, spend=spend))
+
+    def seed_debt(self, *, left_out: tuple[str, ...]) -> None:
+        coordinates = SliceCoordinates(
+            repo=self.REPO, issue=self.SLICE_ISSUE, slice_id=CanonicalSliceId.of_text(self.SLICE_ID)
+        )
+        self.debt_ledger.record(DebtEntry(coordinates=coordinates, left_out=left_out))
 
     def seed_verdict(self, *, round: int, verdict: Verdict) -> None:
         self.corpus.record(
@@ -177,7 +185,11 @@ class Conductor:
                 close=self.close,
                 record_step=RecordStep(repository=self.repository, events=self.events, clock=self.clock),
                 record_closure=RecordClosure(
-                    metrics=self.metrics, repository=self.repository, spend_log=self.spend_log, corpus=self.corpus
+                    metrics=self.metrics,
+                    repository=self.repository,
+                    spend_log=self.spend_log,
+                    corpus=self.corpus,
+                    debt_ledger=self.debt_ledger,
                 ),
                 read_ci=ReadCiStatus(ci=self.ci, forum=self.forum),
                 read_pull_request=ReadPullRequestStatus(forum=self.forum),

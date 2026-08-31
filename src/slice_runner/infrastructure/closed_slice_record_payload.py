@@ -77,7 +77,7 @@ class ClosedSliceRecordPayload(ContractModel):
     spend: RecordedSpendPayload | None = None
     variant: str | None = None
     models: tuple[str, ...] = ()
-    debt: int
+    declared_debt: int | None = None
     diff: DiffStatsPayload | None = None
     budgets: dict[str, object]
     models_by_role: dict[str, object]
@@ -108,7 +108,7 @@ class ClosedSliceRecordPayload(ContractModel):
                 "spend": RecordedSpendPayload.from_domain(record.spend) if record.spend is not None else None,
                 "variant": record.variant,
                 "models": record.models,
-                "debt": record.debt,
+                "declared_debt": record.declared_debt,
                 "diff": DiffStatsPayload.from_domain(record.diff) if record.diff is not None else None,
                 "budgets": record.budgets,
                 "models_by_role": record.models_by_role,

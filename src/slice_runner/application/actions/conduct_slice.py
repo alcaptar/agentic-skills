@@ -764,7 +764,6 @@ class ConductSlice:
                 models=self._models,
                 discarded_call=progress.discarded_call,
                 ci_indeterminate_cause=progress.ci_indeterminate_cause,
-                debt=progress.debt,
                 conflicting_paths=progress.conflicting_paths,
             )
         )

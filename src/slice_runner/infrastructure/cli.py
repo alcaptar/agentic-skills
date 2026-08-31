@@ -99,6 +99,7 @@ from slice_runner.infrastructure.local_call_trace import LocalCallTrace
 from slice_runner.infrastructure.local_control_runner import LocalControlRunner
 from slice_runner.infrastructure.local_conversation_log import LocalConversationLog
 from slice_runner.infrastructure.local_corpus import LocalCorpus
+from slice_runner.infrastructure.local_debt_ledger import LocalDebtLedger
 from slice_runner.infrastructure.local_event_log import LocalEventLog
 from slice_runner.infrastructure.local_metrics_log import LocalMetricsLog
 from slice_runner.infrastructure.local_plugin_registry import LocalPluginRegistry
@@ -582,6 +583,7 @@ class Cli:
         machine = StateMachine(budgets=self._budgets)
         reader = ProcessSourceReader(process=self._process, budgets=self._budgets)
         corpus = LocalCorpus(clock=clock)
+        debt_ledger = LocalDebtLedger(clock=clock)
         calls = HarnessInvocationRunner(
             process=self._process,
             telemetry=HarnessTelemetry(
@@ -600,6 +602,7 @@ class Cli:
                 implement=ImplementSlice(
                     implementer=ClaudeImplementer(calls=calls, reader=reader),
                     reader=GitDiffReader(process=self._process),
+                    debt_ledger=debt_ledger,
                 ),
                 stage=StageSlice(workspace=workspace),
                 run_controls=RunControls(controls=LocalControlRunner(process=self._process)),
@@ -612,6 +615,7 @@ class Cli:
                     repository=repository,
                     spend_log=LocalCallSpendLog(clock=clock),
                     corpus=corpus,
+                    debt_ledger=debt_ledger,
                 ),
                 read_ci=ReadCiStatus(ci=GhCi(call=gh_call), forum=forum),
                 read_pull_request=ReadPullRequestStatus(forum=forum),

@@ -122,7 +122,7 @@ class ClosedSliceRecordMother:
             spend=spend,
             variant=variant,
             models=models,
-            debt=0,
+            declared_debt=None,
             diff=diff,
             budgets={},
             models_by_role={},

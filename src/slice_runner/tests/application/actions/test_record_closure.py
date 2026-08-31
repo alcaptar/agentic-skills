@@ -8,6 +8,7 @@ from slice_runner.domain.budgets import Budgets
 from slice_runner.domain.call_spend_log import CallSpendLog
 from slice_runner.domain.canonical_slice_id import CanonicalSliceId
 from slice_runner.domain.corpus import Corpus
+from slice_runner.domain.debt_ledger import DebtDeclaration, DebtLedger
 from slice_runner.domain.diff_stats import DiffStats
 from slice_runner.domain.harness_spend import HarnessSpend
 from slice_runner.domain.metrics_log import MetricsLog
@@ -42,11 +43,17 @@ class _Closer:
         self.corpus: Mock = create_autospec(Corpus, spec_set=True, instance=True)
         self.corpus.size_of_the_last_verification.return_value = None
         self.corpus.rounds_of_the_slice.return_value = ()
+        self.debt_ledger: Mock = create_autospec(DebtLedger, spec_set=True, instance=True)
+        self.debt_ledger.declarations_of_the_slice.return_value = ()
 
     @property
     def action(self) -> RecordClosure:
         return RecordClosure(
-            metrics=self.metrics, repository=self.repository, spend_log=self.spend_log, corpus=self.corpus
+            metrics=self.metrics,
+            repository=self.repository,
+            spend_log=self.spend_log,
+            corpus=self.corpus,
+            debt_ledger=self.debt_ledger,
         )
 
     def close(self, **overrides: object) -> ClosedSlice:
@@ -97,20 +104,6 @@ class TestTheRowItWrites:
         written = closer.close(discarded_call=discarded)
 
         assert written.discarded_call == discarded
-
-    def test_what_the_implementer_declared_left_out_reaches_the_row(self) -> None:
-        closer = _Closer()
-
-        written = closer.close(debt=("no cubri el caso de un binario",))
-
-        assert written.debt == ("no cubri el caso de un binario",)
-
-    def test_a_run_with_nothing_left_out_writes_an_empty_debt_instead_of_omitting_it(self) -> None:
-        closer = _Closer()
-
-        written = closer.close()
-
-        assert written.debt == ()
 
     def test_the_size_of_the_diff_measured_at_the_last_verify_reaches_the_row(self) -> None:
         closer = _Closer()
@@ -294,3 +287,60 @@ class TestPublishingTheVetoFindings:
         closer.close(state=RunState.MERGED)
 
         closer.repository.publish_findings.assert_not_called()
+
+
+class TestTheDebtThatReachesTheRow:
+    def test_what_the_ledger_holds_reaches_the_row_and_not_a_debt_carried_by_the_params(self) -> None:
+        closer = _Closer()
+        closer.debt_ledger.declarations_of_the_slice.return_value = (
+            DebtDeclaration(left_out=("no cubri el caso de un binario",)),
+        )
+
+        written = closer.close()
+
+        assert written.debt.left_out == ("no cubri el caso de un binario",)
+
+    def test_a_closure_whose_invocation_implemented_nothing_still_closes_with_what_the_ledger_already_had(
+        self,
+    ) -> None:
+        closer = _Closer()
+        closer.debt_ledger.declarations_of_the_slice.return_value = (
+            DebtDeclaration(left_out=("no cubri el caso de un binario",)),
+        )
+
+        written = closer.close()
+
+        assert (written.debt.declared, written.debt.left_out) == (True, ("no cubri el caso de un binario",))
+
+    def test_two_rounds_that_declared_different_gaps_both_reach_the_row(self) -> None:
+        closer = _Closer()
+        closer.debt_ledger.declarations_of_the_slice.return_value = (
+            DebtDeclaration(left_out=("no cubri el caso de un binario",)),
+            DebtDeclaration(left_out=("falta el caso de rename",)),
+        )
+
+        written = closer.close()
+
+        assert written.debt.left_out == ("no cubri el caso de un binario", "falta el caso de rename")
+
+    def test_a_declaration_that_explicitly_left_nothing_out_writes_declared_debt_with_no_items(self) -> None:
+        closer = _Closer()
+        closer.debt_ledger.declarations_of_the_slice.return_value = (DebtDeclaration(left_out=()),)
+
+        written = closer.close()
+
+        assert (written.debt.declared, written.debt.left_out) == (True, ())
+
+    def test_a_slice_whose_declaration_was_never_written_closes_with_nothing_declared(self) -> None:
+        closer = _Closer()
+
+        written = closer.close()
+
+        assert (written.debt.declared, written.debt.left_out) == (False, ())
+
+    def test_the_debt_is_asked_from_the_ledger_and_not_from_a_field_carried_in_memory(self) -> None:
+        closer = _Closer()
+
+        closer.close()
+
+        closer.debt_ledger.declarations_of_the_slice.assert_called_once_with(_COORDINATES)
