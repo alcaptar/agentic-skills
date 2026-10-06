@@ -23,6 +23,7 @@ class ExitCode(IntEnum):
     ENVIRONMENT_NOT_READY = 13
     SOURCES_BUDGET_EXCEEDED = 14
     UNCHANGED_DIFF = 15
+    NO_UNDERSTANDING = 16
 
     @classmethod
     def of(cls, ruling: Ruling) -> ExitCode:

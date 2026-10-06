@@ -1,0 +1,13 @@
+{
+  "optional": [],
+  "examples": [
+    {
+      "version": 1,
+      "text": "El contador vive en Run y no en el conductor."
+    },
+    {
+      "version": 1,
+      "text": "Primera linea.\n\nSegunda linea tras un parrafo."
+    }
+  ]
+}

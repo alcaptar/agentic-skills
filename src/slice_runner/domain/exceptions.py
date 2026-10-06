@@ -84,6 +84,10 @@ class UnreadableIssueError(ValueError):
     pass
 
 
+class NoUnderstandingPublishedError(LookupError):
+    pass
+
+
 class UnreadableForumError(ValueError):
     pass
 

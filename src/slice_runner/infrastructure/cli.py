@@ -36,6 +36,7 @@ from slice_runner.application.queries.list_closed_slices import ListClosedSlices
 from slice_runner.application.queries.read_ci_status import ReadCiStatus
 from slice_runner.application.queries.read_conversation import ReadConversation, ReadConversationParams
 from slice_runner.application.queries.read_pull_request_status import ReadPullRequestStatus
+from slice_runner.application.queries.read_understanding import ReadUnderstanding, ReadUnderstandingParams
 from slice_runner.application.queries.run_prechecks import RunPrechecks
 from slice_runner.application.queries.select_slice import SelectSlice
 from slice_runner.application.queries.show_feature_status import ShowFeatureStatus, ShowFeatureStatusParams
@@ -58,6 +59,7 @@ from slice_runner.domain.exceptions import (
     NoPullRequestError,
     NoRecognizableSpecError,
     NoSliceLeftError,
+    NoUnderstandingPublishedError,
     ProtectedBranchError,
     RunNotClosedError,
     SourcesBudgetExceededError,
@@ -135,6 +137,7 @@ from slice_runner.infrastructure.system_clock import SystemClock
 from slice_runner.infrastructure.transition_payload import TransitionPayload
 from slice_runner.infrastructure.transition_request_payload import TransitionRequestPayload
 from slice_runner.infrastructure.understanding_invocation import UnderstandingInvocation
+from slice_runner.infrastructure.understanding_line_payload import UnderstandingLinePayload
 from slice_runner.infrastructure.uv_program_origin import UvProgramOrigin
 from slice_runner.infrastructure.verdict_payload import VerdictPayload
 
@@ -230,6 +233,10 @@ class Cli:
                     as_json=arguments.json,
                     reader=LocalEventReader(),
                     clock=SystemClock(),
+                )
+            case Subcommand.UNDERSTANDING:
+                result = cls(process=LocalProcess(budgets=budgets), budgets=budgets).understanding(
+                    repo=arguments.repo, issue=arguments.issue, as_json=arguments.json
                 )
 
         return result
@@ -366,6 +373,14 @@ class Cli:
         follow.add_argument("--repo", help="keep only the events of this repo, as `<org>/<repo>`")
         follow.add_argument("--once", action="store_true", help="print the snapshot and exit")
         follow.add_argument("--json", action="store_true", help="print each event as a JSON object")
+
+        understanding = subcommands.add_parser(
+            Subcommand.UNDERSTANDING,
+            help="print the last understanding published in a subissue, answered or not, reading only",
+        )
+        understanding.add_argument("issue", type=int, help="number of the subissue whose understanding is shown")
+        understanding.add_argument("--repo", required=True, help="repo of the subissue, as `<org>/<repo>`")
+        understanding.add_argument("--json", action="store_true", help="print the understanding as a JSON object")
 
         return parser
 
@@ -620,6 +635,26 @@ class Cli:
             return self._reported(f"the status of the feature could not be read: {error}", ExitCode.RUN_INTERRUPTED)
 
         print(FeatureStatusReport(statuses=statuses).rendered())
+
+        return ExitCode.OK
+
+    def understanding(self, *, repo: str, issue: int, as_json: bool) -> int:
+        try:
+            text = ReadUnderstanding(repository=GhRunRepository(call=self._gh_call(clock=SystemClock()))).execute(
+                ReadUnderstandingParams(repo=repo, issue=issue)
+            )
+        except NoUnderstandingPublishedError as error:
+            return self._reported(str(error), ExitCode.NO_UNDERSTANDING)
+        except UnreadableIssueError as error:
+            return self._reported(f"the understanding could not be read: {error}", ExitCode.USAGE_ERROR)
+        except GhCommandFailedError as error:
+            return self._reported(f"the understanding could not be read: {error}", ExitCode.RUN_INTERRUPTED)
+
+        print(
+            json.dumps(UnderstandingLinePayload.from_domain(text).to_contract(), ensure_ascii=False)
+            if as_json
+            else text
+        )
 
         return ExitCode.OK
 
