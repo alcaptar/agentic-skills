@@ -136,8 +136,9 @@ sola al mergear.
   anterior, la skill `/slice-runner` lo lee, elige una slice y reescribe **solo su linea** en cada
   transicion; en el flujo que conduce hoy una slice, el programa etiqueta la subissue en cada
   transicion (ver el diagrama de "El flujo de un cambio"). `deploy-watch` comenta el veredicto en los
-  dos flujos. No hay estado local, ni ledger, ni panel: nada que se desincronice o que haya que
-  descartar.
+  dos flujos. No hay estado local ni ledger: nada que se desincronice o que haya que
+  descartar. El panel de `panel/` tampoco guarda estado: solo lee la salida de `slice-runner follow --json`
+  y se rehace de cero en cada arranque.
 - **El issue tambien declara la vara.** Sus secciones `## Fuentes de convencion` y `## Controles`
   (descubiertas por los helpers, **confirmadas por una persona**) son lo que fija con que se mide este
   repo. En tiempo de ejecucion ningun agente abre un `Makefile`: si esas secciones faltan,
@@ -330,6 +331,7 @@ El codigo de salida es el contrato con quien lo invoca:
 | `13` | `doctor`: el entorno no esta listo para conducir una slice -falta `git`, `gh` no esta autenticado, falta `claude`, falta alguna de las skills `slice-spec`/`deploy-watch`, o el binario instalado y las skills enlazadas vienen de arboles distintos-. Distinto de `4`: la invocacion estaba bien escrita, lo que falta es el entorno |
 | `14` | Las fuentes de convencion declaradas, ya leidas, se pasan del tope de tamano del presupuesto: no se mando ningun prompt. Distinto de `8`: eso para antes de leer nada, esto se descubre sumando contenido ya leido, y reinvocar sin reducir lo declarado repite el mismo cierre |
 | `15` | `run`: el juez ya habia dictaminado sobre este mismo diff en esta invocacion y el implementador no lo movio en la vuelta siguiente, asi que no se le volvio a invocar (el veredicto sobre el mismo diff no puede cambiar). La subissue queda `bloqueada:sin-cambios` y un comentario junta lo que el juez sigue exigiendo con lo que el implementador declaro haber dejado fuera. Distinto de `5`: reinvocar a ciegas repite el cierre, hay que resolver el desacuerdo -o cambiar criterios y reabrir con `-RETRY`, que si vuelve a juzgar- |
+| `16` | `understanding`: la subissue no tiene ningun entendimiento publicado, asi que no hay nada que ensenar todavia. La invocacion esta bien escrita y la subissue existe: quien invoca espera y vuelve a preguntar, no corrige nada. Distinto de `4`, donde la invocacion o la subissue estan mal |
 
 `1` es un veredicto y `2` no lo es: esa es la distincion que hace el codigo de salida y que un booleano
 perderia. Del `5` en adelante la pregunta es otra -¿que hace quien invoca ahora?-, y por eso hay un codigo

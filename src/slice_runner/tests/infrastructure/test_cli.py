@@ -30,6 +30,7 @@ from slice_runner.infrastructure.deploy_watch_invocation import DeployWatchInvoc
 from slice_runner.infrastructure.durable_ledger import DurableLedger
 from slice_runner.infrastructure.event_payload import EventPayload
 from slice_runner.infrastructure.exit_code import ExitCode
+from slice_runner.infrastructure.gh_run_repository import GhRunRepository
 from slice_runner.infrastructure.harness_call_payload import HarnessCallPayload
 from slice_runner.infrastructure.implementer_invocation import ImplementerInvocation
 from slice_runner.infrastructure.judge_invocation import JudgeInvocation
@@ -40,6 +41,7 @@ from slice_runner.infrastructure.local_metrics_log import LocalMetricsLog
 from slice_runner.infrastructure.metrics_entry_payload import MetricsEntryPayload
 from slice_runner.infrastructure.reset_comment import ResetComment
 from slice_runner.infrastructure.system_clock import SystemClock
+from slice_runner.infrastructure.understanding_comment import UnderstandingComment
 from slice_runner.infrastructure.understanding_invocation import UnderstandingInvocation
 from slice_runner.infrastructure.uv_program_origin import UvProgramOrigin
 from slice_runner.infrastructure.veto_findings_comment import VetoFindingsComment
@@ -48,6 +50,7 @@ from slice_runner.tests.doubles import (
     Answer,
     AnsweringByArgv,
     AnsweringByArgvWithADiffThatMoves,
+    GhCallDoubles,
     ProcessDoubles,
     RealExceptTheJudge,
     ScriptedEventReader,
@@ -3153,3 +3156,74 @@ class TestTheCommandThatFollowsTheEvents(WithTheDurableStoresOutOfTheRealHome):
         assert code == ExitCode.USAGE_ERROR
         assert output.out == ""
         assert "not JSON" in output.err
+
+
+class TestTheCommandThatReadsTheUnderstanding:
+    _REPO = "alcaptar/agentic-skills"
+    _ISSUE = 45
+
+    @classmethod
+    def _process(cls, bodies: list[str]) -> AnsweringByArgv:
+        template = GhResponseMother.subissue_comments()[0]
+        payload = {"comments": [{**template, "body": body} for body in bodies]}
+
+        return AnsweringByArgv(Answer(to=("issue", "view", "--json", "comments"), stdout=json.dumps(payload)))
+
+    def test_it_prints_one_json_line_with_the_version_and_the_last_understanding_even_when_it_was_answered(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        process = self._process(
+            [
+                UnderstandingComment.rendered("el primero"),
+                "-REVIEW usa Run",
+                UnderstandingComment.rendered("el ultimo"),
+                "-GO",
+            ]
+        )
+
+        code = Cli(process=process, budgets=Budgets()).understanding(repo=self._REPO, issue=self._ISSUE, as_json=True)
+
+        assert code == ExitCode.OK
+        assert json.loads(capsys.readouterr().out) == {"version": 1, "text": "el ultimo"}
+
+    def test_without_the_json_flag_it_prints_the_text_alone(self, capsys: pytest.CaptureFixture[str]) -> None:
+        process = self._process([UnderstandingComment.rendered("el contador vive en Run")])
+
+        Cli(process=process, budgets=Budgets()).understanding(repo=self._REPO, issue=self._ISSUE, as_json=False)
+
+        assert capsys.readouterr().out == "el contador vive en Run\n"
+
+    def test_a_subissue_without_any_understanding_exits_with_its_own_code_and_says_why_only_on_stderr(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        process = self._process(["un comentario cualquiera", "-GO"])
+
+        code = Cli(process=process, budgets=Budgets()).understanding(repo=self._REPO, issue=self._ISSUE, as_json=True)
+
+        captured = capsys.readouterr()
+        assert code == ExitCode.NO_UNDERSTANDING
+        assert captured.out == ""
+        assert str(self._ISSUE) in captured.err
+
+    def test_it_prints_the_same_text_the_run_reads_from_the_same_subissue(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        bodies = [
+            UnderstandingComment.rendered("el primero"),
+            "-REVIEW usa Run",
+            UnderstandingComment.rendered("el ultimo"),
+        ]
+        read_by_the_run = GhRunRepository(call=GhCallDoubles.wired(self._process(bodies))).read_understanding(
+            repo=self._REPO, issue=self._ISSUE
+        )
+
+        Cli(process=self._process(bodies), budgets=Budgets()).understanding(
+            repo=self._REPO, issue=self._ISSUE, as_json=True
+        )
+
+        assert json.loads(capsys.readouterr().out)["text"] == read_by_the_run
+
+    def test_it_parses_with_the_subissue_as_a_positional_and_the_repo_and_json_as_flags(self) -> None:
+        arguments = Cli.parser().parse_args(["understanding", "45", "--repo", "alcaptar/agentic-skills", "--json"])
+
+        assert (arguments.issue, arguments.repo, arguments.json) == (45, "alcaptar/agentic-skills", True)

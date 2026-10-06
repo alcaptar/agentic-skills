@@ -8,6 +8,7 @@ from slice_runner.domain.issue_label import IssueLabel
 from slice_runner.domain.slice_status import SliceStatus
 from slice_runner.infrastructure.event_follow_line_payload import EventFollowLinePayload
 from slice_runner.infrastructure.slice_status_line_payload import SliceStatusLinePayload
+from slice_runner.infrastructure.understanding_line_payload import UnderstandingLinePayload
 from slice_runner.tests.mothers.closed_slice_record_mother import ClosedSliceRecordMother
 from slice_runner.tests.mothers.event_mother import EventMother
 from slice_runner.tests.mothers.harness_spend_mother import HarnessSpendMother
@@ -96,3 +97,11 @@ class TestTheStatusLineAgainstItsExamples(TheLineAgainstItsExamples):
         )
 
         return [SliceStatusLinePayload.from_domain(status).to_contract() for status in statuses]
+
+
+class TestTheUnderstandingLineAgainstItsExamples(TheLineAgainstItsExamples):
+    _CONTRACT: ClassVar[Path] = Path(__file__).resolve().parents[4] / "contract" / "understanding-line.json"
+
+    @staticmethod
+    def _emitted() -> list[dict[str, object]]:
+        return [UnderstandingLinePayload.from_domain(text).to_contract() for text in ("el contador vive en Run", "")]
