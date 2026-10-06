@@ -12,6 +12,7 @@ from unittest.mock import Mock, create_autospec
 import pytest
 
 from slice_runner.domain.budgets import Budgets
+from slice_runner.domain.call_spend_log import HarnessCallSpend
 from slice_runner.domain.call_trace import HarnessCall
 from slice_runner.domain.canonical_slice_id import CanonicalSliceId
 from slice_runner.domain.clock import Clock
@@ -74,7 +75,6 @@ from slice_runner.tests.run_invocation import RunInvocation
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from slice_runner.domain.call_spend_log import HarnessCallSpend
     from slice_runner.domain.closed_slice import ClosedSlice
     from slice_runner.domain.run import Run
 
@@ -2622,7 +2622,7 @@ class TestTheCommandThatResetsASlice:
         assert code == ExitCode.USAGE_ERROR
 
 
-class TestTheCommandThatShowsFeatureStatus:
+class TheFeatureBeingShown:
     _REPO = "alcaptar/agentic-skills"
     _ISSUE = 38
 
@@ -2655,6 +2655,8 @@ class TestTheCommandThatShowsFeatureStatus:
             "title": title,
         }
 
+
+class TestTheCommandThatShowsFeatureStatus(TheFeatureBeingShown):
     def test_it_exits_with_zero_and_prints_one_line_per_slice(self, capsys: pytest.CaptureFixture[str]) -> None:
         code = Cli(process=self._process(), budgets=Budgets()).status(repo=self._REPO, issue=self._ISSUE)
 
@@ -2766,15 +2768,10 @@ class TestTheCommandThatShowsFeatureStatus:
         assert capsys.readouterr().err == ""
 
 
-class TestTheCommandThatShowsFeatureStatusAsJson:
-    _REPO = "alcaptar/agentic-skills"
-    _ISSUE = 38
-
-    @staticmethod
-    def _process(
-        *, children: list[dict[str, object]] | None = None, pull_requests: list[dict[str, object]] | None = None
-    ) -> AnsweringByArgv:
-        return TestTheCommandThatShowsFeatureStatus._process(children=children, pull_requests=pull_requests)
+class TestTheCommandThatShowsFeatureStatusAsJson(TheFeatureBeingShown):
+    @pytest.fixture(autouse=True)
+    def toolbox(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
 
     @staticmethod
     def _printed(capsys: pytest.CaptureFixture[str]) -> list[dict[str, object]]:
@@ -2826,6 +2823,38 @@ class TestTheCommandThatShowsFeatureStatusAsJson:
         printed = self._printed_by(capsys)
 
         assert (printed["slice-01"]["closed"], printed["slice-02"]["closed"]) == (True, False)
+
+    def test_each_slice_carries_the_label_of_its_state(self, capsys: pytest.CaptureFixture[str]) -> None:
+        printed = self._printed_by(capsys)
+
+        assert printed["slice-01"]["label"] == IssueLabel.IN_PROGRESS.value
+        assert printed["slice-02"]["label"] == IssueLabel.PENDING.value
+
+    def test_a_slice_with_a_run_carries_the_cost_measured_in_its_calls(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        coordinates = SliceCoordinates(repo=self._REPO, issue=50, slice_id=CanonicalSliceId.of_text("slice-01"))
+        call = HarnessCallSpend(
+            coordinates=coordinates,
+            session=HarnessEnvelopeMother.SESSION_OF_THE_IMPLEMENTER,
+            spend=HarnessSpendMother.of_the_implementer_call(),
+        )
+        LocalCallSpendLog(clock=SystemClock()).record(call)
+
+        printed = self._printed_by(capsys)
+
+        assert printed["slice-01"]["cost_usd"] == pytest.approx(HarnessSpendMother.of_the_implementer_call().cost_usd)
+        assert "cost_usd" not in printed["slice-02"]
+
+    def test_a_slice_without_a_run_carries_the_cost_its_closure_left_in_the_registry(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        LocalMetricsLog(clock=SystemClock()).record(ClosedSliceMother.merged_for_issue(49))
+
+        printed = self._printed_by(capsys)
+
+        assert printed["slice-02"]["cost_usd"] == pytest.approx(HarnessSpendMother.of_the_implementer_call().cost_usd)
+        assert "cost_usd" not in printed["slice-01"]
 
     def test_a_response_gh_cannot_read_writes_nothing_on_standard_output(
         self, capsys: pytest.CaptureFixture[str]

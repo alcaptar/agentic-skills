@@ -6,7 +6,7 @@
       "slice_id": "slice-03",
       "name": "una-feature-se-lee-entera",
       "issue": 473,
-      "label": "awaiting-merge",
+      "label": "estado:esperando-merge",
       "closed": false,
       "cost_usd": 1.2345,
       "pull_request": 480
