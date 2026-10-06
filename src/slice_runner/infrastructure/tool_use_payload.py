@@ -16,11 +16,12 @@ class ToolUsePayload(ContractModel):
     turn: int
     tool: str
     path: str | None = None
+    command: str | None = None
     failed: bool | None = None
 
     @classmethod
     def from_domain(cls, use: ToolUse) -> Self:
-        return cls(turn=use.turn, tool=use.tool, path=use.path, failed=use.failed or None)
+        return cls(turn=use.turn, tool=use.tool, path=use.path, command=use.command, failed=use.failed or None)
 
 
 class CallToolUsePayload(StampedRow):

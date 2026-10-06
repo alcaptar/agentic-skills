@@ -13,6 +13,7 @@ class ToolCall:
     summary: str
     result: str | None
     path: str | None
+    command: str | None
     failed: bool = False
 
 

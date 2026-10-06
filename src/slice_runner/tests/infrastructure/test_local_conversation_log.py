@@ -145,6 +145,24 @@ class TestThePathATurnTouched:
 
         assert conversation.turns[0].tool_calls[0].path is None
 
+    def test_a_bash_tool_use_carries_the_command_it_ran(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
+        self._conversation_with("Bash", {"command": "ls"}, tmp_path=tmp_path)
+
+        conversation = LocalConversationLog().read(session="path-session", worktree=_WORKTREE)
+
+        assert conversation.turns[0].tool_calls[0].command == "ls"
+
+    def test_a_tool_use_that_is_not_bash_carries_its_path_and_no_command(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
+        self._conversation_with("Read", {"file_path": "src/x.py"}, tmp_path=tmp_path)
+
+        call = LocalConversationLog().read(session="path-session", worktree=_WORKTREE).turns[0].tool_calls[0]
+
+        assert (call.path, call.command) == ("src/x.py", None)
+
 
 class TestWhereTheConversationLives:
     def test_a_worktree_whose_path_carries_dots_is_still_found_where_the_harness_keeps_it(
