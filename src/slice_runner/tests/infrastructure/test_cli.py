@@ -12,6 +12,7 @@ from unittest.mock import Mock, create_autospec
 import pytest
 
 from slice_runner.domain.budgets import Budgets
+from slice_runner.domain.call_spend_log import HarnessCallSpend
 from slice_runner.domain.call_trace import HarnessCall
 from slice_runner.domain.canonical_slice_id import CanonicalSliceId
 from slice_runner.domain.clock import Clock
@@ -77,7 +78,6 @@ from slice_runner.tests.run_invocation import RunInvocation
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from slice_runner.domain.call_spend_log import HarnessCallSpend
     from slice_runner.domain.closed_slice import ClosedSlice
     from slice_runner.domain.run import Run
 
@@ -2672,7 +2672,7 @@ class TestTheCommandThatResetsASlice:
         assert code == ExitCode.USAGE_ERROR
 
 
-class TestTheCommandThatShowsFeatureStatus:
+class TheFeatureBeingShown:
     _REPO = "alcaptar/agentic-skills"
     _ISSUE = 38
 
@@ -2705,6 +2705,8 @@ class TestTheCommandThatShowsFeatureStatus:
             "title": title,
         }
 
+
+class TestTheCommandThatShowsFeatureStatus(TheFeatureBeingShown):
     def test_it_exits_with_zero_and_prints_one_line_per_slice(self, capsys: pytest.CaptureFixture[str]) -> None:
         code = Cli(process=self._process(), budgets=Budgets()).status(repo=self._REPO, issue=self._ISSUE)
 
@@ -2816,11 +2818,118 @@ class TestTheCommandThatShowsFeatureStatus:
         assert capsys.readouterr().err == ""
 
 
+class TestTheCommandThatShowsFeatureStatusAsJson(TheFeatureBeingShown):
+    @pytest.fixture(autouse=True)
+    def toolbox(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
+
+    @staticmethod
+    def _printed(capsys: pytest.CaptureFixture[str]) -> list[dict[str, object]]:
+        return [json.loads(line) for line in capsys.readouterr().out.splitlines()]
+
+    @classmethod
+    def _printed_by(
+        cls,
+        capsys: pytest.CaptureFixture[str],
+        *,
+        children: list[dict[str, object]] | None = None,
+        pull_requests: list[dict[str, object]] | None = None,
+    ) -> dict[str, dict[str, object]]:
+        process = cls._process(children=children, pull_requests=pull_requests)
+        Cli(process=process, budgets=Budgets()).status(repo=cls._REPO, issue=cls._ISSUE, as_json=True)
+
+        return {str(line["slice_id"]): line for line in cls._printed(capsys)}
+
+    def test_it_exits_with_zero_and_prints_one_json_line_per_slice(self, capsys: pytest.CaptureFixture[str]) -> None:
+        code = Cli(process=self._process(), budgets=Budgets()).status(repo=self._REPO, issue=self._ISSUE, as_json=True)
+
+        assert code == ExitCode.OK
+        assert [line["slice_id"] for line in self._printed(capsys)] == ["slice-01", "slice-02"]
+
+    def test_a_slice_that_never_ran_still_says_who_it_is_and_that_it_is_open(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        printed = self._printed_by(capsys)
+
+        slice_02 = printed["slice-02"]
+        assert slice_02["version"] == 1
+        assert slice_02["name"] == "segunda-de-prueba"
+        assert slice_02["issue"] == 49
+        assert slice_02["closed"] is False
+        assert "cost_usd" not in slice_02
+        assert "pull_request" not in slice_02
+
+    def test_the_pull_request_of_a_branch_is_in_its_own_slice_only(self, capsys: pytest.CaptureFixture[str]) -> None:
+        pull_requests = [{"number": 47, "headRefName": "slice/01-primera-de-prueba"}]
+
+        printed = self._printed_by(capsys, pull_requests=pull_requests)
+
+        assert printed["slice-01"]["pull_request"] == 47
+        assert "pull_request" not in printed["slice-02"]
+
+    def test_a_closed_subissue_is_reported_as_closed_and_an_open_one_as_open(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        printed = self._printed_by(capsys)
+
+        assert (printed["slice-01"]["closed"], printed["slice-02"]["closed"]) == (True, False)
+
+    def test_each_slice_carries_the_label_of_its_state(self, capsys: pytest.CaptureFixture[str]) -> None:
+        printed = self._printed_by(capsys)
+
+        assert printed["slice-01"]["label"] == IssueLabel.IN_PROGRESS.value
+        assert printed["slice-02"]["label"] == IssueLabel.PENDING.value
+
+    def test_a_slice_with_a_run_carries_the_cost_measured_in_its_calls(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        coordinates = SliceCoordinates(repo=self._REPO, issue=50, slice_id=CanonicalSliceId.of_text("slice-01"))
+        call = HarnessCallSpend(
+            coordinates=coordinates,
+            session=HarnessEnvelopeMother.SESSION_OF_THE_IMPLEMENTER,
+            spend=HarnessSpendMother.of_the_implementer_call(),
+        )
+        LocalCallSpendLog(clock=SystemClock()).record(call)
+
+        printed = self._printed_by(capsys)
+
+        assert printed["slice-01"]["cost_usd"] == pytest.approx(HarnessSpendMother.of_the_implementer_call().cost_usd)
+        assert "cost_usd" not in printed["slice-02"]
+
+    def test_a_slice_without_a_run_carries_the_cost_its_closure_left_in_the_registry(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        LocalMetricsLog(clock=SystemClock()).record(ClosedSliceMother.merged_for_issue(49))
+
+        printed = self._printed_by(capsys)
+
+        assert printed["slice-02"]["cost_usd"] == pytest.approx(HarnessSpendMother.of_the_implementer_call().cost_usd)
+        assert "cost_usd" not in printed["slice-01"]
+
+    def test_a_response_gh_cannot_read_writes_nothing_on_standard_output(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        process = AnsweringByArgv(Answer(to=("view",), stdout="not json"))
+
+        code = Cli(process=process, budgets=Budgets()).status(repo=self._REPO, issue=self._ISSUE, as_json=True)
+
+        assert code == ExitCode.USAGE_ERROR
+        output = capsys.readouterr()
+        assert output.out == ""
+        assert output.err != ""
+
+
 class TestTheStatusCommandParsing:
     def test_it_parses_with_the_issue_as_a_positional_and_the_repo_as_a_flag(self) -> None:
         arguments = Cli.parser().parse_args(["status", "38", "--repo", "alcaptar/agentic-skills"])
 
         assert (arguments.issue, arguments.repo) == (38, "alcaptar/agentic-skills")
+
+    def test_json_is_off_unless_asked_for(self) -> None:
+        plain = Cli.parser().parse_args(["status", "38", "--repo", "alcaptar/agentic-skills"])
+        asked = Cli.parser().parse_args(["status", "38", "--repo", "alcaptar/agentic-skills", "--json"])
+
+        assert (plain.json, asked.json) == (False, True)
 
     def test_the_repo_has_no_default_because_a_guessed_one_reads_another_issue(
         self, capsys: pytest.CaptureFixture[str]

@@ -75,9 +75,11 @@ PYTEST_ARGS ?=
 
 test:
 	uv run pytest -q $(PYTEST_ARGS)
+	uv run --project panel pytest -q panel
 
 check-types:
 	uv run mypy skills tests src
+	cd panel && uv run mypy src
 
 check-style:
 	uv run ruff check .
