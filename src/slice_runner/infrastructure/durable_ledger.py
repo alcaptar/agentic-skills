@@ -71,6 +71,26 @@ class ReadableDurableLedger(DurableLedger[_Read]):
 
         return self._row.from_dict(latest) if latest is not None else None
 
+    def rows_from(self, offset: int) -> tuple[tuple[_Read, ...], int]:
+        ledger = self.path()
+        if not ledger.exists():
+            return (), offset
+
+        with ledger.open("rb") as stream:
+            stream.seek(offset)
+            pending = stream.read()
+
+        rows: list[_Read] = []
+        position = offset
+        for raw in pending.splitlines(keepends=True):
+            if not raw.endswith(b"\n"):
+                break
+            if raw.strip():
+                rows.append(self._row.from_dict(self._decoded(raw.decode("utf-8"), f"offset {position}")))
+            position += len(raw)
+
+        return tuple(rows), position
+
     @staticmethod
     def _anything(data: dict[str, object]) -> bool:
         return True
@@ -84,7 +104,7 @@ class ReadableDurableLedger(DurableLedger[_Read]):
             if line.strip():
                 yield number, line
 
-    def _decoded(self, line: str, number: int) -> dict[str, object]:
+    def _decoded(self, line: str, number: int | str) -> dict[str, object]:
         try:
             data = json.loads(line)
         except json.JSONDecodeError as error:

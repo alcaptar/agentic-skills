@@ -1009,8 +1009,8 @@ class _ResumedAwaitingTheCi:
 
 class TestConductSliceCatchesUpTheBranchWhenTheCiFindsAConflict(_ResumedAwaitingTheCi):
     def test_a_conflict_found_by_the_ci_is_caught_up_instead_of_closing_the_run(self) -> None:
-        conductor = self._conductor(budgets=Budgets(ci_wait_seconds=30))
-        conductor.ci.status.side_effect = [CiStatus.NO_CHECKS, CiStatus.PENDING]
+        conductor = self._conductor(budgets=Budgets(ci_wait_seconds=60))
+        conductor.ci.status.side_effect = [CiStatus.NO_CHECKS, CiStatus.PENDING, CiStatus.PENDING]
         conductor.forum.pull_request_state.return_value = PullRequestStatusMother.open_and_conflicting()
 
         result = conductor.conduct()
@@ -1028,8 +1028,8 @@ class TestConductSliceCatchesUpTheBranchWhenTheCiFindsAConflict(_ResumedAwaiting
         assert (conductor.implement.execute.call_count, conductor.verify.execute.call_count) == (0, 0)
 
     def test_a_catch_up_that_reaches_a_passing_round_commits_it_exactly_once(self) -> None:
-        conductor = self._conductor(budgets=Budgets(ci_wait_seconds=30))
-        conductor.ci.status.side_effect = [CiStatus.NO_CHECKS, CiStatus.PENDING]
+        conductor = self._conductor(budgets=Budgets(ci_wait_seconds=60))
+        conductor.ci.status.side_effect = [CiStatus.NO_CHECKS, CiStatus.PENDING, CiStatus.PENDING]
         conductor.forum.pull_request_state.return_value = PullRequestStatusMother.open_and_conflicting()
 
         conductor.conduct()
@@ -1082,8 +1082,8 @@ class TestConductSliceCatchesUpTheBranchWhenTheCiFindsAConflict(_ResumedAwaiting
         assert result.state is RunState.BLOCKED_CI_CONFLICT
 
     def test_a_control_round_that_fails_after_the_catch_up_still_sends_the_repaired_round_to_the_judge(self) -> None:
-        conductor = self._conductor(budgets=Budgets(ci_wait_seconds=30))
-        conductor.ci.status.side_effect = [CiStatus.NO_CHECKS, CiStatus.PENDING]
+        conductor = self._conductor(budgets=Budgets(ci_wait_seconds=60))
+        conductor.ci.status.side_effect = [CiStatus.NO_CHECKS, CiStatus.PENDING, CiStatus.PENDING]
         conductor.forum.pull_request_state.return_value = PullRequestStatusMother.open_and_conflicting()
         conductor.controls.run.side_effect = [ControlOutcomeMother.red(), ControlOutcomeMother.green()]
 
@@ -1094,8 +1094,8 @@ class TestConductSliceCatchesUpTheBranchWhenTheCiFindsAConflict(_ResumedAwaiting
     def test_a_control_round_that_fails_after_the_catch_up_still_commits_the_round_that_finally_passes(
         self,
     ) -> None:
-        conductor = self._conductor(budgets=Budgets(ci_wait_seconds=30))
-        conductor.ci.status.side_effect = [CiStatus.NO_CHECKS, CiStatus.PENDING]
+        conductor = self._conductor(budgets=Budgets(ci_wait_seconds=60))
+        conductor.ci.status.side_effect = [CiStatus.NO_CHECKS, CiStatus.PENDING, CiStatus.PENDING]
         conductor.forum.pull_request_state.return_value = PullRequestStatusMother.open_and_conflicting()
         conductor.controls.run.side_effect = [ControlOutcomeMother.red(), ControlOutcomeMother.green()]
 
@@ -1439,6 +1439,24 @@ class TestConductSliceReportingEvents:
 
         emitted = conductor.emitted_events
         assert (emitted[-1].step, emitted[-1].status) == (Step.AWAIT_MERGE, EventStatus.AWAITING_PERSON)
+
+    def test_an_alignment_with_no_response_yet_reports_awaiting_a_person_because_the_go_is_a_human_decision(
+        self,
+    ) -> None:
+        conductor = Conductor(
+            chosen=SelectSliceResultMother.about_to_start(
+                subissue=SubIssueMother.carrying(IssueLabel.AWAITING_ALIGNMENT)
+            ),
+            budgets=Budgets(person_wait_seconds=30),
+        )
+        conductor.repository.read_alignment_response.return_value = AlignmentResponse(
+            kind=AlignmentResponseKind.NOT_YET
+        )
+
+        conductor.conduct()
+
+        emitted = conductor.emitted_events
+        assert (emitted[-1].step, emitted[-1].status) == (Step.UNDERSTAND, EventStatus.AWAITING_PERSON)
 
     def test_a_pending_ci_reports_waiting_because_no_person_is_deciding_anything_yet(self) -> None:
         conductor = Conductor(

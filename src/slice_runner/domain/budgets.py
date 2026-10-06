@@ -4,10 +4,11 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from slice_runner.domain.cost_exhaustion import CostExhaustion
-from slice_runner.domain.step import Step
+from slice_runner.domain.waiting_on import WaitingOn
 
 if TYPE_CHECKING:
     from slice_runner.domain.harness_spend import HarnessSpend
+    from slice_runner.domain.step import Step
 
 
 @dataclass(frozen=True, kw_only=True, slots=True)
@@ -19,6 +20,7 @@ class Budgets:
     catch_up_retries: int = 3
     indeterminate_ticks: int = 10
     seconds_between_ticks: int = 30
+    seconds_between_follow_reads: int = 5
     ci_wait_seconds: int = 1800
     person_wait_seconds: int = 28800
     process_timeout_seconds: int = 3600
@@ -34,10 +36,10 @@ class Budgets:
         return waited_seconds >= self.waiting_room_of(step)
 
     def waiting_room_of(self, step: Step) -> int:
-        if step is Step.AWAIT_CI:
-            return self.ci_wait_seconds
+        if WaitingOn.of_the_step(step) is WaitingOn.PERSON:
+            return self.person_wait_seconds
 
-        return self.person_wait_seconds
+        return self.ci_wait_seconds
 
     def exhausted(self, total: HarnessSpend) -> bool:
         return total.cost_usd >= self.slice_cost_usd

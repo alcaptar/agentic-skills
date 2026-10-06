@@ -152,6 +152,7 @@ class TestNoDurableStoreWritesAKeyInSpanish(ReadingTheLedger):
             "budgets.catch_up_retries",
             "budgets.indeterminate_ticks",
             "budgets.seconds_between_ticks",
+            "budgets.seconds_between_follow_reads",
             "budgets.ci_wait_seconds",
             "budgets.person_wait_seconds",
             "budgets.process_timeout_seconds",
