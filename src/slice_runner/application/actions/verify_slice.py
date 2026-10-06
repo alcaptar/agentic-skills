@@ -4,7 +4,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from slice_runner.domain.canonical_slice_id import CanonicalSliceId
 from slice_runner.domain.corpus_entry import CorpusEntry
+from slice_runner.domain.exceptions import UnchangedDiffError
+from slice_runner.domain.slice_coordinates import SliceCoordinates
 from slice_runner.domain.slice_under_review import SliceUnderReview
 
 if TYPE_CHECKING:
@@ -36,6 +39,7 @@ class VerifySliceParams:
     checklist: tuple[ChecklistEntry, ...]
     prior_findings: tuple[Finding, ...]
     debt: tuple[str, ...]
+    compares_with_the_last_verification: bool
 
 
 class VerifySlice:
@@ -50,6 +54,12 @@ class VerifySlice:
 
     def execute(self, params: VerifySliceParams) -> Verification:
         diff = self._reader.read(worktree=params.worktree, base=params.base)
+        if params.compares_with_the_last_verification and diff.repeats(self._last_fingerprint_of(params)):
+            raise UnchangedDiffError(
+                f"the diff of {params.slice_id} is identical to the one the judge already ruled on: "
+                "the implementer left it untouched since"
+            )
+
         verification = self._verifier.verify(
             self._judge_reading(params.worktree),
             SliceUnderReview(
@@ -83,6 +93,11 @@ class VerifySlice:
         )
 
         return verification
+
+    def _last_fingerprint_of(self, params: VerifySliceParams) -> str | None:
+        return self._corpus.fingerprint_of_the_last_verification(
+            SliceCoordinates(repo=params.repo, issue=params.issue, slice_id=CanonicalSliceId.of_text(params.slice_id))
+        )
 
     def _judge_reading(self, worktree: str) -> Judge:
         return self._judge.also_reading(Path(worktree), *self._skills.directories())

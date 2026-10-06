@@ -710,6 +710,7 @@ class Cli:
             checklist=(),
             prior_findings=(),
             debt=(),
+            compares_with_the_last_verification=False,
         )
 
     @staticmethod

@@ -70,6 +70,7 @@ class TestTheRecordThatIsWritten(WithTheDurableStoresOutOfTheRealHome):
                     "lines_deleted": SliceDiffMother.STATS.lines_deleted,
                 },
                 "prior_findings_given": CorpusEntryMother.PRIOR_FINDINGS_GIVEN,
+                "diff_fingerprint": SliceDiffMother.of_the_slice().fingerprint,
                 "ts": _STAMP.isoformat(),
             }
         ]
@@ -250,6 +251,57 @@ class TestTheSizeOfTheLastVerification(AskingTheCorpusAboutOneSlice):
         )
 
         assert corpus.size_of_the_last_verification(self._coordinates()) is None
+
+
+class TestTheFingerprintOfTheLastVerification(AskingTheCorpusAboutOneSlice):
+    def test_a_slice_with_no_verification_recorded_answers_with_nothing(self) -> None:
+        corpus = LocalCorpus(clock=self.frozen_at())
+
+        assert corpus.fingerprint_of_the_last_verification(self._coordinates()) is None
+
+    def test_two_rounds_answer_with_the_fingerprint_of_the_diff_of_the_last_one(self) -> None:
+        corpus = LocalCorpus(clock=self.frozen_at())
+        first = SliceDiffMother.of_the_slice(text="first")
+        last = SliceDiffMother.of_the_slice(text="last")
+
+        corpus.record(CorpusEntryMother.of_the_slice(verify_round=1, diff=first))
+        corpus.record(CorpusEntryMother.of_the_slice(verify_round=2, diff=last))
+
+        assert corpus.fingerprint_of_the_last_verification(self._coordinates()) == last.fingerprint
+
+    def test_two_diffs_that_differ_in_one_byte_have_different_fingerprints(self) -> None:
+        corpus = LocalCorpus(clock=self.frozen_at())
+        corpus.record(CorpusEntryMother.of_the_slice(diff=SliceDiffMother.of_the_slice(text="return 2\n")))
+
+        assert corpus.fingerprint_of_the_last_verification(self._coordinates()) != (
+            SliceDiffMother.of_the_slice(text="return 3\n").fingerprint
+        )
+
+    def test_a_verification_of_a_different_slice_is_left_out(self) -> None:
+        corpus = LocalCorpus(clock=self.frozen_at())
+
+        corpus.record(CorpusEntryMother.of_the_slice(slice_id="slice-99"))
+
+        assert corpus.fingerprint_of_the_last_verification(self._coordinates()) is None
+
+    def test_a_row_written_before_the_fingerprint_existed_has_nothing_to_compare_with(self, tmp_path: Path) -> None:
+        stats = DiffStats(files_changed=3, lines_added=40, lines_deleted=12)
+        ledger = tmp_path / "slice-runner" / "runs" / "verdicts.jsonl"
+        ledger.parent.mkdir(parents=True)
+        row = self._verdict_row_written_before_the_pronouncement_existed(stats=stats)
+        ledger.write_text(json.dumps(row) + "\n", encoding="utf-8")
+
+        assert LocalCorpus(clock=self.frozen_at()).fingerprint_of_the_last_verification(self._coordinates()) is None
+
+    def test_answering_it_never_needs_to_load_the_heavy_diff_ledger(self, tmp_path: Path) -> None:
+        corpus = LocalCorpus(clock=self.frozen_at())
+        corpus.record(CorpusEntryMother.of_the_slice())
+        (tmp_path / "slice-runner" / "runs" / "diffs.jsonl").write_text("not json\n", encoding="utf-8")
+
+        assert (
+            corpus.fingerprint_of_the_last_verification(self._coordinates())
+            == SliceDiffMother.of_the_slice().fingerprint
+        )
 
 
 class TestTheRoundsOfTheSlice(AskingTheCorpusAboutOneSlice):

@@ -7,11 +7,13 @@ from unittest.mock import Mock, create_autospec
 
 import pytest
 
-from slice_runner.application.actions.verify_slice import VerifySlice
+from slice_runner.application.actions.verify_slice import VerifySlice, VerifySliceParams
+from slice_runner.domain.canonical_slice_id import CanonicalSliceId
 from slice_runner.domain.corpus import Corpus
 from slice_runner.domain.diff_reader import DiffReader
-from slice_runner.domain.exceptions import DiffNotReadableError
+from slice_runner.domain.exceptions import DiffNotReadableError, UnchangedDiffError
 from slice_runner.domain.skill_library import SkillLibrary
+from slice_runner.domain.slice_coordinates import SliceCoordinates
 from slice_runner.domain.verifier import Verifier
 from slice_runner.tests.mothers.verdict_mother import FindingMother, VerdictMother
 from slice_runner.tests.mothers.verification_mother import (
@@ -243,3 +245,90 @@ class TestVerifySlice:
             action.execute(_PARAMS)
 
         verifier.verify.assert_not_called()
+
+
+class TestVerifySliceComparingWithTheLastVerification:
+    @pytest.fixture
+    def reader(self) -> Mock:
+        reader: Mock = create_autospec(DiffReader, spec_set=True, instance=True)
+        reader.read.return_value = _DIFF
+        return reader
+
+    @pytest.fixture
+    def verifier(self) -> Mock:
+        verifier: Mock = create_autospec(Verifier, spec_set=True, instance=True)
+        verifier.verify.return_value = VerificationMother.passing()
+        return verifier
+
+    @pytest.fixture
+    def corpus(self) -> Mock:
+        corpus: Mock = create_autospec(Corpus, spec_set=True, instance=True)
+        corpus.fingerprint_of_the_last_verification.return_value = _DIFF.fingerprint
+        return corpus
+
+    @pytest.fixture
+    def action(self, reader: Mock, verifier: Mock, corpus: Mock) -> VerifySlice:
+        skills: Mock = create_autospec(SkillLibrary, spec_set=True, instance=True)
+        skills.directories.return_value = _YARDSTICK
+
+        return VerifySlice(
+            reader=reader, verifier=verifier, judge=JudgeMother.adversarial(), skills=skills, corpus=corpus
+        )
+
+    @staticmethod
+    def _comparing() -> VerifySliceParams:
+        return replace(_PARAMS, compares_with_the_last_verification=True)
+
+    def test_a_diff_identical_to_the_one_last_judged_is_refused_before_the_judge_is_invoked(
+        self, action: VerifySlice, verifier: Mock
+    ) -> None:
+        with pytest.raises(UnchangedDiffError):
+            action.execute(self._comparing())
+
+        verifier.verify.assert_not_called()
+
+    def test_a_diff_that_was_not_judged_leaves_no_row_in_the_corpus(self, action: VerifySlice, corpus: Mock) -> None:
+        with pytest.raises(UnchangedDiffError):
+            action.execute(self._comparing())
+
+        corpus.record.assert_not_called()
+
+    def test_the_last_verification_is_asked_for_under_the_slice_that_was_asked_for(
+        self, action: VerifySlice, corpus: Mock
+    ) -> None:
+        with pytest.raises(UnchangedDiffError):
+            action.execute(self._comparing())
+
+        corpus.fingerprint_of_the_last_verification.assert_called_once_with(
+            SliceCoordinates(
+                repo=_PARAMS.repo, issue=_PARAMS.issue, slice_id=CanonicalSliceId.of_text(_PARAMS.slice_id)
+            )
+        )
+
+    def test_a_diff_that_differs_in_a_single_byte_is_judged_again(
+        self, action: VerifySlice, reader: Mock, verifier: Mock
+    ) -> None:
+        reader.read.return_value = SliceDiffMother.of_the_slice(
+            files=_DIFF.files, text=_DIFF.text.replace("return 2", "return 3")
+        )
+
+        action.execute(self._comparing())
+
+        verifier.verify.assert_called_once()
+
+    def test_a_slice_with_no_verification_before_has_nothing_to_compare_with_and_is_judged(
+        self, action: VerifySlice, corpus: Mock, verifier: Mock
+    ) -> None:
+        corpus.fingerprint_of_the_last_verification.return_value = None
+
+        action.execute(self._comparing())
+
+        verifier.verify.assert_called_once()
+
+    def test_an_invocation_that_did_not_judge_before_judges_even_an_identical_diff(
+        self, action: VerifySlice, corpus: Mock, verifier: Mock
+    ) -> None:
+        action.execute(_PARAMS)
+
+        verifier.verify.assert_called_once()
+        corpus.fingerprint_of_the_last_verification.assert_not_called()

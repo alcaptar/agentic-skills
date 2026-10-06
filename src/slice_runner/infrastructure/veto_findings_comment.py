@@ -9,6 +9,7 @@ from slice_runner.infrastructure.automation_mark import AutomationMark
 from slice_runner.infrastructure.published_finding_payload import PublishedFindingPayload
 
 if TYPE_CHECKING:
+    from slice_runner.domain.declared_debt import DeclaredDebt
     from slice_runner.domain.finding import Finding
     from slice_runner.domain.findings_history import FindingsHistory, GroupedFinding
 
@@ -18,7 +19,7 @@ class VetoFindingsComment:
     _BLOCK: ClassVar[re.Pattern[str]] = re.compile(r"<!-- slice-runner:hallazgos-json\n(.*?)\n-->", re.DOTALL)
 
     @classmethod
-    def rendered(cls, history: FindingsHistory) -> str:
+    def rendered(cls, history: FindingsHistory, debt: DeclaredDebt) -> str:
         numbered = tuple(enumerate(history.entries, start=1))
         standing = tuple(
             (index, entry) for index, entry in numbered if entry.seen_in_the_last_round(history.last_round)
@@ -34,6 +35,8 @@ class VetoFindingsComment:
             sections.append(
                 cls._section("Hallazgos de rondas anteriores que no reaparecieron en la ultima ronda", not_standing)
             )
+        if debt.left_out:
+            sections.append(cls._left_out(debt))
         sections.append(cls._block(numbered))
         sections.append(cls.MARKER)
         sections.append(AutomationMark.TEXT)
@@ -80,6 +83,12 @@ class VetoFindingsComment:
             f"  - ronda {appearance.round} ({appearance.finding.severity}): {appearance.finding.evidence}"
             for appearance in entry.appearances
         ]
+
+    @staticmethod
+    def _left_out(debt: DeclaredDebt) -> str:
+        return "\n".join(
+            ["## Lo que declaro el implementador haber dejado fuera", *(f"- {item}" for item in debt.left_out)]
+        )
 
     @classmethod
     def _block(cls, numbered: tuple[tuple[int, GroupedFinding], ...]) -> str:

@@ -70,6 +70,7 @@ class StateMachine:
                 IssueLabel.BLOCKED_CONTROLS
                 | IssueLabel.BLOCKED_HYGIENE
                 | IssueLabel.BLOCKED_VERIFY
+                | IssueLabel.BLOCKED_UNCHANGED_DIFF
                 | IssueLabel.BLOCKED_CI_RED
                 | IssueLabel.BLOCKED_CI_INDETERMINATE
                 | IssueLabel.BLOCKED_CI_CONFLICT
@@ -90,6 +91,7 @@ class StateMachine:
             IssueLabel.BLOCKED_CONTROLS,
             IssueLabel.BLOCKED_HYGIENE,
             IssueLabel.BLOCKED_VERIFY,
+            IssueLabel.BLOCKED_UNCHANGED_DIFF,
             IssueLabel.BLOCKED_CI_RED,
             IssueLabel.BLOCKED_CI_INDETERMINATE,
             IssueLabel.BLOCKED_CI_CONFLICT,
@@ -100,7 +102,7 @@ class StateMachine:
                 return replace(run, control_retries=0)
             case IssueLabel.BLOCKED_HYGIENE:
                 return replace(run, hygiene_retries=0)
-            case IssueLabel.BLOCKED_VERIFY:
+            case IssueLabel.BLOCKED_VERIFY | IssueLabel.BLOCKED_UNCHANGED_DIFF:
                 return replace(run, verify_retries=0)
             case IssueLabel.BLOCKED_CI_RED:
                 return replace(run, ci_retries=0)
@@ -234,6 +236,8 @@ class StateMachine:
                 return self._moving_to(replace(run, verify_discards=run.verify_discards + 1), Step.VERIFY)
             case Outcome.FAILED:
                 return self._retrying_a_veto(self._logged_a_verify_round(run))
+            case Outcome.UNCHANGED:
+                return self._closed(run, RunState.BLOCKED_UNCHANGED_DIFF)
             case Outcome.CALL_NOT_MEASURED:
                 return self._closed(self._marking_a_dead_call(run, call_died), RunState.ABORTED_UNMEASURED_CALL)
             case _:

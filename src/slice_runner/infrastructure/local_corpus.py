@@ -35,6 +35,11 @@ class LocalCorpus(Corpus):
 
         return latest.diff_stats.to_domain() if latest is not None else None
 
+    def fingerprint_of_the_last_verification(self, coordinates: SliceCoordinates) -> str | None:
+        latest = self._verdicts.last_row_where(lambda data: CorpusVerdictPayload.may_belong_to(data, coordinates))
+
+        return latest.diff_fingerprint if latest is not None else None
+
     def rounds_of_the_slice(self, coordinates: SliceCoordinates) -> tuple[JudgedRound, ...]:
         last_row_of: dict[int, CorpusVerdictPayload] = {}
         for row in self._verdicts.rows_where(lambda data: CorpusVerdictPayload.may_belong_to(data, coordinates)):

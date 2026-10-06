@@ -29,6 +29,7 @@ from slice_runner.infrastructure.veto_findings_comment import VetoFindingsCommen
 if TYPE_CHECKING:
     from datetime import datetime
 
+    from slice_runner.domain.declared_debt import DeclaredDebt
     from slice_runner.domain.finding import Finding
     from slice_runner.domain.findings_history import FindingsHistory
     from slice_runner.domain.malformed_reason import MalformedReason
@@ -267,10 +268,10 @@ class GhRunRepository(RunRepository):
             safe_to_repeat=False,
         )
 
-    def publish_findings(self, *, repo: str, issue: int, history: FindingsHistory) -> None:
+    def publish_findings(self, *, repo: str, issue: int, history: FindingsHistory, debt: DeclaredDebt) -> None:
         self._run(
             ["gh", "issue", "comment", str(issue), "--repo", repo, "--body-file", "-"],
-            stdin=VetoFindingsComment.rendered(history),
+            stdin=VetoFindingsComment.rendered(history, debt),
             safe_to_repeat=False,
         )
 

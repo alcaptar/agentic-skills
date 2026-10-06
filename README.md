@@ -329,6 +329,7 @@ El codigo de salida es el contrato con quien lo invoca:
 | `12` | Una llamada a un proceso externo agoto su tope por llamada y se mato, asi que no hay respuesta que interpretar. Reinvocar a ciegas vuelve a pagar el tope entero: primero hay que mirar **que** se colgo |
 | `13` | `doctor`: el entorno no esta listo para conducir una slice -falta `git`, `gh` no esta autenticado, falta `claude`, falta alguna de las skills `slice-spec`/`deploy-watch`, o el binario instalado y las skills enlazadas vienen de arboles distintos-. Distinto de `4`: la invocacion estaba bien escrita, lo que falta es el entorno |
 | `14` | Las fuentes de convencion declaradas, ya leidas, se pasan del tope de tamano del presupuesto: no se mando ningun prompt. Distinto de `8`: eso para antes de leer nada, esto se descubre sumando contenido ya leido, y reinvocar sin reducir lo declarado repite el mismo cierre |
+| `15` | `run`: el juez ya habia dictaminado sobre este mismo diff en esta invocacion y el implementador no lo movio en la vuelta siguiente, asi que no se le volvio a invocar (el veredicto sobre el mismo diff no puede cambiar). La subissue queda `bloqueada:sin-cambios` y un comentario junta lo que el juez sigue exigiendo con lo que el implementador declaro haber dejado fuera. Distinto de `5`: reinvocar a ciegas repite el cierre, hay que resolver el desacuerdo -o cambiar criterios y reabrir con `-RETRY`, que si vuelve a juzgar- |
 
 `1` es un veredicto y `2` no lo es: esa es la distincion que hace el codigo de salida y que un booleano
 perderia. Del `5` en adelante la pregunta es otra -¿que hace quien invoca ahora?-, y por eso hay un codigo
@@ -441,7 +442,7 @@ los controles verdes -> **commit de esa vuelta** -> juzga el diff con `claude -p
 verde -> etiqueta la subissue `estado:esperando-merge` y **para**.
 
 Si algo se rompe, la etiqueta lo dice y el run para en vez de seguir: `bloqueada:controles`,
-`bloqueada:verify`, `bloqueada:ci-roja`, `bloqueada:ci-indeterminada`, `bloqueada:conflicto`,
+`bloqueada:verify`, `bloqueada:sin-cambios`, `bloqueada:ci-roja`, `bloqueada:ci-indeterminada`, `bloqueada:conflicto`,
 `abortada:presupuesto` o `abortada:llamada-no-medida`.
 
 **3. Mergear, o pedir un cambio (tu)**

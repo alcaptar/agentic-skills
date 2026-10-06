@@ -10,6 +10,7 @@ from slice_runner.domain.alignment_response_kind import AlignmentResponseKind
 from slice_runner.domain.budgets import Budgets
 from slice_runner.domain.control_command import ControlCommand
 from slice_runner.domain.controls import Controls
+from slice_runner.domain.declared_debt import DeclaredDebt
 from slice_runner.domain.exceptions import (
     EmptyIssueBodyError,
     LaggingSearchIndexError,
@@ -1591,16 +1592,21 @@ class TestPublishingTheVetoFindings:
         process = ScriptedProcess(ProcessOutput(code=0, stdout="", stderr=""))
         history = FindingsHistoryMother.of_a_single_round(FindingMother.without_line())
 
-        GhRunRepository(call=GhCallDoubles.wired(process)).publish_findings(repo=_REPO, issue=45, history=history)
+        GhRunRepository(call=GhCallDoubles.wired(process)).publish_findings(
+            repo=_REPO, issue=45, history=history, debt=DeclaredDebt.nothing()
+        )
 
         assert process.calls[0].argv == ["gh", "issue", "comment", "45", "--repo", _REPO, "--body-file", "-"]
-        assert process.calls[0].stdin == VetoFindingsComment.rendered(history)
+        assert process.calls[0].stdin == VetoFindingsComment.rendered(history, DeclaredDebt.nothing())
 
     def test_the_comment_carries_the_marker_that_lets_a_later_read_find_it_back(self) -> None:
         process = ScriptedProcess(ProcessOutput(code=0, stdout="", stderr=""))
 
         GhRunRepository(call=GhCallDoubles.wired(process)).publish_findings(
-            repo=_REPO, issue=45, history=FindingsHistoryMother.of_a_single_round(FindingMother.without_line())
+            repo=_REPO,
+            issue=45,
+            history=FindingsHistoryMother.of_a_single_round(FindingMother.without_line()),
+            debt=DeclaredDebt.nothing(),
         )
 
         assert VetoFindingsComment.MARKER in process.calls[0].stdin
@@ -1609,7 +1615,10 @@ class TestPublishingTheVetoFindings:
         process = ScriptedProcess(ProcessOutput(code=0, stdout="", stderr=""))
 
         GhRunRepository(call=GhCallDoubles.wired(process)).publish_findings(
-            repo=_REPO, issue=45, history=FindingsHistoryMother.of_a_single_round(FindingMother.without_line())
+            repo=_REPO,
+            issue=45,
+            history=FindingsHistoryMother.of_a_single_round(FindingMother.without_line()),
+            debt=DeclaredDebt.nothing(),
         )
 
         assert AutomationMark.TEXT in process.calls[0].stdin
@@ -1619,7 +1628,10 @@ class TestPublishingTheVetoFindings:
 
         with pytest.raises(GhCommandFailedError, match="HTTP 422"):
             GhRunRepository(call=GhCallDoubles.wired(process)).publish_findings(
-                repo=_REPO, issue=45, history=FindingsHistoryMother.of_a_single_round(FindingMother.without_line())
+                repo=_REPO,
+                issue=45,
+                history=FindingsHistoryMother.of_a_single_round(FindingMother.without_line()),
+                debt=DeclaredDebt.nothing(),
             )
 
 
@@ -1670,7 +1682,9 @@ class TestFindingAVetoFinding:
 
     def test_a_finding_is_located_by_its_id_from_the_comment_alone_with_no_verdict_object_in_sight(self) -> None:
         finding = FindingMother.without_line()
-        process = self._process([VetoFindingsComment.rendered(FindingsHistoryMother.of_a_single_round(finding))])
+        process = self._process(
+            [VetoFindingsComment.rendered(FindingsHistoryMother.of_a_single_round(finding), DeclaredDebt.nothing())]
+        )
 
         located = GhRunRepository(call=GhCallDoubles.wired(process)).find_finding(repo=_REPO, issue=45, finding_id="f1")
 
@@ -1685,7 +1699,11 @@ class TestFindingAVetoFinding:
 
     def test_an_unknown_id_inside_a_published_comment_resolves_to_none(self) -> None:
         process = self._process(
-            [VetoFindingsComment.rendered(FindingsHistoryMother.of_a_single_round(FindingMother.without_line()))]
+            [
+                VetoFindingsComment.rendered(
+                    FindingsHistoryMother.of_a_single_round(FindingMother.without_line()), DeclaredDebt.nothing()
+                )
+            ]
         )
 
         located = GhRunRepository(call=GhCallDoubles.wired(process)).find_finding(repo=_REPO, issue=45, finding_id="f9")
@@ -1696,7 +1714,12 @@ class TestFindingAVetoFinding:
         old = FindingsHistoryMother.of_a_single_round(FindingMother.without_line(), FindingMother.low_severity())
         new_finding = FindingMother.with_line()
         new = FindingsHistoryMother.of_a_single_round(new_finding)
-        process = self._process([VetoFindingsComment.rendered(old), VetoFindingsComment.rendered(new)])
+        process = self._process(
+            [
+                VetoFindingsComment.rendered(old, DeclaredDebt.nothing()),
+                VetoFindingsComment.rendered(new, DeclaredDebt.nothing()),
+            ]
+        )
 
         located = GhRunRepository(call=GhCallDoubles.wired(process)).find_finding(repo=_REPO, issue=45, finding_id="f1")
 
@@ -1705,7 +1728,12 @@ class TestFindingAVetoFinding:
     def test_an_id_that_only_a_prior_verdict_published_stops_resolving_once_a_new_one_is_published(self) -> None:
         old = FindingsHistoryMother.of_a_single_round(FindingMother.without_line(), FindingMother.low_severity())
         new = FindingsHistoryMother.of_a_single_round(FindingMother.with_line())
-        process = self._process([VetoFindingsComment.rendered(old), VetoFindingsComment.rendered(new)])
+        process = self._process(
+            [
+                VetoFindingsComment.rendered(old, DeclaredDebt.nothing()),
+                VetoFindingsComment.rendered(new, DeclaredDebt.nothing()),
+            ]
+        )
 
         located = GhRunRepository(call=GhCallDoubles.wired(process)).find_finding(repo=_REPO, issue=45, finding_id="f2")
 

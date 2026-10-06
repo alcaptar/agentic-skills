@@ -191,6 +191,7 @@ class TestNoDurableStoreWritesAKeyInSpanish(ReadingTheLedger):
             "verdict.findings.evidence",
             "verdict.findings.detail",
             "verdict.findings.line",
+            "diff_fingerprint",
             "verdict.prior_rulings",
             "verdict.prior_rulings.id",
             "verdict.prior_rulings.state",

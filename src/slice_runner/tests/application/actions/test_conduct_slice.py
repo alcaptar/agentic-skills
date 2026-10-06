@@ -21,6 +21,7 @@ from slice_runner.domain.exceptions import (
     MissingBranchError,
     NoPullRequestError,
     NoSliceLeftError,
+    UnchangedDiffError,
     UnreadableCiError,
 )
 from slice_runner.domain.halt import Halt
@@ -2070,6 +2071,73 @@ class TestConductSliceWhenTheJudgeSpeaks:
         conductor.conduct()
 
         assert conductor.metrics.record.call_args.args[0].discarded_call.cause is DiscardCause.FAILED_CALL
+
+
+class TestConductSliceWhenTheImplementerMovedNothing:
+    @staticmethod
+    def _conductor() -> Conductor:
+        conductor = Conductor(
+            chosen=SelectSliceResultMother.resumed_at(RunMother.judging()), budgets=Budgets(verify_retries=2)
+        )
+        conductor.verify.execute.side_effect = [
+            VerificationMother.vetoing(VerdictMother.failing(FindingMother.without_line())),
+            UnchangedDiffError("the implementer left the diff untouched"),
+        ]
+        conductor.seed_verdict(round=1, verdict=VerdictMother.failing(FindingMother.without_line()))
+
+        return conductor
+
+    def test_the_first_verification_of_an_invocation_has_nothing_to_compare_with_and_the_next_one_compares(
+        self,
+    ) -> None:
+        conductor = self._conductor()
+
+        conductor.conduct()
+
+        compares = [
+            call.args[0].compares_with_the_last_verification for call in conductor.verify.execute.call_args_list
+        ]
+        assert compares == [False, True]
+
+    def test_the_run_closes_with_a_state_of_its_own_instead_of_asking_the_implementer_again(self) -> None:
+        conductor = self._conductor()
+
+        result = conductor.conduct()
+
+        assert result.state is RunState.BLOCKED_UNCHANGED_DIFF
+        assert conductor.implement.execute.call_count == 1
+
+    def test_the_issue_is_labelled_with_a_label_of_its_own_and_not_the_one_of_a_veto(self) -> None:
+        conductor = self._conductor()
+
+        conductor.conduct()
+
+        conductor.repository.write_label.assert_called_once_with(
+            repo=Conductor.REPO,
+            issue=_SUBISSUE,
+            remove=IssueLabel.IN_PROGRESS,
+            add=IssueLabel.BLOCKED_UNCHANGED_DIFF,
+        )
+
+    def test_the_round_that_was_not_judged_is_not_counted_as_a_verify_round_nor_as_a_retry(self) -> None:
+        conductor = self._conductor()
+
+        conductor.conduct()
+
+        run = conductor.closed.run
+        assert (run.verify_rounds_logged, run.verify_retries) == (1, 1)
+
+    def test_the_closure_publishes_what_the_judge_still_demands_and_what_the_implementer_declared_left_out(
+        self,
+    ) -> None:
+        conductor = self._conductor()
+        conductor.seed_debt(left_out=("el cableado del subcomando queda para otra slice",))
+
+        conductor.conduct()
+
+        publication = conductor.repository.publish_findings.call_args.kwargs
+        assert publication["history"].last_round == 1
+        assert publication["debt"].left_out == ("el cableado del subcomando queda para otra slice",)
 
 
 class TestConductSliceWhenTheCostOfTheSliceRunsOut:

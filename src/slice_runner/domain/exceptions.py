@@ -68,6 +68,10 @@ class DirtyIndexError(ValueError):
     pass
 
 
+class UnchangedDiffError(ValueError):
+    pass
+
+
 class ProtectedBranchError(ValueError):
     pass
 

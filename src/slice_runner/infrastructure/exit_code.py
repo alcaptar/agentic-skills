@@ -22,6 +22,7 @@ class ExitCode(IntEnum):
     PROCESS_TIMED_OUT = 12
     ENVIRONMENT_NOT_READY = 13
     SOURCES_BUDGET_EXCEEDED = 14
+    UNCHANGED_DIFF = 15
 
     @classmethod
     def of(cls, ruling: Ruling) -> ExitCode:
@@ -48,6 +49,8 @@ class ExitCode(IntEnum):
         match state:
             case RunState.MERGED:
                 return cls.OK
+            case RunState.BLOCKED_UNCHANGED_DIFF:
+                return cls.UNCHANGED_DIFF
             case (
                 RunState.OPEN
                 | RunState.BLOCKED_CONTROLS

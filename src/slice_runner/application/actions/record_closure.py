@@ -59,6 +59,7 @@ class RecordClosure:
     def execute(self, params: RecordClosureParams) -> None:
         spend = self._spend_of(params)
         history = self._history_of(params)
+        debt = self._debt_of(params)
         self._metrics.record(
             ClosedSlice(
                 repo=params.repo,
@@ -76,12 +77,12 @@ class RecordClosure:
                 ),
                 discarded_call=params.discarded_call,
                 ci_indeterminate_cause=params.ci_indeterminate_cause,
-                debt=self._debt_of(params),
+                debt=debt,
                 diff_stats=self._size_of(params),
             )
         )
-        if params.state is RunState.BLOCKED_VERIFY and not history.is_empty:
-            self._repository.publish_findings(repo=params.repo, issue=params.issue, history=history)
+        if params.state.publishes_the_findings and not history.is_empty:
+            self._repository.publish_findings(repo=params.repo, issue=params.issue, history=history, debt=debt)
         if params.state is RunState.BLOCKED_CI_CONFLICT and params.conflicting_paths:
             self._repository.publish_catch_up_conflict(
                 repo=params.repo, issue=params.issue, paths=params.conflicting_paths
