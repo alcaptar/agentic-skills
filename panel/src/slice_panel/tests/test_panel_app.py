@@ -1,13 +1,16 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from textual.widgets import Static, Tree
 
 from slice_panel.domain.follow_ended import FollowEnded
 from slice_panel.infrastructure.panel_app import PanelApp
-from slice_panel.tests.doubles import ScriptedFollowSource
+from slice_panel.infrastructure.slice_runner_commands import SliceRunnerCommands
+from slice_panel.tests.doubles import RecordingLauncher, ScriptedFollowSource
 from slice_panel.tests.mothers.follow_line_mother import FollowLineMother
+from slice_panel.tests.mothers.status_output_mother import StatusOutputMother
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -15,6 +18,9 @@ if TYPE_CHECKING:
     from textual.pilot import Pilot
 
     from slice_panel.domain.follow_line import FollowLine
+
+
+CLONE_ROOT = Path("/work/clone")
 
 
 class OnScreen:
@@ -26,6 +32,27 @@ class OnScreen:
     @staticmethod
     def source_of(lines: Sequence[FollowLine], ended: FollowEnded | None = None) -> ScriptedFollowSource:
         return ScriptedFollowSource(lines=lines, ended=ended)
+
+    @staticmethod
+    def launcher_that_knows_the_waiting_slice() -> RecordingLauncher:
+        waiting = FollowLineMother.awaiting_person()
+        argv = SliceRunnerCommands.understanding(repo=waiting.repo, issue=waiting.issue)
+
+        return RecordingLauncher({argv: StatusOutputMother.a_long_understanding()})
+
+    @classmethod
+    def panel(
+        cls,
+        lines: Sequence[FollowLine],
+        ended: FollowEnded | None = None,
+        launcher: RecordingLauncher | None = None,
+    ) -> PanelApp:
+        return PanelApp(
+            source=cls.source_of(lines, ended),
+            launcher=launcher or cls.launcher_that_knows_the_waiting_slice(),
+            clone_root=CLONE_ROOT,
+            repo=FollowLineMother.REPO,
+        )
 
     @staticmethod
     def tree_lines(pilot: Pilot[None]) -> list[str]:
@@ -55,7 +82,7 @@ class TestTheFeaturesOnTheLeft(OnScreen):
             FollowLineMother.of_another_feature(),
             FollowLineMother.awaiting_person(),
         ]
-        async with PanelApp(source=self.source_of(lines)).run_test() as pilot:
+        async with self.panel(lines).run_test() as pilot:
             await self.settled(pilot)
 
             shown = self.tree_lines(pilot)
@@ -65,7 +92,7 @@ class TestTheFeaturesOnTheLeft(OnScreen):
 
     async def test_the_lines_without_a_parent_get_a_group_of_their_own(self) -> None:
         lines = [FollowLineMother.advancing_without_the_feature()]
-        async with PanelApp(source=self.source_of(lines)).run_test() as pilot:
+        async with self.panel(lines).run_test() as pilot:
             await self.settled(pilot)
 
             shown = self.tree_lines(pilot)
@@ -75,7 +102,7 @@ class TestTheFeaturesOnTheLeft(OnScreen):
 
     async def test_a_slice_keeps_its_last_known_parent_when_a_later_line_comes_without_one(self) -> None:
         lines = [FollowLineMother.advancing(), FollowLineMother.advancing_without_the_feature()]
-        async with PanelApp(source=self.source_of(lines)).run_test() as pilot:
+        async with self.panel(lines).run_test() as pilot:
             await self.settled(pilot)
 
             shown = self.tree_lines(pilot)
@@ -86,7 +113,7 @@ class TestTheFeaturesOnTheLeft(OnScreen):
 
     async def test_a_slice_shows_the_status_of_its_latest_line_whatever_the_order_they_arrive_in(self) -> None:
         lines = [FollowLineMother.closed(), FollowLineMother.advancing()]
-        async with PanelApp(source=self.source_of(lines)).run_test() as pilot:
+        async with self.panel(lines).run_test() as pilot:
             await self.settled(pilot)
 
             shown = self.tree_lines(pilot)
@@ -101,7 +128,7 @@ class TestTheSlicesThatWaitForAPerson(OnScreen):
             FollowLineMother.awaiting_person(),
             FollowLineMother.waiting_for_a_machine(),
         ]
-        async with PanelApp(source=self.source_of(lines)).run_test() as pilot:
+        async with self.panel(lines).run_test() as pilot:
             await self.settled(pilot)
 
             shown = self.tree_lines(pilot)
@@ -112,7 +139,7 @@ class TestTheSlicesThatWaitForAPerson(OnScreen):
 
     async def test_a_slice_that_stopped_waiting_for_a_person_loses_the_mark(self) -> None:
         lines = [FollowLineMother.awaiting_person(), FollowLineMother.after_the_person_answered()]
-        async with PanelApp(source=self.source_of(lines)).run_test() as pilot:
+        async with self.panel(lines).run_test() as pilot:
             await self.settled(pilot)
 
             shown = self.tree_lines(pilot)
@@ -123,7 +150,7 @@ class TestTheSlicesThatWaitForAPerson(OnScreen):
 class TestTheDetailOnTheRight(OnScreen):
     async def test_the_selected_slice_shows_its_status_step_spend_and_latest_events(self) -> None:
         lines = [FollowLineMother.advancing(), FollowLineMother.closed()]
-        async with PanelApp(source=self.source_of(lines)).run_test() as pilot:
+        async with self.panel(lines).run_test() as pilot:
             await self.settled(pilot)
 
             detail = self.detail(pilot)
@@ -137,7 +164,7 @@ class TestTheDetailOnTheRight(OnScreen):
 
     async def test_moving_the_cursor_to_another_slice_shows_the_detail_of_that_one(self) -> None:
         lines = [FollowLineMother.advancing(), FollowLineMother.awaiting_person()]
-        async with PanelApp(source=self.source_of(lines)).run_test() as pilot:
+        async with self.panel(lines).run_test() as pilot:
             await self.settled(pilot)
             await pilot.press("down")
             await pilot.pause()
@@ -149,7 +176,7 @@ class TestTheDetailOnTheRight(OnScreen):
 
     async def test_a_status_the_panel_does_not_know_is_shown_as_it_arrived(self) -> None:
         lines = [FollowLineMother.with_a_status_the_panel_does_not_know()]
-        async with PanelApp(source=self.source_of(lines)).run_test() as pilot:
+        async with self.panel(lines).run_test() as pilot:
             await self.settled(pilot)
 
             detail = self.detail(pilot)
@@ -160,7 +187,7 @@ class TestTheDetailOnTheRight(OnScreen):
 class TestWhenFollowEnds(OnScreen):
     async def test_the_panel_says_on_screen_that_follow_ended_and_why(self) -> None:
         ended = FollowEnded(exit_code=3, detail="gh is not authenticated")
-        async with PanelApp(source=self.source_of([FollowLineMother.advancing()], ended)).run_test() as pilot:
+        async with self.panel([FollowLineMother.advancing()], ended).run_test() as pilot:
             await self.settled(pilot)
 
             notice = self.notice(pilot)
@@ -170,7 +197,7 @@ class TestWhenFollowEnds(OnScreen):
         assert "gh is not authenticated" in notice
 
     async def test_the_notice_stays_empty_while_follow_is_still_running(self) -> None:
-        async with PanelApp(source=self.source_of([FollowLineMother.advancing()])).run_test() as pilot:
+        async with self.panel([FollowLineMother.advancing()]).run_test() as pilot:
             await self.settled(pilot)
 
             notice = self.notice(pilot)
