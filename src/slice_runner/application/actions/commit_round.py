@@ -46,6 +46,7 @@ class CommitRound:
                     at=self._clock.now(),
                     spend=params.spend,
                     status=EventStatus.NOTHING_TO_COMMIT,
+                    closed_as=None,
                 )
             )
 

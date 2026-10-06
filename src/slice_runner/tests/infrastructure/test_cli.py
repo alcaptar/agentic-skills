@@ -2645,6 +2645,11 @@ class TestTheStatusCommandParsing:
 class TestTheCommandThatFollowsTheEvents(WithTheDurableStoresOutOfTheRealHome):
     _ADVANCING_LINE = "2024-01-01T12:30:45+00:00 alcaptar/agentic-skills #150 slice-05 run-controls advancing $0.34"
     _WAITING_LINE = "2024-01-01T12:31:45+00:00 alcaptar/agentic-skills #150 slice-05 await-ci waiting $0.34"
+    _CLOSED_WITHOUT_STATE_LINE = (
+        "2024-01-01T12:31:15+00:00 alcaptar/agentic-skills #150 slice-05 await-merge closed $0.05"
+    )
+    _MERGED_LINE = f"{_CLOSED_WITHOUT_STATE_LINE} merged"
+    _BLOCKED_LINE = f"{_CLOSED_WITHOUT_STATE_LINE} blocked-verify"
 
     @staticmethod
     def _clock_interrupted_after(sleeps: int) -> Mock:
@@ -2676,6 +2681,38 @@ class TestTheCommandThatFollowsTheEvents(WithTheDurableStoresOutOfTheRealHome):
         assert code == ExitCode.OK
         assert capsys.readouterr().out.splitlines() == [self._ADVANCING_LINE, self._WAITING_LINE]
         assert reader.cursors == [EventCursor.start(), EventCursor(offset=10)]
+
+    def test_the_snapshot_shows_the_state_the_run_closed_with(self, capsys: pytest.CaptureFixture[str]) -> None:
+        reader = ScriptedEventReader(
+            EventBatch(events=(EventMother.blocked_by_the_judge(),), cursor=EventCursor(offset=10))
+        )
+
+        self._cli().follow(repo=None, once=True, reader=reader, clock=self._clock_interrupted_after(1))
+
+        assert capsys.readouterr().out.splitlines() == [self._BLOCKED_LINE]
+
+    def test_the_line_of_the_change_to_closed_shows_the_state_the_run_closed_with(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        reader = ScriptedEventReader(
+            EventBatch(events=(EventMother.advancing(),), cursor=EventCursor(offset=10)),
+            EventBatch(events=(EventMother.closed(),), cursor=EventCursor(offset=20)),
+        )
+
+        self._cli().follow(repo=None, once=False, reader=reader, clock=self._clock_interrupted_after(2))
+
+        assert capsys.readouterr().out.splitlines() == [self._ADVANCING_LINE, self._MERGED_LINE]
+
+    def test_a_closing_row_without_the_state_is_printed_without_it(self, capsys: pytest.CaptureFixture[str]) -> None:
+        reader = ScriptedEventReader(
+            EventBatch(
+                events=(EventMother.closed_before_the_closing_state_was_recorded(),), cursor=EventCursor(offset=10)
+            )
+        )
+
+        self._cli().follow(repo=None, once=True, reader=reader, clock=self._clock_interrupted_after(1))
+
+        assert capsys.readouterr().out.splitlines() == [self._CLOSED_WITHOUT_STATE_LINE]
 
     def test_a_row_repeating_the_step_and_status_of_the_snapshot_prints_nothing_after_it(
         self, capsys: pytest.CaptureFixture[str]

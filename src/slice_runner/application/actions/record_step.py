@@ -63,6 +63,7 @@ class RecordStep:
         return label
 
     def _emit(self, params: RecordStepParams, *, run: Run) -> None:
+        status = EventStatus.of_the_transition(params.transition)
         self._events.emit(
             Event(
                 slice_id=params.slice_id,
@@ -71,6 +72,7 @@ class RecordStep:
                 step=run.step,
                 at=self._clock.now(),
                 spend=params.spend,
-                status=EventStatus.of_the_transition(params.transition),
+                status=status,
+                closed_as=params.transition.state if status is EventStatus.CLOSED else None,
             )
         )

@@ -156,6 +156,30 @@ class TestTheEventItEmits:
 
         assert recorder.events.emit.call_args.args[0].status is EventStatus.CLOSED
 
+    def test_each_closing_transition_emits_the_state_it_closed_with(self) -> None:
+        for state in (RunState.MERGED, RunState.BLOCKED_VERIFY):
+            recorder = _Recorder()
+            transition = Transition(run=RunMother.awaiting_merge(), state=state)
+
+            recorder.action.execute(_Given.params(current=RunMother.awaiting_merge(), transition=transition))
+
+            assert recorder.events.emit.call_args.args[0].closed_as is state
+
+    def test_a_transition_that_does_not_close_emits_no_closing_state(self) -> None:
+        recorder = _Recorder()
+
+        recorder.action.execute(
+            _Given.params(current=RunMother.implementing(), transition=Transition(run=RunMother.judging()))
+        )
+        recorder.action.execute(
+            _Given.params(
+                current=RunMother.awaiting_merge(),
+                transition=Transition(run=RunMother.awaiting_merge(), wait_seconds=30),
+            )
+        )
+
+        assert [call.args[0].closed_as for call in recorder.events.emit.call_args_list] == [None, None]
+
     def test_the_event_carries_the_accumulated_spend_so_the_log_shows_what_the_run_costs_so_far(self) -> None:
         recorder = _Recorder()
         spend = HarnessSpendMother.of_the_implementer_call()

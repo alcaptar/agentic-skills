@@ -29,3 +29,26 @@ class TestWhatTheProgramEmits:
             },
             "status": "advancing",
         }
+
+    def test_a_closing_event_writes_the_state_it_closed_with_under_closed_as(self) -> None:
+        merged = EventPayload.from_domain(EventMother.closed()).to_contract()
+        blocked = EventPayload.from_domain(EventMother.blocked_by_the_judge()).to_contract()
+
+        assert (merged["status"], merged["closed_as"]) == ("closed", "merged")
+        assert (blocked["status"], blocked["closed_as"]) == ("closed", "blocked-verify")
+
+    def test_an_event_that_does_not_close_leaves_the_key_out_instead_of_emitting_null(self) -> None:
+        assert "closed_as" not in EventPayload.from_domain(EventMother.advancing()).to_contract()
+
+
+class TestWhatTheProgramReads:
+    def test_a_closing_row_written_before_the_closing_state_existed_is_still_read_without_it(self) -> None:
+        row = EventPayload.from_domain(EventMother.closed_before_the_closing_state_was_recorded()).to_contract()
+        assert "closed_as" not in row
+
+        assert EventPayload.from_dict(row).to_domain() == EventMother.closed_before_the_closing_state_was_recorded()
+
+    def test_a_closing_row_reads_back_with_the_state_it_closed_with(self) -> None:
+        row = EventPayload.from_domain(EventMother.blocked_by_the_judge()).to_contract()
+
+        assert EventPayload.from_dict(row).to_domain() == EventMother.blocked_by_the_judge()

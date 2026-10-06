@@ -7,6 +7,7 @@ from slice_runner.domain.canonical_slice_id import CanonicalSliceId
 from slice_runner.domain.event import Event
 from slice_runner.domain.event_status import EventStatus
 from slice_runner.domain.exceptions import UnreadableEventLogError
+from slice_runner.domain.run_state import RunState
 from slice_runner.domain.slice_coordinates import SliceCoordinates
 from slice_runner.domain.step import Step
 from slice_runner.infrastructure.durable_ledger import ReadableLedgerRow
@@ -21,6 +22,7 @@ class EventPayload(StampedRow, ReadableLedgerRow):
     step: Step
     spend: SpendPayload
     status: EventStatus
+    closed_as: RunState | None = None
 
     @classmethod
     def json_schema(cls) -> dict[str, object]:
@@ -38,6 +40,7 @@ class EventPayload(StampedRow, ReadableLedgerRow):
             step=event.step,
             spend=SpendPayload.from_domain(event.spend),
             status=event.status,
+            closed_as=event.closed_as,
         )
 
     @classmethod
@@ -55,4 +58,5 @@ class EventPayload(StampedRow, ReadableLedgerRow):
             at=datetime.fromisoformat(self.ts),
             spend=self.spend.to_domain(),
             status=self.status,
+            closed_as=self.closed_as,
         )

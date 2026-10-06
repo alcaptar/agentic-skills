@@ -15,7 +15,11 @@ class EventFollowReport:
 
     @staticmethod
     def _line_of(event: Event) -> str:
-        return (
+        line = (
             f"{event.at.isoformat()} {event.repo} #{event.issue} {event.slice_id} "
             f"{event.step} {event.status} ${event.spend.cost_usd:.2f}"
         )
+        if event.closed_as is None:
+            return line
+
+        return f"{line} {event.closed_as}"
