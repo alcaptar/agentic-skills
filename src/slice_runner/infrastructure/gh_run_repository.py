@@ -20,8 +20,8 @@ from slice_runner.infrastructure.gh_parent_view_payload import GhParentViewPaylo
 from slice_runner.infrastructure.gh_sub_issue_payload import GhSubIssuePayload
 from slice_runner.infrastructure.kept_worktree_comment import KeptWorktreeComment
 from slice_runner.infrastructure.malformed_response_comment import MalformedResponseComment
+from slice_runner.infrastructure.order_comment import OrderComment
 from slice_runner.infrastructure.parent_body import ParentBody
-from slice_runner.infrastructure.reopened_comment import ReopenedComment
 from slice_runner.infrastructure.reset_comment import ResetComment
 from slice_runner.infrastructure.subissue_body import SubissueBody
 from slice_runner.infrastructure.understanding_comment import UnderstandingComment
@@ -34,6 +34,7 @@ if TYPE_CHECKING:
     from slice_runner.domain.finding import Finding
     from slice_runner.domain.findings_history import FindingsHistory
     from slice_runner.domain.malformed_reason import MalformedReason
+    from slice_runner.domain.order import Order
     from slice_runner.domain.precheck_outcome import PrecheckOutcome
     from slice_runner.domain.run import Run
     from slice_runner.domain.worktree_retirement import WorktreeRetirement
@@ -166,10 +167,10 @@ class GhRunRepository(RunRepository):
 
         return RetryResponse.of_the_comments(self._without_acknowledged_malformed(window))
 
-    def mark_reopened(self, *, repo: str, issue: int, instruction: str) -> None:
+    def mark_order(self, *, repo: str, issue: int, order: Order, text: str) -> None:
         self._run(
             ["gh", "issue", "comment", str(issue), "--repo", repo, "--body-file", "-"],
-            stdin=ReopenedComment.rendered(instruction),
+            stdin=OrderComment.rendered(order, text),
             safe_to_repeat=False,
         )
 
@@ -206,7 +207,7 @@ class GhRunRepository(RunRepository):
     @staticmethod
     def _after_the_last_reopening(bodies: tuple[str, ...]) -> tuple[str, ...]:
         for index in range(len(bodies) - 1, -1, -1):
-            if ReopenedComment.is_the_marker(bodies[index]):
+            if OrderComment.is_a_reopening(bodies[index]):
                 return bodies[index + 1 :]
 
         return bodies

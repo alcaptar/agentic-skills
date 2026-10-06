@@ -355,6 +355,36 @@ class TestConductSliceWhenATreeIsFoundThatNobodyExpected(_Merging):
         assert result.state is RunState.BLOCKED_LEFTOVER_WORKTREE
         assert conductor.implement.execute.call_count == 0
 
+    @staticmethod
+    def _reopened_by_the_retry_subcommand_after_a_leftover() -> Conductor:
+        reopened = replace(RunMother.implementing(), tree_unexpected=True)
+
+        return Conductor(chosen=SelectSliceResultMother.resumed_at(reopened))
+
+    def test_a_run_reopened_by_the_retry_subcommand_after_a_leftover_finds_the_old_tree_and_blocks_again(self) -> None:
+        conductor = self._reopened_by_the_retry_subcommand_after_a_leftover()
+        conductor.worktrees.listed.return_value = (
+            ListedWorktreeMother.main_clone(),
+            ListedWorktreeMother.mounted(path=Conductor.WORKTREE, branch=_BRANCH),
+        )
+        conductor.worktrees.branch_exists.return_value = True
+
+        result = conductor.conduct()
+
+        assert result.state is RunState.BLOCKED_LEFTOVER_WORKTREE
+        assert conductor.implement.execute.call_count == 0
+
+    def test_a_run_reopened_by_the_retry_subcommand_with_no_tree_in_the_way_mounts_one_and_expects_it_from_then_on(
+        self,
+    ) -> None:
+        conductor = self._reopened_by_the_retry_subcommand_after_a_leftover()
+        conductor.worktrees.listed.return_value = (ListedWorktreeMother.main_clone(),)
+
+        conductor.conduct()
+
+        assert conductor.worktrees.add_new_branch.called or conductor.worktrees.add_on_branch.called
+        assert conductor.repository.write_run.call_args_list[0].kwargs["run"].tree_unexpected is False
+
     def test_a_worktree_given_by_hand_is_expected_so_it_is_never_taken_for_a_leftover(self) -> None:
         conductor = Conductor(chosen=SelectSliceResultMother.about_to_start())
         conductor.worktrees.branch_exists.return_value = True

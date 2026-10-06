@@ -15,3 +15,6 @@ class Subcommand(StrEnum):
     STATUS = "status"
     FOLLOW = "follow"
     UNDERSTANDING = "understanding"
+    GO = "go"
+    REVIEW = "review"
+    RETRY = "retry"

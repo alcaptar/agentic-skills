@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from typing import Annotated, Self
+from typing import Annotated, ClassVar, Self
 
 from pydantic import Field
 
+from slice_runner.domain.alignment_stage import AlignmentStage
 from slice_runner.domain.exceptions import UnreadableRunError
 from slice_runner.domain.harness_spend import HarnessSpend
 from slice_runner.domain.run import Run
@@ -16,9 +17,13 @@ Spent = Annotated[int, Field(strict=True, ge=0)]
 
 
 class RunPayload(ContractModel):
+    RETIRED_KEY: ClassVar[str] = "understanding_pending"
+
     step: Step
     corrected: str = ""
-    understanding_pending: bool = False
+    alignment: AlignmentStage = AlignmentStage.AWAITING
+    retry_instruction: str = ""
+    tree_unexpected: bool = False
     previous_call_died: bool = False
     catching_up_the_branch: bool = False
     control_retries: Spent = 0
@@ -39,14 +44,31 @@ class RunPayload(ContractModel):
 
     @classmethod
     def from_dict(cls, data: dict[str, object]) -> Self:
-        return cls._validated(data, "the execution state block is not one this program can read", UnreadableRunError)
+        return cls._validated(
+            cls._with_the_retired_key_translated(data),
+            "the execution state block is not one this program can read",
+            UnreadableRunError,
+        )
+
+    @classmethod
+    def _with_the_retired_key_translated(cls, data: dict[str, object]) -> dict[str, object]:
+        pending = data.get(cls.RETIRED_KEY)
+        if not isinstance(pending, bool):
+            return data
+
+        kept = {key: value for key, value in data.items() if key != cls.RETIRED_KEY}
+        stage = AlignmentStage.DRAFT if pending else AlignmentStage.AWAITING
+
+        return {"alignment": stage, **kept}
 
     @classmethod
     def from_domain(cls, run: Run) -> Self:
         return cls(
             step=run.step,
             corrected=run.corrected,
-            understanding_pending=run.understanding_pending,
+            alignment=run.alignment,
+            retry_instruction=run.retry_instruction,
+            tree_unexpected=run.tree_unexpected,
             previous_call_died=run.previous_call_died,
             catching_up_the_branch=run.catching_up_the_branch,
             control_retries=run.control_retries,
@@ -69,7 +91,9 @@ class RunPayload(ContractModel):
         return Run(
             step=self.step,
             corrected=self.corrected,
-            understanding_pending=self.understanding_pending,
+            alignment=self.alignment,
+            retry_instruction=self.retry_instruction,
+            tree_unexpected=self.tree_unexpected,
             previous_call_died=self.previous_call_died,
             catching_up_the_branch=self.catching_up_the_branch,
             control_retries=self.control_retries,

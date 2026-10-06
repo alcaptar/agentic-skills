@@ -48,6 +48,10 @@ class UnreadableRunError(ValueError):
     pass
 
 
+class OrderRefusedError(ValueError):
+    pass
+
+
 class DiffNotReadableError(ValueError):
     pass
 

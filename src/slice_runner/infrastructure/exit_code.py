@@ -24,6 +24,8 @@ class ExitCode(IntEnum):
     SOURCES_BUDGET_EXCEEDED = 14
     UNCHANGED_DIFF = 15
     NO_UNDERSTANDING = 16
+    AWAITING_ALIGNMENT = 17
+    ORDER_REFUSED = 18
 
     @classmethod
     def of(cls, ruling: Ruling) -> ExitCode:
@@ -44,6 +46,8 @@ class ExitCode(IntEnum):
                 return cls.WAIT_EXHAUSTED
             case Halt.PULL_REQUEST_CLOSED:
                 return cls.PULL_REQUEST_CLOSED
+            case Halt.AWAITING_ALIGNMENT:
+                return cls.AWAITING_ALIGNMENT
 
     @classmethod
     def _of_the_closing(cls, state: RunState) -> ExitCode:

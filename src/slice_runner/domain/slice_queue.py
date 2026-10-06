@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from slice_runner.domain.alignment_stage import AlignmentStage
 from slice_runner.domain.issue_label import IssueLabel
 from slice_runner.domain.issue_state import IssueState
+from slice_runner.domain.step import Step
 
 if TYPE_CHECKING:
     from slice_runner.domain.sub_issue import SubIssue
@@ -35,12 +37,36 @@ class SliceQueue:
         return child.state is IssueState.OPEN and cls._disqualifying(child.label)
 
     @classmethod
+    def awaiting_alignment(cls, child: SubIssue) -> bool:
+        return (
+            cls._paused_at_the_alignment(child)
+            and child.run is not None
+            and child.run.alignment is AlignmentStage.AWAITING
+        )
+
+    @classmethod
+    def awaiting_a_correction_to_be_replaced(cls, child: SubIssue) -> bool:
+        if cls.awaiting_alignment(child):
+            return True
+
+        return cls._paused_at_the_alignment(child) and child.run is not None and child.run.redrafting_after_a_correction
+
+    @classmethod
     def dangling(cls, children: tuple[SubIssue, ...]) -> tuple[SubIssue, ...]:
         return tuple(child for child in children if cls._left_dangling(child))
 
     @classmethod
     def all_delivered(cls, children: tuple[SubIssue, ...]) -> bool:
         return bool(children) and all(child.state is IssueState.CLOSED for child in children)
+
+    @staticmethod
+    def _paused_at_the_alignment(child: SubIssue) -> bool:
+        return (
+            child.state is IssueState.OPEN
+            and child.label is IssueLabel.AWAITING_ALIGNMENT
+            and child.run is not None
+            and child.run.step is Step.UNDERSTAND
+        )
 
     @staticmethod
     def _left_dangling(child: SubIssue) -> bool:

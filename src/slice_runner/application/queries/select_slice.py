@@ -91,7 +91,7 @@ class SelectSlice:
         if SliceQueue.blocked(named):
             raise self._none_left(
                 f"slice {params.slice_id} of issue {params.issue} is blocked and waits for a retry instruction "
-                f"in a subissue comment (`-RETRY <instruction>`)",
+                f"in a subissue comment (`-RETRY <instruction>`) or in `slice-runner retry`",
                 dangling=dangling,
                 malformed=malformed_named,
             )

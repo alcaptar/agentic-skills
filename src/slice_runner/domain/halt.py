@@ -8,3 +8,4 @@ class Halt(StrEnum):
     PRECHECKS_BLOCKED = "prechecks-blocked"
     WAIT_EXHAUSTED = "wait-exhausted"
     PULL_REQUEST_CLOSED = "pull-request-closed"
+    AWAITING_ALIGNMENT = "awaiting-alignment"

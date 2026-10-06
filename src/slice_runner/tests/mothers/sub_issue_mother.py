@@ -73,6 +73,28 @@ class SubIssueMother:
         )
 
     @staticmethod
+    def awaiting_alignment() -> SubIssue:
+        return replace(
+            SubIssueMother.pending(), label=IssueLabel.AWAITING_ALIGNMENT, run=RunMother.awaiting_alignment()
+        )
+
+    @staticmethod
+    def awaiting_alignment_with_the_understanding_agreed() -> SubIssue:
+        return replace(
+            SubIssueMother.pending(),
+            label=IssueLabel.AWAITING_ALIGNMENT,
+            run=RunMother.with_the_understanding_agreed(),
+        )
+
+    @staticmethod
+    def redrafting_after_a_correction(correction: str) -> SubIssue:
+        return replace(
+            SubIssueMother.pending(),
+            label=IssueLabel.AWAITING_ALIGNMENT,
+            run=RunMother.about_to_redraft_after_a_correction(correction),
+        )
+
+    @staticmethod
     def unlabelled() -> SubIssue:
         return replace(SubIssueMother.pending(), label=None)
 

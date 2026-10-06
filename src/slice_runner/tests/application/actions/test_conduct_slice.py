@@ -11,6 +11,7 @@ from slice_runner.application.actions.close_parent import CloseParentParams
 from slice_runner.application.actions.reopen_slice import ReopenSliceParams, ReopenSliceResult
 from slice_runner.domain.alignment_response import AlignmentResponse
 from slice_runner.domain.alignment_response_kind import AlignmentResponseKind
+from slice_runner.domain.alignment_stage import AlignmentStage
 from slice_runner.domain.budgets import Budgets
 from slice_runner.domain.ci_indeterminate_cause import CiIndeterminateCause
 from slice_runner.domain.ci_status import CiStatus
@@ -79,7 +80,6 @@ class TestConductSliceStartingANewRun:
             RejectionMother.invalid_understanding_report(),
             UnderstandingMother.of_the_chosen_slice(),
         ]
-        conductor.repository.read_alignment_response.return_value = AlignmentResponse(kind=AlignmentResponseKind.GO)
         conductor.seed_spend(
             session=HarnessCallMother.SESSION_OF_THE_DISCARDED_UNDERSTANDING,
             spend=HarnessSpendMother.of_a_call_that_cost_nothing(),
@@ -91,16 +91,12 @@ class TestConductSliceStartingANewRun:
             session=HarnessCallMother.SESSION_OF_THE_JUDGE, spend=HarnessSpendMother.of_the_judge_call()
         )
 
-        conductor.conduct()
+        conductor.conduct_after_the_person_agrees()
 
         assert conductor.understanding.write.call_count == 2
         assert conductor.repository.pause_for_alignment.call_count == 1
         recorded = conductor.closed
         assert recorded.run.understand_discards == 1
-        assert recorded.discarded_call is not None
-        assert recorded.discarded_call.step is Step.UNDERSTAND
-        assert recorded.discarded_call.cause is DiscardCause.FAILED_CALL
-        assert recorded.discarded_call.reason == "the harness returned only blank text as its understanding"
         assert recorded.spend == HarnessSpend.summing(
             (
                 HarnessSpendMother.of_a_call_that_cost_nothing(),
@@ -115,7 +111,6 @@ class TestConductSliceStartingANewRun:
             RejectionMother.envelope_without_structured_output(),
             UnderstandingMother.of_the_chosen_slice(),
         ]
-        conductor.repository.read_alignment_response.return_value = AlignmentResponse(kind=AlignmentResponseKind.GO)
         conductor.seed_spend(
             session=HarnessCallMother.SESSION_OF_THE_DISCARDED_UNDERSTANDING,
             spend=HarnessSpendMother.of_the_understanding_call(),
@@ -127,14 +122,11 @@ class TestConductSliceStartingANewRun:
             session=HarnessCallMother.SESSION_OF_THE_JUDGE, spend=HarnessSpendMother.of_the_judge_call()
         )
 
-        conductor.conduct()
+        conductor.conduct_after_the_person_agrees()
 
         assert conductor.understanding.write.call_count == 2
         recorded = conductor.closed
         assert recorded.run.understand_discards == 1
-        assert recorded.discarded_call is not None
-        assert recorded.discarded_call.step is Step.UNDERSTAND
-        assert recorded.discarded_call.cause is DiscardCause.NO_STRUCTURED_OUTPUT
         assert recorded.spend == HarnessSpend.summing(
             (
                 HarnessSpendMother.of_the_understanding_call(),
@@ -144,17 +136,30 @@ class TestConductSliceStartingANewRun:
         )
 
     def test_a_discard_whose_message_is_longer_than_the_reason_limit_is_recorded_with_it_truncated(self) -> None:
-        conductor = self._conductor()
+        conductor = Conductor(chosen=SelectSliceResultMother.about_to_start(), budgets=Budgets(slice_cost_usd=0.03))
         conductor.understanding.write.side_effect = [
             RejectionMother.invalid_understanding_report_with_an_overlong_message(),
-            UnderstandingMother.of_the_chosen_slice(),
+            RejectionMother.invalid_understanding_report_with_an_overlong_message(),
         ]
-        conductor.repository.read_alignment_response.return_value = AlignmentResponse(kind=AlignmentResponseKind.GO)
 
         conductor.conduct()
 
         assert conductor.closed.discarded_call is not None
         assert conductor.closed.discarded_call.reason == "a" * 200
+
+    def test_a_call_whose_envelope_has_no_structured_output_twice_over_closes_the_run_naming_that_cause(self) -> None:
+        conductor = Conductor(chosen=SelectSliceResultMother.about_to_start(), budgets=Budgets(slice_cost_usd=0.03))
+        conductor.understanding.write.side_effect = [
+            RejectionMother.envelope_without_structured_output(),
+            RejectionMother.envelope_without_structured_output(),
+        ]
+
+        conductor.conduct()
+
+        recorded = conductor.closed
+        assert recorded.discarded_call is not None
+        assert recorded.discarded_call.step is Step.UNDERSTAND
+        assert recorded.discarded_call.cause is DiscardCause.NO_STRUCTURED_OUTPUT
 
     def test_discard_after_discard_of_the_understanding_closes_the_run_and_writes_its_label(self) -> None:
         conductor = Conductor(chosen=SelectSliceResultMother.about_to_start(), budgets=Budgets(slice_cost_usd=0.03))
@@ -177,13 +182,14 @@ class TestConductSliceStartingANewRun:
         assert recorded.discarded_call.cause is DiscardCause.FAILED_CALL
         assert conductor.repository.pause_for_alignment.call_count == 0
 
-    def test_the_invocation_that_asks_for_alignment_ticks_instead_of_writing_any_code(self) -> None:
-        conductor = Conductor(chosen=SelectSliceResultMother.about_to_start(), budgets=Budgets(person_wait_seconds=0))
+    def test_the_invocation_that_asks_for_alignment_ends_instead_of_writing_any_code(self) -> None:
+        conductor = self._conductor()
 
         result = conductor.conduct()
 
         assert conductor.implement.execute.call_count == 0
-        assert result.halt is Halt.WAIT_EXHAUSTED
+        assert result.halt is Halt.AWAITING_ALIGNMENT
+        assert conductor.clock.sleep.call_count == 0
 
     def test_the_run_pauses_on_the_in_progress_label_it_wrote_when_selected_not_the_one_the_subissue_carried(
         self,
@@ -321,45 +327,109 @@ class TestConductSliceStartingANewRun:
         )
 
 
-class TestConductSliceRespondingToAlignment:
+class TestConductSliceWhileTheUnderstandingAwaitsAPerson:
     @staticmethod
-    def _subissue() -> SubIssue:
-        return SubIssueMother.carrying(IssueLabel.AWAITING_ALIGNMENT)
+    def _conductor(run: Run | None = None) -> Conductor:
+        return Conductor(
+            chosen=SelectSliceResultMother.resumed_at(
+                run or RunMother.awaiting_alignment(), label=IssueLabel.AWAITING_ALIGNMENT
+            )
+        )
 
-    @classmethod
-    def _conductor(cls, *, budgets: Budgets | None = None) -> Conductor:
-        return Conductor(chosen=SelectSliceResultMother.about_to_start(subissue=cls._subissue()), budgets=budgets)
+    def test_the_invocation_ends_with_its_own_halt_instead_of_ticking_until_the_wait_is_spent(self) -> None:
+        conductor = self._conductor()
 
-    def test_no_response_yet_ticks_until_the_wait_is_spent_without_touching_the_harness_or_the_understanding_comment(
-        self,
-    ) -> None:
-        conductor = self._conductor(budgets=Budgets(person_wait_seconds=0))
-        conductor.repository.read_alignment_response.return_value = AlignmentResponse(
-            kind=AlignmentResponseKind.NOT_YET
+        result = conductor.conduct()
+
+        assert result.halt is Halt.AWAITING_ALIGNMENT
+        assert result.state is RunState.OPEN
+        assert result.step is Step.UNDERSTAND
+        assert conductor.clock.sleep.call_count == 0
+
+    def test_the_understanding_step_is_not_executed_again_while_waiting(self) -> None:
+        conductor = self._conductor()
+
+        conductor.conduct()
+        conductor.conduct()
+
+        assert conductor.understanding.write.call_count == 0
+        assert conductor.repository.write_understanding.call_count == 0
+        assert conductor.implement.execute.call_count == 0
+
+    def test_waiting_writes_nothing_to_the_issue(self) -> None:
+        conductor = self._conductor()
+
+        conductor.conduct()
+
+        assert conductor.repository.write_run.call_count == 0
+        assert conductor.repository.write_label.call_count == 0
+        assert conductor.repository.pause_for_alignment.call_count == 0
+
+    def test_a_correction_already_published_is_waited_for_without_publishing_it_again(self) -> None:
+        conductor = self._conductor(RunMother.awaiting_alignment_after_a_published_correction("falta la senal"))
+
+        result = conductor.conduct()
+
+        assert result.halt is Halt.AWAITING_ALIGNMENT
+        assert conductor.understanding.write.call_count == 0
+
+    def test_a_label_moved_by_hand_is_repaired_without_publishing_the_understanding_again(self) -> None:
+        conductor = Conductor(
+            chosen=SelectSliceResultMother.resumed_at(RunMother.awaiting_alignment(), label=IssueLabel.PENDING)
         )
 
         result = conductor.conduct()
 
-        assert result.halt is Halt.WAIT_EXHAUSTED
-        assert conductor.implement.execute.call_count == 0
+        assert result.halt is Halt.AWAITING_ALIGNMENT
         assert conductor.understanding.write.call_count == 0
-        assert conductor.repository.write_understanding.call_count == 0
-        assert conductor.repository.write_run.call_count == 0
+        assert conductor.repository.pause_for_alignment.call_count == 0
+        conductor.repository.write_label.assert_called_once_with(
+            repo=Conductor.REPO, issue=_SUBISSUE, remove=IssueLabel.PENDING, add=IssueLabel.AWAITING_ALIGNMENT
+        )
 
-    def test_a_response_that_only_appears_on_the_second_tick_still_starts_the_implementation(self) -> None:
-        conductor = self._conductor(budgets=Budgets(person_wait_seconds=60))
-        conductor.repository.read_alignment_response.side_effect = [
-            AlignmentResponse(kind=AlignmentResponseKind.NOT_YET),
-            AlignmentResponse(kind=AlignmentResponseKind.GO),
-        ]
+
+class TestConductSliceReadingTheAlignmentCommentsOnTheNextRun:
+    @staticmethod
+    def _conductor() -> Conductor:
+        return Conductor(
+            chosen=SelectSliceResultMother.resumed_at(
+                RunMother.awaiting_alignment(), label=IssueLabel.AWAITING_ALIGNMENT
+            )
+        )
+
+    def test_no_comment_yet_ends_the_invocation_after_reading_them_once_without_touching_the_harness(self) -> None:
+        conductor = self._conductor()
+
+        result = conductor.conduct()
+
+        assert result.halt is Halt.AWAITING_ALIGNMENT
+        conductor.repository.read_alignment_response.assert_called_once()
+        assert conductor.understanding.write.call_count == 0
+        assert conductor.implement.execute.call_count == 0
+        assert conductor.clock.sleep.call_count == 0
+
+    def test_a_go_comment_starts_the_implementation_in_the_same_invocation(self) -> None:
+        conductor = self._conductor()
+        conductor.repository.read_alignment_response.return_value = AlignmentResponse(kind=AlignmentResponseKind.GO)
 
         conductor.conduct()
 
-        assert conductor.repository.read_alignment_response.call_count == 2
+        assert conductor.understanding.write.call_count == 0
         assert conductor.implement.execute.call_count == 1
 
-    def test_a_review_publishes_the_rewritten_understanding_and_keeps_waiting_until_the_wait_is_spent(self) -> None:
-        conductor = self._conductor(budgets=Budgets(person_wait_seconds=0))
+    def test_a_go_comment_moves_the_label_to_in_progress_before_the_implementer_is_asked_to_start(self) -> None:
+        conductor = self._conductor()
+        conductor.repository.read_alignment_response.return_value = AlignmentResponse(kind=AlignmentResponseKind.GO)
+        manager = Mock()
+        manager.attach_mock(conductor.repository.write_label, "write_label")
+        manager.attach_mock(conductor.implement.execute, "implement")
+
+        conductor.conduct()
+
+        assert [call[0] for call in manager.mock_calls][:2] == ["write_label", "implement"]
+
+    def test_a_review_comment_publishes_the_rewritten_understanding_once_and_ends_waiting_for_the_person(self) -> None:
+        conductor = self._conductor()
         conductor.repository.read_alignment_response.return_value = AlignmentResponse(
             kind=AlignmentResponseKind.REVIEW, correction="la senal no esta exenta"
         )
@@ -369,118 +439,91 @@ class TestConductSliceRespondingToAlignment:
         conductor.repository.write_understanding.assert_called_once_with(
             repo=Conductor.REPO, issue=_SUBISSUE, understanding=Conductor.UNDERSTANDING
         )
-        assert result.halt is Halt.WAIT_EXHAUSTED
+        assert conductor.understanding.write.call_count == 1
+        assert result.halt is Halt.AWAITING_ALIGNMENT
 
-    def test_a_review_answered_by_a_go_on_the_next_tick_publishes_once_and_starts_implementing(self) -> None:
-        conductor = self._conductor(budgets=Budgets(person_wait_seconds=60))
-        conductor.repository.read_alignment_response.side_effect = [
-            AlignmentResponse(kind=AlignmentResponseKind.REVIEW, correction="la senal no esta exenta"),
-            AlignmentResponse(kind=AlignmentResponseKind.GO),
-        ]
+    def test_a_review_comment_persists_its_correction_with_the_run_that_waits_again(self) -> None:
+        conductor = self._conductor()
+        conductor.repository.read_alignment_response.return_value = AlignmentResponse(
+            kind=AlignmentResponseKind.REVIEW, correction="la senal no esta exenta"
+        )
 
         conductor.conduct()
 
-        assert conductor.repository.read_alignment_response.call_count == 2
-        assert conductor.understanding.write.call_count == 1
-        assert conductor.implement.execute.call_count == 1
+        persisted = conductor.repository.write_run.call_args_list[-1].kwargs["run"]
+        assert (persisted.corrected, persisted.alignment) == ("la senal no esta exenta", AlignmentStage.AWAITING)
 
-    def test_a_review_still_unanswered_on_every_tick_publishes_only_once_for_that_correction(self) -> None:
-        conductor = self._conductor(budgets=Budgets(person_wait_seconds=90))
+    def test_a_review_comment_already_published_by_a_prior_invocation_writes_no_new_call(self) -> None:
+        conductor = Conductor(
+            chosen=SelectSliceResultMother.resumed_at(
+                RunMother.awaiting_alignment_after_a_published_correction("la senal no esta exenta"),
+                label=IssueLabel.AWAITING_ALIGNMENT,
+            )
+        )
         conductor.repository.read_alignment_response.return_value = AlignmentResponse(
             kind=AlignmentResponseKind.REVIEW, correction="la senal no esta exenta"
         )
 
         result = conductor.conduct()
 
-        assert conductor.repository.read_alignment_response.call_count == 3
-        assert conductor.understanding.write.call_count == 1
-        assert result.halt is Halt.WAIT_EXHAUSTED
+        assert conductor.understanding.write.call_count == 0
+        assert result.halt is Halt.AWAITING_ALIGNMENT
 
-    def test_a_second_review_with_a_different_correction_still_publishes_its_own_call(self) -> None:
-        conductor = self._conductor(budgets=Budgets(person_wait_seconds=60))
-        conductor.repository.read_alignment_response.side_effect = [
-            AlignmentResponse(kind=AlignmentResponseKind.REVIEW, correction="la senal no esta exenta"),
-            AlignmentResponse(kind=AlignmentResponseKind.REVIEW, correction="ademas falta un criterio"),
-        ]
-
-        conductor.conduct()
-
-        assert conductor.understanding.write.call_count == 2
-
-    def test_a_review_pauses_again_after_persisting_the_correction_and_its_redraft(self) -> None:
-        conductor = self._conductor(budgets=Budgets(person_wait_seconds=0))
-        conductor.repository.read_alignment_response.return_value = AlignmentResponse(
-            kind=AlignmentResponseKind.REVIEW, correction="la senal no esta exenta"
-        )
-
-        conductor.conduct()
-
-        assert conductor.repository.pause_for_alignment.call_count == 1
-        assert conductor.repository.write_run.call_args_list == [
-            call(
-                repo=Conductor.REPO,
-                issue=_SUBISSUE,
-                run=RunMother.about_to_redraft_after_a_correction("la senal no esta exenta"),
-            ),
-            call(
-                repo=Conductor.REPO,
-                issue=_SUBISSUE,
-                run=Run(
-                    step=Step.UNDERSTAND,
-                    corrected="la senal no esta exenta",
-                    spend=HarnessSpendMother.of_the_understanding_call(),
-                ),
-            ),
-        ]
-
-    def test_a_new_correction_marks_the_slice_in_progress_before_asking_the_harness_to_redraft(self) -> None:
-        conductor = self._conductor(budgets=Budgets(person_wait_seconds=0))
-        conductor.repository.read_alignment_response.return_value = AlignmentResponse(
-            kind=AlignmentResponseKind.REVIEW, correction="la senal no esta exenta"
-        )
-        manager = Mock()
-        manager.attach_mock(conductor.repository.write_label, "write_label")
-        manager.attach_mock(conductor.understanding.write, "understand")
-
-        conductor.conduct()
-
-        assert [call[0] for call in manager.mock_calls][:2] == ["write_label", "understand"]
-        conductor.repository.write_label.assert_called_once_with(
-            repo=Conductor.REPO, issue=_SUBISSUE, remove=IssueLabel.AWAITING_ALIGNMENT, add=IssueLabel.IN_PROGRESS
-        )
-
-    def test_a_new_correction_returns_the_label_to_awaiting_alignment_only_after_the_redraft_is_published(
-        self,
-    ) -> None:
-        conductor = self._conductor(budgets=Budgets(person_wait_seconds=0))
-        conductor.repository.read_alignment_response.return_value = AlignmentResponse(
-            kind=AlignmentResponseKind.REVIEW, correction="la senal no esta exenta"
-        )
-        manager = Mock()
-        manager.attach_mock(conductor.understanding.write, "understand")
-        manager.attach_mock(conductor.repository.pause_for_alignment, "pause_for_alignment")
-
-        conductor.conduct()
-
-        assert [call[0] for call in manager.mock_calls] == ["understand", "pause_for_alignment"]
-        conductor.repository.pause_for_alignment.assert_called_once_with(
-            repo=Conductor.REPO, issue=_SUBISSUE, remove=IssueLabel.IN_PROGRESS
-        )
-
-    def test_a_go_persists_the_initial_run_and_starts_implementing_in_the_same_invocation(self) -> None:
+    def test_a_malformed_comment_is_answered_once_and_the_invocation_ends_waiting(self) -> None:
         conductor = self._conductor()
-        conductor.repository.read_alignment_response.return_value = AlignmentResponse(kind=AlignmentResponseKind.GO)
+        conductor.repository.read_alignment_response.return_value = AlignmentResponse(
+            kind=AlignmentResponseKind.MALFORMED, reason=MalformedReason.GO_CARRIES_TEXT
+        )
+
+        result = conductor.conduct()
+
+        conductor.repository.write_malformed_response.assert_called_once_with(
+            repo=Conductor.REPO, issue=_SUBISSUE, reason=MalformedReason.GO_CARRIES_TEXT
+        )
+        assert result.halt is Halt.AWAITING_ALIGNMENT
+        assert conductor.implement.execute.call_count == 0
+
+
+class TestConductSliceWithTheUnderstandingAgreed:
+    @staticmethod
+    def _conductor(run: Run | None = None) -> Conductor:
+        return Conductor(
+            chosen=SelectSliceResultMother.resumed_at(
+                run or RunMother.with_the_understanding_agreed(), label=IssueLabel.AWAITING_ALIGNMENT
+            )
+        )
+
+    def test_the_slice_implements_without_publishing_the_understanding_again_or_waiting(self) -> None:
+        conductor = self._conductor()
+
+        conductor.conduct()
+
+        assert conductor.understanding.write.call_count == 0
+        assert conductor.repository.write_understanding.call_count == 0
+        assert conductor.implement.execute.call_count == 1
+        assert conductor.clock.sleep.call_count == 0
+
+    def test_the_implementer_receives_the_understanding_that_was_agreed_in_the_issue(self) -> None:
+        conductor = self._conductor()
+
+        conductor.conduct()
+
+        conductor.repository.read_understanding.assert_called_once_with(repo=Conductor.REPO, issue=_SUBISSUE)
+        assert conductor.implement.execute.call_args.args[0].understanding == Conductor.UNDERSTANDING
+
+    def test_the_run_persisted_when_it_starts_implementing_keeps_the_agreement(self) -> None:
+        conductor = self._conductor()
 
         conductor.conduct()
 
         conductor.repository.write_run.assert_any_call(
-            repo=Conductor.REPO, issue=_SUBISSUE, run=RunMother.implementing()
+            repo=Conductor.REPO,
+            issue=_SUBISSUE,
+            run=Run(step=Step.IMPLEMENT, alignment=AlignmentStage.AGREED),
         )
-        assert conductor.implement.execute.call_count == 1
 
-    def test_a_go_moves_the_label_to_in_progress_before_the_implementer_is_asked_to_start(self) -> None:
+    def test_the_label_moves_to_in_progress_before_the_implementer_is_asked_to_start(self) -> None:
         conductor = self._conductor()
-        conductor.repository.read_alignment_response.return_value = AlignmentResponse(kind=AlignmentResponseKind.GO)
         manager = Mock()
         manager.attach_mock(conductor.repository.write_label, "write_label")
         manager.attach_mock(conductor.implement.execute, "implement")
@@ -492,101 +535,89 @@ class TestConductSliceRespondingToAlignment:
             repo=Conductor.REPO, issue=_SUBISSUE, remove=IssueLabel.AWAITING_ALIGNMENT, add=IssueLabel.IN_PROGRESS
         )
 
-    def test_a_tick_that_finds_the_prior_malformed_comment_already_acknowledged_answers_it_no_further(self) -> None:
-        conductor = self._conductor(budgets=Budgets(person_wait_seconds=60))
-        malformed = AlignmentResponse(kind=AlignmentResponseKind.MALFORMED, reason=MalformedReason.GO_CARRIES_TEXT)
-        conductor.repository.read_alignment_response.side_effect = [
-            malformed,
-            AlignmentResponse(kind=AlignmentResponseKind.NOT_YET),
-        ]
-
-        conductor.conduct()
-
-        assert conductor.repository.read_alignment_response.call_count == 2
-        conductor.repository.write_malformed_response.assert_called_once_with(
-            repo=Conductor.REPO, issue=_SUBISSUE, reason=MalformedReason.GO_CARRIES_TEXT
-        )
-        assert conductor.implement.execute.call_count == 0
-
-    def test_a_go_carries_forward_whatever_was_spent_while_asking_for_alignment(self) -> None:
+    def test_whatever_was_spent_while_asking_for_alignment_is_carried_forward(self) -> None:
         spend = HarnessSpendMother.of_the_understanding_call()
-        conductor = Conductor(
-            chosen=SelectSliceResultMother.about_to_start(subissue=SubIssueMother.paused_after_spending(spend))
-        )
-        conductor.repository.read_alignment_response.return_value = AlignmentResponse(kind=AlignmentResponseKind.GO)
+        conductor = self._conductor(replace(RunMother.with_the_understanding_agreed(), spend=spend))
 
         conductor.conduct()
 
         conductor.repository.write_run.assert_any_call(
-            repo=Conductor.REPO, issue=_SUBISSUE, run=Run(step=Step.IMPLEMENT, spend=spend)
+            repo=Conductor.REPO,
+            issue=_SUBISSUE,
+            run=Run(step=Step.IMPLEMENT, alignment=AlignmentStage.AGREED, spend=spend),
         )
-        assert conductor.implement.execute.call_count == 1
 
 
-class TestConductSliceReinvokedWhileAwaitingAlignment:
+class TestConductSliceRedraftingAfterACorrection:
     @staticmethod
-    def _conductor(correction: str, *, budgets: Budgets | None = None) -> Conductor:
+    def _conductor() -> Conductor:
         return Conductor(
             chosen=SelectSliceResultMother.resumed_at(
-                RunMother.awaiting_alignment_after_a_published_correction(correction),
+                RunMother.about_to_redraft_after_a_correction("la senal no esta exenta"),
                 label=IssueLabel.AWAITING_ALIGNMENT,
-            ),
-            budgets=budgets,
+            )
         )
 
-    def test_a_reinvocation_that_still_reads_the_correction_a_prior_invocation_already_published_writes_no_new_call(
-        self,
-    ) -> None:
-        conductor = self._conductor("la senal no esta exenta", budgets=Budgets(person_wait_seconds=0))
-        conductor.repository.read_alignment_response.return_value = AlignmentResponse(
-            kind=AlignmentResponseKind.REVIEW, correction="la senal no esta exenta"
-        )
+    def test_the_redraft_is_published_once_and_the_invocation_ends_waiting_for_the_person(self) -> None:
+        conductor = self._conductor()
 
         result = conductor.conduct()
 
-        assert conductor.understanding.write.call_count == 0
-        assert result.halt is Halt.WAIT_EXHAUSTED
-
-    def test_a_reinvocation_that_reads_a_correction_never_published_still_publishes_it(self) -> None:
-        conductor = self._conductor("la senal no esta exenta", budgets=Budgets(person_wait_seconds=0))
-        conductor.repository.read_alignment_response.return_value = AlignmentResponse(
-            kind=AlignmentResponseKind.REVIEW, correction="ademas falta un criterio"
+        conductor.repository.write_understanding.assert_called_once_with(
+            repo=Conductor.REPO, issue=_SUBISSUE, understanding=Conductor.UNDERSTANDING
         )
+        assert conductor.understanding.write.call_count == 1
+        assert result.halt is Halt.AWAITING_ALIGNMENT
+
+    def test_the_run_persisted_is_awaiting_again_and_keeps_the_correction(self) -> None:
+        conductor = self._conductor()
 
         conductor.conduct()
+
+        assert conductor.repository.write_run.call_args_list == [
+            call(
+                repo=Conductor.REPO,
+                issue=_SUBISSUE,
+                run=Run(
+                    step=Step.UNDERSTAND,
+                    corrected="la senal no esta exenta",
+                    spend=HarnessSpendMother.of_the_understanding_call(),
+                ),
+            )
+        ]
+
+    def test_the_slice_is_marked_in_progress_before_the_harness_redrafts(self) -> None:
+        conductor = self._conductor()
+        manager = Mock()
+        manager.attach_mock(conductor.repository.write_label, "write_label")
+        manager.attach_mock(conductor.understanding.write, "understand")
+
+        conductor.conduct()
+
+        assert [call[0] for call in manager.mock_calls][:2] == ["write_label", "understand"]
+        conductor.repository.write_label.assert_called_once_with(
+            repo=Conductor.REPO, issue=_SUBISSUE, remove=IssueLabel.AWAITING_ALIGNMENT, add=IssueLabel.IN_PROGRESS
+        )
+
+    def test_the_label_returns_to_awaiting_alignment_only_after_the_redraft_is_published(self) -> None:
+        conductor = self._conductor()
+        manager = Mock()
+        manager.attach_mock(conductor.understanding.write, "understand")
+        manager.attach_mock(conductor.repository.pause_for_alignment, "pause_for_alignment")
+
+        conductor.conduct()
+
+        assert [call[0] for call in manager.mock_calls] == ["understand", "pause_for_alignment"]
+        conductor.repository.pause_for_alignment.assert_called_once_with(
+            repo=Conductor.REPO, issue=_SUBISSUE, remove=IssueLabel.IN_PROGRESS
+        )
+
+    def test_a_redraft_that_the_person_then_agrees_on_the_next_run_starts_implementing(self) -> None:
+        conductor = self._conductor()
+
+        conductor.conduct_after_the_person_agrees()
 
         assert conductor.understanding.write.call_count == 1
-
-
-class TestConductSliceRespondingToAlignmentWithAMismatchedLabel:
-    @staticmethod
-    def _conductor(*, budgets: Budgets | None = None) -> Conductor:
-        return Conductor(
-            chosen=SelectSliceResultMother.about_to_start(
-                subissue=SubIssueMother.understanding_published_but_relabelled_by_hand()
-            ),
-            budgets=budgets,
-        )
-
-    def test_a_label_moved_by_hand_still_reads_the_pending_response_instead_of_publishing_again(self) -> None:
-        conductor = self._conductor(budgets=Budgets(person_wait_seconds=0))
-        conductor.repository.read_alignment_response.return_value = AlignmentResponse(
-            kind=AlignmentResponseKind.NOT_YET
-        )
-
-        conductor.conduct()
-
-        conductor.repository.read_alignment_response.assert_called_once_with(repo=Conductor.REPO, issue=_SUBISSUE)
-        assert conductor.understanding.write.call_count == 0
-        assert conductor.repository.pause_for_alignment.call_count == 0
-
-    def test_a_go_read_despite_the_mismatched_label_still_starts_implementing(self) -> None:
-        conductor = self._conductor()
-        conductor.repository.read_alignment_response.return_value = AlignmentResponse(kind=AlignmentResponseKind.GO)
-
-        conductor.conduct()
-
-        assert conductor.understanding.write.call_count == 0
         assert conductor.implement.execute.call_count == 1
 
 
@@ -793,7 +824,9 @@ class TestConductSliceReopeningABlockedRun:
         retry = RetryResponse(kind=RetryResponseKind.RETRY, instruction=_RETRY_INSTRUCTION)
         chosen = replace(SelectSliceResultMother.about_to_start(subissue=blocked), retry=retry)
         conductor = Conductor(chosen=chosen)
-        reopened = replace(blocked, run=reopened_run, label=IssueLabel.IN_PROGRESS)
+        reopened = replace(
+            blocked, run=replace(reopened_run, retry_instruction=_RETRY_INSTRUCTION), label=IssueLabel.IN_PROGRESS
+        )
         conductor.reopen.execute.return_value = ReopenSliceResult(subissue=reopened, instruction=_RETRY_INSTRUCTION)
 
         return conductor, blocked.run or reopened_run
@@ -874,6 +907,79 @@ class TestConductSliceReopeningABlockedRun:
         assert conductor.controls.run.call_args_list[0].kwargs["out"] == slice_dir / "round-4"
 
 
+class TestConductSliceResumingAReopenedRun:
+    @staticmethod
+    def _reopened_blocked_on_verify() -> Run:
+        return replace(RunMother.blocked_on_verify(), verify_retries=0, retry_instruction=_RETRY_INSTRUCTION)
+
+    def test_the_run_resumes_with_the_retry_budget_the_reopening_restored(self) -> None:
+        conductor = Conductor(chosen=SelectSliceResultMother.resumed_at(self._reopened_blocked_on_verify()))
+        conductor.verify.execute.side_effect = [
+            VerificationMother.vetoing(VerdictMother.failing()),
+            VerificationMother.passing(),
+        ]
+
+        conductor.conduct()
+
+        assert conductor.verify.execute.call_count == 2
+        assert conductor.implement.execute.call_count == 1
+
+    def test_the_instruction_persisted_in_the_run_travels_to_the_implementer(self) -> None:
+        conductor = Conductor(
+            chosen=SelectSliceResultMother.resumed_at(RunMother.implementing_after_a_retry(_RETRY_INSTRUCTION))
+        )
+
+        conductor.conduct()
+
+        assert conductor.implement.execute.call_args.args[0].retry_instruction == _RETRY_INSTRUCTION
+
+    def test_a_run_that_died_before_implementing_hands_the_instruction_over_when_launched_again(self) -> None:
+        dying = Conductor(chosen=SelectSliceResultMother.resumed_at(self._reopened_blocked_on_verify()))
+        dying.verify.execute.side_effect = [VerificationMother.vetoing(VerdictMother.failing())]
+        dying.implement.execute.side_effect = OSError("the process died")
+        with pytest.raises(OSError, match="died"):
+            dying.conduct()
+        last_persisted = dying.repository.write_run.call_args_list[-1].kwargs["run"]
+
+        relaunched = Conductor(chosen=SelectSliceResultMother.resumed_at(last_persisted))
+        relaunched.conduct()
+
+        assert relaunched.implement.execute.call_args.args[0].retry_instruction == _RETRY_INSTRUCTION
+
+    def test_the_instruction_is_spent_once_the_implementer_has_received_it(self) -> None:
+        conductor = Conductor(
+            chosen=SelectSliceResultMother.resumed_at(RunMother.implementing_after_a_retry(_RETRY_INSTRUCTION))
+        )
+
+        conductor.conduct()
+
+        persisted = [written.kwargs["run"] for written in conductor.repository.write_run.call_args_list]
+        assert persisted[0].step is Step.RUN_CONTROLS
+        assert persisted[0].retry_instruction == ""
+
+    def test_a_later_round_of_the_implementer_does_not_receive_the_instruction_again(self) -> None:
+        conductor = Conductor(
+            chosen=SelectSliceResultMother.resumed_at(RunMother.implementing_after_a_retry(_RETRY_INSTRUCTION))
+        )
+        conductor.controls.run.side_effect = [ControlOutcomeMother.red(), ControlOutcomeMother.green()]
+
+        conductor.conduct()
+
+        assert [call.args[0].retry_instruction for call in conductor.implement.execute.call_args_list] == [
+            _RETRY_INSTRUCTION,
+            "",
+        ]
+
+    def test_reopening_a_run_blocked_on_controls_names_the_next_round_after_the_ones_already_logged(self) -> None:
+        reopened_run = replace(RunMother.blocked_on_controls(), control_retries=0)
+        conductor = Conductor(chosen=SelectSliceResultMother.resumed_at(reopened_run))
+
+        conductor.conduct()
+
+        slice_dir = Conductor.slice_dir(SubIssueMother.pending().slice_id)
+        assert conductor.controls.run.call_args_list[0].kwargs["out"] == slice_dir / "round-4"
+
+
 class TestConductSliceResumingAnInterruptedRun:
     @staticmethod
     def _conductor() -> Conductor:
@@ -918,31 +1024,28 @@ class TestConductSliceResumingAnInterruptedRun:
         assert conductor.verify.execute.call_count == 0
         assert conductor.repository.write_precheck_reason.call_count == 0
 
-    def test_a_run_whose_understanding_was_already_published_goes_on_without_asking_the_harness_again(
-        self,
-    ) -> None:
+    def test_a_run_whose_understanding_was_already_published_waits_without_asking_the_harness_again(self) -> None:
         conductor = Conductor(
             chosen=SelectSliceResultMother.resumed_at(
                 RunMother.understanding_after_a_discard(HarnessSpendMother.of_the_understanding_call())
             )
         )
-        conductor.repository.read_alignment_response.return_value = AlignmentResponse(kind=AlignmentResponseKind.GO)
 
-        conductor.conduct()
+        result = conductor.conduct()
 
         assert conductor.prechecks.execute.call_count == 0
         assert conductor.understanding.write.call_count == 0
-        assert conductor.implement.execute.call_count == 1
+        assert result.halt is Halt.AWAITING_ALIGNMENT
 
-    def test_a_run_whose_understanding_is_still_pending_publishes_it_when_resumed(self) -> None:
+    def test_a_run_whose_understanding_is_still_to_be_drafted_publishes_it_when_resumed_and_waits(self) -> None:
         conductor = Conductor(chosen=SelectSliceResultMother.resumed_at(RunMother.about_to_publish_the_understanding()))
-        conductor.repository.read_alignment_response.return_value = AlignmentResponse(kind=AlignmentResponseKind.GO)
 
-        conductor.conduct()
+        result = conductor.conduct()
 
         assert conductor.prechecks.execute.call_count == 0
         assert conductor.understanding.write.call_count == 1
-        assert conductor.implement.execute.call_count == 1
+        assert conductor.implement.execute.call_count == 0
+        assert result.halt is Halt.AWAITING_ALIGNMENT
 
 
 class TestConductSliceResumingCatchesUpTheBranch:
@@ -1453,13 +1556,9 @@ class TestConductSliceReportingEvents:
         self,
     ) -> None:
         conductor = Conductor(
-            chosen=SelectSliceResultMother.about_to_start(
-                subissue=SubIssueMother.carrying(IssueLabel.AWAITING_ALIGNMENT)
-            ),
-            budgets=Budgets(person_wait_seconds=30),
-        )
-        conductor.repository.read_alignment_response.return_value = AlignmentResponse(
-            kind=AlignmentResponseKind.NOT_YET
+            chosen=SelectSliceResultMother.resumed_at(
+                RunMother.awaiting_alignment(), label=IssueLabel.AWAITING_ALIGNMENT
+            )
         )
 
         conductor.conduct()

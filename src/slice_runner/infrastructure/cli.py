@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
+from slice_runner.application.actions.agree_understanding import AgreeUnderstanding, AgreeUnderstandingParams
 from slice_runner.application.actions.catch_up_branch import CatchUpBranch
 from slice_runner.application.actions.close_parent import CloseParent
 from slice_runner.application.actions.commit_round import CommitRound
@@ -16,12 +17,13 @@ from slice_runner.application.actions.conduct_slice import (
     ConductSlicePorts,
     ConductSliceUseCases,
 )
+from slice_runner.application.actions.correct_understanding import CorrectUnderstanding, CorrectUnderstandingParams
 from slice_runner.application.actions.deliver_slice import DeliverSlice
 from slice_runner.application.actions.implement_slice import ImplementSlice
 from slice_runner.application.actions.mount_worktree import MountWorktree
 from slice_runner.application.actions.record_closure import RecordClosure
 from slice_runner.application.actions.record_step import RecordStep
-from slice_runner.application.actions.reopen_slice import ReopenSlice
+from slice_runner.application.actions.reopen_slice import ReopenSlice, ReopenSliceParams
 from slice_runner.application.actions.rescue_staged_work import RescueStagedWork
 from slice_runner.application.actions.reset_slice import ResetSlice, ResetSliceParams
 from slice_runner.application.actions.retire_worktree import RetireWorktree
@@ -60,6 +62,7 @@ from slice_runner.domain.exceptions import (
     NoRecognizableSpecError,
     NoSliceLeftError,
     NoUnderstandingPublishedError,
+    OrderRefusedError,
     ProtectedBranchError,
     RunNotClosedError,
     SourcesBudgetExceededError,
@@ -174,6 +177,14 @@ class Cli:
         SourcesBudgetExceededError,
     )
 
+    ORDER_STOPS: ClassVar[tuple[type[Exception], ...]] = (
+        OrderRefusedError,
+        ImpossibleTransitionError,
+        UnreadableIssueError,
+        UnreadableRunError,
+        GhCommandFailedError,
+    )
+
     def __init__(self, *, process: Process, budgets: Budgets) -> None:
         self._process = process
         self._budgets = budgets
@@ -219,10 +230,8 @@ class Cli:
                 result = cls(process=LocalProcess(budgets=budgets), budgets=budgets).doctor(
                     repo=arguments.repo, worktree=arguments.worktree, base=arguments.base
                 )
-            case Subcommand.RESET:
-                result = cls(process=LocalProcess(budgets=budgets), budgets=budgets).reset(
-                    repo=arguments.repo, issue=arguments.issue
-                )
+            case Subcommand.RESET | Subcommand.GO | Subcommand.REVIEW | Subcommand.RETRY:
+                result = cls._dispatched_over_a_subissue(arguments, budgets=budgets)
             case Subcommand.STATUS:
                 result = cls(process=LocalProcess(budgets=budgets), budgets=budgets).status(
                     repo=arguments.repo, issue=arguments.issue, as_json=arguments.json
@@ -239,6 +248,24 @@ class Cli:
                 result = cls(process=LocalProcess(budgets=budgets), budgets=budgets).understanding(
                     repo=arguments.repo, issue=arguments.issue, as_json=arguments.json
                 )
+
+        return result
+
+    @classmethod
+    def _dispatched_over_a_subissue(cls, arguments: argparse.Namespace, *, budgets: Budgets) -> int:
+        cli = cls(process=LocalProcess(budgets=budgets), budgets=budgets)
+
+        match Subcommand(arguments.command):
+            case Subcommand.RESET:
+                result = cli.reset(repo=arguments.repo, issue=arguments.issue)
+            case Subcommand.GO:
+                result = cli.go(repo=arguments.repo, issue=arguments.issue)
+            case Subcommand.REVIEW:
+                result = cli.review(repo=arguments.repo, issue=arguments.issue, correction=" ".join(arguments.text))
+            case Subcommand.RETRY:
+                result = cli.retry(repo=arguments.repo, issue=arguments.issue, instruction=" ".join(arguments.text))
+            case _:
+                raise ValueError(f"`{arguments.command}` is not a subcommand over a subissue")
 
         return result
 
@@ -360,6 +387,39 @@ class Cli:
         reset.add_argument("issue", type=int, help="number of the subissue to reset")
         reset.add_argument("--repo", required=True, help="repo of the issue the subissue belongs to")
 
+        cls._add_the_orders(subcommands)
+
+        cls._add_the_readers(subcommands)
+
+        return parser
+
+    @staticmethod
+    def _add_the_orders(subcommands: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+        go = subcommands.add_parser(
+            Subcommand.GO,
+            help="agree the understanding a slice published, so the next run implements it, without launching the run",
+        )
+        go.add_argument("issue", type=int, help="number of the subissue whose understanding is agreed")
+        go.add_argument("--repo", required=True, help="repo of the subissue, as `<org>/<repo>`")
+
+        review = subcommands.add_parser(
+            Subcommand.REVIEW,
+            help="ask for the understanding of a slice to be redone with a correction, without launching the run",
+        )
+        review.add_argument("issue", type=int, help="number of the subissue whose understanding is corrected")
+        review.add_argument("--repo", required=True, help="repo of the subissue, as `<org>/<repo>`")
+        review.add_argument("text", nargs="+", help="the correction the understanding is redone with")
+
+        retry = subcommands.add_parser(
+            Subcommand.RETRY,
+            help="reopen a blocked or aborted slice with an instruction for the implementer, without launching the run",
+        )
+        retry.add_argument("issue", type=int, help="number of the subissue that is reopened")
+        retry.add_argument("--repo", required=True, help="repo of the subissue, as `<org>/<repo>`")
+        retry.add_argument("text", nargs="+", help="the instruction the implementer receives on the next run")
+
+    @staticmethod
+    def _add_the_readers(subcommands: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
         status = subcommands.add_parser(
             Subcommand.STATUS,
             help="print one line per slice of an issue with its state, step, spend and pull request, reading only",
@@ -383,8 +443,6 @@ class Cli:
         understanding.add_argument("issue", type=int, help="number of the subissue whose understanding is shown")
         understanding.add_argument("--repo", required=True, help="repo of the subissue, as `<org>/<repo>`")
         understanding.add_argument("--json", action="store_true", help="print the understanding as a JSON object")
-
-        return parser
 
     @classmethod
     def explain(cls, *, request: str, budgets: Budgets) -> int:
@@ -615,6 +673,61 @@ class Cli:
         )
 
         return ExitCode.OK
+
+    def go(self, *, repo: str, issue: int) -> int:
+        repository = GhRunRepository(call=self._gh_call(clock=SystemClock()))
+        try:
+            subissue = repository.read_subissue(repo=repo, issue=issue)
+            AgreeUnderstanding(repository=repository).execute(AgreeUnderstandingParams(repo=repo, subissue=subissue))
+        except self.ORDER_STOPS as error:
+            return self._why_the_order_stopped(error)
+
+        print(f"the understanding of subissue #{issue} is agreed: the next `run` implements it")
+
+        return ExitCode.OK
+
+    def review(self, *, repo: str, issue: int, correction: str) -> int:
+        if not correction.strip():
+            return self._reported("a review needs the correction as text", ExitCode.USAGE_ERROR)
+
+        repository = GhRunRepository(call=self._gh_call(clock=SystemClock()))
+        try:
+            subissue = repository.read_subissue(repo=repo, issue=issue)
+            CorrectUnderstanding(repository=repository).execute(
+                CorrectUnderstandingParams(repo=repo, subissue=subissue, correction=correction)
+            )
+        except self.ORDER_STOPS as error:
+            return self._why_the_order_stopped(error)
+
+        print(f"the correction of subissue #{issue} is saved: the next `run` redoes the understanding with it")
+
+        return ExitCode.OK
+
+    def retry(self, *, repo: str, issue: int, instruction: str) -> int:
+        if not instruction.strip():
+            return self._reported("a retry needs the instruction as text", ExitCode.USAGE_ERROR)
+
+        repository = GhRunRepository(call=self._gh_call(clock=SystemClock()))
+        try:
+            subissue = repository.read_subissue(repo=repo, issue=issue)
+            ReopenSlice(repository=repository, machine=StateMachine(budgets=self._budgets)).execute(
+                ReopenSliceParams(repo=repo, subissue=subissue, instruction=instruction)
+            )
+        except self.ORDER_STOPS as error:
+            return self._why_the_order_stopped(error)
+
+        print(f"subissue #{issue} is reopened: the next `run` hands the instruction to the implementer")
+
+        return ExitCode.OK
+
+    def _why_the_order_stopped(self, error: Exception) -> ExitCode:
+        match error:
+            case OrderRefusedError() | ImpossibleTransitionError():
+                return self._reported(f"the order was refused: {error}", ExitCode.ORDER_REFUSED)
+            case UnreadableIssueError() | UnreadableRunError():
+                return self._reported(f"the order cannot be given as asked: {error}", ExitCode.USAGE_ERROR)
+            case _:
+                return self._reported(f"the order could not be written: {error}", ExitCode.RUN_INTERRUPTED)
 
     def status(self, *, repo: str, issue: int, as_json: bool = False) -> int:
         clock = SystemClock()

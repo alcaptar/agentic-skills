@@ -12,6 +12,7 @@ if TYPE_CHECKING:
     from slice_runner.domain.findings_history import FindingsHistory
     from slice_runner.domain.issue_label import IssueLabel
     from slice_runner.domain.malformed_reason import MalformedReason
+    from slice_runner.domain.order import Order
     from slice_runner.domain.parent_issue import ParentIssue
     from slice_runner.domain.precheck_outcome import PrecheckOutcome
     from slice_runner.domain.retry_response import RetryResponse
@@ -40,10 +41,10 @@ class RunRepository(ABC):
     def read_retry_instruction(self, *, repo: str, issue: int) -> RetryResponse: ...
 
     @abstractmethod
-    def mark_reopened(self, *, repo: str, issue: int, instruction: str) -> None: ...
+    def write_malformed_response(self, *, repo: str, issue: int, reason: MalformedReason) -> None: ...
 
     @abstractmethod
-    def write_malformed_response(self, *, repo: str, issue: int, reason: MalformedReason) -> None: ...
+    def mark_order(self, *, repo: str, issue: int, order: Order, text: str) -> None: ...
 
     @abstractmethod
     def write_run(self, *, repo: str, issue: int, run: Run) -> None: ...

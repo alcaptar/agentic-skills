@@ -8,9 +8,10 @@ import pytest
 
 from slice_runner.application.actions.reopen_slice import ReopenSlice, ReopenSliceParams
 from slice_runner.domain.budgets import Budgets
-from slice_runner.domain.exceptions import ImpossibleTransitionError
+from slice_runner.domain.exceptions import ImpossibleTransitionError, OrderRefusedError
 from slice_runner.domain.harness_spend import HarnessSpend
 from slice_runner.domain.issue_label import IssueLabel
+from slice_runner.domain.order import Order
 from slice_runner.domain.run_repository import RunRepository
 from slice_runner.domain.state_machine import StateMachine
 from slice_runner.tests.mothers.harness_spend_mother import HarnessSpendMother
@@ -19,6 +20,7 @@ from slice_runner.tests.mothers.sub_issue_mother import SubIssueMother
 
 if TYPE_CHECKING:
     from slice_runner.domain.run import Run
+    from slice_runner.domain.sub_issue import SubIssue
 
 _REPO = "alcaptar/agentic-skills"
 _INSTRUCTION = "el control ya esta arreglado a mano"
@@ -54,7 +56,7 @@ _BLOCKS: list[tuple[IssueLabel, Run, Run]] = [
     (
         IssueLabel.BLOCKED_LEFTOVER_WORKTREE,
         RunMother.blocked_on_the_worktree(),
-        RunMother.blocked_on_the_worktree(),
+        replace(RunMother.blocked_on_the_worktree(), tree_unexpected=True),
     ),
     (
         IssueLabel.ABORTED_BUDGET,
@@ -90,7 +92,9 @@ class TestReopenSlice:
 
         action.execute(ReopenSliceParams(repo=_REPO, subissue=subissue, instruction=_INSTRUCTION))
 
-        repository.write_run.assert_called_once_with(repo=_REPO, issue=subissue.number, run=reopened_run)
+        repository.write_run.assert_called_once_with(
+            repo=_REPO, issue=subissue.number, run=replace(reopened_run, retry_instruction=_INSTRUCTION)
+        )
 
     @pytest.mark.parametrize(("label", "blocked_run", "reopened_run"), _BLOCKS)
     def test_the_blocking_label_is_swapped_for_the_one_that_matches_the_resumed_step(
@@ -120,17 +124,20 @@ class TestReopenSlice:
                 RunMother.blocked_on_conflict_with_indeterminate_ticks_piled_up(),
                 catch_up_retries=0,
                 indeterminate_ticks=0,
+                retry_instruction=_INSTRUCTION,
             ),
         )
 
-    def test_the_instruction_that_reopened_the_slice_is_left_on_the_subissue_marked_as_consumed(
+    def test_the_order_that_reopened_the_slice_is_left_on_the_subissue_with_its_instruction(
         self, action: ReopenSlice, repository: Mock
     ) -> None:
         subissue = SubIssueMother.blocked(IssueLabel.BLOCKED_CONTROLS, RunMother.blocked_on_controls())
 
         action.execute(ReopenSliceParams(repo=_REPO, subissue=subissue, instruction=_INSTRUCTION))
 
-        repository.mark_reopened.assert_called_once_with(repo=_REPO, issue=subissue.number, instruction=_INSTRUCTION)
+        repository.mark_order.assert_called_once_with(
+            repo=_REPO, issue=subissue.number, order=Order.RETRY, text=_INSTRUCTION
+        )
 
     def test_the_result_carries_the_reopened_subissue_and_the_instruction_that_reopened_it(
         self, action: ReopenSlice, repository: Mock
@@ -140,7 +147,9 @@ class TestReopenSlice:
         result = action.execute(ReopenSliceParams(repo=_REPO, subissue=subissue, instruction=_INSTRUCTION))
 
         assert result.subissue == replace(
-            subissue, run=replace(RunMother.blocked_on_controls(), control_retries=0), label=IssueLabel.IN_PROGRESS
+            subissue,
+            run=replace(RunMother.blocked_on_controls(), control_retries=0, retry_instruction=_INSTRUCTION),
+            label=IssueLabel.IN_PROGRESS,
         )
         assert result.instruction == _INSTRUCTION
 
@@ -159,3 +168,38 @@ class TestReopenSlice:
 
         with pytest.raises(ImpossibleTransitionError, match=str(subissue.number)):
             action.execute(ReopenSliceParams(repo=_REPO, subissue=subissue, instruction=_INSTRUCTION))
+
+    def test_a_run_aborted_before_touching_code_is_reopened_not_expecting_the_tree_it_could_not_retire(
+        self, action: ReopenSlice, repository: Mock
+    ) -> None:
+        aborted = SubIssueMother.blocked(IssueLabel.ABORTED_BUDGET, RunMother.aborted_before_touching_code())
+
+        action.execute(ReopenSliceParams(repo=_REPO, subissue=aborted, instruction=_INSTRUCTION))
+
+        assert repository.write_run.call_args.kwargs["run"].tree_unexpected is True
+
+    def test_a_run_blocked_while_it_kept_its_tree_is_reopened_expecting_it(
+        self, action: ReopenSlice, repository: Mock
+    ) -> None:
+        blocked = SubIssueMother.blocked(IssueLabel.BLOCKED_VERIFY, RunMother.blocked_on_verify())
+
+        action.execute(ReopenSliceParams(repo=_REPO, subissue=blocked, instruction=_INSTRUCTION))
+
+        assert repository.write_run.call_args.kwargs["run"].tree_unexpected is False
+
+    @pytest.mark.parametrize(
+        "subissue",
+        [
+            SubIssueMother.awaiting_alignment(),
+            replace(SubIssueMother.pending(), label=IssueLabel.IN_PROGRESS, run=RunMother.implementing()),
+        ],
+    )
+    def test_a_slice_that_is_neither_blocked_nor_aborted_is_refused_before_writing_anything(
+        self, action: ReopenSlice, repository: Mock, subissue: SubIssue
+    ) -> None:
+        with pytest.raises(OrderRefusedError, match=str(subissue.number)):
+            action.execute(ReopenSliceParams(repo=_REPO, subissue=subissue, instruction=_INSTRUCTION))
+
+        repository.write_run.assert_not_called()
+        repository.write_label.assert_not_called()
+        repository.mark_order.assert_not_called()

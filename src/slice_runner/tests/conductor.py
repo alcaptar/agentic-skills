@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
@@ -33,6 +34,7 @@ from slice_runner.application.queries.run_prechecks import RunPrechecks
 from slice_runner.application.queries.select_slice import SelectSlice
 from slice_runner.domain.alignment_response import AlignmentResponse
 from slice_runner.domain.alignment_response_kind import AlignmentResponseKind
+from slice_runner.domain.alignment_stage import AlignmentStage
 from slice_runner.domain.branches import Branches
 from slice_runner.domain.budgets import Budgets
 from slice_runner.domain.call_spend_log import HarnessCallSpend
@@ -46,6 +48,7 @@ from slice_runner.domain.debt_entry import DebtEntry
 from slice_runner.domain.deploy_watch import DeployWatch
 from slice_runner.domain.event_log import EventLog
 from slice_runner.domain.forum import Forum
+from slice_runner.domain.issue_label import IssueLabel
 from slice_runner.domain.metrics_log import MetricsLog
 from slice_runner.domain.precheck_outcome import PrecheckOutcome
 from slice_runner.domain.precheck_result import PrecheckResult
@@ -63,6 +66,7 @@ from slice_runner.tests.mothers.control_outcome_mother import ControlOutcomeMoth
 from slice_runner.tests.mothers.implementation_mother import ImplementationMother
 from slice_runner.tests.mothers.listed_worktree_mother import ListedWorktreeMother
 from slice_runner.tests.mothers.pull_request_status_mother import PullRequestStatusMother
+from slice_runner.tests.mothers.select_slice_result_mother import SelectSliceResultMother
 from slice_runner.tests.mothers.sub_issue_mother import SubIssueMother
 from slice_runner.tests.mothers.understanding_mother import UnderstandingMother
 from slice_runner.tests.mothers.verification_mother import SliceDiffMother, VerificationMother
@@ -201,6 +205,22 @@ class Conductor:
                 logs=self.LOGS,
             )
         )
+
+    def agree_the_understanding(self) -> None:
+        paused = self.repository.write_run.call_args_list[-1].kwargs["run"]
+        agreed = replace(paused, alignment=AlignmentStage.AGREED)
+        self.select.execute.return_value = SelectSliceResultMother.resumed_at(
+            agreed, label=IssueLabel.AWAITING_ALIGNMENT
+        )
+        self.worktrees.listed.side_effect = None
+        self.worktrees.listed.return_value = self._mounted_listing()
+        self.worktrees.branch_exists.return_value = True
+
+    def conduct_after_the_person_agrees(self) -> ConductSliceResult:
+        self.conduct()
+        self.agree_the_understanding()
+
+        return self.conduct()
 
     def _action(self) -> ConductSlice:
         return ConductSlice(

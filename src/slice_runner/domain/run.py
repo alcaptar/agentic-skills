@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
+from slice_runner.domain.alignment_stage import AlignmentStage
 from slice_runner.domain.harness_spend import HarnessSpend
 
 if TYPE_CHECKING:
@@ -14,7 +15,9 @@ if TYPE_CHECKING:
 class Run:
     step: Step
     corrected: str = ""
-    understanding_pending: bool = False
+    alignment: AlignmentStage = AlignmentStage.AWAITING
+    retry_instruction: str = ""
+    tree_unexpected: bool = False
     previous_call_died: bool = False
     catching_up_the_branch: bool = False
     control_retries: int = 0
@@ -42,7 +45,7 @@ class Run:
 
     @property
     def redrafting_after_a_correction(self) -> bool:
-        return self.has_a_correction and self.understanding_pending
+        return self.has_a_correction and self.alignment is AlignmentStage.DRAFT
 
     @property
     def verify_round_in_progress(self) -> int:

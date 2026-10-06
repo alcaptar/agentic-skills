@@ -23,6 +23,7 @@ from slice_runner.application.queries.read_ci_status import ReadCiStatusParams
 from slice_runner.application.queries.read_pull_request_status import ReadPullRequestStatusParams
 from slice_runner.application.queries.run_prechecks import RunPrechecksParams
 from slice_runner.application.queries.select_slice import SelectSliceParams
+from slice_runner.domain.alignment_stage import AlignmentStage
 from slice_runner.domain.closing_worktree import ClosingWorktree
 from slice_runner.domain.discarded_call import DiscardedCall
 from slice_runner.domain.exceptions import (
@@ -128,7 +129,6 @@ class ConductSliceProgress:
     control_logs: tuple[Path, ...] = field(default=())
     hygiene_refusal: str = ""
     understanding: str = ""
-    retry_instruction: str = ""
     pull_request: int | None = None
     waited_seconds: int = 0
     discarded_call: DiscardedCall | None = None
@@ -273,7 +273,6 @@ class ConductSlice:
             run=run,
             label=chosen.subissue.label,
             spends=(run.spend,) if run.spend.measured else (),
-            retry_instruction=retry.instruction if retry is not None else "",
             expects_a_tree=expects_a_tree,
         )
         of_the_subissue = Prechecks.of_the_subissue(chosen.subissue)
@@ -324,7 +323,16 @@ class ConductSlice:
                 replace(progress, conflicting_paths=(mounted.conflicting_path,)), mounted.outcome
             )
 
-        return then(progress)
+        return then(self._with_the_tree_expected_from_now_on(progress))
+
+    def _with_the_tree_expected_from_now_on(self, progress: ConductSliceProgress) -> ConductSliceProgress:
+        if not progress.run.tree_unexpected:
+            return progress
+
+        run = replace(progress.run, tree_unexpected=False)
+        self._repository.write_run(repo=progress.params.repo, issue=progress.subissue.number, run=run)
+
+        return replace(progress, run=run)
 
     def _blocked_by_the_worktree(self, progress: ConductSliceProgress, outcome: Outcome) -> ConductSliceResult:
         transition = self._machine.after(progress.run, outcome)
@@ -405,7 +413,7 @@ class ConductSlice:
         marked = self._marked_in_progress(progress)
         arrived = self._machine.after(marked.run, Outcome.DONE).run
 
-        return self._conducting(replace(marked, run=replace(arrived, understanding_pending=True)))
+        return self._conducting(replace(marked, run=replace(arrived, alignment=AlignmentStage.DRAFT)))
 
     def _halted_by(self, progress: ConductSliceProgress, precheck: PrecheckResult) -> ConductSliceResult:
         if precheck.reason is not None:
@@ -456,24 +464,17 @@ class ConductSlice:
             understanding=sought.understanding,
             spends=(*progress.spends, sought.spend) if sought.spend is not None else progress.spends,
         )
-        response = sought.response
-        if response is None:
-            return self._paused_for_alignment(updated)
+        if sought.published:
+            updated = self._paused_for_alignment(updated)
 
-        return SteppedSlice(
-            progress=updated,
-            outcome=Outcome.of_the_alignment(response, redrafting=updated.run.redrafting_after_a_correction),
-        )
+        return SteppedSlice(progress=updated, outcome=Outcome.of_the_alignment(sought.response))
 
-    def _paused_for_alignment(self, progress: ConductSliceProgress) -> SteppedSlice:
+    def _paused_for_alignment(self, progress: ConductSliceProgress) -> ConductSliceProgress:
         self._repository.pause_for_alignment(
             repo=progress.params.repo, issue=progress.subissue.number, remove=progress.label
         )
 
-        return SteppedSlice(
-            progress=replace(progress, label=IssueLabel.AWAITING_ALIGNMENT),
-            outcome=Outcome.PENDING,
-        )
+        return replace(progress, label=IssueLabel.AWAITING_ALIGNMENT)
 
     def _seeded(self, progress: ConductSliceProgress) -> ConductSliceProgress:
         if progress.understanding:
@@ -497,6 +498,8 @@ class ConductSlice:
             progress = self._recorded(stepped.progress, transition)
             if transition.state is not RunState.OPEN:
                 return self._closing(progress, transition.state)
+            if transition.awaits_a_person:
+                return self._ending(progress, Halt.AWAITING_ALIGNMENT)
             if transition.wait_seconds > 0:
                 progress = self._waiting(progress, transition.wait_seconds)
                 if self._budgets.wait_exhausted(progress.waited_seconds, step=progress.run.step):
@@ -579,7 +582,7 @@ class ConductSlice:
                     control_logs=progress.control_logs,
                     hygiene_refusal=progress.hygiene_refusal,
                     understanding=progress.understanding,
-                    retry_instruction=progress.retry_instruction,
+                    retry_instruction=progress.run.retry_instruction,
                     requested_changes=progress.run.requested_changes,
                     previous_call_died=progress.run.previous_call_died,
                 )
