@@ -66,7 +66,6 @@ from slice_runner.domain.exceptions import (
     ProtectedBranchError,
     RunNotClosedError,
     SourcesBudgetExceededError,
-    StaleRunStateError,
     UnreadableCallSpendLogError,
     UnreadableCallTraceError,
     UnreadableConversationError,
@@ -653,7 +652,7 @@ class Cli:
         clock = SystemClock()
         repository = GhRunRepository(call=self._gh_call(clock=clock))
         try:
-            subissue = repository.read_subissue_without_run(repo=repo, issue=issue)
+            subissue = repository.read_subissue(repo=repo, issue=issue)
             reset = ResetSlice(repository=repository, clock=clock).execute(
                 ResetSliceParams(repo=repo, subissue=subissue)
             )
@@ -675,7 +674,7 @@ class Cli:
             subissue = repository.read_subissue(repo=repo, issue=issue)
             AgreeUnderstanding(repository=repository).execute(AgreeUnderstandingParams(repo=repo, subissue=subissue))
         except self.ORDER_STOPS as error:
-            return self._why_the_order_stopped(error, repo=repo, issue=issue)
+            return self._why_the_order_stopped(error)
 
         print(f"the understanding of subissue #{issue} is agreed: the next `run` implements it")
 
@@ -692,7 +691,7 @@ class Cli:
                 CorrectUnderstandingParams(repo=repo, subissue=subissue, correction=correction)
             )
         except self.ORDER_STOPS as error:
-            return self._why_the_order_stopped(error, repo=repo, issue=issue)
+            return self._why_the_order_stopped(error)
 
         print(f"the correction of subissue #{issue} is saved: the next `run` redoes the understanding with it")
 
@@ -709,30 +708,20 @@ class Cli:
                 ReopenSliceParams(repo=repo, subissue=subissue, instruction=instruction)
             )
         except self.ORDER_STOPS as error:
-            return self._why_the_order_stopped(error, repo=repo, issue=issue)
+            return self._why_the_order_stopped(error)
 
         print(f"subissue #{issue} is reopened: the next `run` hands the instruction to the implementer")
 
         return ExitCode.OK
 
-    def _why_the_order_stopped(self, error: Exception, *, repo: str, issue: int) -> ExitCode:
+    def _why_the_order_stopped(self, error: Exception) -> ExitCode:
         match error:
             case OrderRefusedError() | ImpossibleTransitionError():
                 return self._reported(f"the order was refused: {error}", ExitCode.ORDER_REFUSED)
-            case GhCommandFailedError():
-                return self._reported(f"the order could not be written: {error}", ExitCode.RUN_INTERRUPTED)
+            case UnreadableIssueError() | UnreadableRunError():
+                return self._reported(f"the order cannot be given as asked: {error}", ExitCode.USAGE_ERROR)
             case _:
-                return self._reported(
-                    f"the order cannot be given as asked: {self._explained(error, subissue=str(issue), repo=repo)}",
-                    ExitCode.USAGE_ERROR,
-                )
-
-    @classmethod
-    def _explained(cls, error: Exception, *, subissue: str, repo: str) -> str:
-        if isinstance(error, StaleRunStateError):
-            return f"{error}; clear it with `{cls.PROGRAM} reset {subissue} --repo {repo}`"
-
-        return str(error)
+                return self._reported(f"the order could not be written: {error}", ExitCode.RUN_INTERRUPTED)
 
     def status(self, *, repo: str, issue: int) -> int:
         clock = SystemClock()
@@ -814,9 +803,7 @@ class Cli:
                 | ProtectedBranchError()
                 | BranchMismatchError()
             ):
-                explained = self._explained(error, subissue="<subissue>", repo="<org>/<repo>")
-
-                return self._reported(f"the run cannot be conducted as asked: {explained}", ExitCode.USAGE_ERROR)
+                return self._reported(f"the run cannot be conducted as asked: {error}", ExitCode.USAGE_ERROR)
             case DiffNotReadableError():
                 return self._reported(f"there is no diff to verify: {error}", ExitCode.NO_DIFF)
             case MeasuredCallError():
@@ -864,6 +851,7 @@ class Cli:
         return ConductSlice(
             use_cases=ConductSliceUseCases(
                 select=SelectSlice(repository=repository),
+                reopen=ReopenSlice(repository=repository, machine=machine),
                 prechecks=RunPrechecks(branches=branches, forum=forum),
                 mount=MountWorktree(worktrees=worktrees),
                 retire=RetireWorktree(worktrees=worktrees),

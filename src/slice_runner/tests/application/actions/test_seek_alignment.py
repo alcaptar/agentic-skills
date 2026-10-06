@@ -8,8 +8,11 @@ import pytest
 
 from slice_runner.application.actions.seek_alignment import SeekAlignment, SeekAlignmentParams
 from slice_runner.domain.alignment import Alignment
+from slice_runner.domain.alignment_response import AlignmentResponse
+from slice_runner.domain.alignment_response_kind import AlignmentResponseKind
 from slice_runner.domain.alignment_stage import AlignmentStage
 from slice_runner.domain.exceptions import InvalidUnderstandingReportError
+from slice_runner.domain.malformed_reason import MalformedReason
 from slice_runner.domain.run_repository import RunRepository
 from slice_runner.domain.understanding_writer import UnderstandingWriter
 from slice_runner.tests.mothers.harness_spend_mother import HarnessSpendMother
@@ -36,6 +39,7 @@ class TestSeekAlignment:
     @pytest.fixture
     def repository(self) -> Mock:
         repository: Mock = create_autospec(RunRepository, spec_set=True, instance=True)
+        repository.read_alignment_response.return_value = AlignmentResponse(kind=AlignmentResponseKind.NOT_YET)
         repository.read_understanding.return_value = UnderstandingMother.TEXT
         return repository
 
@@ -111,14 +115,71 @@ class TestSeekAlignment:
         with pytest.raises(InvalidUnderstandingReportError, match="blank text"):
             action.execute(self._params(run=RunMother.about_to_publish_the_understanding()))
 
-    def test_a_run_awaiting_the_person_neither_publishes_again_nor_touches_the_issue(
+    def test_a_run_awaiting_the_person_reads_the_comments_once_and_neither_publishes_again_nor_writes(
         self, action: SeekAlignment, repository: Mock, understanding: Mock
     ) -> None:
         result = action.execute(self._params(run=RunMother.awaiting_alignment()))
 
+        repository.read_alignment_response.assert_called_once_with(repo=_REPO, issue=_ISSUE)
         assert understanding.write.call_count == 0
-        assert repository.mock_calls == []
+        assert repository.write_run.call_count == 0
         assert (result.run, result.response) == (RunMother.awaiting_alignment(), AlignmentStage.AWAITING)
+
+    def test_a_go_comment_agrees_the_understanding_without_asking_the_harness_for_anything(
+        self, action: SeekAlignment, repository: Mock, understanding: Mock
+    ) -> None:
+        repository.read_alignment_response.return_value = AlignmentResponse(kind=AlignmentResponseKind.GO)
+
+        result = action.execute(self._params(run=RunMother.awaiting_alignment()))
+
+        assert understanding.write.call_count == 0
+        assert result.response is AlignmentStage.AGREED
+
+    def test_a_review_comment_redrafts_and_publishes_in_the_same_call_and_goes_back_to_waiting(
+        self, action: SeekAlignment, repository: Mock, understanding: Mock
+    ) -> None:
+        repository.read_alignment_response.return_value = AlignmentResponse(
+            kind=AlignmentResponseKind.REVIEW, correction="la senal no esta exenta"
+        )
+
+        result = action.execute(
+            self._params(run=RunMother.awaiting_alignment(), understanding=UnderstandingMother.TEXT)
+        )
+
+        assert understanding.write.call_args.kwargs["alignment"] == Alignment(
+            agreed=UnderstandingMother.TEXT, correction="la senal no esta exenta"
+        )
+        assert repository.write_run.call_args_list[0].kwargs["run"] == (
+            RunMother.about_to_redraft_after_a_correction("la senal no esta exenta")
+        )
+        assert (result.response, result.run.corrected) == (AlignmentStage.AWAITING, "la senal no esta exenta")
+
+    def test_a_review_comment_whose_correction_is_already_applied_is_not_redrafted_again(
+        self, action: SeekAlignment, repository: Mock, understanding: Mock
+    ) -> None:
+        repository.read_alignment_response.return_value = AlignmentResponse(
+            kind=AlignmentResponseKind.REVIEW, correction="la senal no esta exenta"
+        )
+        applied = replace(RunMother.awaiting_alignment(), corrected="la senal no esta exenta")
+
+        result = action.execute(self._params(run=applied))
+
+        assert understanding.write.call_count == 0
+        assert result.response is AlignmentStage.AWAITING
+
+    def test_a_malformed_comment_is_answered_once_and_the_run_keeps_waiting(
+        self, action: SeekAlignment, repository: Mock
+    ) -> None:
+        repository.read_alignment_response.return_value = AlignmentResponse(
+            kind=AlignmentResponseKind.MALFORMED, reason=MalformedReason.GO_CARRIES_TEXT
+        )
+
+        result = action.execute(self._params(run=RunMother.awaiting_alignment()))
+
+        repository.write_malformed_response.assert_called_once_with(
+            repo=_REPO, issue=_ISSUE, reason=MalformedReason.GO_CARRIES_TEXT
+        )
+        assert result.response is AlignmentStage.AWAITING
 
     def test_a_run_with_the_understanding_agreed_neither_publishes_nor_touches_the_issue(
         self, action: SeekAlignment, repository: Mock, understanding: Mock

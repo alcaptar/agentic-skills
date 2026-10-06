@@ -17,6 +17,7 @@ class Run:
     corrected: str = ""
     alignment: AlignmentStage = AlignmentStage.AWAITING
     retry_instruction: str = ""
+    tree_unexpected: bool = False
     previous_call_died: bool = False
     catching_up_the_branch: bool = False
     control_retries: int = 0

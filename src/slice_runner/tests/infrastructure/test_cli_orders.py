@@ -279,29 +279,12 @@ class TestARunBlockWrittenByAnEarlierVersion(_Orders):
             label=IssueLabel.AWAITING_ALIGNMENT, run=RunMother.awaiting_alignment(), stale=True
         )
 
-    @pytest.mark.parametrize("order", ["go", "review", "retry"])
-    def test_every_order_names_the_reset_command_and_writes_nothing(
-        self, order: str, capsys: pytest.CaptureFixture[str]
-    ) -> None:
-        process = self.process(self._stale())
-        cli = Cli(process=process, budgets=Budgets())
-        orders = {
-            "go": lambda: cli.go(repo=_REPO, issue=_ISSUE),
-            "review": lambda: cli.review(repo=_REPO, issue=_ISSUE, correction="x"),
-            "retry": lambda: cli.retry(repo=_REPO, issue=_ISSUE, instruction="x"),
-        }
-
-        code = orders[order]()
-
-        assert code == ExitCode.USAGE_ERROR
-        assert f"slice-runner reset {_ISSUE} --repo {_REPO}" in capsys.readouterr().err
-        assert self.wrote_nothing(process)
-
-    def test_reset_clears_that_block_instead_of_refusing_to_read_it(self, capsys: pytest.CaptureFixture[str]) -> None:
+    def test_go_accepts_it_as_an_understanding_awaiting_the_person(self, capsys: pytest.CaptureFixture[str]) -> None:
         process = self.process(self._stale())
 
-        code = Cli(process=process, budgets=Budgets()).reset(repo=_REPO, issue=_ISSUE)
+        code = Cli(process=process, budgets=Budgets()).go(repo=_REPO, issue=_ISSUE)
 
-        rewritten = next(call for call in process.calls if "--body-file" in call.argv)
         assert code == ExitCode.OK
-        assert "slice-runner:estado" not in rewritten.stdin
+        assert "understanding_pending" not in capsys.readouterr().err
+        written = next(call for call in process.calls if "--body" in call.argv or "--body-file" in call.argv)
+        assert "understanding_pending" not in written.stdin

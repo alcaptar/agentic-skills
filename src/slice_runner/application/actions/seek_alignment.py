@@ -4,6 +4,7 @@ from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING
 
 from slice_runner.domain.alignment import Alignment
+from slice_runner.domain.alignment_response_kind import AlignmentResponseKind
 from slice_runner.domain.alignment_stage import AlignmentStage
 from slice_runner.domain.step import Step
 
@@ -47,10 +48,30 @@ class SeekAlignment:
         match params.run.alignment:
             case AlignmentStage.DRAFT:
                 return self._published(params)
-            case AlignmentStage.AWAITING | AlignmentStage.AGREED:
+            case AlignmentStage.AWAITING:
+                return self._reading_the_comments(params)
+            case AlignmentStage.AGREED:
                 return SeekAlignmentResult(
-                    run=params.run, understanding=params.understanding, response=params.run.alignment
+                    run=params.run, understanding=params.understanding, response=AlignmentStage.AGREED
                 )
+
+    def _reading_the_comments(self, params: SeekAlignmentParams) -> SeekAlignmentResult:
+        response = self._repository.read_alignment_response(repo=params.repo, issue=params.subissue.number)
+        if response.kind is AlignmentResponseKind.GO:
+            return SeekAlignmentResult(
+                run=params.run, understanding=params.understanding, response=AlignmentStage.AGREED
+            )
+        if response.kind is AlignmentResponseKind.REVIEW and response.correction != params.run.corrected:
+            run = replace(params.run, corrected=response.correction, alignment=AlignmentStage.DRAFT)
+            self._repository.write_run(repo=params.repo, issue=params.subissue.number, run=run)
+
+            return self._published(replace(params, run=run))
+        if response.kind is AlignmentResponseKind.MALFORMED and response.reason is not None:
+            self._repository.write_malformed_response(
+                repo=params.repo, issue=params.subissue.number, reason=response.reason
+            )
+
+        return SeekAlignmentResult(run=params.run, understanding=params.understanding, response=AlignmentStage.AWAITING)
 
     def _published(self, params: SeekAlignmentParams) -> SeekAlignmentResult:
         correction = params.run.corrected

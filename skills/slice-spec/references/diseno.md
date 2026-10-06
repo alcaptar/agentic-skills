@@ -7,7 +7,7 @@ Reference-doc de `slice-spec`. Se carga en el paso 1 del modo autoria (`referenc
 
 Un diseno que se aprueba pregunta poco y decide mucho: lo que nadie pregunto lo resuelve el agente en
 silencio (`silent-misalignment`), y la decision reaparece mas tarde en la pausa de alineacion de una
-slice, donde cuesta una ronda de `slice-runner review` o la toma el implementador sin que nadie la vea. Este proceso
+slice, donde cuesta una ronda de `slice-runner review` -o `-REVIEW`- o la toma el implementador sin que nadie la vea. Este proceso
 no termina cuando la persona dice que si: termina cuando **no queda ninguna decision sin tomar**.
 
 Mezcla dos cosas. Del interrogatorio toma el arbol de decisiones y las rondas; de la exploracion de

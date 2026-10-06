@@ -396,7 +396,8 @@ su ruta:
 - el worktree esta registrado pero su directorio se borro a mano: lo sanea y monta;
 - la rama la tiene otro worktree, o el arbol esta en otra rama: **cierra el run** con la etiqueta
   `bloqueada:worktree` y dice en que ruta esta el conflicto. Se libera esa ruta o esa rama y se
-  reabre con `slice-runner retry <subissue> --repo <org>/<repo> <instruccion>` y reinvoca.
+  reabre con `slice-runner retry <subissue> --repo <org>/<repo> <instruccion>` -o con un comentario
+  `-RETRY`- y reinvoca.
 
 **`--worktree <ruta>` sigue aceptandose** para un arbol que alguien monto a mano, y manda sobre derivar
 uno. Ese arbol tiene que colgar del mismo clon que `--repo-root`: si no, el run cierra en
@@ -651,7 +652,7 @@ un run anterior no se reutiliza ni se pisa: la invocacion siguiente cierra en
    Si solo te interesa el final, **recorta al leer, no al escribir**.
 
    Y avisa de lo que viene despues, porque es lo que sorprende: **cada run se para en su pausa de
-   alineacion**, asi que N runs en paralelo son N entendimientos que revisar y N `slice-runner go` que dar, no uno.
+   alineacion**, asi que N runs en paralelo son N entendimientos que revisar y N `slice-runner go` -o `-GO`- que dar, no uno.
 
 ## Steps — modo `validate`
 

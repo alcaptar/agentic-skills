@@ -6,13 +6,16 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from datetime import datetime
 
+    from slice_runner.domain.alignment_response import AlignmentResponse
     from slice_runner.domain.declared_debt import DeclaredDebt
     from slice_runner.domain.finding import Finding
     from slice_runner.domain.findings_history import FindingsHistory
     from slice_runner.domain.issue_label import IssueLabel
+    from slice_runner.domain.malformed_reason import MalformedReason
     from slice_runner.domain.order import Order
     from slice_runner.domain.parent_issue import ParentIssue
     from slice_runner.domain.precheck_outcome import PrecheckOutcome
+    from slice_runner.domain.retry_response import RetryResponse
     from slice_runner.domain.run import Run
     from slice_runner.domain.sub_issue import SubIssue
     from slice_runner.domain.worktree_retirement import WorktreeRetirement
@@ -32,7 +35,13 @@ class RunRepository(ABC):
     def read_understanding(self, *, repo: str, issue: int) -> str: ...
 
     @abstractmethod
-    def read_subissue_without_run(self, *, repo: str, issue: int) -> SubIssue: ...
+    def read_alignment_response(self, *, repo: str, issue: int) -> AlignmentResponse: ...
+
+    @abstractmethod
+    def read_retry_instruction(self, *, repo: str, issue: int) -> RetryResponse: ...
+
+    @abstractmethod
+    def write_malformed_response(self, *, repo: str, issue: int, reason: MalformedReason) -> None: ...
 
     @abstractmethod
     def mark_order(self, *, repo: str, issue: int, order: Order, text: str) -> None: ...

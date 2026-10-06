@@ -38,19 +38,18 @@ class SliceQueue:
 
     @classmethod
     def awaiting_alignment(cls, child: SubIssue) -> bool:
-        return cls._paused_at_the_alignment(child) and cls._stage_of(child) is AlignmentStage.AWAITING
+        return (
+            cls._paused_at_the_alignment(child)
+            and child.run is not None
+            and child.run.alignment is AlignmentStage.AWAITING
+        )
 
     @classmethod
     def awaiting_a_correction_to_be_replaced(cls, child: SubIssue) -> bool:
         if cls.awaiting_alignment(child):
             return True
 
-        return (
-            cls._paused_at_the_alignment(child)
-            and cls._stage_of(child) is AlignmentStage.DRAFT
-            and child.run is not None
-            and child.run.has_a_correction
-        )
+        return cls._paused_at_the_alignment(child) and child.run is not None and child.run.redrafting_after_a_correction
 
     @classmethod
     def dangling(cls, children: tuple[SubIssue, ...]) -> tuple[SubIssue, ...]:
@@ -68,10 +67,6 @@ class SliceQueue:
             and child.run is not None
             and child.run.step is Step.UNDERSTAND
         )
-
-    @staticmethod
-    def _stage_of(child: SubIssue) -> AlignmentStage | None:
-        return child.run.alignment if child.run is not None else None
 
     @staticmethod
     def _left_dangling(child: SubIssue) -> bool:

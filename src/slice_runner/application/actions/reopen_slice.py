@@ -8,6 +8,7 @@ from slice_runner.domain.issue_label import IssueLabel
 from slice_runner.domain.order import Order
 from slice_runner.domain.run_state import RunState
 from slice_runner.domain.slice_queue import SliceQueue
+from slice_runner.domain.worktree_retirement_policy import WorktreeRetirementPolicy
 
 if TYPE_CHECKING:
     from slice_runner.domain.run_repository import RunRepository
@@ -35,7 +36,7 @@ class ReopenSlice:
 
     def execute(self, params: ReopenSliceParams) -> ReopenSliceResult:
         subissue = params.subissue
-        if not SliceQueue.blocked(subissue):
+        if subissue.label is not None and not SliceQueue.blocked(subissue):
             raise OrderRefusedError(
                 f"subissue #{subissue.number} is neither blocked nor aborted, so there is nothing to retry"
             )
@@ -45,7 +46,9 @@ class ReopenSlice:
             )
 
         run = replace(
-            self._machine.reopened(subissue.run, blocked=subissue.label), retry_instruction=params.instruction
+            self._machine.reopened(subissue.run, blocked=subissue.label),
+            retry_instruction=params.instruction,
+            tree_unexpected=not WorktreeRetirementPolicy.expects_a_tree(label=subissue.label, run=subissue.run),
         )
         label = IssueLabel.of(state=RunState.OPEN, step=run.step)
         if label is None:

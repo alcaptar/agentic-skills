@@ -56,7 +56,7 @@ _BLOCKS: list[tuple[IssueLabel, Run, Run]] = [
     (
         IssueLabel.BLOCKED_LEFTOVER_WORKTREE,
         RunMother.blocked_on_the_worktree(),
-        RunMother.blocked_on_the_worktree(),
+        replace(RunMother.blocked_on_the_worktree(), tree_unexpected=True),
     ),
     (
         IssueLabel.ABORTED_BUDGET,
@@ -166,16 +166,32 @@ class TestReopenSlice:
             SubIssueMother.blocked(IssueLabel.BLOCKED_CONTROLS, RunMother.blocked_on_controls()), label=None
         )
 
-        with pytest.raises(OrderRefusedError, match=str(subissue.number)):
+        with pytest.raises(ImpossibleTransitionError, match=str(subissue.number)):
             action.execute(ReopenSliceParams(repo=_REPO, subissue=subissue, instruction=_INSTRUCTION))
+
+    def test_a_run_aborted_before_touching_code_is_reopened_not_expecting_the_tree_it_could_not_retire(
+        self, action: ReopenSlice, repository: Mock
+    ) -> None:
+        aborted = SubIssueMother.blocked(IssueLabel.ABORTED_BUDGET, RunMother.aborted_before_touching_code())
+
+        action.execute(ReopenSliceParams(repo=_REPO, subissue=aborted, instruction=_INSTRUCTION))
+
+        assert repository.write_run.call_args.kwargs["run"].tree_unexpected is True
+
+    def test_a_run_blocked_while_it_kept_its_tree_is_reopened_expecting_it(
+        self, action: ReopenSlice, repository: Mock
+    ) -> None:
+        blocked = SubIssueMother.blocked(IssueLabel.BLOCKED_VERIFY, RunMother.blocked_on_verify())
+
+        action.execute(ReopenSliceParams(repo=_REPO, subissue=blocked, instruction=_INSTRUCTION))
+
+        assert repository.write_run.call_args.kwargs["run"].tree_unexpected is False
 
     @pytest.mark.parametrize(
         "subissue",
         [
-            SubIssueMother.pending(),
-            SubIssueMother.closed(),
             SubIssueMother.awaiting_alignment(),
-            SubIssueMother.carrying(IssueLabel.IN_PROGRESS),
+            replace(SubIssueMother.pending(), label=IssueLabel.IN_PROGRESS, run=RunMother.implementing()),
         ],
     )
     def test_a_slice_that_is_neither_blocked_nor_aborted_is_refused_before_writing_anything(

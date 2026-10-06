@@ -1149,6 +1149,7 @@ class TestTheTransitionOfEveryPair:
                 "corrected": "",
                 "alignment": "awaiting",
                 "retry_instruction": "",
+                "tree_unexpected": False,
                 "previous_call_died": False,
                 "catching_up_the_branch": False,
                 "control_retries": 1,
@@ -1716,6 +1717,29 @@ class TestRetiringTheWorktreeFromTheCommandLine:
         assert "kept-uncommitted-work" in captured.err
 
     def test_a_tree_left_by_an_earlier_run_closes_the_invocation_with_the_command_to_resolve_it_by_hand(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        invocation = RunInvocation(
+            children=GhConversationMother.the_slice_aborted_before_touching_code(),
+            answers=(
+                Answer(
+                    to=("gh", "issue", "view", "comments"),
+                    stdout=GhConversationMother.the_comments_of_a_person_asking_to_retry(),
+                ),
+                Answer(to=("git", "rev-list", "--count"), stdout="0\n"),
+                Answer(to=("gh", "pr", "list"), stdout=GhConversationMother.no_open_pull_request()),
+            ),
+        )
+
+        code = invocation.conduct(logs=tmp_path / "logs", worktree=None)
+
+        captured = capsys.readouterr()
+        assert code == ExitCode.RUN_UNMERGED
+        assert json.loads(captured.out)["state"] == "blocked-leftover-worktree"
+        assert f"git worktree remove {GhConversationMother.WORKTREE}" in captured.err
+        assert not invocation.process.invoked("git", "worktree", "add")
+
+    def test_a_tree_left_by_a_run_that_persisted_nothing_closes_the_invocation_with_the_command_to_resolve_it_by_hand(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
         invocation = RunInvocation(
@@ -3143,12 +3167,10 @@ class TestTheCommandThatReadsTheUnderstanding:
         assert (arguments.issue, arguments.repo, arguments.json) == (45, "alcaptar/agentic-skills", True)
 
 
-class TestATokenTypedByHandHasNoEffect:
-    @pytest.mark.parametrize("typed", ["-GO", "-REVIEW falta la senal", "-RETRY ya esta a mano"])
-    def test_the_run_ends_as_it_would_without_the_comment_and_never_asks_for_the_comments(
-        self, typed: str, tmp_path: Path, capsys: pytest.CaptureFixture[str]
-    ) -> None:
-        invocation = RunInvocation(
+class TestTheAlignmentCommentsAreReadByTheNextRunAndNotWhileItWaits:
+    @staticmethod
+    def _invocation(typed: str) -> RunInvocation:
+        return RunInvocation(
             children=GhConversationMother.the_slice_resumed_at(
                 RunMother.awaiting_alignment(), label=IssueLabel.AWAITING_ALIGNMENT
             ),
@@ -3162,22 +3184,39 @@ class TestATokenTypedByHandHasNoEffect:
             ),
         )
 
+    def test_a_run_with_no_answer_yet_ends_the_invocation_after_reading_the_comments_without_calling_the_model(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        invocation = self._invocation("un comentario cualquiera")
+
         code = invocation.conduct(logs=tmp_path / "logs")
 
         assert code == ExitCode.AWAITING_ALIGNMENT
         assert json.loads(capsys.readouterr().out)["halt"] == "awaiting-alignment"
-        assert not invocation.process.invoked("comments")
+        assert invocation.process.invoked("comments")
         assert not invocation.process.invoked("stream-json")
 
 
-class TestARunBlockWrittenByAnEarlierVersionStopsTheRun:
-    def test_the_run_names_the_reset_command_too(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
-        stale = GhConversationMother.the_subissue_viewed(
+class TestARunBlockWrittenByAnEarlierVersionIsStillRead:
+    def test_a_block_that_was_not_pending_goes_on_as_an_understanding_awaiting_the_person(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        earlier = GhConversationMother.the_subissue_viewed(
             label=IssueLabel.AWAITING_ALIGNMENT, run=RunMother.awaiting_alignment(), stale=True
         )
-        invocation = RunInvocation(children=json.dumps([stale]))
+        invocation = RunInvocation(
+            children=json.dumps([earlier]),
+            answers=(
+                Answer(
+                    to=("gh", "issue", "view", "comments"),
+                    stdout=GhConversationMother.the_comments_of_a_person_typing("nada que ver"),
+                ),
+                Answer(to=("git", "rev-list", "--count"), stdout="0\n"),
+                Answer(to=("gh", "pr", "list"), stdout=GhConversationMother.no_open_pull_request()),
+            ),
+        )
 
         code = invocation.conduct(logs=tmp_path / "logs")
 
-        assert code == ExitCode.USAGE_ERROR
-        assert "slice-runner reset" in capsys.readouterr().err
+        assert code == ExitCode.AWAITING_ALIGNMENT
+        assert "understanding_pending" not in capsys.readouterr().err

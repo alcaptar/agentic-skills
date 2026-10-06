@@ -12,6 +12,8 @@ _HOW_TO_RESPOND = (
     "- `slice-runner review <subissue> --repo <org>/<repo> <correccion>` pide rehacer el entendimiento con esa "
     "correccion.\n"
     "\n"
+    "Tambien vale responder a este comentario con `-GO` o con `-REVIEW <correccion>`: el siguiente `run` lo lee.\n"
+    "\n"
     "Sin orden la slice se queda esperando: lanzar `run` no vuelve a publicar el entendimiento."
 )
 
