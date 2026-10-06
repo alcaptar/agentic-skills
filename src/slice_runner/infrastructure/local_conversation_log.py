@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 from typing import TYPE_CHECKING, ClassVar
 
@@ -41,7 +42,7 @@ class LocalConversationLog(ConversationLog):
         )
 
     def _path(self, *, session: str, worktree: str) -> Path:
-        encoded = self.OUTSIDE_A_PROJECT_DIRECTORY_NAME.sub("-", worktree.rstrip("/"))
+        encoded = self.OUTSIDE_A_PROJECT_DIRECTORY_NAME.sub("-", os.path.abspath(worktree).rstrip("/"))
 
         return ClaudeConfig.root().joinpath("projects", encoded, f"{session}.jsonl")
 

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import os
+from pathlib import PurePosixPath
 from typing import TYPE_CHECKING
 
 import pytest
@@ -154,6 +156,53 @@ class TestWhereTheConversationLives:
         conversation = LocalConversationLog().read(session=ConversationTranscriptMother.SESSION, worktree=_WORKTREE)
 
         assert len(conversation.turns) == 4
+
+    @pytest.mark.parametrize(
+        ("relative", "invoked_from"),
+        [
+            (".", _WORKTREE),
+            ("the-slice", str(PurePosixPath(_WORKTREE).parent)),
+            (f"{PurePosixPath(_WORKTREE).name}/", str(PurePosixPath(_WORKTREE).parent)),
+        ],
+    )
+    def test_a_relative_worktree_finds_the_same_conversation_as_its_absolute_equivalent(
+        self, relative: str, invoked_from: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
+        ConversationTranscriptMother.written_under(tmp_path)
+        monkeypatch.setattr(os, "getcwd", lambda: invoked_from)
+
+        conversation = LocalConversationLog().read(session=ConversationTranscriptMother.SESSION, worktree=relative)
+
+        assert len(conversation.turns) == 4
+
+    def test_an_absolute_worktree_is_found_wherever_the_program_was_invoked_from(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
+        ConversationTranscriptMother.written_under(tmp_path)
+        monkeypatch.setattr(os, "getcwd", lambda: "/somewhere/else")
+
+        conversation = LocalConversationLog().read(session=ConversationTranscriptMother.SESSION, worktree=_WORKTREE)
+
+        assert len(conversation.turns) == 4
+
+    def test_a_worktree_through_a_symbolic_link_is_looked_up_as_it_was_given_not_where_it_points(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        configuration = tmp_path / "configuration"
+        real = tmp_path / "workspace" / "real"
+        link = tmp_path / "workspace" / "link"
+        real.mkdir(parents=True)
+        link.symlink_to(real)
+        monkeypatch.setenv(ClaudeConfig.VARIABLE, str(configuration))
+        ConversationTranscriptMother.written_for_the_directory(configuration, directory=link)
+
+        conversation = LocalConversationLog().read(session=ConversationTranscriptMother.SESSION, worktree=str(link))
+
+        assert len(conversation.turns) == 4
+        with pytest.raises(ConversationNotFoundError):
+            LocalConversationLog().read(session=ConversationTranscriptMother.SESSION, worktree=str(real))
 
     def test_a_session_never_recorded_under_that_repo_is_refused_instead_of_guessing(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch

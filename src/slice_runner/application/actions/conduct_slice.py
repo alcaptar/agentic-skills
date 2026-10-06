@@ -5,11 +5,13 @@ from typing import TYPE_CHECKING, Literal, NoReturn
 
 from slice_runner.application.actions.catch_up_branch import CatchUpBranchParams
 from slice_runner.application.actions.close_parent import CloseParentParams
+from slice_runner.application.actions.commit_round import CommitRoundParams
 from slice_runner.application.actions.deliver_slice import DeliverSliceParams
 from slice_runner.application.actions.implement_slice import ImplementSliceParams
 from slice_runner.application.actions.record_closure import RecordClosureParams
 from slice_runner.application.actions.record_step import RecordStepParams
 from slice_runner.application.actions.reopen_slice import ReopenSliceParams
+from slice_runner.application.actions.rescue_staged_work import RescueStagedWorkParams
 from slice_runner.application.actions.run_controls import RunControlsParams
 from slice_runner.application.actions.seek_alignment import SeekAlignmentParams
 from slice_runner.application.actions.stage_slice import StageSliceParams
@@ -44,11 +46,13 @@ if TYPE_CHECKING:
 
     from slice_runner.application.actions.catch_up_branch import CatchUpBranch
     from slice_runner.application.actions.close_parent import CloseParent
+    from slice_runner.application.actions.commit_round import CommitRound
     from slice_runner.application.actions.deliver_slice import DeliverSlice
     from slice_runner.application.actions.implement_slice import ImplementSlice
     from slice_runner.application.actions.record_closure import RecordClosure
     from slice_runner.application.actions.record_step import RecordStep
     from slice_runner.application.actions.reopen_slice import ReopenSlice
+    from slice_runner.application.actions.rescue_staged_work import RescueStagedWork
     from slice_runner.application.actions.run_controls import RunControls
     from slice_runner.application.actions.seek_alignment import SeekAlignment
     from slice_runner.application.actions.stage_slice import StageSlice
@@ -153,6 +157,8 @@ class ConductSliceUseCases:
     prechecks: RunPrechecks
     implement: ImplementSlice
     stage: StageSlice
+    commit: CommitRound
+    rescue: RescueStagedWork
     run_controls: RunControls
     verify: VerifySlice
     deliver: DeliverSlice
@@ -190,6 +196,8 @@ class ConductSlice:
         self._prechecks = use_cases.prechecks
         self._implement = use_cases.implement
         self._stage = use_cases.stage
+        self._commit = use_cases.commit
+        self._rescue = use_cases.rescue
         self._run_controls = use_cases.run_controls
         self._verify = use_cases.verify
         self._deliver = use_cases.deliver
@@ -252,6 +260,8 @@ class ConductSlice:
 
     def _resuming(self, progress: ConductSliceProgress) -> ConductSliceResult:
         if self._branch_still_standing(progress):
+            if self._staged_work_waits_at(progress.run.step):
+                self._rescuing_staged_work(progress)
             if self._already_delivered(progress.run.step):
                 return self._conducting(progress)
 
@@ -263,6 +273,21 @@ class ConductSlice:
             return self._recreating_the_branch(progress)
 
         self._missing_branch(progress)
+
+    @staticmethod
+    def _staged_work_waits_at(step: Step) -> bool:
+        return step is Step.VERIFY or step is Step.OPEN_PULL_REQUEST or step is Step.AWAIT_CI
+
+    def _rescuing_staged_work(self, progress: ConductSliceProgress) -> None:
+        self._rescue.execute(
+            RescueStagedWorkParams(
+                worktree=progress.params.worktree,
+                branch=progress.subissue.branch,
+                message=self._pull_request.commit_message(
+                    progress.subissue, round=max(progress.run.control_rounds_logged, 1)
+                ),
+            )
+        )
 
     @staticmethod
     def _already_delivered(step: Step) -> bool:
@@ -542,6 +567,7 @@ class ConductSlice:
             )
 
         round_progress = replace(progress, hygiene_refusal="")
+        round_number = round_progress.run.control_round_in_progress
         ran = self._run_controls.execute(
             RunControlsParams(
                 worktree=round_progress.params.worktree,
@@ -550,9 +576,21 @@ class ConductSlice:
                 repo=round_progress.params.repo,
                 issue=round_progress.params.issue,
                 slice_id=round_progress.subissue.slice_id,
-                control_rounds_logged=round_progress.run.control_rounds_logged,
+                round_in_progress=round_number,
             )
         )
+        if ran.outcome is Outcome.DONE:
+            self._commit.execute(
+                CommitRoundParams(
+                    worktree=round_progress.params.worktree,
+                    branch=round_progress.subissue.branch,
+                    message=self._pull_request.commit_message(round_progress.subissue, round=round_number),
+                    repo=round_progress.params.repo,
+                    issue=round_progress.subissue.number,
+                    slice_id=round_progress.subissue.slice_id.canonical,
+                    spend=round_progress.spend,
+                )
+            )
 
         return SteppedSlice(progress=replace(round_progress, control_logs=ran.red_logs), outcome=ran.outcome)
 
@@ -621,11 +659,9 @@ class ConductSlice:
                 branch=progress.subissue.branch,
                 base=progress.params.base,
                 title=self._pull_request.title(progress.subissue),
-                commit_message=self._pull_request.commit_message(progress.subissue),
                 body=self._pull_request.body(
                     progress.subissue, debt=progress.debt, findings=progress.findings_of_the_last_round
                 ),
-                from_catch_up=progress.run.catching_up_the_branch,
             )
         )
 

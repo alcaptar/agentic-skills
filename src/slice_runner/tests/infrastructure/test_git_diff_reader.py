@@ -68,6 +68,16 @@ class TestWhatItReads:
 
         assert (read.stats.files_changed, read.stats.lines_added, read.stats.lines_deleted) == (2, 1, 1)
 
+    def test_a_round_already_committed_still_reaches_the_diff_alongside_the_one_now_staged(
+        self, tmp_path: Path
+    ) -> None:
+        repo = RepoMother.with_one_round_committed_and_another_staged(tmp_path)
+
+        read = self._reader().read(worktree=str(repo), base=Git.BASE_BRANCH)
+
+        assert read.files == ("first.py", "second.py")
+        assert (read.stats.files_changed, read.stats.lines_added, read.stats.lines_deleted) == (2, 4, 0)
+
     @staticmethod
     def _reader() -> GitDiffReader:
         return GitDiffReader(process=Real.process())

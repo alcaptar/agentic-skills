@@ -15,6 +15,7 @@ class EventStatus(StrEnum):
     WAITING = "waiting"
     AWAITING_PERSON = "awaiting-person"
     CLOSED = "closed"
+    NOTHING_TO_COMMIT = "nothing-to-commit"
 
     @classmethod
     def of_the_transition(cls, transition: Transition) -> EventStatus:

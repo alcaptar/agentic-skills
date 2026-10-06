@@ -29,6 +29,21 @@ class RepoMother:
         return repo
 
     @staticmethod
+    def with_one_round_committed_and_another_staged(root: Path) -> Path:
+        repo = Git.init_repo(root / "repo")
+        (repo / "base.py").write_text("def base() -> int:\n    return 0\n", encoding="utf-8")
+        Git.run(repo, "add", "base.py")
+        Git.run(repo, "commit", "-m", "base")
+        Git.run(repo, "switch", "-c", "slice/01-x")
+        (repo / "first.py").write_text("def first() -> int:\n    return 1\n", encoding="utf-8")
+        Git.run(repo, "add", "first.py")
+        Git.run(repo, "commit", "-m", "round 1")
+        (repo / "second.py").write_text("def second() -> int:\n    return 2\n", encoding="utf-8")
+        Git.run(repo, "add", "second.py")
+
+        return repo
+
+    @staticmethod
     def with_nothing_staged(root: Path) -> Path:
         repo = RepoMother.with_the_slice_staged(root)
         Git.run(repo, "reset", "--hard")

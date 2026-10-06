@@ -316,14 +316,20 @@ mide. Las reglas que salen de estas decisiones siguen en su capa.
   mismo razonamiento que `gh_retries`: unos pocos empujones bastan para poner al día la rama que se movio
   mientras la pull request esperaba, sin dejar que una base que no deja de moverse convierta el run en un
   bucle que solo el coste del juez frenaba hasta ahora.
-- **Por que `DeliverSlice` no comitea cuando la entrega viene de una puesta al día.** Un `catch_up` que
-  resuelve fusionando ya deja su propio commit de merge en el árbol; comitear de nuevo staggearia un
-  índice vacío -o peor, algo que ni el implementador declaró- encima de un commit que ya existe. La
-  decisión no la toma "si el índice esta vacío": eso seguiria siendo un fallo ruidoso y deseable en
-  cualquier otro camino, incluido un implementador que no produjo nada. La toma un dato explícito,
-  `from_catch_up`, que viaja desde la maquina de estados (`Run.catching_up_the_branch`) hasta el caso de
-  uso de entrega: el push si es incondicional en los dos casos, porque es lo que hace que la integración
-  continua vuelva a arrancar sobre una pull request que ya dejó de estar detrás.
+- **Por qué el commit vive en la ronda de controles y no en la entrega.** Cada vuelta que llega a
+  controles verdes se comitea ahí mismo (`CommitRound`, invocado desde `_running_the_controls`), con el
+  índice que dejó esa vuelta; `DeliverSlice` ya solo empuja la rama y abre o reutiliza la pull request.
+  Eso resuelve solo un `catch_up` que fusiona: su commit de merge ya vive en el árbol antes de que la
+  ronda de controles se ejecute, así que si esa ronda no dejó nada nuevo que comitear, el índice vacío es
+  la señal -no un dato aparte como el antiguo `from_catch_up`- y `CommitRound` simplemente no comitea. Esa
+  vuelta deja fila propia en el registro durable de eventos (`EventStatus.NOTHING_TO_COMMIT`): el fallo
+  ruidoso de "el implementador no produjo nada" ya no revienta el commit, y un run que se queda abierto es
+  justo el caso que esa señal existe para cazar, así que no se espera a la fila de cierre para verla.
+- **Por qué reanudar comitea lo que encuentra staged.** Un run persistido en verificar, abrir la pull
+  request o esperar la integración continua puede encontrar el índice lleno: murió entre los controles y la
+  entrega, o es anterior a este cambio, cuando el programa dejaba el trabajo staged y cero commits hasta
+  entregar. `RescueStagedWork` lo comitea antes de nada, porque `DeliverSlice` ya no lo hace y el push
+  saldría sin el código. Con el índice vacío, que es lo normal, no hace nada ni deja fila.
 - **Reabrir por conflicto reinicia también `indeterminate_ticks`, no solo `catch_up_retries`.** Un run
   puede acumular ticks de integración continua ilegible, cerrar después por conflicto con esos ticks casi
   agotados, y al reabrirlo la primera lectura ilegible lo cerraria otra vez con un motivo distinto del que

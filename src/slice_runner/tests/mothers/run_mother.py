@@ -41,6 +41,18 @@ class RunMother:
         return Run(step=Step.VERIFY)
 
     @staticmethod
+    def judging_after_one_control_round() -> Run:
+        return Run(step=Step.VERIFY, control_rounds_logged=1)
+
+    @staticmethod
+    def about_to_open_the_pull_request() -> Run:
+        return Run(step=Step.OPEN_PULL_REQUEST, control_rounds_logged=1)
+
+    @staticmethod
+    def about_to_ask_the_ci_after_one_control_round() -> Run:
+        return Run(step=Step.AWAIT_CI, control_rounds_logged=1)
+
+    @staticmethod
     def judging_with_one_verify_round_already_logged() -> Run:
         return Run(step=Step.VERIFY, verify_rounds_logged=1)
 
