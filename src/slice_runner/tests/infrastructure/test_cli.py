@@ -4,14 +4,19 @@ import io
 import json
 import shutil
 import sys
+from dataclasses import replace
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
+from unittest.mock import Mock, create_autospec
 
 import pytest
 
 from slice_runner.domain.budgets import Budgets
 from slice_runner.domain.call_trace import HarnessCall
 from slice_runner.domain.canonical_slice_id import CanonicalSliceId
+from slice_runner.domain.clock import Clock
+from slice_runner.domain.event_cursor import EventCursor
+from slice_runner.domain.event_reader import EventBatch
 from slice_runner.domain.issue_label import IssueLabel
 from slice_runner.domain.outcome import Outcome
 from slice_runner.domain.run_state import RunState
@@ -22,12 +27,14 @@ from slice_runner.infrastructure.claude_config import ClaudeConfig
 from slice_runner.infrastructure.cli import Cli
 from slice_runner.infrastructure.deploy_watch_invocation import DeployWatchInvocation
 from slice_runner.infrastructure.durable_ledger import DurableLedger
+from slice_runner.infrastructure.event_payload import EventPayload
 from slice_runner.infrastructure.exit_code import ExitCode
 from slice_runner.infrastructure.harness_call_payload import HarnessCallPayload
 from slice_runner.infrastructure.implementer_invocation import ImplementerInvocation
 from slice_runner.infrastructure.judge_invocation import JudgeInvocation
 from slice_runner.infrastructure.local_call_spend_log import LocalCallSpendLog
 from slice_runner.infrastructure.local_call_trace import LocalCallTrace
+from slice_runner.infrastructure.local_event_log import LocalEventLog
 from slice_runner.infrastructure.local_metrics_log import LocalMetricsLog
 from slice_runner.infrastructure.metrics_entry_payload import MetricsEntryPayload
 from slice_runner.infrastructure.reset_comment import ResetComment
@@ -40,14 +47,18 @@ from slice_runner.tests.doubles import (
     Answer,
     AnsweringByArgv,
     AnsweringByArgvWithADiffThatMoves,
+    ProcessDoubles,
     RealExceptTheJudge,
+    ScriptedEventReader,
     TimingOutProcess,
     UnrunnableJudge,
 )
+from slice_runner.tests.durable_store_home import WithTheDurableStoresOutOfTheRealHome
 from slice_runner.tests.git_repo import Git
 from slice_runner.tests.mothers.closed_slice_mother import ClosedSliceMother
 from slice_runner.tests.mothers.conversation_transcript_mother import ConversationTranscriptMother
 from slice_runner.tests.mothers.discarded_call_mother import DiscardedCallMother
+from slice_runner.tests.mothers.event_mother import EventMother
 from slice_runner.tests.mothers.gh_conversation_mother import GhConversationMother
 from slice_runner.tests.mothers.gh_response_mother import GhResponseMother
 from slice_runner.tests.mothers.harness_call_spend_mother import HarnessCallSpendMother
@@ -2629,3 +2640,133 @@ class TestTheStatusCommandParsing:
             Cli.parser().parse_args(["status", "38"])
 
         assert "the following arguments are required: --repo" in capsys.readouterr().err
+
+
+class TestTheCommandThatFollowsTheEvents(WithTheDurableStoresOutOfTheRealHome):
+    _ADVANCING_LINE = "2024-01-01T12:30:45+00:00 alcaptar/agentic-skills #150 slice-05 run-controls advancing $0.34"
+    _WAITING_LINE = "2024-01-01T12:31:45+00:00 alcaptar/agentic-skills #150 slice-05 await-ci waiting $0.34"
+
+    @staticmethod
+    def _clock_interrupted_after(sleeps: int) -> Mock:
+        clock: Mock = create_autospec(Clock, spec_set=True, instance=True)
+        clock.sleep.side_effect = [None] * (sleeps - 1) + [KeyboardInterrupt()]
+
+        return clock
+
+    @staticmethod
+    def _cli(*, budgets: Budgets | None = None, process: Mock | None = None) -> Cli:
+        return Cli(
+            process=process if process is not None else ProcessDoubles.exiting(),
+            budgets=budgets if budgets is not None else Budgets(),
+        )
+
+    def test_it_prints_the_snapshot_and_then_one_line_per_change_of_the_following_reads(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        reader = ScriptedEventReader(
+            EventBatch(events=(EventMother.advancing(),), cursor=EventCursor(offset=10)),
+            EventBatch(
+                events=(EventMother.advancing_again(minutes_later=1), EventMother.waiting_on_a_machine()),
+                cursor=EventCursor(offset=30),
+            ),
+        )
+
+        code = self._cli().follow(repo=None, once=False, reader=reader, clock=self._clock_interrupted_after(2))
+
+        assert code == ExitCode.OK
+        assert capsys.readouterr().out.splitlines() == [self._ADVANCING_LINE, self._WAITING_LINE]
+        assert reader.cursors == [EventCursor.start(), EventCursor(offset=10)]
+
+    def test_a_row_repeating_the_step_and_status_of_the_snapshot_prints_nothing_after_it(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        reader = ScriptedEventReader(
+            EventBatch(events=(EventMother.advancing(),), cursor=EventCursor(offset=10)),
+            EventBatch(events=(EventMother.advancing_again(minutes_later=1),), cursor=EventCursor(offset=20)),
+        )
+
+        self._cli().follow(repo=None, once=False, reader=reader, clock=self._clock_interrupted_after(2))
+
+        assert capsys.readouterr().out.splitlines() == [self._ADVANCING_LINE]
+
+    def test_once_prints_only_the_snapshot_exits_with_zero_and_never_sleeps(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        reader = ScriptedEventReader(
+            EventBatch(
+                events=(EventMother.advancing(), EventMother.waiting_on_a_machine()), cursor=EventCursor(offset=10)
+            )
+        )
+        clock = self._clock_interrupted_after(1)
+
+        code = self._cli().follow(repo=None, once=True, reader=reader, clock=clock)
+
+        assert code == ExitCode.OK
+        assert capsys.readouterr().out.splitlines() == [self._WAITING_LINE]
+        clock.sleep.assert_not_called()
+        assert len(reader.cursors) == 1
+
+    def test_the_interval_between_reads_is_the_budget_and_not_a_literal_of_the_command(self) -> None:
+        reader = ScriptedEventReader(
+            EventBatch(events=(), cursor=EventCursor.start()), EventBatch(events=(), cursor=EventCursor.start())
+        )
+        clock = self._clock_interrupted_after(2)
+        budgets = replace(Budgets(), seconds_between_follow_reads=Budgets().seconds_between_follow_reads + 3)
+
+        self._cli(budgets=budgets).follow(repo=None, once=False, reader=reader, clock=clock)
+
+        assert [call.kwargs for call in clock.sleep.call_args_list] == [
+            {"seconds": budgets.seconds_between_follow_reads}
+        ] * 2
+
+    def test_following_launches_no_external_process(self) -> None:
+        process = ProcessDoubles.exiting()
+        reader = ScriptedEventReader(
+            EventBatch(events=(EventMother.advancing(),), cursor=EventCursor(offset=10)),
+            EventBatch(events=(), cursor=EventCursor(offset=10)),
+        )
+
+        self._cli(process=process).follow(repo=None, once=False, reader=reader, clock=self._clock_interrupted_after(2))
+
+        process.run.assert_not_called()
+
+    def test_main_reads_the_real_ledger_and_the_repo_flag_keeps_only_that_repo(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        log = LocalEventLog()
+        log.emit(EventMother.advancing())
+        log.emit(EventMother.advancing_in_another_repo())
+        capsys.readouterr()
+
+        code = Cli.main(["follow", "--once", "--repo", EventMother.ANOTHER_REPO])
+
+        assert code == ExitCode.OK
+        assert capsys.readouterr().out.splitlines() == [
+            f"2024-01-01T12:30:45+00:00 {EventMother.ANOTHER_REPO} #150 slice-05 run-controls advancing $0.34"
+        ]
+
+    def test_main_without_the_repo_flag_prints_every_repo(self, capsys: pytest.CaptureFixture[str]) -> None:
+        log = LocalEventLog()
+        log.emit(EventMother.advancing())
+        log.emit(EventMother.advancing_in_another_repo())
+        capsys.readouterr()
+
+        Cli.main(["follow", "--once"])
+
+        assert len(capsys.readouterr().out.splitlines()) == 2
+
+    def test_a_ledger_line_this_generation_did_not_write_exits_with_a_usage_error_and_prints_nothing_to_standard_output(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        LocalEventLog().emit(EventMother.advancing())
+        ledger = DurableLedger(name=LocalEventLog.LEDGER, row=EventPayload).path()
+        with ledger.open("a", encoding="utf-8") as stream:
+            stream.write("not json\n")
+        capsys.readouterr()
+
+        code = Cli.main(["follow", "--once"])
+
+        output = capsys.readouterr()
+        assert code == ExitCode.USAGE_ERROR
+        assert output.out == ""
+        assert "not JSON" in output.err

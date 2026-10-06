@@ -13,6 +13,7 @@ from slice_runner.domain.cited_source import CitedSource
 from slice_runner.domain.clock import Clock
 from slice_runner.domain.corpus import Corpus, JudgedRound
 from slice_runner.domain.debt_ledger import DebtDeclaration, DebtLedger
+from slice_runner.domain.event_reader import EventBatch, EventReader
 from slice_runner.domain.exceptions import UnreadableSourceError
 from slice_runner.domain.gh_retry_policy import GhRetryPolicy
 from slice_runner.domain.harness_spend import HarnessSpend
@@ -38,6 +39,7 @@ if TYPE_CHECKING:
     from slice_runner.domain.corpus_entry import CorpusEntry
     from slice_runner.domain.debt_entry import DebtEntry
     from slice_runner.domain.diff_stats import DiffStats
+    from slice_runner.domain.event_cursor import EventCursor
     from slice_runner.domain.slice_coordinates import SliceCoordinates
     from slice_runner.domain.source import Source
     from slice_runner.domain.step import Step
@@ -493,3 +495,14 @@ class GhCallDoubles:
         return GhCall(
             process=process, policy=GhRetryPolicy(budgets=budgets or Budgets()), clock=clock or RecordingClock()
         )
+
+
+class ScriptedEventReader(EventReader):
+    def __init__(self, *batches: EventBatch) -> None:
+        self._batches = list(batches)
+        self.cursors: list[EventCursor] = []
+
+    def read_since(self, cursor: EventCursor) -> EventBatch:
+        self.cursors.append(cursor)
+
+        return self._batches.pop(0)

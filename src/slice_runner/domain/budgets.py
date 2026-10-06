@@ -19,6 +19,7 @@ class Budgets:
     catch_up_retries: int = 3
     indeterminate_ticks: int = 10
     seconds_between_ticks: int = 30
+    seconds_between_follow_reads: int = 5
     ci_wait_seconds: int = 1800
     person_wait_seconds: int = 28800
     process_timeout_seconds: int = 3600

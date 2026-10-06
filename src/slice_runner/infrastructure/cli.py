@@ -28,6 +28,7 @@ from slice_runner.application.actions.seek_alignment import SeekAlignment
 from slice_runner.application.actions.stage_slice import StageSlice
 from slice_runner.application.actions.verify_slice import VerifySlice, VerifySliceParams
 from slice_runner.application.queries.check_readiness import CheckReadiness, CheckReadinessParams, CheckReadinessPorts
+from slice_runner.application.queries.follow_events import FollowEvents, FollowEventsParams
 from slice_runner.application.queries.list_closed_slices import ListClosedSlices, ListClosedSlicesParams
 from slice_runner.application.queries.read_ci_status import ReadCiStatus
 from slice_runner.application.queries.read_conversation import ReadConversation, ReadConversationParams
@@ -40,6 +41,7 @@ from slice_runner.application.queries.spend_of_step import SpendOfStep, SpendOfS
 from slice_runner.domain.budgets import Budgets
 from slice_runner.domain.closed_slice_metrics import ClosedSliceMetrics
 from slice_runner.domain.closed_slice_scope import ClosedSliceScope
+from slice_runner.domain.event_cursor import EventCursor
 from slice_runner.domain.exceptions import (
     BranchMismatchError,
     ConversationNotFoundError,
@@ -60,6 +62,7 @@ from slice_runner.domain.exceptions import (
     UnreadableCallSpendLogError,
     UnreadableCallTraceError,
     UnreadableConversationError,
+    UnreadableEventLogError,
     UnreadableForumError,
     UnreadableIssueError,
     UnreadableMetricsLogError,
@@ -83,6 +86,7 @@ from slice_runner.infrastructure.control_logs_directory import ControlLogsDirect
 from slice_runner.infrastructure.conversation_report import ConversationReport
 from slice_runner.infrastructure.conversation_tool_use_recorder import ConversationToolUseRecorder
 from slice_runner.infrastructure.diff_installed_code import DiffInstalledCode
+from slice_runner.infrastructure.event_follow_report import EventFollowReport
 from slice_runner.infrastructure.exit_code import ExitCode
 from slice_runner.infrastructure.feature_status_report import FeatureStatusReport
 from slice_runner.infrastructure.gh_call import GhCall
@@ -105,6 +109,7 @@ from slice_runner.infrastructure.local_conversation_log import LocalConversation
 from slice_runner.infrastructure.local_corpus import LocalCorpus
 from slice_runner.infrastructure.local_debt_ledger import LocalDebtLedger
 from slice_runner.infrastructure.local_event_log import LocalEventLog
+from slice_runner.infrastructure.local_event_reader import LocalEventReader
 from slice_runner.infrastructure.local_metrics_log import LocalMetricsLog
 from slice_runner.infrastructure.local_plugin_registry import LocalPluginRegistry
 from slice_runner.infrastructure.local_process import LocalProcess
@@ -131,6 +136,8 @@ if TYPE_CHECKING:
     from slice_runner.application.actions.conduct_slice import ConductSliceResult
     from slice_runner.domain.clock import Clock
     from slice_runner.domain.corpus import Corpus
+    from slice_runner.domain.event import Event
+    from slice_runner.domain.event_reader import EventReader
     from slice_runner.infrastructure.process import Process
 
 
@@ -196,6 +203,30 @@ class Cli:
                         slice_id=arguments.slice_id,
                     )
                 )
+            case Subcommand.READ | Subcommand.SPEND | Subcommand.METRICS:
+                result = cls._dispatched_over_the_ledgers(arguments)
+            case Subcommand.DOCTOR:
+                result = cls(process=LocalProcess(budgets=budgets), budgets=budgets).doctor(
+                    repo=arguments.repo, worktree=arguments.worktree, base=arguments.base
+                )
+            case Subcommand.RESET:
+                result = cls(process=LocalProcess(budgets=budgets), budgets=budgets).reset(
+                    repo=arguments.repo, issue=arguments.issue
+                )
+            case Subcommand.STATUS:
+                result = cls(process=LocalProcess(budgets=budgets), budgets=budgets).status(
+                    repo=arguments.repo, issue=arguments.issue
+                )
+            case Subcommand.FOLLOW:
+                result = cls(process=LocalProcess(budgets=budgets), budgets=budgets).follow(
+                    repo=arguments.repo, once=arguments.once, reader=LocalEventReader(), clock=SystemClock()
+                )
+
+        return result
+
+    @classmethod
+    def _dispatched_over_the_ledgers(cls, arguments: argparse.Namespace) -> int:
+        match Subcommand(arguments.command):
             case Subcommand.READ:
                 result = cls.read(
                     repo=arguments.repo,
@@ -208,24 +239,12 @@ class Cli:
                 result = cls.spend(
                     repo=arguments.repo, issue=arguments.issue, slice_id=arguments.slice_id, step=Step(arguments.step)
                 )
-            case Subcommand.DOCTOR:
-                result = cls(process=LocalProcess(budgets=budgets), budgets=budgets).doctor(
-                    repo=arguments.repo, worktree=arguments.worktree, base=arguments.base
-                )
             case Subcommand.METRICS:
                 result = cls.metrics(
                     repo=arguments.repo,
                     since=cls._parsed_date(arguments.since, default=datetime(1970, 1, 1, tzinfo=UTC)),
                     until=cls._parsed_date(arguments.until, default=SystemClock().now()),
                     out=arguments.out,
-                )
-            case Subcommand.RESET:
-                result = cls(process=LocalProcess(budgets=budgets), budgets=budgets).reset(
-                    repo=arguments.repo, issue=arguments.issue
-                )
-            case Subcommand.STATUS:
-                result = cls(process=LocalProcess(budgets=budgets), budgets=budgets).status(
-                    repo=arguments.repo, issue=arguments.issue
                 )
 
         return result
@@ -317,6 +336,13 @@ class Cli:
         )
         status.add_argument("issue", type=int, help="number of the parent issue whose slices are shown")
         status.add_argument("--repo", required=True, help="repo of the issue, as `<org>/<repo>`")
+
+        follow = subcommands.add_parser(
+            Subcommand.FOLLOW,
+            help="print the last event of every slice and then one line per change, reading only the local events",
+        )
+        follow.add_argument("--repo", help="keep only the events of this repo, as `<org>/<repo>`")
+        follow.add_argument("--once", action="store_true", help="print the snapshot and exit")
 
         return parser
 
@@ -542,6 +568,29 @@ class Cli:
         print(FeatureStatusReport(statuses=statuses).rendered())
 
         return ExitCode.OK
+
+    def follow(self, *, repo: str | None, once: bool, reader: EventReader, clock: Clock) -> int:
+        query = FollowEvents(reader=reader)
+        try:
+            followed = query.execute(FollowEventsParams(cursor=EventCursor.start(), repo=repo))
+            self._printed(followed.snapshot)
+            while not once:
+                clock.sleep(seconds=self._budgets.seconds_between_follow_reads)
+                followed = query.execute(
+                    FollowEventsParams(cursor=followed.cursor, snapshot=followed.snapshot, repo=repo)
+                )
+                self._printed(followed.changes)
+        except KeyboardInterrupt:
+            return ExitCode.OK
+        except UnreadableEventLogError as error:
+            return self._reported(f"the events could not be followed: {error}", ExitCode.USAGE_ERROR)
+
+        return ExitCode.OK
+
+    @staticmethod
+    def _printed(events: tuple[Event, ...]) -> None:
+        for line in EventFollowReport(events=events).lines():
+            print(line, flush=True)
 
     def _why_the_run_stopped(self, error: Exception) -> ExitCode:
         match error:
