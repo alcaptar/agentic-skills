@@ -24,6 +24,7 @@ if TYPE_CHECKING:
 class ClosedSliceMother:
     REPO: ClassVar[str] = "alcaptar/agentic-skills"
     ISSUE: ClassVar[int] = 38
+    WORKTREE: ClassVar[str] = "/repo/.worktrees/02-the-slice"
     SLICE_ID: ClassVar[str] = "slice-07"
     NAME: ClassVar[str] = "controles-como-puerto"
     BUDGETS: ClassVar[Budgets] = Budgets()
@@ -114,7 +115,7 @@ class ClosedSliceMother:
 
     @classmethod
     def merged_with_its_worktree(cls, retirement: WorktreeRetirement) -> ClosedSlice:
-        return replace(cls._closed(RunState.MERGED), worktree_retirement=retirement)
+        return replace(cls._closed(RunState.MERGED), worktree=cls.WORKTREE, worktree_retirement=retirement)
 
     @classmethod
     def aborted_over_budget(cls, budgets: Budgets, *, spend: HarnessSpend | None = None) -> ClosedSlice:

@@ -206,7 +206,8 @@ class MetricsEntryPayload(StampedRow, ReadableLedgerRow):
     variant: str
     declared_debt: int | None = None
     diff: DiffStatsPayload | None = None
-    worktree_retirement: WorktreeRetirement
+    worktree_retirement: WorktreeRetirement = WorktreeRetirement.NOT_MOUNTED
+    worktree: str | None = None
     budgets: dict[str, object]
     models_by_role: dict[str, object]
 
@@ -260,6 +261,7 @@ class MetricsEntryPayload(StampedRow, ReadableLedgerRow):
                 "declared_debt": len(closed.debt.left_out) if closed.debt.declared else None,
                 "diff": DiffStatsPayload.from_domain(closed.diff_stats) if closed.diff_stats is not None else None,
                 "worktree_retirement": closed.worktree_retirement,
+                "worktree": closed.worktree if closed.worktree_retirement.kept else None,
                 "budgets": asdict(closed.budgets),
                 "models_by_role": asdict(closed.models),
             },

@@ -151,7 +151,7 @@ class TestConductSliceRetiringTheWorktreeOfAMergedRun(_Merging):
         assert not conductor.worktrees.delete_branch.called
         self.published(conductor, WorktreeRetirement.KEPT_REMOVAL_FAILED)
 
-    def test_the_durable_row_says_where_the_kept_worktree_stayed_and_why(self) -> None:
+    def test_the_closure_handed_to_the_log_carries_where_the_kept_worktree_stayed_and_why(self) -> None:
         conductor = self.conductor()
         conductor.worktrees.has_uncommitted_work.return_value = True
 
