@@ -18,6 +18,7 @@ from slice_runner.infrastructure.gh_body_payload import GhBodyPayload
 from slice_runner.infrastructure.gh_comments_payload import GhCommentPayload, GhCommentsPayload
 from slice_runner.infrastructure.gh_parent_view_payload import GhParentViewPayload
 from slice_runner.infrastructure.gh_sub_issue_payload import GhSubIssuePayload
+from slice_runner.infrastructure.kept_worktree_comment import KeptWorktreeComment
 from slice_runner.infrastructure.malformed_response_comment import MalformedResponseComment
 from slice_runner.infrastructure.parent_body import ParentBody
 from slice_runner.infrastructure.reopened_comment import ReopenedComment
@@ -35,6 +36,7 @@ if TYPE_CHECKING:
     from slice_runner.domain.malformed_reason import MalformedReason
     from slice_runner.domain.precheck_outcome import PrecheckOutcome
     from slice_runner.domain.run import Run
+    from slice_runner.domain.worktree_retirement import WorktreeRetirement
     from slice_runner.infrastructure.gh_call import GhCall
     from slice_runner.infrastructure.gh_sub_issue_payload import GhLabelPayload
     from slice_runner.infrastructure.process import ProcessOutput
@@ -279,6 +281,13 @@ class GhRunRepository(RunRepository):
         self._run(
             ["gh", "issue", "comment", str(issue), "--repo", repo, "--body-file", "-"],
             stdin=CatchUpConflictComment.rendered(paths),
+            safe_to_repeat=False,
+        )
+
+    def publish_kept_worktree(self, *, repo: str, issue: int, path: str, retirement: WorktreeRetirement) -> None:
+        self._run(
+            ["gh", "issue", "comment", str(issue), "--repo", repo, "--body-file", "-"],
+            stdin=KeptWorktreeComment.rendered(path=path, retirement=retirement),
             safe_to_repeat=False,
         )
 

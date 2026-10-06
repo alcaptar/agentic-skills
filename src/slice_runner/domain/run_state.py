@@ -14,6 +14,7 @@ class RunState(StrEnum):
     BLOCKED_CI_INDETERMINATE = "blocked-ci-indeterminate"
     BLOCKED_CI_CONFLICT = "blocked-ci-conflict"
     BLOCKED_WORKTREE = "blocked-worktree"
+    BLOCKED_LEFTOVER_WORKTREE = "blocked-leftover-worktree"
     ABORTED_BUDGET = "aborted-budget"
     ABORTED_UNMEASURED_CALL = "aborted-unmeasured-call"
 
@@ -31,6 +32,7 @@ class RunState(StrEnum):
                 | RunState.BLOCKED_CI_INDETERMINATE
                 | RunState.BLOCKED_CI_CONFLICT
                 | RunState.BLOCKED_WORKTREE
+                | RunState.BLOCKED_LEFTOVER_WORKTREE
                 | RunState.ABORTED_BUDGET
                 | RunState.ABORTED_UNMEASURED_CALL
             ):

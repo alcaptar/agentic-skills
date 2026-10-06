@@ -24,6 +24,7 @@ from slice_runner.application.actions.record_step import RecordStep
 from slice_runner.application.actions.reopen_slice import ReopenSlice
 from slice_runner.application.actions.rescue_staged_work import RescueStagedWork
 from slice_runner.application.actions.reset_slice import ResetSlice, ResetSliceParams
+from slice_runner.application.actions.retire_worktree import RetireWorktree
 from slice_runner.application.actions.run_controls import RunControls
 from slice_runner.application.actions.seek_alignment import SeekAlignment
 from slice_runner.application.actions.stage_slice import StageSlice
@@ -105,6 +106,7 @@ from slice_runner.infrastructure.harness_invocation_runner import HarnessInvocat
 from slice_runner.infrastructure.harness_telemetry import HarnessTelemetry
 from slice_runner.infrastructure.implementer_invocation import ImplementerInvocation
 from slice_runner.infrastructure.judge_invocation import JudgeInvocation
+from slice_runner.infrastructure.kept_worktree_comment import KeptWorktreeComment
 from slice_runner.infrastructure.local_call_spend_log import LocalCallSpendLog
 from slice_runner.infrastructure.local_call_trace import LocalCallTrace
 from slice_runner.infrastructure.local_control_runner import LocalControlRunner
@@ -508,6 +510,7 @@ class Cli:
 
         self._warn_about_the_draft_pull_request(conducted)
         self._warn_about_the_blocked_worktree(conducted)
+        self._warn_about_the_kept_worktree(conducted)
         print(json.dumps(ConductedSlicePayload.from_domain(conducted).to_contract(), ensure_ascii=False))
 
         return ExitCode.of_the_halt(halt=conducted.halt, state=conducted.state)
@@ -525,12 +528,30 @@ class Cli:
 
     @staticmethod
     def _warn_about_the_blocked_worktree(conducted: ConductSliceResult) -> None:
-        if conducted.state is not RunState.BLOCKED_WORKTREE:
+        match conducted.state:
+            case RunState.BLOCKED_WORKTREE:
+                print(
+                    f"the worktree of the slice cannot be mounted because of {conducted.conflicting_path}; "
+                    "free that path or branch and reinvoke with a retry instruction",
+                    file=sys.stderr,
+                )
+            case RunState.BLOCKED_LEFTOVER_WORKTREE:
+                command = KeptWorktreeComment.removal_command(conducted.conflicting_path)
+                print(
+                    f"a worktree nobody expected is left at {conducted.conflicting_path}, so it is neither reused "
+                    f"nor mounted over; resolve it by hand with `{command}` and reinvoke with a retry instruction",
+                    file=sys.stderr,
+                )
+            case _:
+                return
+
+    @staticmethod
+    def _warn_about_the_kept_worktree(conducted: ConductSliceResult) -> None:
+        if conducted.state is RunState.BLOCKED_LEFTOVER_WORKTREE or not conducted.worktree_retirement.kept:
             return
 
         print(
-            f"the worktree of the slice cannot be mounted because of {conducted.conflicting_path}; "
-            "free that path or branch and reinvoke with a retry instruction",
+            f"the worktree of the slice stayed at {conducted.worktree} ({conducted.worktree_retirement})",
             file=sys.stderr,
         )
 
@@ -659,6 +680,7 @@ class Cli:
         gh_call = self._gh_call(clock=clock)
         repository = GhRunRepository(call=gh_call)
         branches = GitBranches(process=self._process)
+        worktrees = GitWorktrees(process=self._process)
         forum = GhForum(call=gh_call)
         workspace = GitWorkspace(process=self._process)
         machine = StateMachine(budgets=self._budgets)
@@ -680,7 +702,8 @@ class Cli:
                 select=SelectSlice(repository=repository),
                 reopen=ReopenSlice(repository=repository, machine=machine),
                 prechecks=RunPrechecks(branches=branches, forum=forum),
-                mount=MountWorktree(worktrees=GitWorktrees(process=self._process)),
+                mount=MountWorktree(worktrees=worktrees),
+                retire=RetireWorktree(worktrees=worktrees),
                 check_sources=CheckSources(sources=reader),
                 implement=ImplementSlice(
                     implementer=ClaudeImplementer(calls=calls, reader=reader),

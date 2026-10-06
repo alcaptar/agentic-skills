@@ -144,6 +144,7 @@ class TestNoDurableStoreWritesAKeyInSpanish(ReadingTheLedger):
             "diff.files_changed",
             "diff.lines_added",
             "diff.lines_deleted",
+            "worktree_retirement",
             "budgets",
             "budgets.control_retries",
             "budgets.hygiene_retries",

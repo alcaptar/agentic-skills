@@ -31,6 +31,8 @@ class StateMachine:
             return self._closed(closing, RunState.ABORTED_BUDGET)
         if outcome is Outcome.WORKTREE_TAKEN:
             return self._closed(run, RunState.BLOCKED_WORKTREE)
+        if outcome is Outcome.WORKTREE_LEFT_BEHIND:
+            return self._closed(run, RunState.BLOCKED_LEFTOVER_WORKTREE)
         if outcome is Outcome.CONFLICTING:
             return self._after_a_catch_up_conflict(run)
 
@@ -81,7 +83,9 @@ class StateMachine:
                 return self._with_the_retry_counter_reset(run, blocked=blocked)
             case IssueLabel.ABORTED_BUDGET:
                 return replace(run, spend=HarnessSpend.nothing())
-            case IssueLabel.ABORTED_UNMEASURED_CALL | IssueLabel.BLOCKED_WORKTREE:
+            case (
+                IssueLabel.ABORTED_UNMEASURED_CALL | IssueLabel.BLOCKED_WORKTREE | IssueLabel.BLOCKED_LEFTOVER_WORKTREE
+            ):
                 return run
             case _:
                 raise ImpossibleTransitionError(f"the label `{blocked}` names no closed run that can be reopened")

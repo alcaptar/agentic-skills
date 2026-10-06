@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 
 from slice_runner.domain.declared_debt import DeclaredDebt
 from slice_runner.domain.harness_spend import HarnessSpend
+from slice_runner.domain.worktree_retirement import WorktreeRetirement
 
 if TYPE_CHECKING:
     from slice_runner.domain.budgets import Budgets
@@ -35,6 +36,8 @@ class ClosedSlice:
     ci_indeterminate_cause: CiIndeterminateCause | None = None
     debt: DeclaredDebt = field(default=DeclaredDebt())
     diff_stats: DiffStats | None = None
+    worktree: str = ""
+    worktree_retirement: WorktreeRetirement = WorktreeRetirement.NOT_MOUNTED
 
     @property
     def spend(self) -> HarnessSpend:

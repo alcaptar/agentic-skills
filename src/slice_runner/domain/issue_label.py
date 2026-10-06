@@ -19,8 +19,17 @@ class IssueLabel(StrEnum):
     BLOCKED_CI_INDETERMINATE = "bloqueada:ci-indeterminada"
     BLOCKED_CI_CONFLICT = "bloqueada:conflicto"
     BLOCKED_WORKTREE = "bloqueada:worktree"
+    BLOCKED_LEFTOVER_WORKTREE = "bloqueada:worktree-sin-retirar"
     ABORTED_BUDGET = "abortada:presupuesto"
     ABORTED_UNMEASURED_CALL = "abortada:llamada-no-medida"
+
+    @property
+    def closed_as(self) -> RunState | None:
+        for state in RunState:
+            if state is not RunState.OPEN and IssueLabel.of(state=state, step=Step.MOUNT_WORKTREE) is self:
+                return state
+
+        return None
 
     @classmethod
     def of(cls, *, state: RunState, step: Step) -> IssueLabel | None:
@@ -38,6 +47,7 @@ class IssueLabel(StrEnum):
                 | RunState.BLOCKED_CI_INDETERMINATE
                 | RunState.BLOCKED_CI_CONFLICT
                 | RunState.BLOCKED_WORKTREE
+                | RunState.BLOCKED_LEFTOVER_WORKTREE
             ):
                 return cls._of_the_blocked_reason(state)
             case RunState.ABORTED_BUDGET:
@@ -74,4 +84,5 @@ class IssueLabel(StrEnum):
             RunState.BLOCKED_CI_INDETERMINATE: cls.BLOCKED_CI_INDETERMINATE,
             RunState.BLOCKED_CI_CONFLICT: cls.BLOCKED_CI_CONFLICT,
             RunState.BLOCKED_WORKTREE: cls.BLOCKED_WORKTREE,
+            RunState.BLOCKED_LEFTOVER_WORKTREE: cls.BLOCKED_LEFTOVER_WORKTREE,
         }[state]

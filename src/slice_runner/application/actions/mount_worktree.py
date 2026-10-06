@@ -19,6 +19,7 @@ class MountWorktreeParams:
     worktree: str
     branch: str
     base: str
+    expects_a_tree: bool = True
 
 
 @dataclass(frozen=True, kw_only=True, slots=True)
@@ -56,7 +57,7 @@ class MountWorktree:
     ) -> MountWorktreeResult:
         match classification.standing:
             case WorktreeStanding.MOUNTED:
-                return MountWorktreeResult(outcome=Outcome.DONE)
+                return self._reusing(params)
             case WorktreeStanding.ABSENT:
                 self._creating_the_branch(params)
             case WorktreeStanding.BRANCH_ONLY:
@@ -73,6 +74,13 @@ class MountWorktree:
                 )
 
         return MountWorktreeResult(outcome=Outcome.DONE)
+
+    @staticmethod
+    def _reusing(params: MountWorktreeParams) -> MountWorktreeResult:
+        if params.expects_a_tree:
+            return MountWorktreeResult(outcome=Outcome.DONE)
+
+        return MountWorktreeResult(outcome=Outcome.WORKTREE_LEFT_BEHIND, conflicting_path=params.worktree)
 
     def _creating_the_branch(self, params: MountWorktreeParams) -> None:
         self._worktrees.add_new_branch(root=params.root, path=params.worktree, branch=params.branch, base=params.base)

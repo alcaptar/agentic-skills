@@ -15,6 +15,7 @@ from slice_runner.domain.exceptions import RunNotClosedError, UnreadableMetricsL
 from slice_runner.domain.role_models import RoleModels
 from slice_runner.domain.run_state import RunState
 from slice_runner.domain.severity import Severity
+from slice_runner.domain.worktree_retirement import WorktreeRetirement
 from slice_runner.infrastructure import local_metrics_log
 from slice_runner.infrastructure.claude_config import ClaudeConfig
 from slice_runner.infrastructure.durable_ledger import DurableLedger
@@ -607,3 +608,18 @@ class TestTheAdapterOwnsOnlyItsNameAndItsPayload:
         assert stub.row is MetricsEntryPayload
         assert len(stub.appended) == 1
         assert not (tmp_path / "slice-runner").exists()
+
+
+class TestTheRowCarriesWhatBecameOfTheWorktree(WithTheDurableStoresOutOfTheRealHome):
+    @pytest.mark.parametrize("retirement", list(WorktreeRetirement))
+    def test_every_way_a_worktree_can_end_is_written_under_one_key_so_the_kept_ones_can_be_counted(
+        self, tmp_path: Path, retirement: WorktreeRetirement
+    ) -> None:
+        LocalMetricsLog(clock=self.frozen_at()).record(ClosedSliceMother.merged_with_its_worktree(retirement))
+
+        assert WrittenMetricsLog.row_under(tmp_path)["worktree_retirement"] == retirement.value
+
+    def test_the_new_leftover_closing_is_written_as_its_own_verdict(self, tmp_path: Path) -> None:
+        LocalMetricsLog(clock=self.frozen_at()).record(ClosedSliceMother.closed_as(RunState.BLOCKED_LEFTOVER_WORKTREE))
+
+        assert WrittenMetricsLog.row_under(tmp_path)["verdict"] == "blocked-leftover-worktree"

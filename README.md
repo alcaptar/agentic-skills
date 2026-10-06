@@ -443,7 +443,7 @@ verde -> etiqueta la subissue `estado:esperando-merge` y **para**.
 
 Si algo se rompe, la etiqueta lo dice y el run para en vez de seguir: `bloqueada:controles`,
 `bloqueada:verify`, `bloqueada:sin-cambios`, `bloqueada:ci-roja`, `bloqueada:ci-indeterminada`, `bloqueada:conflicto`,
-`bloqueada:worktree`, `abortada:presupuesto` o `abortada:llamada-no-medida`.
+`bloqueada:worktree`, `bloqueada:worktree-sin-retirar`, `abortada:presupuesto` o `abortada:llamada-no-medida`.
 
 **3. Mergear, o pedir un cambio (tu)**
 

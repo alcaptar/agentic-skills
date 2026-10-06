@@ -183,3 +183,7 @@ class UnreadableFindingsError(ValueError):
 
 class MalformedSliceIdError(ValueError):
     pass
+
+
+class WorktreeRetirementError(OSError):
+    pass

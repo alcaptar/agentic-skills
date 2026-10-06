@@ -263,6 +263,7 @@ _KNOWN_NOT_HARNESS_WRITING = {
     ("_repository", "write_precheck_reason"),
     ("_repository", "write_run"),
     ("_rescue", "execute"),
+    ("_retire", "execute"),
     ("_run_controls", "execute"),
     ("_select", "execute"),
     ("_stage", "execute"),

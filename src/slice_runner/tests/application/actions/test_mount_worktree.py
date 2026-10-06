@@ -27,9 +27,15 @@ class _Mounting:
     def listing(self, *listed: object) -> None:
         self.worktrees.listed.return_value = (ListedWorktreeMother.main_clone(), *listed)
 
-    def mount(self, *, worktree: str | None = None) -> MountWorktreeResult:
+    def mount(self, *, worktree: str | None = None, expects_a_tree: bool = True) -> MountWorktreeResult:
         return MountWorktree(worktrees=self.worktrees).execute(
-            MountWorktreeParams(root=self.ROOT, worktree=worktree or self.DERIVED, branch=self.BRANCH, base=self.BASE)
+            MountWorktreeParams(
+                root=self.ROOT,
+                worktree=worktree or self.DERIVED,
+                branch=self.BRANCH,
+                base=self.BASE,
+                expects_a_tree=expects_a_tree,
+            )
         )
 
     @property
@@ -209,3 +215,40 @@ class TestMountWorktree:
         called = [call[0] for call in mounting.worktrees.method_calls]
         mounting.worktrees.exclude.assert_called_once_with(root=mounting.ROOT, rule="/.worktrees/")
         assert called.index("exclude") < called.index("listed")
+
+
+class TestMountWorktreeFindingATreeNobodyExpected:
+    def test_a_tree_already_on_its_branch_that_nobody_expected_is_reported_as_left_behind_with_its_path(self) -> None:
+        mounting = _Mounting()
+        mounting.worktrees.branch_exists.return_value = True
+        mounting.listing(ListedWorktreeMother.mounted(path=mounting.DERIVED, branch=mounting.BRANCH))
+
+        result = mounting.mount(expects_a_tree=False)
+
+        assert result == MountWorktreeResult(outcome=Outcome.WORKTREE_LEFT_BEHIND, conflicting_path=mounting.DERIVED)
+
+    def test_a_tree_that_nobody_expected_is_neither_reused_nor_mounted_over(self) -> None:
+        mounting = _Mounting()
+        mounting.worktrees.branch_exists.return_value = True
+        mounting.listing(ListedWorktreeMother.mounted(path=mounting.DERIVED, branch=mounting.BRANCH))
+
+        mounting.mount(expects_a_tree=False)
+
+        assert mounting.changed_nothing
+
+    def test_a_tree_that_was_expected_is_reused_as_before(self) -> None:
+        mounting = _Mounting()
+        mounting.worktrees.branch_exists.return_value = True
+        mounting.listing(ListedWorktreeMother.mounted(path=mounting.DERIVED, branch=mounting.BRANCH))
+
+        result = mounting.mount(expects_a_tree=True)
+
+        assert result == MountWorktreeResult(outcome=Outcome.DONE)
+
+    def test_nothing_mounted_is_mounted_whether_a_tree_was_expected_or_not(self) -> None:
+        mounting = _Mounting()
+
+        result = mounting.mount(expects_a_tree=False)
+
+        assert result == MountWorktreeResult(outcome=Outcome.DONE)
+        mounting.worktrees.add_new_branch.assert_called_once()
