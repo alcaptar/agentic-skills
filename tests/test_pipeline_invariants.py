@@ -49,9 +49,12 @@ from __future__ import annotations
 import ast
 import fnmatch
 import re
+import tomllib
 
 import pytest
 from conftest import _ROOT, _read, _tracked
+
+from slice_runner.infrastructure.slice_implementer_brief import SliceImplementerBrief
 
 _UNSCANNED = {
     "skills/slice-spec/references/observabilidad.md": "documenta rutas de otros repos",
@@ -819,3 +822,48 @@ def test_the_scan_catches_alias_choices_wherever_it_is_imported_or_used() -> Non
 
     assert _uses_alias_choices(importing_it)
     assert not _uses_alias_choices(a_well_formed_payload)
+
+
+_BRIEF_PROHIBITIONS_HEADING = "## Lo que NO tocas"
+
+
+def _executables_not_forbidden(brief: str, executables: frozenset[str]) -> list[str]:
+    start = brief.index(_BRIEF_PROHIBITIONS_HEADING) + len(_BRIEF_PROHIBITIONS_HEADING)
+    following = re.search(r"^## ", brief[start:], flags=re.MULTILINE)
+    section = brief[start : start + following.start()] if following else brief[start:]
+
+    return sorted(name for name in executables if f"`{name}`" not in section)
+
+
+def test_the_implementer_brief_forbids_launching_any_executable_of_the_program() -> None:
+    declared = tomllib.loads(_read(_ROOT / "pyproject.toml"))["project"]["scripts"]
+
+    assert declared, "pyproject.toml declares no executable, so this invariant measures nothing"
+    assert not _executables_not_forbidden(SliceImplementerBrief.TEXT, frozenset(declared)), (
+        "the implementer brief does not forbid these executables of the program under "
+        f"`{_BRIEF_PROHIBITIONS_HEADING}`: the implementer could verify itself and spend outside the slice budget"
+    )
+
+
+def test_the_brief_scan_does_not_count_a_mention_outside_the_section_as_a_prohibition() -> None:
+    mentioned_elsewhere = "\n".join(
+        [
+            "## Lo que recibes",
+            "`slice-runner` se menciona aqui.",
+            _BRIEF_PROHIBITIONS_HEADING,
+            "- `git`.",
+            "## Lo que devuelves",
+        ]
+    )
+    forbidden_in_the_section = "\n".join(
+        [
+            "## Lo que recibes",
+            _BRIEF_PROHIBITIONS_HEADING,
+            "- `slice-runner`.",
+            "## Lo que devuelves",
+        ]
+    )
+    executables = frozenset({"slice-runner"})
+
+    assert _executables_not_forbidden(mentioned_elsewhere, executables) == ["slice-runner"]
+    assert _executables_not_forbidden(forbidden_in_the_section, executables) == []
