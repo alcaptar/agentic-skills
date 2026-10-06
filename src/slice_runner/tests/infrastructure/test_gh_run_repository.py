@@ -6,7 +6,6 @@ from datetime import UTC, datetime
 
 import pytest
 
-from slice_runner.domain.alignment_response_kind import AlignmentResponseKind
 from slice_runner.domain.budgets import Budgets
 from slice_runner.domain.control_command import ControlCommand
 from slice_runner.domain.controls import Controls
@@ -15,16 +14,16 @@ from slice_runner.domain.exceptions import (
     EmptyIssueBodyError,
     LaggingSearchIndexError,
     MalformedConventionLineError,
+    StaleRunStateError,
     UnreadableFindingsError,
     UnreadableIssueError,
     UnreadableRunError,
 )
 from slice_runner.domain.issue_label import IssueLabel
 from slice_runner.domain.issue_state import IssueState
-from slice_runner.domain.malformed_reason import MalformedReason
+from slice_runner.domain.order import Order
 from slice_runner.domain.precheck_outcome import PrecheckOutcome
 from slice_runner.domain.requested_change import RequestedChange
-from slice_runner.domain.retry_response_kind import RetryResponseKind
 from slice_runner.domain.run import Run
 from slice_runner.domain.slice_identity import SliceIdentity
 from slice_runner.domain.source import Source, SourceKind
@@ -33,9 +32,7 @@ from slice_runner.domain.worktree_retirement import WorktreeRetirement
 from slice_runner.infrastructure.automation_mark import AutomationMark
 from slice_runner.infrastructure.catch_up_conflict_comment import CatchUpConflictComment
 from slice_runner.infrastructure.gh_run_repository import GhCommandFailedError, GhRunRepository
-from slice_runner.infrastructure.malformed_response_comment import MalformedResponseComment
 from slice_runner.infrastructure.process import ProcessOutput
-from slice_runner.infrastructure.reopened_comment import ReopenedComment
 from slice_runner.infrastructure.reset_comment import ResetComment
 from slice_runner.infrastructure.understanding_comment import UnderstandingComment
 from slice_runner.infrastructure.veto_findings_comment import VetoFindingsComment
@@ -65,7 +62,7 @@ _SUB1_BODY = (
     "SENAL: exenta - spike de medicion\n"
     "\n"
     "<!-- slice-runner:estado\n"
-    '{"step": "await-ci", "corrected": "", "understanding_pending": false, '
+    '{"step": "await-ci", "corrected": "", "alignment": "awaiting", "retry_instruction": "", '
     '"previous_call_died": false, "catching_up_the_branch": false, "control_retries": 1, '
     '"hygiene_retries": 0, "verify_retries": 0, '
     '"ci_retries": 0, "catch_up_retries": 0, "indeterminate_ticks": 2, '
@@ -665,7 +662,7 @@ class TestWritingTheExecutionStateBlock:
             "SENAL: exenta - spike de medicion\n"
             "\n"
             "<!-- slice-runner:estado\n"
-            '{"step": "implement", "corrected": "", "understanding_pending": false, '
+            '{"step": "implement", "corrected": "", "alignment": "awaiting", "retry_instruction": "", '
             '"previous_call_died": false, "catching_up_the_branch": false, '
             '"control_retries": 0, "hygiene_retries": 0, "verify_retries": 0, '
             '"ci_retries": 0, "catch_up_retries": 0, "indeterminate_ticks": 0, '
@@ -700,7 +697,7 @@ class TestWritingTheExecutionStateBlock:
             "SENAL: exenta - spike de medicion\n"
             "\n"
             "<!-- slice-runner:estado\n"
-            '{"step": "await-merge", "corrected": "", "understanding_pending": false, '
+            '{"step": "await-merge", "corrected": "", "alignment": "awaiting", "retry_instruction": "", '
             '"previous_call_died": false, "catching_up_the_branch": false, '
             '"control_retries": 0, "hygiene_retries": 0, "verify_retries": 0, '
             '"ci_retries": 0, "catch_up_retries": 0, "indeterminate_ticks": 0, '
@@ -759,7 +756,7 @@ class TestWritingTheExecutionStateBlock:
             "SENAL: exenta - spike de medicion\n"
             "\n"
             "<!-- slice-runner:estado\n"
-            '{"step": "verify", "corrected": "", "understanding_pending": false, '
+            '{"step": "verify", "corrected": "", "alignment": "awaiting", "retry_instruction": "", '
             '"previous_call_died": false, "catching_up_the_branch": false, '
             '"control_retries": 0, "hygiene_retries": 0, "verify_retries": 0, '
             '"ci_retries": 0, "catch_up_retries": 0, "indeterminate_ticks": 0, '
@@ -1021,8 +1018,10 @@ class TestWritingTheUnderstanding:
         GhRunRepository(call=GhCallDoubles.wired(process)).write_understanding(repo=_REPO, issue=45, understanding="x")
 
         stdin = process.calls[0].stdin
-        assert "-GO" in stdin
-        assert "-REVIEW" in stdin
+        assert "slice-runner go" in stdin
+        assert "slice-runner review" in stdin
+        assert "-GO" not in stdin
+        assert "-REVIEW" not in stdin
 
     def test_the_comment_carries_the_marker_that_lets_a_later_read_find_it_back(self) -> None:
         process = ScriptedProcess(ProcessOutput(code=0, stdout="", stderr=""))
@@ -1089,250 +1088,34 @@ class TestReadingBackWhatWasAgreed:
         assert understood == "asi entiendo la slice-10"
 
 
-class TestReadingTheAlignmentResponse:
-    @staticmethod
-    def _process(bodies: list[str]) -> ScriptedProcess:
-        template = GhResponseMother.subissue_comments()[0]
-        payload = {"comments": [{**template, "body": body} for body in bodies]}
-
-        return ScriptedProcess(ProcessOutput(code=0, stdout=json.dumps(payload), stderr=""))
-
-    def test_a_comment_with_every_field_gh_actually_sends_is_still_read_by_its_body(self) -> None:
-        payload = {"comments": GhResponseMother.subissue_comments()}
-        process = ScriptedProcess(ProcessOutput(code=0, stdout=json.dumps(payload), stderr=""))
-
-        response = GhRunRepository(call=GhCallDoubles.wired(process)).read_alignment_response(repo=_REPO, issue=45)
-
-        assert response.kind is AlignmentResponseKind.GO
-
-    def test_it_asks_gh_for_exactly_the_comments_of_the_subissue(self) -> None:
-        process = self._process([])
-
-        GhRunRepository(call=GhCallDoubles.wired(process)).read_alignment_response(repo=_REPO, issue=45)
-
-        argv = Argv(process.calls[0].argv)
-        assert process.calls[0].argv[:4] == ["gh", "issue", "view", "45"]
-        assert argv.value_of("--repo") == _REPO
-        assert argv.value_of("--json") == "comments"
-
-    def test_no_comment_at_all_reads_as_not_answered_yet(self) -> None:
-        process = self._process([])
-
-        response = GhRunRepository(call=GhCallDoubles.wired(process)).read_alignment_response(repo=_REPO, issue=45)
-
-        assert response.kind is AlignmentResponseKind.NOT_YET
-
-    def test_a_comment_that_only_repeats_the_understanding_is_never_read_as_its_own_answer(self) -> None:
-        process = self._process([UnderstandingComment.rendered("asi entiendo la slice")])
-
-        response = GhRunRepository(call=GhCallDoubles.wired(process)).read_alignment_response(repo=_REPO, issue=45)
-
-        assert response.kind is AlignmentResponseKind.NOT_YET
-
-    def test_a_go_after_the_understanding_is_read_as_the_answer_to_arrange_for(self) -> None:
-        process = self._process([UnderstandingComment.rendered("asi entiendo la slice"), "-GO"])
-
-        response = GhRunRepository(call=GhCallDoubles.wired(process)).read_alignment_response(repo=_REPO, issue=45)
-
-        assert response.kind is AlignmentResponseKind.GO
-
-    def test_a_review_after_the_understanding_carries_its_correction_through(self) -> None:
-        process = self._process(
-            [UnderstandingComment.rendered("asi entiendo la slice"), "-REVIEW la senal no esta exenta"]
-        )
-
-        response = GhRunRepository(call=GhCallDoubles.wired(process)).read_alignment_response(repo=_REPO, issue=45)
-
-        assert (response.kind, response.correction) == (AlignmentResponseKind.REVIEW, "la senal no esta exenta")
-
-    def test_a_stray_comment_before_the_understanding_is_never_read_as_its_answer(self) -> None:
-        process = self._process(["-GO", UnderstandingComment.rendered("asi entiendo la slice")])
-
-        response = GhRunRepository(call=GhCallDoubles.wired(process)).read_alignment_response(repo=_REPO, issue=45)
-
-        assert response.kind is AlignmentResponseKind.NOT_YET
-
-    def test_a_stray_comment_before_a_previous_format_understanding_is_never_read_as_its_answer(self) -> None:
-        previous_format = GhResponseMother.subissue_comments()[0]["body"]
-        assert isinstance(previous_format, str)
-        process = self._process(["-GO", previous_format])
-
-        response = GhRunRepository(call=GhCallDoubles.wired(process)).read_alignment_response(repo=_REPO, issue=45)
-
-        assert response.kind is AlignmentResponseKind.NOT_YET
-
-    def test_the_visible_automation_mark_by_itself_is_never_read_as_the_answer(self) -> None:
-        process = self._process([UnderstandingComment.rendered("asi entiendo la slice"), AutomationMark.TEXT])
-
-        response = GhRunRepository(call=GhCallDoubles.wired(process)).read_alignment_response(repo=_REPO, issue=45)
-
-        assert response.kind is AlignmentResponseKind.NOT_YET
-
-    def test_only_the_most_recent_understanding_bounds_the_search_after_a_review_round(self) -> None:
-        process = self._process(
-            [
-                UnderstandingComment.rendered("primer entendimiento"),
-                "-REVIEW la senal no esta exenta",
-                UnderstandingComment.rendered("entendimiento corregido"),
-            ]
-        )
-
-        response = GhRunRepository(call=GhCallDoubles.wired(process)).read_alignment_response(repo=_REPO, issue=45)
-
-        assert response.kind is AlignmentResponseKind.NOT_YET
-
-    def test_a_go_carrying_extra_text_is_read_as_malformed_instead_of_not_yet_answered(self) -> None:
-        process = self._process([UnderstandingComment.rendered("asi entiendo la slice"), "-GO por favor"])
-
-        response = GhRunRepository(call=GhCallDoubles.wired(process)).read_alignment_response(repo=_REPO, issue=45)
-
-        assert response.kind is AlignmentResponseKind.MALFORMED
-        assert response.reason is MalformedReason.GO_CARRIES_TEXT
-
-    def test_a_review_with_no_correction_behind_it_is_read_as_malformed_instead_of_not_yet_answered(self) -> None:
-        process = self._process([UnderstandingComment.rendered("asi entiendo la slice"), "-REVIEW"])
-
-        response = GhRunRepository(call=GhCallDoubles.wired(process)).read_alignment_response(repo=_REPO, issue=45)
-
-        assert response.kind is AlignmentResponseKind.MALFORMED
-        assert response.reason is MalformedReason.MISSING_CORRECTION
-
-    def test_a_malformed_comment_already_acknowledged_is_never_read_again_as_the_answer(self) -> None:
-        process = self._process(
-            [
-                UnderstandingComment.rendered("asi entiendo la slice"),
-                "-GO por favor",
-                MalformedResponseComment.rendered(MalformedReason.GO_CARRIES_TEXT),
-            ]
-        )
-
-        response = GhRunRepository(call=GhCallDoubles.wired(process)).read_alignment_response(repo=_REPO, issue=45)
-
-        assert response.kind is AlignmentResponseKind.NOT_YET
-
-    def test_a_non_zero_exit_raises_with_the_stderr_it_carried(self) -> None:
-        process = ScriptedProcess(ProcessOutput(code=1, stdout="", stderr="HTTP 404: Not Found"))
-
-        with pytest.raises(GhCommandFailedError, match="HTTP 404"):
-            GhRunRepository(call=GhCallDoubles.wired(process)).read_alignment_response(repo=_REPO, issue=45)
-
-
-class TestReadingTheRetryInstruction:
-    @staticmethod
-    def _process(bodies: list[str]) -> ScriptedProcess:
-        template = GhResponseMother.subissue_comments()[0]
-        payload = {"comments": [{**template, "body": body} for body in bodies]}
-
-        return ScriptedProcess(ProcessOutput(code=0, stdout=json.dumps(payload), stderr=""))
-
-    def test_it_asks_gh_for_exactly_the_comments_of_the_subissue(self) -> None:
-        process = self._process([])
-
-        GhRunRepository(call=GhCallDoubles.wired(process)).read_retry_instruction(repo=_REPO, issue=45)
-
-        argv = Argv(process.calls[0].argv)
-        assert process.calls[0].argv[:4] == ["gh", "issue", "view", "45"]
-        assert argv.value_of("--repo") == _REPO
-        assert argv.value_of("--json") == "comments"
-
-    def test_no_comment_at_all_reads_as_not_answered_yet(self) -> None:
-        process = self._process([])
-
-        response = GhRunRepository(call=GhCallDoubles.wired(process)).read_retry_instruction(repo=_REPO, issue=45)
-
-        assert response.kind is RetryResponseKind.NOT_YET
-
-    def test_a_retry_comment_carries_its_instruction_through(self) -> None:
-        process = self._process(["-RETRY el control ya esta arreglado a mano"])
-
-        response = GhRunRepository(call=GhCallDoubles.wired(process)).read_retry_instruction(repo=_REPO, issue=45)
-
-        assert (response.kind, response.instruction) == (RetryResponseKind.RETRY, "el control ya esta arreglado a mano")
-
-    def test_the_most_recent_retry_comment_wins_over_an_earlier_one(self) -> None:
-        process = self._process(["-RETRY el primero", "-RETRY el ultimo"])
-
-        response = GhRunRepository(call=GhCallDoubles.wired(process)).read_retry_instruction(repo=_REPO, issue=45)
-
-        assert response.instruction == "el ultimo"
-
-    def test_a_retry_comment_before_the_last_reopening_is_never_read_as_a_new_instruction(self) -> None:
-        process = self._process(["-RETRY ya consumida", ReopenedComment.rendered("ya consumida")])
-
-        response = GhRunRepository(call=GhCallDoubles.wired(process)).read_retry_instruction(repo=_REPO, issue=45)
-
-        assert response.kind is RetryResponseKind.NOT_YET
-
-    def test_a_retry_comment_after_the_last_reopening_is_read_as_a_new_instruction(self) -> None:
-        process = self._process(
-            ["-RETRY ya consumida", ReopenedComment.rendered("ya consumida"), "-RETRY la de verdad"]
-        )
-
-        response = GhRunRepository(call=GhCallDoubles.wired(process)).read_retry_instruction(repo=_REPO, issue=45)
-
-        assert (response.kind, response.instruction) == (RetryResponseKind.RETRY, "la de verdad")
-
-    def test_a_retry_comment_before_a_previous_format_reopening_is_never_read_as_a_new_instruction(self) -> None:
-        previous_format = f"Slice reabierta por esta instruccion de reintento:\n\nx\n\n{ReopenedComment.MARKER}"
-        process = self._process(["-RETRY ya consumida", previous_format])
-
-        response = GhRunRepository(call=GhCallDoubles.wired(process)).read_retry_instruction(repo=_REPO, issue=45)
-
-        assert response.kind is RetryResponseKind.NOT_YET
-
-    def test_the_visible_automation_mark_by_itself_is_never_read_as_a_retry_instruction(self) -> None:
-        process = self._process(["-RETRY ya consumida", ReopenedComment.rendered("ya consumida"), AutomationMark.TEXT])
-
-        response = GhRunRepository(call=GhCallDoubles.wired(process)).read_retry_instruction(repo=_REPO, issue=45)
-
-        assert response.kind is RetryResponseKind.NOT_YET
-
-    def test_a_retry_comment_with_no_instruction_behind_it_is_read_as_malformed_instead_of_not_yet_answered(
-        self,
+class TestMarkingAnOrder:
+    @pytest.mark.parametrize(
+        ("order", "text"),
+        [(Order.GO, ""), (Order.REVIEW, "falta la senal"), (Order.RETRY, "el control ya esta arreglado")],
+    )
+    def test_the_call_is_a_comment_saying_which_order_was_given_and_with_what_text(
+        self, order: Order, text: str
     ) -> None:
-        process = self._process(["-RETRY"])
-
-        response = GhRunRepository(call=GhCallDoubles.wired(process)).read_retry_instruction(repo=_REPO, issue=45)
-
-        assert response.kind is RetryResponseKind.MALFORMED
-        assert response.reason is MalformedReason.MISSING_INSTRUCTION
-
-    def test_a_malformed_retry_comment_already_acknowledged_is_never_read_again_as_the_answer(self) -> None:
-        process = self._process(["-RETRY", MalformedResponseComment.rendered(MalformedReason.MISSING_INSTRUCTION)])
-
-        response = GhRunRepository(call=GhCallDoubles.wired(process)).read_retry_instruction(repo=_REPO, issue=45)
-
-        assert response.kind is RetryResponseKind.NOT_YET
-
-    def test_a_non_zero_exit_raises_with_the_stderr_it_carried(self) -> None:
-        process = ScriptedProcess(ProcessOutput(code=1, stdout="", stderr="HTTP 404: Not Found"))
-
-        with pytest.raises(GhCommandFailedError, match="HTTP 404"):
-            GhRunRepository(call=GhCallDoubles.wired(process)).read_retry_instruction(repo=_REPO, issue=45)
-
-
-class TestMarkingASliceReopened:
-    def test_the_call_is_a_comment_carrying_the_instruction_and_the_marker(self) -> None:
         process = ScriptedProcess(ProcessOutput(code=0, stdout="", stderr=""))
 
-        GhRunRepository(call=GhCallDoubles.wired(process)).mark_reopened(
-            repo=_REPO, issue=45, instruction="el control ya esta arreglado a mano"
-        )
+        GhRunRepository(call=GhCallDoubles.wired(process)).mark_order(repo=_REPO, issue=45, order=order, text=text)
 
         assert process.calls[0].argv == ["gh", "issue", "comment", "45", "--repo", _REPO, "--body-file", "-"]
-        assert process.calls[0].stdin == ReopenedComment.rendered("el control ya esta arreglado a mano")
+        assert f"`{order}`" in process.calls[0].stdin
+        assert text in process.calls[0].stdin
 
-    def test_the_comment_carries_the_marker_that_lets_a_later_read_find_it_back(self) -> None:
+    @pytest.mark.parametrize("order", list(Order))
+    def test_the_comment_carries_none_of_the_tokens_the_run_used_to_read(self, order: Order) -> None:
         process = ScriptedProcess(ProcessOutput(code=0, stdout="", stderr=""))
 
-        GhRunRepository(call=GhCallDoubles.wired(process)).mark_reopened(repo=_REPO, issue=45, instruction="x")
+        GhRunRepository(call=GhCallDoubles.wired(process)).mark_order(repo=_REPO, issue=45, order=order, text="x")
 
-        assert ReopenedComment.MARKER in process.calls[0].stdin
+        assert not any(token in process.calls[0].stdin for token in ("-GO", "-REVIEW", "-RETRY"))
 
     def test_the_comment_carries_the_visible_automation_mark(self) -> None:
         process = ScriptedProcess(ProcessOutput(code=0, stdout="", stderr=""))
 
-        GhRunRepository(call=GhCallDoubles.wired(process)).mark_reopened(repo=_REPO, issue=45, instruction="x")
+        GhRunRepository(call=GhCallDoubles.wired(process)).mark_order(repo=_REPO, issue=45, order=Order.GO, text="")
 
         assert AutomationMark.TEXT in process.calls[0].stdin
 
@@ -1340,7 +1123,30 @@ class TestMarkingASliceReopened:
         process = ScriptedProcess(ProcessOutput(code=1, stdout="", stderr="HTTP 422: Unprocessable Entity"))
 
         with pytest.raises(GhCommandFailedError, match="HTTP 422"):
-            GhRunRepository(call=GhCallDoubles.wired(process)).mark_reopened(repo=_REPO, issue=45, instruction="x")
+            GhRunRepository(call=GhCallDoubles.wired(process)).mark_order(repo=_REPO, issue=45, order=Order.GO, text="")
+
+
+class TestReadingASubissueWhoseRunBlockIsStale:
+    @staticmethod
+    def _process() -> ScriptedProcess:
+        stale = _SUB1_BODY.replace(
+            '"alignment": "awaiting", "retry_instruction": "", ', '"understanding_pending": true, '
+        )
+        payload = {**GhResponseMother.children_of_parent()[1], "body": stale}
+
+        return ScriptedProcess(ProcessOutput(code=0, stdout=json.dumps(payload), stderr=""))
+
+    def test_reading_it_with_its_run_names_the_retired_key_instead_of_failing_validation(self) -> None:
+        with pytest.raises(StaleRunStateError, match="understanding_pending"):
+            GhRunRepository(call=GhCallDoubles.wired(self._process())).read_subissue(repo=_REPO, issue=49)
+
+    def test_reading_it_without_its_run_still_returns_the_spec_and_no_run(self) -> None:
+        subissue = GhRunRepository(call=GhCallDoubles.wired(self._process())).read_subissue_without_run(
+            repo=_REPO, issue=49
+        )
+
+        assert subissue.run is None
+        assert subissue.slice_id.canonical == "slice-02"
 
 
 class TestMarkingASliceReset:
@@ -1391,44 +1197,6 @@ class TestMarkingASliceReset:
         with pytest.raises(GhCommandFailedError, match="HTTP 422"):
             GhRunRepository(call=GhCallDoubles.wired(process)).mark_reset(
                 repo=_REPO, issue=45, branch=self._BRANCH, at=self._AT
-            )
-
-
-class TestWritingAMalformedResponse:
-    def test_the_call_is_a_comment_carrying_the_explanation_and_the_marker(self) -> None:
-        process = ScriptedProcess(ProcessOutput(code=0, stdout="", stderr=""))
-
-        GhRunRepository(call=GhCallDoubles.wired(process)).write_malformed_response(
-            repo=_REPO, issue=45, reason=MalformedReason.GO_CARRIES_TEXT
-        )
-
-        assert process.calls[0].argv == ["gh", "issue", "comment", "45", "--repo", _REPO, "--body-file", "-"]
-        assert process.calls[0].stdin == MalformedResponseComment.rendered(MalformedReason.GO_CARRIES_TEXT)
-
-    def test_the_comment_carries_the_marker_that_lets_a_later_read_find_it_back(self) -> None:
-        process = ScriptedProcess(ProcessOutput(code=0, stdout="", stderr=""))
-
-        GhRunRepository(call=GhCallDoubles.wired(process)).write_malformed_response(
-            repo=_REPO, issue=45, reason=MalformedReason.GO_CARRIES_TEXT
-        )
-
-        assert MalformedResponseComment.MARKER in process.calls[0].stdin
-
-    def test_the_comment_carries_the_visible_automation_mark(self) -> None:
-        process = ScriptedProcess(ProcessOutput(code=0, stdout="", stderr=""))
-
-        GhRunRepository(call=GhCallDoubles.wired(process)).write_malformed_response(
-            repo=_REPO, issue=45, reason=MalformedReason.GO_CARRIES_TEXT
-        )
-
-        assert AutomationMark.TEXT in process.calls[0].stdin
-
-    def test_a_non_zero_exit_raises_with_the_stderr_it_carried(self) -> None:
-        process = ScriptedProcess(ProcessOutput(code=1, stdout="", stderr="HTTP 422: Unprocessable Entity"))
-
-        with pytest.raises(GhCommandFailedError, match="HTTP 422"):
-            GhRunRepository(call=GhCallDoubles.wired(process)).write_malformed_response(
-                repo=_REPO, issue=45, reason=MalformedReason.GO_CARRIES_TEXT
             )
 
 

@@ -199,6 +199,9 @@ Vale igual para el `--slice` de `verify`, `read` y `spend`.
 |---|---|---|
 | `run` | Monta el worktree de la slice bajo `<raiz-del-clon>/.worktrees/` -`--repo-root`, el directorio actual por omision; `--worktree` solo para un arbol montado a mano- y conduce la siguiente slice ejecutable del issue de punta a punta -alinear, implementar, controlar, verificar, abrir la pull request, esperar la integracion continua- y para donde diga el estado. `--slice` nombra una slice concreta en vez de dejar que el programa elija. | `uv run slice-runner run 38 --repo alcaptar/agentic-skills --base master` |
 | `verify` | Juzga lo ya comiteado en la rama mas lo que hay staged, contra el branch-point de la base, y emite el veredicto por salida estandar (o el motivo de no tenerlo, por salida de error). | `uv run slice-runner verify --repo . --base master --slice slice-01` |
+| `go` | Acuerda el entendimiento que una slice publico y espera tu decision: guarda en el estado del run que esta acordado y deja en la subissue un comentario que dice que orden se dio. El siguiente `run` implementa sin volver a publicarlo. No lanza el run ni invoca al modelo, y rechaza -por `18`- una slice que no espera alineacion. | `uv run slice-runner go 45 --repo alcaptar/agentic-skills` |
+| `review` | Pide rehacer el entendimiento con una correccion: la guarda en el estado del run y deja el texto en un comentario. El siguiente `run` lo rehace con ella, lo publica y vuelve a parar; dos `review` seguidos dejan solo la segunda correccion. No lanza el run ni invoca al modelo, y rechaza -por `18`- una slice que no espera alineacion. | `uv run slice-runner review 45 --repo alcaptar/agentic-skills falta cubrir la slice ya cerrada` |
+| `retry` | Reabre una slice bloqueada o abortada por su etiqueta, reinicia el contador que la bloqueo y guarda la instruccion en el estado del run, de modo que el implementador la recibe aunque el proceso muera antes de llegar a el. Deja la instruccion en un comentario. No lanza el run ni invoca al modelo, y rechaza -por `18`- una slice sin bloqueo ni aborto. | `uv run slice-runner retry 45 --repo alcaptar/agentic-skills el control ya esta arreglado a mano` |
 | `explain` | Contesta que paso viene despues de un resultado, y cuando se agota un presupuesto, sin montar un run: es una funcion pura sobre el estado que le llega por entrada estandar. | `echo '{"run": {"step": "run-controls", "control_retries": 2}, "outcome": "failed"}' \| uv run slice-runner explain` |
 | `read` | Abre la conversacion grabada de una llamada concreta del rastro y la emite legible por salida estandar, para que la lea una persona. `--repo` e `--issue` identifican el run -son los mismos que fija `run`-, y `--worktree` es la ruta donde corrio la llamada: `<raiz-del-clon>/.worktrees/<NN-nombre>`, no el directorio del clon. | `uv run slice-runner read --repo alcaptar/agentic-skills --issue 38 --worktree .worktrees/04-nombre-de-la-slice --slice slice-04 --step implement` |
 | `spend` | Suma lo que gasto el harness en las llamadas que sirvieron un paso de una slice (coste, turnos, duracion, numero de llamadas) y lo emite como JSON. `--repo` e `--issue` identifican el run, igual que en `read`. | `uv run slice-runner spend --repo alcaptar/agentic-skills --issue 38 --slice slice-04 --step implement` |
@@ -321,7 +324,7 @@ El codigo de salida es el contrato con quien lo invoca:
 | `3` | No hay nada que juzgar: el indice esta vacio (¿falto el `git add`?) |
 | `4` | Error de uso: el repo o la base no resuelven, falta un argumento, el issue o el estado que se quiere leer no se pueden leer, `read` no encuentra la conversacion pedida, o el rastro/registro durable que `read` o `spend` leen trae una linea corrupta |
 | `5` | `run`: la slice cerro **sin** mergear (controles, juez, integracion continua, presupuesto, un worktree que no se pudo montar o una llamada al arnes que no dejo nada que medir). Hay que mirar el issue; reinvocar sin tocar nada repite el cierre |
-| `7` | `run`: se agoto la espera con el run todavia abierto -pausa de alineacion, integracion continua o merge-. Reinvocar es exactamente lo que toca. Esperando el merge, ademas, un comentario en la subissue dice que la pull request quedo sin fusionar y recuerda que en borrador el merge no puede ocurrir |
+| `7` | `run`: se agoto la espera con el run todavia abierto -integracion continua o merge-. Reinvocar es exactamente lo que toca. Esperando el merge, ademas, un comentario en la subissue dice que la pull request quedo sin fusionar y recuerda que en borrador el merge no puede ocurrir |
 | `8` | `run`: los prechecks pararon la invocacion antes de tocar codigo |
 | `9` | `run`: el issue no tiene ninguna slice ejecutable (todas cerradas, bloqueadas o abortadas) |
 | `10` | `run`: el run se interrumpio antes de llegar a una parada -`gh` o `git` fallaron, el foro contesto algo ilegible, el registro durable no se pudo escribir-. El estado persistido sigue siendo bueno. Cualquier subcomando sale con este mismo codigo ante una excepcion que el programa no sabe nombrar, con su tipo y su mensaje por `stderr` en vez de un volcado de la pila |
@@ -329,8 +332,10 @@ El codigo de salida es el contrato con quien lo invoca:
 | `12` | Una llamada a un proceso externo agoto su tope por llamada y se mato, asi que no hay respuesta que interpretar. Reinvocar a ciegas vuelve a pagar el tope entero: primero hay que mirar **que** se colgo |
 | `13` | `doctor`: el entorno no esta listo para conducir una slice -falta `git`, `gh` no esta autenticado, falta `claude`, falta alguna de las skills `slice-spec`/`deploy-watch`, o el binario instalado y las skills enlazadas vienen de arboles distintos-. Distinto de `4`: la invocacion estaba bien escrita, lo que falta es el entorno |
 | `14` | Las fuentes de convencion declaradas, ya leidas, se pasan del tope de tamano del presupuesto: no se mando ningun prompt. Distinto de `8`: eso para antes de leer nada, esto se descubre sumando contenido ya leido, y reinvocar sin reducir lo declarado repite el mismo cierre |
-| `15` | `run`: el juez ya habia dictaminado sobre este mismo diff en esta invocacion y el implementador no lo movio en la vuelta siguiente, asi que no se le volvio a invocar (el veredicto sobre el mismo diff no puede cambiar). La subissue queda `bloqueada:sin-cambios` y un comentario junta lo que el juez sigue exigiendo con lo que el implementador declaro haber dejado fuera. Distinto de `5`: reinvocar a ciegas repite el cierre, hay que resolver el desacuerdo -o cambiar criterios y reabrir con `-RETRY`, que si vuelve a juzgar- |
+| `15` | `run`: el juez ya habia dictaminado sobre este mismo diff en esta invocacion y el implementador no lo movio en la vuelta siguiente, asi que no se le volvio a invocar (el veredicto sobre el mismo diff no puede cambiar). La subissue queda `bloqueada:sin-cambios` y un comentario junta lo que el juez sigue exigiendo con lo que el implementador declaro haber dejado fuera. Distinto de `5`: reinvocar a ciegas repite el cierre, hay que resolver el desacuerdo -o cambiar criterios y reabrir con `slice-runner retry`, que si vuelve a juzgar- |
 | `16` | `understanding`: la subissue no tiene ningun entendimiento publicado, asi que no hay nada que ensenar todavia. La invocacion esta bien escrita y la subissue existe: quien invoca espera y vuelve a preguntar, no corrige nada. Distinto de `4`, donde la invocacion o la subissue estan mal |
+| `17` | `run`: la slice espera una orden tuya -`go` o `review`- tras publicar su entendimiento. La invocacion **termina** en vez de sondear el issue: da la orden y vuelve a lanzar `run`. Reinvocar sin dar ninguna orden termina igual y no vuelve a publicar nada |
+| `18` | `go`, `review` o `retry`: la slice no esta en el estado que esa orden necesita -`go` y `review` fuera de la pausa de alineacion, `retry` sin bloqueo ni aborto-. El motivo sale por `stderr` y no se escribe nada en el issue. Distinto de `4`: la invocacion estaba bien escrita y la subissue se leyo, lo que no cuadra es el estado de la slice |
 
 `1` es un veredicto y `2` no lo es: esa es la distincion que hace el codigo de salida y que un booleano
 perderia. Del `5` en adelante la pregunta es otra -¿que hace quien invoca ahora?-, y por eso hay un codigo
@@ -350,13 +355,14 @@ echo '{"run": {"step": "run-controls", "control_retries": 2}, "outcome": "failed
 ```
 
 ```json
-{"run": {"step": "run-controls", "corrected": "", "understanding_pending": false,
- "previous_call_died": false, "catching_up_the_branch": false, "control_retries": 2,
+{"run": {"step": "run-controls", "corrected": "", "alignment": "awaiting",
+ "retry_instruction": "", "previous_call_died": false, "catching_up_the_branch": false, "control_retries": 2,
  "hygiene_retries": 0, "verify_retries": 0, "ci_retries": 0, "catch_up_retries": 0,
  "indeterminate_ticks": 0, "verify_discards": 0, "understand_discards": 0, "implement_discards": 0,
  "control_rounds_logged": 1, "verify_rounds_logged": 0, "last_reviewed_id": 0, "requested_changes": []},
  "state": "blocked-controls",
- "wait_seconds": 0}
+ "wait_seconds": 0,
+ "awaits_a_person": false}
 ```
 
 La respuesta trae **el run entero** (con los contadores ya gastados), el estado en el que queda -`open`
@@ -370,7 +376,7 @@ porque no se toco el codigo-, y **la espera**, que termina la invocacion dejando
 estaba. La espera son **dos** topes, no uno, porque esperar a una maquina no es esperar a una persona:
 **30 minutos para la integracion continua** -que no tarda mas salvo que este colgada- y **8 horas para
 las esperas humanas**, la alineacion y el merge. Y **cada paso estrena su cuenta**: lo que tardes en dar
-el `-GO` no sale del rato que el programa aguantara luego a que mergees. El motivo de los numeros esta en
+el `go` no sale del rato que el programa aguantara luego a que mergees. El motivo de los numeros esta en
 `docs/conventions/domain.md`. Un par (paso, resultado) que la secuencia no describe **no cae en una rama
 generica**: sale por `4`.
 

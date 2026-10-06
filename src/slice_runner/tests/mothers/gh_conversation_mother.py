@@ -5,7 +5,6 @@ from typing import TYPE_CHECKING, ClassVar
 
 from slice_runner.domain.issue_label import IssueLabel
 from slice_runner.domain.issue_state import IssueState
-from slice_runner.tests.mothers.run_mother import RunMother
 
 if TYPE_CHECKING:
     from slice_runner.domain.run import Run
@@ -78,9 +77,26 @@ class GhConversationMother:
         return json.dumps({"body": _SUBISSUE_PROSE})
 
     @classmethod
-    def the_slice_resumed_at(cls, run: Run) -> str:
-        return cls._children(
-            body=f"{_SUBISSUE_PROSE}\n{cls._state_block(run)}\n", label=IssueLabel.IN_PROGRESS, state=IssueState.OPEN
+    def the_slice_resumed_at(cls, run: Run, *, label: IssueLabel = IssueLabel.IN_PROGRESS) -> str:
+        return cls._children(body=f"{_SUBISSUE_PROSE}\n{cls._state_block(run)}\n", label=label, state=IssueState.OPEN)
+
+    @classmethod
+    def the_subissue_viewed(
+        cls, *, label: IssueLabel, run: Run | None = None, stale: bool = False
+    ) -> dict[str, object]:
+        block = cls._state_block(run) if run is not None else ""
+        body = f"{_SUBISSUE_PROSE}\n{block}\n"
+        if stale:
+            body = body.replace('"alignment": "awaiting"', '"understanding_pending": true')
+
+        return cls._entry(
+            number=cls.SUBISSUE,
+            slice_id=cls.SLICE,
+            name=cls.NAME,
+            summary=cls.SUMMARY,
+            body=body,
+            label=label,
+            state=IssueState.OPEN,
         )
 
     @classmethod
@@ -96,16 +112,12 @@ class GhConversationMother:
         return cls._children(body=_SUBISSUE_PROSE, label=IssueLabel.PENDING, state=IssueState.OPEN)
 
     @classmethod
-    def the_slice_aborted_before_touching_code(cls) -> str:
-        return cls._children(
-            body=f"{_SUBISSUE_PROSE}\n{cls._state_block(RunMother.aborted_before_touching_code())}\n",
-            label=IssueLabel.ABORTED_BUDGET,
-            state=IssueState.OPEN,
-        )
+    def the_slice_marked_in_progress_that_never_persisted_a_run(cls) -> str:
+        return cls._children(body=_SUBISSUE_PROSE, label=IssueLabel.IN_PROGRESS, state=IssueState.OPEN)
 
     @classmethod
-    def the_comments_of_a_person_asking_to_retry(cls) -> str:
-        return json.dumps({"comments": [{"body": "-RETRY ya esta resuelto a mano"}]})
+    def the_comments_of_a_person_typing(cls, body: str) -> str:
+        return json.dumps({"comments": [{"body": body}]})
 
     @classmethod
     def the_slice_already_closed(cls) -> str:
@@ -215,6 +227,9 @@ class GhConversationMother:
     def _state_block(run: Run) -> str:
         state = {
             "step": run.step.value,
+            "corrected": run.corrected,
+            "alignment": run.alignment.value,
+            "retry_instruction": run.retry_instruction,
             "control_retries": run.control_retries,
             "hygiene_retries": run.hygiene_retries,
             "verify_retries": run.verify_retries,

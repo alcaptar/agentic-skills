@@ -11,7 +11,6 @@ from slice_runner.application.actions.implement_slice import ImplementSliceParam
 from slice_runner.application.actions.mount_worktree import MountWorktreeParams
 from slice_runner.application.actions.record_closure import RecordClosureParams
 from slice_runner.application.actions.record_step import RecordStepParams
-from slice_runner.application.actions.reopen_slice import ReopenSliceParams
 from slice_runner.application.actions.rescue_staged_work import RescueStagedWorkParams
 from slice_runner.application.actions.retire_worktree import RetireWorktreeParams
 from slice_runner.application.actions.run_controls import RunControlsParams
@@ -23,6 +22,7 @@ from slice_runner.application.queries.read_ci_status import ReadCiStatusParams
 from slice_runner.application.queries.read_pull_request_status import ReadPullRequestStatusParams
 from slice_runner.application.queries.run_prechecks import RunPrechecksParams
 from slice_runner.application.queries.select_slice import SelectSliceParams
+from slice_runner.domain.alignment_stage import AlignmentStage
 from slice_runner.domain.closing_worktree import ClosingWorktree
 from slice_runner.domain.discarded_call import DiscardedCall
 from slice_runner.domain.exceptions import (
@@ -61,7 +61,6 @@ if TYPE_CHECKING:
     from slice_runner.application.actions.mount_worktree import MountWorktree
     from slice_runner.application.actions.record_closure import RecordClosure
     from slice_runner.application.actions.record_step import RecordStep
-    from slice_runner.application.actions.reopen_slice import ReopenSlice
     from slice_runner.application.actions.rescue_staged_work import RescueStagedWork
     from slice_runner.application.actions.retire_worktree import RetireWorktree
     from slice_runner.application.actions.run_controls import RunControls
@@ -82,7 +81,6 @@ if TYPE_CHECKING:
     from slice_runner.domain.parent_issue import ParentIssue
     from slice_runner.domain.pull_request_writer import PullRequestWriter
     from slice_runner.domain.reported_path import ReportedPath
-    from slice_runner.domain.retry_response import RetryResponse
     from slice_runner.domain.role_models import RoleModels
     from slice_runner.domain.run_repository import RunRepository
     from slice_runner.domain.state_machine import StateMachine
@@ -128,7 +126,6 @@ class ConductSliceProgress:
     control_logs: tuple[Path, ...] = field(default=())
     hygiene_refusal: str = ""
     understanding: str = ""
-    retry_instruction: str = ""
     pull_request: int | None = None
     waited_seconds: int = 0
     discarded_call: DiscardedCall | None = None
@@ -174,7 +171,6 @@ class HaltedSlice:
 @dataclass(frozen=True, kw_only=True, slots=True)
 class ConductSliceUseCases:
     select: SelectSlice
-    reopen: ReopenSlice
     prechecks: RunPrechecks
     mount: MountWorktree
     retire: RetireWorktree
@@ -215,7 +211,6 @@ class ConductSlice:
         models: RoleModels,
     ) -> None:
         self._select = use_cases.select
-        self._reopen = use_cases.reopen
         self._prechecks = use_cases.prechecks
         self._mount = use_cases.mount
         self._retire = use_cases.retire
@@ -252,19 +247,11 @@ class ConductSlice:
             reconciled = sum(
                 self._closing_a_merge_missed_between_invocations(params, dangling) for dangling in unselectable.dangling
             )
-            for subissue, response in unselectable.malformed_retries:
-                if response.reason is not None:
-                    self._repository.write_malformed_response(
-                        repo=params.repo, issue=subissue.number, reason=response.reason
-                    )
             raise self._reported_after_reconciling(unselectable, reconciled) from unselectable
 
         for dangling in chosen.dangling:
             self._closing_a_merge_missed_between_invocations(params, dangling)
-        retry = chosen.retry
         expects_a_tree = self._expects_a_tree(params, chosen)
-        if retry is not None:
-            chosen = self._reopened(params, chosen, retry=retry)
         run = chosen.subissue.run or Run(step=Step.MOUNT_WORKTREE)
         progress = ConductSliceProgress(
             params=params,
@@ -273,7 +260,6 @@ class ConductSlice:
             run=run,
             label=chosen.subissue.label,
             spends=(run.spend,) if run.spend.measured else (),
-            retry_instruction=retry.instruction if retry is not None else "",
             expects_a_tree=expects_a_tree,
         )
         of_the_subissue = Prechecks.of_the_subissue(chosen.subissue)
@@ -370,15 +356,6 @@ class ConductSlice:
 
         return self._closing(closed, transition.state)
 
-    def _reopened(
-        self, params: ConductSliceParams, chosen: SelectSliceResult, *, retry: RetryResponse
-    ) -> SelectSliceResult:
-        reopened = self._reopen.execute(
-            ReopenSliceParams(repo=params.repo, subissue=chosen.subissue, instruction=retry.instruction)
-        )
-
-        return replace(chosen, subissue=reopened.subissue)
-
     def _aligning(self, progress: ConductSliceProgress) -> ConductSliceResult:
         precheck = self._prechecks.execute(
             RunPrechecksParams(
@@ -405,7 +382,7 @@ class ConductSlice:
         marked = self._marked_in_progress(progress)
         arrived = self._machine.after(marked.run, Outcome.DONE).run
 
-        return self._conducting(replace(marked, run=replace(arrived, understanding_pending=True)))
+        return self._conducting(replace(marked, run=replace(arrived, alignment=AlignmentStage.DRAFT)))
 
     def _halted_by(self, progress: ConductSliceProgress, precheck: PrecheckResult) -> ConductSliceResult:
         if precheck.reason is not None:
@@ -456,24 +433,17 @@ class ConductSlice:
             understanding=sought.understanding,
             spends=(*progress.spends, sought.spend) if sought.spend is not None else progress.spends,
         )
-        response = sought.response
-        if response is None:
-            return self._paused_for_alignment(updated)
+        if sought.published:
+            updated = self._paused_for_alignment(updated)
 
-        return SteppedSlice(
-            progress=updated,
-            outcome=Outcome.of_the_alignment(response, redrafting=updated.run.redrafting_after_a_correction),
-        )
+        return SteppedSlice(progress=updated, outcome=Outcome.of_the_alignment(sought.response))
 
-    def _paused_for_alignment(self, progress: ConductSliceProgress) -> SteppedSlice:
+    def _paused_for_alignment(self, progress: ConductSliceProgress) -> ConductSliceProgress:
         self._repository.pause_for_alignment(
             repo=progress.params.repo, issue=progress.subissue.number, remove=progress.label
         )
 
-        return SteppedSlice(
-            progress=replace(progress, label=IssueLabel.AWAITING_ALIGNMENT),
-            outcome=Outcome.PENDING,
-        )
+        return replace(progress, label=IssueLabel.AWAITING_ALIGNMENT)
 
     def _seeded(self, progress: ConductSliceProgress) -> ConductSliceProgress:
         if progress.understanding:
@@ -497,6 +467,8 @@ class ConductSlice:
             progress = self._recorded(stepped.progress, transition)
             if transition.state is not RunState.OPEN:
                 return self._closing(progress, transition.state)
+            if transition.awaits_a_person:
+                return self._ending(progress, Halt.AWAITING_ALIGNMENT)
             if transition.wait_seconds > 0:
                 progress = self._waiting(progress, transition.wait_seconds)
                 if self._budgets.wait_exhausted(progress.waited_seconds, step=progress.run.step):
@@ -579,7 +551,7 @@ class ConductSlice:
                     control_logs=progress.control_logs,
                     hygiene_refusal=progress.hygiene_refusal,
                     understanding=progress.understanding,
-                    retry_instruction=progress.retry_instruction,
+                    retry_instruction=progress.run.retry_instruction,
                     requested_changes=progress.run.requested_changes,
                     previous_call_died=progress.run.previous_call_died,
                 )
@@ -838,7 +810,6 @@ class ConductSlice:
     def _reported_after_reconciling(unselectable: NoSliceLeftError, reconciled: int) -> NoSliceLeftError:
         error = NoSliceLeftError(f"{unselectable}; reconciled {reconciled} dangling slice(s) before giving up")
         error.dangling = unselectable.dangling
-        error.malformed_retries = unselectable.malformed_retries
 
         return error
 

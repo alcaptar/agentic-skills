@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from typing import Annotated, Self
+from typing import Annotated, ClassVar, Self
 
 from pydantic import Field
 
-from slice_runner.domain.exceptions import UnreadableRunError
+from slice_runner.domain.alignment_stage import AlignmentStage
+from slice_runner.domain.exceptions import StaleRunStateError, UnreadableRunError
 from slice_runner.domain.harness_spend import HarnessSpend
 from slice_runner.domain.run import Run
 from slice_runner.domain.step import Step
@@ -16,9 +17,12 @@ Spent = Annotated[int, Field(strict=True, ge=0)]
 
 
 class RunPayload(ContractModel):
+    RETIRED_KEY: ClassVar[str] = "understanding_pending"
+
     step: Step
     corrected: str = ""
-    understanding_pending: bool = False
+    alignment: AlignmentStage = AlignmentStage.AWAITING
+    retry_instruction: str = ""
     previous_call_died: bool = False
     catching_up_the_branch: bool = False
     control_retries: Spent = 0
@@ -39,6 +43,12 @@ class RunPayload(ContractModel):
 
     @classmethod
     def from_dict(cls, data: dict[str, object]) -> Self:
+        if cls.RETIRED_KEY in data:
+            raise StaleRunStateError(
+                f"the execution state block was written by an earlier version of this program and carries "
+                f"`{cls.RETIRED_KEY}`, which this one no longer reads"
+            )
+
         return cls._validated(data, "the execution state block is not one this program can read", UnreadableRunError)
 
     @classmethod
@@ -46,7 +56,8 @@ class RunPayload(ContractModel):
         return cls(
             step=run.step,
             corrected=run.corrected,
-            understanding_pending=run.understanding_pending,
+            alignment=run.alignment,
+            retry_instruction=run.retry_instruction,
             previous_call_died=run.previous_call_died,
             catching_up_the_branch=run.catching_up_the_branch,
             control_retries=run.control_retries,
@@ -69,7 +80,8 @@ class RunPayload(ContractModel):
         return Run(
             step=self.step,
             corrected=self.corrected,
-            understanding_pending=self.understanding_pending,
+            alignment=self.alignment,
+            retry_instruction=self.retry_instruction,
             previous_call_died=self.previous_call_died,
             catching_up_the_branch=self.catching_up_the_branch,
             control_retries=self.control_retries,

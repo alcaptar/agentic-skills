@@ -4,7 +4,7 @@ from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING
 
 from slice_runner.domain.alignment import Alignment
-from slice_runner.domain.alignment_response_kind import AlignmentResponseKind
+from slice_runner.domain.alignment_stage import AlignmentStage
 from slice_runner.domain.step import Step
 
 if TYPE_CHECKING:
@@ -30,8 +30,12 @@ class SeekAlignmentParams:
 class SeekAlignmentResult:
     run: Run
     understanding: str
-    response: AlignmentResponseKind | None = None
+    response: AlignmentStage
     spend: HarnessSpend | None = None
+
+    @property
+    def published(self) -> bool:
+        return self.spend is not None
 
 
 class SeekAlignment:
@@ -40,21 +44,13 @@ class SeekAlignment:
         self._repository = repository
 
     def execute(self, params: SeekAlignmentParams) -> SeekAlignmentResult:
-        if params.run.understanding_pending:
-            return self._published(params)
-
-        response = self._repository.read_alignment_response(repo=params.repo, issue=params.subissue.number)
-        if response.kind is AlignmentResponseKind.REVIEW and response.correction != params.run.corrected:
-            run = replace(params.run, corrected=response.correction, understanding_pending=True)
-            self._repository.write_run(repo=params.repo, issue=params.subissue.number, run=run)
-
-            return SeekAlignmentResult(run=run, understanding=params.understanding, response=response.kind)
-        if response.kind is AlignmentResponseKind.MALFORMED and response.reason is not None:
-            self._repository.write_malformed_response(
-                repo=params.repo, issue=params.subissue.number, reason=response.reason
-            )
-
-        return SeekAlignmentResult(run=params.run, understanding=params.understanding, response=response.kind)
+        match params.run.alignment:
+            case AlignmentStage.DRAFT:
+                return self._published(params)
+            case AlignmentStage.AWAITING | AlignmentStage.AGREED:
+                return SeekAlignmentResult(
+                    run=params.run, understanding=params.understanding, response=params.run.alignment
+                )
 
     def _published(self, params: SeekAlignmentParams) -> SeekAlignmentResult:
         correction = params.run.corrected
@@ -70,14 +66,16 @@ class SeekAlignment:
             params.run,
             step=Step.UNDERSTAND,
             spend=params.run.spend.plus(understanding.spend),
-            understanding_pending=False,
+            alignment=AlignmentStage.AWAITING,
         )
         self._repository.write_run(repo=params.repo, issue=params.subissue.number, run=run)
         self._repository.write_understanding(
             repo=params.repo, issue=params.subissue.number, understanding=understanding.text
         )
 
-        return SeekAlignmentResult(run=run, understanding=understanding.text, spend=understanding.spend)
+        return SeekAlignmentResult(
+            run=run, understanding=understanding.text, response=AlignmentStage.AWAITING, spend=understanding.spend
+        )
 
     def _seeded(self, params: SeekAlignmentParams) -> SeekAlignmentParams:
         if params.understanding:

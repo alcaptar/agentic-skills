@@ -14,6 +14,7 @@ class TransitionPayload(ContractModel):
     run: RunPayload
     state: RunState
     wait_seconds: int
+    awaits_a_person: bool
 
     @classmethod
     def from_domain(cls, transition: Transition) -> Self:
@@ -21,4 +22,5 @@ class TransitionPayload(ContractModel):
             run=RunPayload.from_domain(transition.run),
             state=transition.state,
             wait_seconds=transition.wait_seconds,
+            awaits_a_person=transition.awaits_a_person,
         )

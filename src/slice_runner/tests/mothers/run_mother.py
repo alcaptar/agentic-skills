@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from slice_runner.domain.alignment_stage import AlignmentStage
 from slice_runner.domain.requested_change import RequestedChange
 from slice_runner.domain.run import Run
 from slice_runner.domain.step import Step
@@ -104,7 +105,7 @@ class RunMother:
 
     @staticmethod
     def about_to_publish_the_understanding() -> Run:
-        return Run(step=Step.UNDERSTAND, understanding_pending=True)
+        return Run(step=Step.UNDERSTAND, alignment=AlignmentStage.DRAFT)
 
     @staticmethod
     def awaiting_alignment() -> Run:
@@ -120,7 +121,15 @@ class RunMother:
 
     @staticmethod
     def about_to_redraft_after_a_correction(correction: str) -> Run:
-        return Run(step=Step.UNDERSTAND, corrected=correction, understanding_pending=True)
+        return Run(step=Step.UNDERSTAND, corrected=correction, alignment=AlignmentStage.DRAFT)
+
+    @staticmethod
+    def with_the_understanding_agreed() -> Run:
+        return Run(step=Step.UNDERSTAND, alignment=AlignmentStage.AGREED)
+
+    @staticmethod
+    def implementing_after_a_retry(instruction: str) -> Run:
+        return Run(step=Step.IMPLEMENT, retry_instruction=instruction)
 
     @staticmethod
     def understanding_after_a_discard(spend: HarnessSpend) -> Run:

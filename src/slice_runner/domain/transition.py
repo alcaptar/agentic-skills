@@ -14,3 +14,4 @@ class Transition:
     run: Run
     state: RunState = RunState.OPEN
     wait_seconds: int = 0
+    awaits_a_person: bool = False
