@@ -197,7 +197,7 @@ Vale igual para el `--slice` de `verify`, `read` y `spend`.
 
 | Subcomando | Para que sirve | Ejemplo |
 |---|---|---|
-| `run` | Conduce la siguiente slice ejecutable del issue de punta a punta -alinear, implementar, controlar, verificar, abrir la pull request, esperar la integracion continua- y para donde diga el estado. `--slice` nombra una slice concreta en vez de dejar que el programa elija. | `uv run slice-runner run 38 --repo alcaptar/agentic-skills --base master` |
+| `run` | Monta el worktree de la slice bajo `<raiz-del-clon>/.worktrees/` -`--repo-root`, el directorio actual por omision; `--worktree` solo para un arbol montado a mano- y conduce la siguiente slice ejecutable del issue de punta a punta -alinear, implementar, controlar, verificar, abrir la pull request, esperar la integracion continua- y para donde diga el estado. `--slice` nombra una slice concreta en vez de dejar que el programa elija. | `uv run slice-runner run 38 --repo alcaptar/agentic-skills --base master` |
 | `verify` | Juzga lo ya comiteado en la rama mas lo que hay staged, contra el branch-point de la base, y emite el veredicto por salida estandar (o el motivo de no tenerlo, por salida de error). | `uv run slice-runner verify --repo . --base master --slice slice-01` |
 | `explain` | Contesta que paso viene despues de un resultado, y cuando se agota un presupuesto, sin montar un run: es una funcion pura sobre el estado que le llega por entrada estandar. | `echo '{"run": {"step": "run-controls", "control_retries": 2}, "outcome": "failed"}' \| uv run slice-runner explain` |
 | `read` | Abre la conversacion grabada de una llamada concreta del rastro y la emite legible por salida estandar, para que la lea una persona. `--repo` e `--issue` identifican el run -son los mismos que fija `run`-, y `--worktree` es la ruta donde corrio la llamada. | `uv run slice-runner read --repo alcaptar/agentic-skills --issue 38 --worktree . --slice slice-04 --step implement` |
@@ -320,7 +320,7 @@ El codigo de salida es el contrato con quien lo invoca:
 | `2` | No hay veredicto de fiar: un proceso del run no se pudo lanzar, o el juez devolvio un veredicto incoherente |
 | `3` | No hay nada que juzgar: el indice esta vacio (¿falto el `git add`?) |
 | `4` | Error de uso: el repo o la base no resuelven, falta un argumento, el issue o el estado que se quiere leer no se pueden leer, `read` no encuentra la conversacion pedida, o el rastro/registro durable que `read` o `spend` leen trae una linea corrupta |
-| `5` | `run`: la slice cerro **sin** mergear (controles, juez, integracion continua, presupuesto o una llamada al arnes que no dejo nada que medir). Hay que mirar el issue; reinvocar sin tocar nada repite el cierre |
+| `5` | `run`: la slice cerro **sin** mergear (controles, juez, integracion continua, presupuesto, un worktree que no se pudo montar o una llamada al arnes que no dejo nada que medir). Hay que mirar el issue; reinvocar sin tocar nada repite el cierre |
 | `7` | `run`: se agoto la espera con el run todavia abierto -pausa de alineacion, integracion continua o merge-. Reinvocar es exactamente lo que toca. Esperando el merge, ademas, un comentario en la subissue dice que la pull request quedo sin fusionar y recuerda que en borrador el merge no puede ocurrir |
 | `8` | `run`: los prechecks pararon la invocacion antes de tocar codigo |
 | `9` | `run`: el issue no tiene ninguna slice ejecutable (todas cerradas, bloqueadas o abortadas) |
@@ -443,7 +443,7 @@ verde -> etiqueta la subissue `estado:esperando-merge` y **para**.
 
 Si algo se rompe, la etiqueta lo dice y el run para en vez de seguir: `bloqueada:controles`,
 `bloqueada:verify`, `bloqueada:sin-cambios`, `bloqueada:ci-roja`, `bloqueada:ci-indeterminada`, `bloqueada:conflicto`,
-`abortada:presupuesto` o `abortada:llamada-no-medida`.
+`bloqueada:worktree`, `abortada:presupuesto` o `abortada:llamada-no-medida`.
 
 **3. Mergear, o pedir un cambio (tu)**
 

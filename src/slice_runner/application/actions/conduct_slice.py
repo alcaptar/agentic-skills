@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
-from typing import TYPE_CHECKING, Literal, NoReturn
+from typing import TYPE_CHECKING, Literal
 
 from slice_runner.application.actions.catch_up_branch import CatchUpBranchParams
 from slice_runner.application.actions.close_parent import CloseParentParams
 from slice_runner.application.actions.commit_round import CommitRoundParams
 from slice_runner.application.actions.deliver_slice import DeliverSliceParams
 from slice_runner.application.actions.implement_slice import ImplementSliceParams
+from slice_runner.application.actions.mount_worktree import MountWorktreeParams
 from slice_runner.application.actions.record_closure import RecordClosureParams
 from slice_runner.application.actions.record_step import RecordStepParams
 from slice_runner.application.actions.reopen_slice import ReopenSliceParams
@@ -16,6 +17,7 @@ from slice_runner.application.actions.run_controls import RunControlsParams
 from slice_runner.application.actions.seek_alignment import SeekAlignmentParams
 from slice_runner.application.actions.stage_slice import StageSliceParams
 from slice_runner.application.actions.verify_slice import VerifySliceParams
+from slice_runner.application.queries.check_sources import CheckSourcesParams
 from slice_runner.application.queries.read_ci_status import ReadCiStatusParams
 from slice_runner.application.queries.read_pull_request_status import ReadPullRequestStatusParams
 from slice_runner.application.queries.run_prechecks import RunPrechecksParams
@@ -23,8 +25,8 @@ from slice_runner.application.queries.select_slice import SelectSliceParams
 from slice_runner.domain.discarded_call import DiscardedCall
 from slice_runner.domain.exceptions import (
     DirtyIndexError,
+    ImpossibleTransitionError,
     MeasuredCallError,
-    MissingBranchError,
     NoPullRequestError,
     NoSliceLeftError,
     UnchangedDiffError,
@@ -43,6 +45,7 @@ from slice_runner.domain.run_state import RunState
 from slice_runner.domain.step import Step
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
     from pathlib import Path
 
     from slice_runner.application.actions.catch_up_branch import CatchUpBranch
@@ -50,6 +53,7 @@ if TYPE_CHECKING:
     from slice_runner.application.actions.commit_round import CommitRound
     from slice_runner.application.actions.deliver_slice import DeliverSlice
     from slice_runner.application.actions.implement_slice import ImplementSlice
+    from slice_runner.application.actions.mount_worktree import MountWorktree
     from slice_runner.application.actions.record_closure import RecordClosure
     from slice_runner.application.actions.record_step import RecordStep
     from slice_runner.application.actions.reopen_slice import ReopenSlice
@@ -58,11 +62,11 @@ if TYPE_CHECKING:
     from slice_runner.application.actions.seek_alignment import SeekAlignment
     from slice_runner.application.actions.stage_slice import StageSlice
     from slice_runner.application.actions.verify_slice import VerifySlice
+    from slice_runner.application.queries.check_sources import CheckSources
     from slice_runner.application.queries.read_ci_status import ReadCiStatus
     from slice_runner.application.queries.read_pull_request_status import ReadPullRequestStatus
     from slice_runner.application.queries.run_prechecks import RunPrechecks
     from slice_runner.application.queries.select_slice import SelectSlice, SelectSliceResult
-    from slice_runner.domain.branches import Branches
     from slice_runner.domain.budgets import Budgets
     from slice_runner.domain.ci_indeterminate_cause import CiIndeterminateCause
     from slice_runner.domain.clock import Clock
@@ -85,7 +89,8 @@ if TYPE_CHECKING:
 class ConductSliceParams:
     repo: str
     issue: int
-    worktree: str
+    root: str
+    worktree: str | None
     base: str
     logs: Path
     slice_id: str | None = None
@@ -98,11 +103,13 @@ class ConductSliceResult:
     step: Step
     precheck: PrecheckResult | None = None
     pull_request: int | None = None
+    conflicting_path: str = ""
 
 
 @dataclass(frozen=True, kw_only=True, slots=True)
 class ConductSliceProgress:
     params: ConductSliceParams
+    worktree: str
     chosen: SelectSliceResult
     run: Run
     label: IssueLabel | None
@@ -160,6 +167,8 @@ class ConductSliceUseCases:
     select: SelectSlice
     reopen: ReopenSlice
     prechecks: RunPrechecks
+    mount: MountWorktree
+    check_sources: CheckSources
     implement: ImplementSlice
     stage: StageSlice
     commit: CommitRound
@@ -179,7 +188,6 @@ class ConductSliceUseCases:
 @dataclass(frozen=True, kw_only=True, slots=True)
 class ConductSlicePorts:
     repository: RunRepository
-    branches: Branches
     forum: Forum
     clock: Clock
     pull_request: PullRequestWriter
@@ -199,6 +207,8 @@ class ConductSlice:
         self._select = use_cases.select
         self._reopen = use_cases.reopen
         self._prechecks = use_cases.prechecks
+        self._mount = use_cases.mount
+        self._check_sources = use_cases.check_sources
         self._implement = use_cases.implement
         self._stage = use_cases.stage
         self._commit = use_cases.commit
@@ -214,7 +224,6 @@ class ConductSlice:
         self._seek_alignment = use_cases.seek_alignment
         self._catch_up = use_cases.catch_up
         self._repository = ports.repository
-        self._branches = ports.branches
         self._forum = ports.forum
         self._clock = ports.clock
         self._pull_request = ports.pull_request
@@ -244,9 +253,10 @@ class ConductSlice:
         retry = chosen.retry
         if retry is not None:
             chosen = self._reopened(params, chosen, retry=retry)
-        run = chosen.subissue.run or Run(step=Step.IMPLEMENT)
+        run = chosen.subissue.run or Run(step=Step.MOUNT_WORKTREE)
         progress = ConductSliceProgress(
             params=params,
+            worktree=params.worktree or chosen.subissue.slice_id.worktree_under(params.root),
             chosen=chosen,
             run=run,
             label=chosen.subissue.label,
@@ -259,25 +269,48 @@ class ConductSlice:
         if chosen.subissue.run is not None:
             return self._resuming(progress)
         if chosen.subissue.label is IssueLabel.AWAITING_ALIGNMENT:
-            return self._conducting(replace(progress, run=replace(progress.run, step=Step.UNDERSTAND)))
+            return self._mounting(
+                replace(progress, run=replace(progress.run, step=Step.UNDERSTAND)), then=self._conducting
+            )
 
         return self._aligning(progress)
 
     def _resuming(self, progress: ConductSliceProgress) -> ConductSliceResult:
-        if self._branch_still_standing(progress):
-            if self._staged_work_waits_at(progress.run.step):
-                self._rescuing_staged_work(progress)
-            if self._already_delivered(progress.run.step):
-                return self._conducting(progress)
+        return self._mounting(progress, then=self._resuming_on_the_mounted_worktree)
 
-            return self._caught_up_before_conducting(progress)
-        if progress.run.step is Step.UNDERSTAND:
-            if progress.run.understanding_pending:
-                return self._aligning(progress)
+    def _resuming_on_the_mounted_worktree(self, progress: ConductSliceProgress) -> ConductSliceResult:
+        if progress.run.step is Step.MOUNT_WORKTREE:
+            return self._reading_the_sources(progress)
+        if self._staged_work_waits_at(progress.run.step):
+            self._rescuing_staged_work(progress)
+        if self._already_delivered(progress.run.step):
+            return self._conducting(progress)
 
-            return self._recreating_the_branch(progress)
+        return self._caught_up_before_conducting(progress)
 
-        self._missing_branch(progress)
+    def _mounting(
+        self, progress: ConductSliceProgress, *, then: Callable[[ConductSliceProgress], ConductSliceResult]
+    ) -> ConductSliceResult:
+        mounted = self._mount.execute(
+            MountWorktreeParams(
+                root=progress.params.root,
+                worktree=progress.worktree,
+                branch=progress.subissue.branch,
+                base=progress.params.base,
+            )
+        )
+        if mounted.outcome is Outcome.WORKTREE_TAKEN:
+            return self._blocked_by_the_worktree(replace(progress, conflicting_paths=(mounted.conflicting_path,)))
+
+        return then(progress)
+
+    def _blocked_by_the_worktree(self, progress: ConductSliceProgress) -> ConductSliceResult:
+        transition = self._machine.after(progress.run, Outcome.WORKTREE_TAKEN)
+        if progress.subissue.run is None:
+            self._repository.write_run(repo=progress.params.repo, issue=progress.subissue.number, run=transition.run)
+        closed = self._recorded(progress, transition)
+
+        return self._closing(closed, transition.state)
 
     @staticmethod
     def _staged_work_waits_at(step: Step) -> bool:
@@ -286,7 +319,7 @@ class ConductSlice:
     def _rescuing_staged_work(self, progress: ConductSliceProgress) -> None:
         self._rescue.execute(
             RescueStagedWorkParams(
-                worktree=progress.params.worktree,
+                worktree=progress.worktree,
                 branch=progress.subissue.branch,
                 message=self._pull_request.commit_message(
                     progress.subissue, round=max(progress.run.control_rounds_logged, 1)
@@ -300,9 +333,7 @@ class ConductSlice:
 
     def _caught_up_before_conducting(self, progress: ConductSliceProgress) -> ConductSliceResult:
         caught_up = self._catch_up.execute(
-            CatchUpBranchParams(
-                worktree=progress.params.worktree, branch=progress.subissue.branch, base=progress.params.base
-            )
+            CatchUpBranchParams(worktree=progress.worktree, branch=progress.subissue.branch, base=progress.params.base)
         )
         if caught_up.outcome is Outcome.CONFLICTING:
             return self._blocked_by_a_catch_up_conflict(
@@ -317,13 +348,6 @@ class ConductSlice:
 
         return self._closing(closed, transition.state)
 
-    def _recreating_the_branch(self, progress: ConductSliceProgress) -> ConductSliceResult:
-        self._branches.create(
-            worktree=progress.params.worktree, name=progress.subissue.branch, base=progress.params.base
-        )
-
-        return self._conducting(progress)
-
     def _reopened(
         self, params: ConductSliceParams, chosen: SelectSliceResult, *, retry: RetryResponse
     ) -> SelectSliceResult:
@@ -333,21 +357,11 @@ class ConductSlice:
 
         return replace(chosen, subissue=reopened.subissue)
 
-    def _branch_still_standing(self, progress: ConductSliceProgress) -> bool:
-        return self._branches.exists(worktree=progress.params.worktree, name=progress.subissue.branch)
-
-    @staticmethod
-    def _missing_branch(progress: ConductSliceProgress) -> NoReturn:
-        raise MissingBranchError(
-            f"the run of {progress.subissue.slice_id.canonical} stands on `{progress.run.step}` and resumes "
-            f"expecting the branch `{progress.subissue.branch}` to exist: the worktree has no such branch"
-        )
-
     def _aligning(self, progress: ConductSliceProgress) -> ConductSliceResult:
         precheck = self._prechecks.execute(
             RunPrechecksParams(
                 repo=progress.params.repo,
-                worktree=progress.params.worktree,
+                root=progress.params.root,
                 branch=progress.subissue.branch,
                 base=progress.params.base,
                 subissue=progress.subissue,
@@ -355,21 +369,32 @@ class ConductSlice:
             )
         )
         if precheck.outcome is not PrecheckOutcome.CLEAR:
-            if precheck.reason is not None:
-                self._repository.write_precheck_reason(
-                    repo=progress.params.repo,
-                    issue=progress.subissue.number,
-                    outcome=precheck.outcome,
-                    reason=precheck.reason,
-                )
+            return self._halted_by(progress, precheck)
 
-            return self._ending(progress, Halt.PRECHECKS_BLOCKED, precheck=precheck)
+        return self._mounting(progress, then=self._reading_the_sources)
+
+    def _reading_the_sources(self, progress: ConductSliceProgress) -> ConductSliceResult:
+        checked = self._check_sources.execute(
+            CheckSourcesParams(worktree=progress.worktree, sources=progress.parent.sources)
+        )
+        if checked.outcome is not PrecheckOutcome.CLEAR:
+            return self._halted_by(progress, checked)
 
         marked = self._marked_in_progress(progress)
+        arrived = self._machine.after(marked.run, Outcome.DONE).run
 
-        return self._conducting(
-            replace(marked, run=replace(marked.run, step=Step.UNDERSTAND, understanding_pending=True))
-        )
+        return self._conducting(replace(marked, run=replace(arrived, understanding_pending=True)))
+
+    def _halted_by(self, progress: ConductSliceProgress, precheck: PrecheckResult) -> ConductSliceResult:
+        if precheck.reason is not None:
+            self._repository.write_precheck_reason(
+                repo=progress.params.repo,
+                issue=progress.subissue.number,
+                outcome=precheck.outcome,
+                reason=precheck.reason,
+            )
+
+        return self._ending(progress, Halt.PRECHECKS_BLOCKED, precheck=precheck)
 
     def _marked_in_progress(self, progress: ConductSliceProgress) -> ConductSliceProgress:
         if progress.label is IssueLabel.IN_PROGRESS:
@@ -389,7 +414,7 @@ class ConductSlice:
             sought = self._seek_alignment.execute(
                 SeekAlignmentParams(
                     repo=progress.params.repo,
-                    worktree=progress.params.worktree,
+                    worktree=progress.worktree,
                     subissue=progress.subissue,
                     parent=progress.parent,
                     run=progress.run,
@@ -411,23 +436,12 @@ class ConductSlice:
         )
         response = sought.response
         if response is None:
-            if updated.run.has_a_correction:
-                return self._paused_for_alignment(updated)
-
-            return self._paused_for_the_first_alignment(updated)
+            return self._paused_for_alignment(updated)
 
         return SteppedSlice(
             progress=updated,
             outcome=Outcome.of_the_alignment(response, redrafting=updated.run.redrafting_after_a_correction),
         )
-
-    def _paused_for_the_first_alignment(self, progress: ConductSliceProgress) -> SteppedSlice:
-        stepped = self._paused_for_alignment(progress)
-        self._branches.create(
-            worktree=progress.params.worktree, name=progress.subissue.branch, base=progress.params.base
-        )
-
-        return stepped
 
     def _paused_for_alignment(self, progress: ConductSliceProgress) -> SteppedSlice:
         self._repository.pause_for_alignment(
@@ -476,6 +490,10 @@ class ConductSlice:
 
     def _stepping(self, progress: ConductSliceProgress) -> SteppedSlice | HaltedSlice:
         match progress.run.step:
+            case Step.MOUNT_WORKTREE:
+                raise ImpossibleTransitionError(
+                    f"the run of {progress.subissue.slice_id.canonical} reached the loop before mounting its worktree"
+                )
             case Step.UNDERSTAND | Step.IMPLEMENT | Step.RUN_CONTROLS | Step.VERIFY:
                 return self._stepping_while_producing(progress, progress.run.step)
             case Step.OPEN_PULL_REQUEST | Step.AWAIT_CI | Step.CATCH_UP | Step.AWAIT_MERGE:
@@ -513,9 +531,7 @@ class ConductSlice:
 
     def _catching_up_the_branch(self, progress: ConductSliceProgress) -> SteppedSlice:
         caught_up = self._catch_up.execute(
-            CatchUpBranchParams(
-                worktree=progress.params.worktree, branch=progress.subissue.branch, base=progress.params.base
-            )
+            CatchUpBranchParams(worktree=progress.worktree, branch=progress.subissue.branch, base=progress.params.base)
         )
         if caught_up.outcome is not Outcome.CONFLICTING:
             return SteppedSlice(progress=progress, outcome=caught_up.outcome)
@@ -534,7 +550,7 @@ class ConductSlice:
             implementation = self._implement.execute(
                 ImplementSliceParams(
                     repo=progress.params.repo,
-                    worktree=progress.params.worktree,
+                    worktree=progress.worktree,
                     subissue=progress.subissue,
                     parent=progress.parent,
                     findings=progress.findings_of_the_last_round,
@@ -564,7 +580,7 @@ class ConductSlice:
 
     def _running_the_controls(self, progress: ConductSliceProgress) -> SteppedSlice:
         try:
-            self._stage.execute(StageSliceParams(worktree=progress.params.worktree, paths=progress.paths))
+            self._stage.execute(StageSliceParams(worktree=progress.worktree, paths=progress.paths))
         except DirtyIndexError as refusal:
             return SteppedSlice(
                 progress=replace(progress, control_logs=(), hygiene_refusal=str(refusal)),
@@ -575,7 +591,7 @@ class ConductSlice:
         round_number = round_progress.run.control_round_in_progress
         ran = self._run_controls.execute(
             RunControlsParams(
-                worktree=round_progress.params.worktree,
+                worktree=round_progress.worktree,
                 controls=round_progress.parent.controls,
                 logs=round_progress.params.logs,
                 repo=round_progress.params.repo,
@@ -587,7 +603,7 @@ class ConductSlice:
         if ran.outcome is Outcome.DONE:
             self._commit.execute(
                 CommitRoundParams(
-                    worktree=round_progress.params.worktree,
+                    worktree=round_progress.worktree,
                     branch=round_progress.subissue.branch,
                     message=self._pull_request.commit_message(round_progress.subissue, round=round_number),
                     repo=round_progress.params.repo,
@@ -608,7 +624,7 @@ class ConductSlice:
                 VerifySliceParams(
                     repo=progress.params.repo,
                     issue=progress.subissue.number,
-                    worktree=progress.params.worktree,
+                    worktree=progress.worktree,
                     base=f"origin/{progress.params.base}",
                     slice_id=progress.subissue.slice_id.canonical,
                     verify_round=progress.run.verify_round_in_progress,
@@ -662,7 +678,7 @@ class ConductSlice:
     def _opening_the_pull_request(self, progress: ConductSliceProgress) -> SteppedSlice:
         opened = self._deliver.execute(
             DeliverSliceParams(
-                worktree=progress.params.worktree,
+                worktree=progress.worktree,
                 repo=progress.params.repo,
                 branch=progress.subissue.branch,
                 base=progress.params.base,
@@ -816,7 +832,7 @@ class ConductSlice:
             self._close.execute(CloseParentParams(repo=progress.params.repo, issue=progress.params.issue))
             if not progress.subissue.signal_is_exempt:
                 self._deploy_watch.watch(
-                    worktree=progress.params.worktree, repo=progress.params.repo, signal=progress.subissue.signal
+                    worktree=progress.worktree, repo=progress.params.repo, signal=progress.subissue.signal
                 )
 
         return self._ending(progress, Halt.RUN_CLOSED, state=state)
@@ -835,4 +851,5 @@ class ConductSlice:
             step=progress.run.step,
             precheck=precheck,
             pull_request=progress.pull_request,
+            conflicting_path=progress.conflicting_paths[0] if state is RunState.BLOCKED_WORKTREE else "",
         )

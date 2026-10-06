@@ -59,6 +59,7 @@ class ExitCode(IntEnum):
                 | RunState.BLOCKED_CI_RED
                 | RunState.BLOCKED_CI_INDETERMINATE
                 | RunState.BLOCKED_CI_CONFLICT
+                | RunState.BLOCKED_WORKTREE
                 | RunState.ABORTED_BUDGET
                 | RunState.ABORTED_UNMEASURED_CALL
             ):

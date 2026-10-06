@@ -35,7 +35,8 @@ _SUBISSUE_PROSE_WITH_A_SIGNAL = (
 
 class GhConversationMother:
     REPO: ClassVar[str] = "alcaptar/agentic-skills"
-    WORKTREE: ClassVar[str] = "/repos/agentic-skills"
+    ROOT: ClassVar[str] = "/repos/agentic-skills"
+    WORKTREE: ClassVar[str] = "/repos/agentic-skills/.worktrees/05-prechecks-deterministas"
     BASE: ClassVar[str] = "master"
     ISSUE: ClassVar[int] = 38
     SUBISSUE: ClassVar[int] = 45

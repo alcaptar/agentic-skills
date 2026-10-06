@@ -8,7 +8,6 @@ class PrecheckOutcome(StrEnum):
     SLICE_IN_ANOTHER_REPO = "slice-in-another-repo"
     SUBISSUE_ALREADY_CLOSED = "subissue-already-closed"
     PULL_REQUEST_ALREADY_OPEN = "pull-request-already-open"
-    BRANCH_ALREADY_EXISTS = "branch-already-exists"
     MISSING_SOURCES = "missing-sources"
     UNREADABLE_SOURCE = "unreadable-source"
     SOURCES_OVER_BUDGET = "sources-over-budget"

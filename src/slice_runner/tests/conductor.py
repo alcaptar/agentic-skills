@@ -16,6 +16,7 @@ from slice_runner.application.actions.conduct_slice import (
 )
 from slice_runner.application.actions.deliver_slice import DeliverSlice
 from slice_runner.application.actions.implement_slice import ImplementSlice
+from slice_runner.application.actions.mount_worktree import MountWorktree
 from slice_runner.application.actions.record_closure import RecordClosure
 from slice_runner.application.actions.record_step import RecordStep
 from slice_runner.application.actions.reopen_slice import ReopenSlice
@@ -24,6 +25,7 @@ from slice_runner.application.actions.run_controls import RunControls
 from slice_runner.application.actions.seek_alignment import SeekAlignment
 from slice_runner.application.actions.stage_slice import StageSlice
 from slice_runner.application.actions.verify_slice import VerifySlice
+from slice_runner.application.queries.check_sources import CheckSources
 from slice_runner.application.queries.read_ci_status import ReadCiStatus
 from slice_runner.application.queries.read_pull_request_status import ReadPullRequestStatus
 from slice_runner.application.queries.run_prechecks import RunPrechecks
@@ -53,10 +55,12 @@ from slice_runner.domain.slice_coordinates import SliceCoordinates
 from slice_runner.domain.state_machine import StateMachine
 from slice_runner.domain.understanding_writer import UnderstandingWriter
 from slice_runner.domain.workspace import Workspace
+from slice_runner.domain.worktrees import Worktrees
 from slice_runner.tests.doubles import RecordedCorpus, RecordedDebtLedger, RecordedSpendLog
 from slice_runner.tests.mothers.branch_catch_up_mother import BranchCatchUpMother
 from slice_runner.tests.mothers.control_outcome_mother import ControlOutcomeMother
 from slice_runner.tests.mothers.implementation_mother import ImplementationMother
+from slice_runner.tests.mothers.listed_worktree_mother import ListedWorktreeMother
 from slice_runner.tests.mothers.pull_request_status_mother import PullRequestStatusMother
 from slice_runner.tests.mothers.sub_issue_mother import SubIssueMother
 from slice_runner.tests.mothers.understanding_mother import UnderstandingMother
@@ -75,7 +79,9 @@ if TYPE_CHECKING:
 class Conductor:
     REPO: ClassVar[str] = "alcaptar/agentic-skills"
     ISSUE: ClassVar[int] = 38
-    WORKTREE: ClassVar[str] = "/repos/agentic-skills"
+    ROOT: ClassVar[str] = ListedWorktreeMother.ROOT
+    WORKTREE: ClassVar[str] = SubIssueMother.pending().slice_id.worktree_under(ROOT)
+    COMMON_DIR: ClassVar[str] = "/repos/agentic-skills/.git"
     BASE: ClassVar[str] = "master"
     LOGS: ClassVar[Path] = Path("/tmp/slice-runner/logs")
     PULL_REQUEST: ClassVar[int] = 61
@@ -96,6 +102,14 @@ class Conductor:
         self.select = self._doubling(SelectSlice, execute=chosen)
         self.reopen = self._doubling(ReopenSlice, execute=None)
         self.prechecks = self._doubling(RunPrechecks, execute=PrecheckResult(outcome=PrecheckOutcome.CLEAR))
+        self.check_sources = self._doubling(CheckSources, execute=PrecheckResult(outcome=PrecheckOutcome.CLEAR))
+        self.worktrees: Mock = create_autospec(Worktrees, spec_set=True, instance=True)
+        self.worktrees.listed.return_value = (
+            ListedWorktreeMother.main_clone(),
+            ListedWorktreeMother.mounted(path=self.WORKTREE, branch=SubIssueMother.pending().branch),
+        )
+        self.worktrees.branch_exists.return_value = True
+        self.worktrees.common_dir.return_value = self.COMMON_DIR
         self.implement = self._doubling(ImplementSlice, execute=ImplementationMother.of_two_paths())
         self.stage = self._doubling(StageSlice, execute=None)
         self.commit = self._doubling(CommitRound, execute=None)
@@ -174,9 +188,16 @@ class Conductor:
 
         return closed
 
-    def conduct(self) -> ConductSliceResult:
+    def conduct(self, *, worktree: str | None = None) -> ConductSliceResult:
         return self._action().execute(
-            ConductSliceParams(repo=self.REPO, issue=self.ISSUE, worktree=self.WORKTREE, base=self.BASE, logs=self.LOGS)
+            ConductSliceParams(
+                repo=self.REPO,
+                issue=self.ISSUE,
+                root=self.ROOT,
+                worktree=worktree,
+                base=self.BASE,
+                logs=self.LOGS,
+            )
         )
 
     def _action(self) -> ConductSlice:
@@ -185,6 +206,8 @@ class Conductor:
                 select=self.select,
                 reopen=self.reopen,
                 prechecks=self.prechecks,
+                mount=MountWorktree(worktrees=self.worktrees),
+                check_sources=self.check_sources,
                 implement=self.implement,
                 stage=self.stage,
                 commit=self.commit,
@@ -208,7 +231,6 @@ class Conductor:
             ),
             ports=ConductSlicePorts(
                 repository=self.repository,
-                branches=self.branches,
                 forum=self.forum,
                 clock=self.clock,
                 pull_request=self.pull_request,

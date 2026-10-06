@@ -603,74 +603,57 @@ def _argv_of(command: str) -> list[str]:
     return ["run", *(_PLACEHOLDER.sub(lambda m: "1" if m.group() in ("<N>", "<padre>") else "x", flattened)).split()]
 
 
-def test_every_command_slice_spec_teaches_parses_and_names_the_worktree_it_runs_in() -> None:
-    """The skill teaches the launch command on four surfaces, and they had drifted apart.
+def test_every_command_slice_spec_teaches_parses_and_leaves_the_worktree_to_the_program() -> None:
+    """The skill teaches the launch command on four surfaces, and a flag renamed would leave them stale.
 
-    Three of them -- the natural pair up top, the close of step 6 and the close of `validate` -- left
-    `--worktree` out, and only step 7's parallel split carried it. The one read on every single spec
-    was one of the three without it, so following the skill meant falling into the default: the
-    current working directory, which is the measured mechanism behind the judge reading a branch of
-    someone else's slice 31 times out of 32. Copies of a command with nothing measuring them is how
-    the surface that matters ends up being the stale one.
-
-    This compares the prose against `Cli.parser()` rather than against another copy of the prose, so
-    it also fails when a flag is renamed or dropped from the program and the skill still teaches it.
+    The program mounts the worktree of the slice itself, so the command carries no path for it: the
+    value by omission is the one the program derives, not the directory where the caller stands --
+    the measured mechanism behind the judge reading a branch of someone else's slice 31 times out of
+    32. This compares the prose against `Cli.parser()` rather than against another copy of the prose,
+    so it also fails when a flag is renamed or dropped from the program and the skill still teaches it,
+    or when a taught command hands a path to the worktree and takes the choice away from the program.
     """
     taught = set(_RUN_COMMAND.findall(_read(_SPEC)))
-    # The default is read by parsing a command WITHOUT the flag, not from `get_default`: the option
-    # lives on the `run` subparser, so the root parser answers `None` for it and every comparison
-    # against that passes -- which is how the first version of this test passed all five mutations.
-    conducting_where_the_caller_stands = Cli.parser().parse_args(["run", "1", "--repo", "x", "--base", "x"]).worktree
+    derived_by_the_program = Cli.parser().parse_args(["run", "1", "--repo", "x", "--base", "x"]).worktree
 
     assert taught, f"{_rel(_SPEC)} teaches no launch command at all"
+    assert derived_by_the_program is None
     for command in sorted(taught):
         argv = _argv_of(command)
         parsed = Cli.parser().parse_args(argv)
-        assert parsed.worktree != conducting_where_the_caller_stands, (
-            f"{_rel(_SPEC)} teaches `slice-runner run {' '.join(argv[1:])}`, which leaves the worktree "
-            f"at {conducting_where_the_caller_stands!r} and conducts wherever the caller happens to stand"
+        assert parsed.worktree is derived_by_the_program, (
+            f"{_rel(_SPEC)} teaches `slice-runner run {' '.join(argv[1:])}`, which names a worktree by hand "
+            f"when the program mounts its own"
         )
 
 
 _WORKTREE_SECTION = "## El worktree de una slice"
 _MOUNTS_A_WORKTREE = re.compile(r"git worktree add")
 _NEXT_STEP = re.compile(r"\n\d+[a-z]?\. \*\*|\n## ")
-_STEPS_THAT_ORDER_A_WORKTREE = (
+_STEPS_THAT_SPEAK_OF_A_WORKTREE = (
     "6. **Cierra**",
     "7. **Propon el reparto en paralelo",
 )
 
 
-def test_the_recipe_for_mounting_a_worktree_lives_in_one_place_and_every_step_that_orders_one_cites_it() -> None:
-    """The three conditions on where a worktree goes fail silently, so they cannot sit in a doc.
+def test_the_skill_teaches_no_recipe_for_a_worktree_and_the_steps_that_speak_of_one_cite_the_section() -> None:
+    """A recipe by hand is a second source of truth next to the program that mounts the tree.
 
-    They were written in `docs/design-notes.md` and nowhere the skill reads, and the result is
-    measured: following this skill, a tree for a real slice got mounted outside the repo root and
-    without a leading dot -- breaking two of the three -- and nothing said anything, because nothing
-    does. It only survived because this repo runs its controls outside a container; the same tree
-    under `docker compose` would not have existed inside it at all.
-
-    So the recipe and its conditions live in one section, and the steps that order a tree cite it
-    instead of restating it. Restating is what this file already caught once, in the launch command
-    the skill taught on four surfaces and three of them stale: a second copy of the recipe is a
-    second place the conditions can go missing from. This measures the shape, not the wording --
-    where the recipe lives, and that nobody orders a tree without pointing at it.
+    It used to live in one section because its three conditions failed silently and sat only in a
+    design note. The program now mounts the tree, so the section tells what the program does and the
+    steps that mention a worktree cite it instead of restating it; a `git worktree add` anywhere in
+    the skill is a person being taught to do by hand what can diverge from what the program does.
+    This measures the shape, not the wording.
     """
     spec = _read(_SPEC)
-    section_at = spec.find(_WORKTREE_SECTION)
 
-    assert section_at != -1, f"{_rel(_SPEC)} has no `{_WORKTREE_SECTION}` section"
-    mounted_at = [m.start() for m in _MOUNTS_A_WORKTREE.finditer(spec)]
-    assert len(mounted_at) == 1, (
-        f"{_rel(_SPEC)} spells out `git worktree add` {len(mounted_at)} times: the recipe belongs to "
-        f"`{_WORKTREE_SECTION}` alone, and every other place cites it"
+    assert spec.find(_WORKTREE_SECTION) != -1, f"{_rel(_SPEC)} has no `{_WORKTREE_SECTION}` section"
+    assert not _MOUNTS_A_WORKTREE.search(spec), (
+        f"{_rel(_SPEC)} teaches `git worktree add`: the program mounts the worktree of a slice itself"
     )
-    assert mounted_at[0] > section_at, f"the recipe in {_rel(_SPEC)} sits outside `{_WORKTREE_SECTION}`"
-    for step in _STEPS_THAT_ORDER_A_WORKTREE:
+    for step in _STEPS_THAT_SPEAK_OF_A_WORKTREE:
         at = spec.find(step)
         assert at != -1, f"{_rel(_SPEC)} no longer has the step starting `{step}`"
-        # Scoped to the NEXT numbered step, not the next `##`: step 6 runs until step 7, which cites
-        # the section, so a scope that reaches the heading reads 7's citation as 6's and passes.
         rest = spec[at + len(step) :]
         ends_at = min(
             (m.start() for m in _NEXT_STEP.finditer(rest) if m.start() > 0),
@@ -678,8 +661,7 @@ def test_the_recipe_for_mounting_a_worktree_lives_in_one_place_and_every_step_th
         )
         following = rest[:ends_at]
         assert _WORKTREE_SECTION.removeprefix("## ") in following, (
-            f"the step starting `{step}` orders a worktree without citing "
-            f"`{_WORKTREE_SECTION}`, where its three silent conditions live"
+            f"the step starting `{step}` speaks of a worktree without citing `{_WORKTREE_SECTION}`"
         )
 
 

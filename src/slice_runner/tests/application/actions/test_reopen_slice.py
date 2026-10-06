@@ -50,6 +50,7 @@ _BLOCKS: list[tuple[IssueLabel, Run, Run]] = [
         RunMother.blocked_on_conflict(),
         replace(RunMother.blocked_on_conflict(), catch_up_retries=0),
     ),
+    (IssueLabel.BLOCKED_WORKTREE, RunMother.blocked_on_the_worktree(), RunMother.blocked_on_the_worktree()),
     (
         IssueLabel.ABORTED_BUDGET,
         RunMother.aborted_for_budget(HarnessSpendMother.of_the_implementer_call()),

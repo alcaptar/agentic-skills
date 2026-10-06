@@ -37,18 +37,9 @@ class TestBranchesWithoutCatchUp:
 
         real.catch_up.assert_not_called()
 
-    def test_a_branch_is_still_created_because_only_the_catch_up_is_switched_off(
+    def test_how_far_behind_the_base_is_still_asked_of_the_port(
         self, branches: BranchesWithoutCatchUp, real: Mock
     ) -> None:
-        branches.create(worktree=_WORKTREE, name=_BRANCH, base=_BASE)
-
-        real.create.assert_called_once_with(worktree=_WORKTREE, name=_BRANCH, base=_BASE)
-
-    def test_the_branch_is_still_asked_whether_it_exists_and_how_far_behind_it_is(
-        self, branches: BranchesWithoutCatchUp, real: Mock
-    ) -> None:
-        branches.exists(worktree=_WORKTREE, name=_BRANCH)
         branches.commits_behind_remote(worktree=_WORKTREE, base=_BASE)
 
-        real.exists.assert_called_once_with(worktree=_WORKTREE, name=_BRANCH)
         real.commits_behind_remote.assert_called_once_with(worktree=_WORKTREE, base=_BASE)

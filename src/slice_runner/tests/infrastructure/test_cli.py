@@ -70,6 +70,18 @@ _SLICE = "slice-01"
 _IMPLEMENTER_PAYLOAD = "implementer-two-paths"
 
 _TABLE: list[tuple[Step, Outcome, dict[str, int], tuple[Step, RunState, int]]] = [
+    (Step.MOUNT_WORKTREE, Outcome.DONE, {}, (Step.UNDERSTAND, RunState.OPEN, 0)),
+    (Step.MOUNT_WORKTREE, Outcome.OVER_BUDGET, {}, (Step.MOUNT_WORKTREE, RunState.ABORTED_BUDGET, 0)),
+    (Step.MOUNT_WORKTREE, Outcome.CONFLICTING, {}, (Step.MOUNT_WORKTREE, RunState.BLOCKED_CI_CONFLICT, 0)),
+    (Step.MOUNT_WORKTREE, Outcome.WORKTREE_TAKEN, {}, (Step.MOUNT_WORKTREE, RunState.BLOCKED_WORKTREE, 0)),
+    (Step.UNDERSTAND, Outcome.WORKTREE_TAKEN, {}, (Step.UNDERSTAND, RunState.BLOCKED_WORKTREE, 0)),
+    (Step.IMPLEMENT, Outcome.WORKTREE_TAKEN, {}, (Step.IMPLEMENT, RunState.BLOCKED_WORKTREE, 0)),
+    (Step.RUN_CONTROLS, Outcome.WORKTREE_TAKEN, {}, (Step.RUN_CONTROLS, RunState.BLOCKED_WORKTREE, 0)),
+    (Step.VERIFY, Outcome.WORKTREE_TAKEN, {}, (Step.VERIFY, RunState.BLOCKED_WORKTREE, 0)),
+    (Step.OPEN_PULL_REQUEST, Outcome.WORKTREE_TAKEN, {}, (Step.OPEN_PULL_REQUEST, RunState.BLOCKED_WORKTREE, 0)),
+    (Step.AWAIT_CI, Outcome.WORKTREE_TAKEN, {}, (Step.AWAIT_CI, RunState.BLOCKED_WORKTREE, 0)),
+    (Step.CATCH_UP, Outcome.WORKTREE_TAKEN, {}, (Step.CATCH_UP, RunState.BLOCKED_WORKTREE, 0)),
+    (Step.AWAIT_MERGE, Outcome.WORKTREE_TAKEN, {}, (Step.AWAIT_MERGE, RunState.BLOCKED_WORKTREE, 0)),
     (Step.UNDERSTAND, Outcome.DONE, {}, (Step.IMPLEMENT, RunState.OPEN, 0)),
     (Step.UNDERSTAND, Outcome.PENDING, {}, (Step.UNDERSTAND, RunState.OPEN, 30)),
     (Step.UNDERSTAND, Outcome.CHANGES_REQUESTED, {}, (Step.UNDERSTAND, RunState.OPEN, 0)),
@@ -162,6 +174,13 @@ _IMPOSSIBLE: list[tuple[Step, Outcome]] = sorted(
 @pytest.fixture(autouse=True)
 def _every_run_closes_its_metrics_row_outside_the_real_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path / "durable-metrics"))
+
+
+@pytest.fixture(autouse=True)
+def _every_run_ignores_the_worktrees_inside_a_clone_of_the_test_and_not_of_this_machine(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(RunInvocation, "common_dir", tmp_path / "common-git-dir")
 
 
 class BlindToTheToolboxOfThisMachine:
@@ -1272,10 +1291,22 @@ class TestTheCommandThatConductsASlice:
             GhConversationMother.BASE,
         )
 
-    def test_the_worktree_defaults_to_where_the_command_was_invoked_because_that_is_the_usual_case(self) -> None:
+    def test_the_worktree_has_no_default_path_because_the_program_derives_and_mounts_its_own(self) -> None:
         arguments = Cli.parser().parse_args(self._complete())
 
-        assert arguments.worktree == "."
+        assert arguments.worktree is None
+
+    def test_the_root_of_the_clone_the_worktree_hangs_from_defaults_to_the_current_directory(self) -> None:
+        arguments = Cli.parser().parse_args(self._complete())
+
+        assert arguments.repo_root == "."
+
+    def test_both_the_worktree_and_the_root_of_the_clone_can_be_given_and_are_kept_apart(self) -> None:
+        arguments = Cli.parser().parse_args(
+            [*self._complete(), "--worktree", "/trees/by-hand", "--repo-root", "/clone"]
+        )
+
+        assert (arguments.worktree, arguments.repo_root) == ("/trees/by-hand", "/clone")
 
     def test_the_directory_of_the_control_logs_defaults_to_one_under_the_configuration_root_of_the_tool(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
@@ -1444,6 +1475,7 @@ class TestConductingTheSliceNamedByTheCaller:
         return RunInvocation(
             children=GhConversationMother.two_slices_resumed_at(RunMother.awaiting_merge()),
             parent=GhConversationMother.parent_of_two_slices(),
+            mounted=False,
             answers=(
                 Answer(to=("git", "rev-parse"), code=0),
                 Answer(
@@ -1457,7 +1489,7 @@ class TestConductingTheSliceNamedByTheCaller:
     def test_the_slice_named_by_the_caller_is_conducted_instead_of_the_first_one_in_line(self, tmp_path: Path) -> None:
         invocation = self._invocation()
 
-        invocation.conduct(logs=tmp_path / "logs", slice_id=GhConversationMother.OTHER_SLICE)
+        invocation.conduct(logs=tmp_path / "logs", slice_id=GhConversationMother.OTHER_SLICE, worktree=None)
 
         assert invocation.process.invoked("gh", "pr", "list", "--head", GhConversationMother.OTHER_BRANCH)
         assert not invocation.process.invoked("gh", "pr", "list", "--head", GhConversationMother.BRANCH)
@@ -1465,7 +1497,7 @@ class TestConductingTheSliceNamedByTheCaller:
     def test_without_the_slice_argument_the_first_one_in_line_is_still_chosen(self, tmp_path: Path) -> None:
         invocation = self._invocation()
 
-        invocation.conduct(logs=tmp_path / "logs")
+        invocation.conduct(logs=tmp_path / "logs", worktree=None)
 
         assert invocation.process.invoked("gh", "pr", "list", "--head", GhConversationMother.BRANCH)
         assert not invocation.process.invoked("gh", "pr", "list", "--head", GhConversationMother.OTHER_BRANCH)
@@ -1499,7 +1531,7 @@ class TestAskingForASliceThatCannotBeRun:
             answers=(Answer(to=("gh", "issue", "view", "--json", "comments"), stdout=json.dumps({"comments": []})),),
         )
 
-        code = invocation.conduct(logs=tmp_path / "logs", slice_id=GhConversationMother.OTHER_SLICE)
+        code = invocation.conduct(logs=tmp_path / "logs", slice_id=GhConversationMother.OTHER_SLICE, worktree=None)
 
         assert code == ExitCode.NO_SLICE_LEFT
         assert GhConversationMother.OTHER_SLICE in capsys.readouterr().err
@@ -1558,6 +1590,25 @@ class TestWhenTheRunClosesWithoutBeingMerged:
             "step": "await-ci",
             "pull_request": GhConversationMother.PULL_REQUEST,
         }
+
+    def test_a_branch_taken_by_another_worktree_closes_with_the_code_of_every_unmerged_run_and_names_the_path(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        invocation = RunInvocation(
+            children=GhConversationMother.the_slice_never_run(),
+            answers=(
+                Answer(to=("git", "rev-list", "--count"), stdout="0\n"),
+                Answer(to=("gh", "pr", "list"), stdout=GhConversationMother.no_open_pull_request()),
+            ),
+        )
+
+        code = invocation.conduct(logs=tmp_path / "logs", worktree="/trees/by-hand")
+
+        captured = capsys.readouterr()
+        assert code == ExitCode.RUN_UNMERGED
+        assert json.loads(captured.out) == {"halt": "run-closed", "state": "blocked-worktree", "step": "mount-worktree"}
+        assert GhConversationMother.WORKTREE in captured.err
+        assert not invocation.process.invoked("git", "worktree", "add")
 
 
 class TestTheRoundTripAfterARedCiThatStillHasARetryLeft(BlindToTheToolboxOfThisMachine):
@@ -1827,11 +1878,10 @@ class TestWhenTheRunStaysOpen:
     def _never_run() -> RunInvocation:
         return RunInvocation(
             children=GhConversationMother.the_slice_never_run(),
+            mounted=False,
             answers=(
-                Answer(to=("git", "rev-parse"), code=1),
                 Answer(to=("git", "fetch", "origin")),
                 Answer(to=("git", "rev-list", "--count"), stdout="0\n"),
-                Answer(to=("git", "switch")),
                 Answer(to=("gh", "pr", "list"), stdout=GhConversationMother.no_open_pull_request()),
                 Answer(
                     to=(UnderstandingInvocation.MODEL, "stream-json"),
@@ -1843,7 +1893,7 @@ class TestWhenTheRunStaysOpen:
             ),
         )
 
-    def test_the_branch_of_the_slice_is_cut_in_the_worktree_from_the_base_the_invocation_named(
+    def test_the_branch_and_the_worktree_of_the_slice_are_cut_from_the_base_the_invocation_named(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setattr("time.sleep", lambda seconds: None)
@@ -1854,10 +1904,12 @@ class TestWhenTheRunStaysOpen:
         assert invocation.process.ran(
             "git",
             "-C",
-            GhConversationMother.WORKTREE,
-            "switch",
-            "-c",
+            GhConversationMother.ROOT,
+            "worktree",
+            "add",
+            "-b",
             GhConversationMother.BRANCH,
+            GhConversationMother.WORKTREE,
             f"origin/{GhConversationMother.BASE}",
         )
 
@@ -1883,8 +1935,8 @@ class TestWhenTheRunStaysOpen:
     ) -> None:
         invocation = RunInvocation(
             children=GhConversationMother.the_slice_never_run(),
+            mounted=False,
             answers=(
-                Answer(to=("git", "rev-parse"), code=1),
                 Answer(to=("git", "fetch", "origin")),
                 Answer(to=("git", "rev-list", "--count"), stdout="0\n"),
                 Answer(to=("gh", "pr", "list"), stdout=GhConversationMother.the_open_pull_request()),
@@ -1901,8 +1953,8 @@ class TestWhenTheRunStaysOpen:
     ) -> None:
         invocation = RunInvocation(
             children=GhConversationMother.the_slice_never_run(),
+            mounted=False,
             answers=(
-                Answer(to=("git", "rev-parse"), code=1),
                 Answer(to=("git", "fetch", "origin")),
                 Answer(
                     to=("git", "rev-list", "--count"),
@@ -1919,15 +1971,15 @@ class TestWhenTheRunStaysOpen:
         assert code == ExitCode.PRECHECKS_BLOCKED
         assert json.loads(capsys.readouterr().out)["precheck"] == "base-not-on-remote"
         assert not invocation.process.invoked("gh", "issue", "edit")
-        assert not invocation.process.invoked("git", "switch")
+        assert not invocation.process.invoked("git", "worktree", "add")
 
     def test_an_unreadable_declared_source_exits_naming_the_path_and_the_motive_and_leaves_them_on_the_subissue(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
         invocation = RunInvocation(
             children=GhConversationMother.the_slice_never_run(),
+            mounted=False,
             answers=(
-                Answer(to=("git", "rev-parse"), code=1),
                 Answer(to=("git", "fetch", "origin")),
                 Answer(to=("git", "rev-list", "--count"), stdout="0\n"),
                 Answer(to=("gh", "pr", "list"), stdout=GhConversationMother.no_open_pull_request()),
@@ -1950,8 +2002,8 @@ class TestWhenTheRunStaysOpen:
     ) -> None:
         invocation = RunInvocation(
             children=GhConversationMother.the_slice_never_run(),
+            mounted=False,
             answers=(
-                Answer(to=("git", "rev-parse"), code=1),
                 Answer(to=("git", "fetch", "origin")),
                 Answer(to=("git", "rev-list", "--count"), stdout="0\n"),
                 Answer(to=("gh", "pr", "list"), stdout=GhConversationMother.no_open_pull_request()),

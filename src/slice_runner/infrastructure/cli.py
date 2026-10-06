@@ -18,6 +18,7 @@ from slice_runner.application.actions.conduct_slice import (
 )
 from slice_runner.application.actions.deliver_slice import DeliverSlice
 from slice_runner.application.actions.implement_slice import ImplementSlice
+from slice_runner.application.actions.mount_worktree import MountWorktree
 from slice_runner.application.actions.record_closure import RecordClosure
 from slice_runner.application.actions.record_step import RecordStep
 from slice_runner.application.actions.reopen_slice import ReopenSlice
@@ -28,6 +29,7 @@ from slice_runner.application.actions.seek_alignment import SeekAlignment
 from slice_runner.application.actions.stage_slice import StageSlice
 from slice_runner.application.actions.verify_slice import VerifySlice, VerifySliceParams
 from slice_runner.application.queries.check_readiness import CheckReadiness, CheckReadinessParams, CheckReadinessPorts
+from slice_runner.application.queries.check_sources import CheckSources
 from slice_runner.application.queries.list_closed_slices import ListClosedSlices, ListClosedSlicesParams
 from slice_runner.application.queries.read_ci_status import ReadCiStatus
 from slice_runner.application.queries.read_conversation import ReadConversation, ReadConversationParams
@@ -49,7 +51,6 @@ from slice_runner.domain.exceptions import (
     LaggingSearchIndexError,
     MalformedSliceIdError,
     MeasuredCallError,
-    MissingBranchError,
     NoConversationRecordedError,
     NoPullRequestError,
     NoRecognizableSpecError,
@@ -69,6 +70,7 @@ from slice_runner.domain.exceptions import (
 from slice_runner.domain.gh_retry_policy import GhRetryPolicy
 from slice_runner.domain.halt import Halt
 from slice_runner.domain.role_models import RoleModels
+from slice_runner.domain.run_state import RunState
 from slice_runner.domain.state_machine import StateMachine
 from slice_runner.domain.step import Step
 from slice_runner.infrastructure.branches_without_catch_up import BranchesWithoutCatchUp
@@ -94,6 +96,7 @@ from slice_runner.infrastructure.git_command_failed_error import GitCommandFaile
 from slice_runner.infrastructure.git_diff_reader import GitDiffReader
 from slice_runner.infrastructure.git_upstream import GitUpstream
 from slice_runner.infrastructure.git_workspace import GitWorkspace
+from slice_runner.infrastructure.git_worktrees import GitWorktrees
 from slice_runner.infrastructure.harness_invocation_runner import HarnessInvocationRunner
 from slice_runner.infrastructure.harness_telemetry import HarnessTelemetry
 from slice_runner.infrastructure.implementer_invocation import ImplementerInvocation
@@ -144,7 +147,6 @@ class Cli:
         ImpossibleTransitionError,
         ProtectedBranchError,
         BranchMismatchError,
-        MissingBranchError,
         DiffNotReadableError,
         MeasuredCallError,
         ProcessTimedOutError,
@@ -190,7 +192,8 @@ class Cli:
                     ConductSliceParams(
                         repo=arguments.repo,
                         issue=arguments.issue,
-                        worktree=arguments.worktree,
+                        root=str(Path(arguments.repo_root).resolve()),
+                        worktree=None if arguments.worktree is None else str(Path(arguments.worktree).resolve()),
                         base=arguments.base,
                         logs=arguments.logs,
                         slice_id=arguments.slice_id,
@@ -252,7 +255,19 @@ class Cli:
         run = subcommands.add_parser(Subcommand.RUN, help="conduct the next slice of an issue until it has to stop")
         run.add_argument("issue", type=int, help="number of the issue whose next slice is conducted")
         run.add_argument("--repo", required=True, help="repo of the issue, as `<org>/<repo>`")
-        run.add_argument("--worktree", default=".", help="local path where the slice is implemented and measured")
+        run.add_argument(
+            "--repo-root",
+            default=".",
+            help="root of the clone the worktree of the slice hangs from; the current directory by default",
+        )
+        run.add_argument(
+            "--worktree",
+            default=None,
+            help=(
+                "local path of a worktree mounted by hand where the slice is implemented and measured; it wins over "
+                "the one the program derives under `--repo-root` and must belong to that clone"
+            ),
+        )
         run.add_argument("--base", required=True, help="branch the diff is taken against and the pull request targets")
         run.add_argument(
             "--logs",
@@ -466,6 +481,7 @@ class Cli:
             return self._why_the_run_stopped(error)
 
         self._warn_about_the_draft_pull_request(conducted)
+        self._warn_about_the_blocked_worktree(conducted)
         print(json.dumps(ConductedSlicePayload.from_domain(conducted).to_contract(), ensure_ascii=False))
 
         return ExitCode.of_the_halt(halt=conducted.halt, state=conducted.state)
@@ -478,6 +494,17 @@ class Cli:
         print(
             f"pull request #{conducted.pull_request} was opened as a draft; take it out of draft for the merge "
             "to happen, reinvoking alone will not move it",
+            file=sys.stderr,
+        )
+
+    @staticmethod
+    def _warn_about_the_blocked_worktree(conducted: ConductSliceResult) -> None:
+        if conducted.state is not RunState.BLOCKED_WORKTREE:
+            return
+
+        print(
+            f"the worktree of the slice cannot be mounted because of {conducted.conflicting_path}; "
+            "free that path or branch and reinvoke with a retry instruction",
             file=sys.stderr,
         )
 
@@ -554,7 +581,6 @@ class Cli:
                 | ImpossibleTransitionError()
                 | ProtectedBranchError()
                 | BranchMismatchError()
-                | MissingBranchError()
             ):
                 return self._reported(f"the run cannot be conducted as asked: {error}", ExitCode.USAGE_ERROR)
             case DiffNotReadableError():
@@ -604,7 +630,9 @@ class Cli:
             use_cases=ConductSliceUseCases(
                 select=SelectSlice(repository=repository),
                 reopen=ReopenSlice(repository=repository, machine=machine),
-                prechecks=RunPrechecks(branches=branches, forum=forum, sources=reader),
+                prechecks=RunPrechecks(branches=branches, forum=forum),
+                mount=MountWorktree(worktrees=GitWorktrees(process=self._process)),
+                check_sources=CheckSources(sources=reader),
                 implement=ImplementSlice(
                     implementer=ClaudeImplementer(calls=calls, reader=reader),
                     reader=GitDiffReader(process=self._process),
@@ -635,7 +663,6 @@ class Cli:
             ),
             ports=ConductSlicePorts(
                 repository=repository,
-                branches=branches,
                 forum=forum,
                 clock=clock,
                 pull_request=SlicePullRequest(),

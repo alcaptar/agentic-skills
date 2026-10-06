@@ -101,7 +101,8 @@ Estos no son convenciones de codigo: son las invariantes del pipeline, y valen e
   hijo y sale con su propio codigo de salida. Una llamada sin tope cuelga el run entero sin
   diagnostico y sin coste acotado, y la vara que lo caza vive en
   `docs/conventions/infrastructure.md`.
-- **No asumir worktree**: rama normal por defecto; worktree solo al paralelizar slices.
+- **El programa monta el worktree siempre**: cada slice vive en `<raiz>/.worktrees/<NN-name>`, derivado de su
+  identidad, y nadie lo teclea. `--worktree` solo se pasa para un arbol montado a mano.
 - **El estado del run vive en el issue de GitHub**: una feature es un **issue padre** y cada slice una
   **subissue** suya, que lleva su spec en el cuerpo y su estado macro en la etiqueta. Es la unica fuente
   de verdad viva y duradera: no hay estado local (`.slice-runner/`, ledger, panel). El registro duradero

@@ -31,6 +31,7 @@ class DurableVerdict(StrEnum):
     BLOCKED_UNCHANGED_DIFF = "blocked-unchanged-diff"
     BLOCKED_CONTROLS = "blocked-controls"
     BLOCKED_HYGIENE = "blocked-hygiene"
+    BLOCKED_WORKTREE = "blocked-worktree"
     ABORTED_BUDGET = "aborted-budget"
     ABORTED_UNMEASURED_CALL = "aborted-unmeasured-call"
 
@@ -97,6 +98,7 @@ class DurableClosure:
         RunState.BLOCKED_UNCHANGED_DIFF: DurableVerdict.BLOCKED_UNCHANGED_DIFF,
         RunState.BLOCKED_CONTROLS: DurableVerdict.BLOCKED_CONTROLS,
         RunState.BLOCKED_HYGIENE: DurableVerdict.BLOCKED_HYGIENE,
+        RunState.BLOCKED_WORKTREE: DurableVerdict.BLOCKED_WORKTREE,
         RunState.ABORTED_BUDGET: DurableVerdict.ABORTED_BUDGET,
         RunState.ABORTED_UNMEASURED_CALL: DurableVerdict.ABORTED_UNMEASURED_CALL,
     }
@@ -106,6 +108,7 @@ class DurableClosure:
         DurableVerdict.BLOCKED_UNCHANGED_DIFF: RunState.BLOCKED_UNCHANGED_DIFF,
         DurableVerdict.BLOCKED_CONTROLS: RunState.BLOCKED_CONTROLS,
         DurableVerdict.BLOCKED_HYGIENE: RunState.BLOCKED_HYGIENE,
+        DurableVerdict.BLOCKED_WORKTREE: RunState.BLOCKED_WORKTREE,
         DurableVerdict.ABORTED_BUDGET: RunState.ABORTED_BUDGET,
         DurableVerdict.ABORTED_UNMEASURED_CALL: RunState.ABORTED_UNMEASURED_CALL,
     }
@@ -132,6 +135,7 @@ class DurableClosure:
                 | RunState.BLOCKED_UNCHANGED_DIFF
                 | RunState.BLOCKED_CONTROLS
                 | RunState.BLOCKED_HYGIENE
+                | RunState.BLOCKED_WORKTREE
                 | RunState.ABORTED_BUDGET
                 | RunState.ABORTED_UNMEASURED_CALL
             ):
@@ -152,6 +156,7 @@ class DurableClosure:
                 | DurableVerdict.BLOCKED_UNCHANGED_DIFF
                 | DurableVerdict.BLOCKED_CONTROLS
                 | DurableVerdict.BLOCKED_HYGIENE
+                | DurableVerdict.BLOCKED_WORKTREE
                 | DurableVerdict.ABORTED_BUDGET
                 | DurableVerdict.ABORTED_UNMEASURED_CALL
             ):

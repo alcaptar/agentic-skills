@@ -19,7 +19,7 @@ artefacto compartido entre humano y agente, y **vive en GitHub**: una feature = 
 mas **una subissue por slice**.
 
 Par natural: `/slice-spec` crea el issue padre y sus subissues, `uv run slice-runner run <N> --repo
-<org>/<repo> --base master --worktree <ruta-del-worktree>` las ejecuta, una invocacion por slice.
+<org>/<repo> --base master` las ejecuta, una invocacion por slice.
 
 Dos modos:
 
@@ -103,8 +103,8 @@ Dos modos:
   slices en el cuerpo del padre, que seria estado duplicado que deriva.
 - **Trocear termina cuando el trabajo esta lanzado, no cuando el issue esta escrito.** Quien acaba de
   cortar es quien mejor sabe que va a tocar cada slice, asi que el reparto en paralelo -que puede ir
-  con que, y que no- se propone aqui (paso 7) y, confirmado, se monta aqui: un worktree por slice y su
-  run. Dejarlo para despues obliga a reconstruir a ojo lo que en este momento se sabe. **Lo que no se
+  con que, y que no- se propone aqui (paso 7) y, confirmado, se lanza aqui: un run por slice, cada uno en su
+  worktree. Dejarlo para despues obliga a reconstruir a ojo lo que en este momento se sabe. **Lo que no se
   hace es prometer que las slices son disjuntas**: se declara el solape que se espera, porque la
   version comoda ya ha fallado dos veces y una fusion avisada no cuesta nada.
 
@@ -373,47 +373,32 @@ SUSTITUYE: no
 
 ## El worktree de una slice
 
-Todo run vive en un worktree: el `CLAUDE.md` del repo dice *"no asumir worktree"* y en la practica es
-falso, se conducen varias en paralelo. Quien monta el arbol es hoy quien invoca -el programa aun no lo
-hace, y esa es la intencion de otro issue-, asi que **las tres condiciones de abajo las cumple una
-persona o no las cumple nadie**. Las tres fallan **en silencio**: un arbol mal colocado no da ningun
-error, simplemente hace que los controles midan otra cosa o no encuentren el codigo.
+Todo run vive en un worktree, y **lo monta el programa**: nadie lo teclea ni lo coloca. El run se
+lanza desde la raiz del clon -o con `--repo-root <ruta>`- y `slice-runner run` deriva la ruta de la
+identidad de la slice: `<raiz-del-repo>/.worktrees/<NN-name>`, del mismo sitio de donde sale la rama
+`slice/NN-name`, y la deja lista antes de entender nada. Tambien escribe `/.worktrees/` en
+`.git/info/exclude` del clon principal -el que git dice por `git rev-parse --git-common-dir`-, asi que
+el directorio no sale como no seguido ni obliga a tocar el `.gitignore` de nadie.
 
-**Donde va.** `<raiz-del-repo>/.worktrees/<NN-name>`, o el nombre que uses, con estas tres condiciones:
+Las tres condiciones que fallan en silencio -bajo la raiz del repo, o Docker no lo ve; con punto
+delante, o los controles recogen las copias de los tests; ignorado, porque git no lo hace solo- las
+cumple el programa por construccion. Las mediciones que las sostienen estan en `docs/design-notes.md`,
+seccion "El worktree del programa".
 
-- **Bajo la raiz del repo, o Docker no lo ve.** Cuando los controles corren en contenedor, el compose
-  monta la raiz y el arbol solo existe dentro si cuelga de ella. Un arbol hermano fuera del repo no
-  estaria montado y los controles no podrian correr.
-- **Con punto delante, o los controles se lo comen.** `pytest` y `ruff` no recursan dentro de un
-  directorio oculto y si dentro de uno visible: sin el punto, `make test` desde la raiz mide tambien
-  las copias de los tests de cada worktree.
-- **Ignorado, porque git no lo hace solo.** Un arbol anidado sale como `?? .worktrees/` en el
-  `git status` del clon principal. Su casa es `.git/info/exclude`, que es por clon y no se versiona,
-  asi que no obliga a tocar el `.gitignore` de nadie. **Preguntale a git donde esta ese fichero**
-  (`git rev-parse --git-common-dir`): dentro de un worktree, el punto de entrada de git es un
-  **fichero** que apunta al clon principal, no un directorio, asi que componer la ruta a mano escribe
-  donde nadie lee.
+**Lo que hace segun lo que encuentra**, clasificando por la rama que tiene tomada cada arbol y no por
+su ruta:
 
-Las mediciones que sostienen las tres estan en `docs/design-notes.md`, seccion "El worktree del
-programa".
+- nada montado: crea la rama desde `origin/<base>` y el worktree;
+- la rama existe y no tiene worktree: monta uno sobre ella;
+- el worktree ya esta en su rama: no toca nada;
+- el worktree esta registrado pero su directorio se borro a mano: lo sanea y monta;
+- la rama la tiene otro worktree, o el arbol esta en otra rama: **cierra el run** con la etiqueta
+  `bloqueada:worktree` y dice en que ruta esta el conflicto. Se libera esa ruta o esa rama y se
+  reinvoca con `-RETRY`.
 
-**Como se monta.** Un arbol por slice:
-
-```bash
-git worktree add <ruta-del-worktree> --detach origin/<base>
-```
-
-**El `--detach` vale para una slice que arranca de cero, y solo para esa.** El programa crea la rama el
-mismo antes de implementar, asi que ahi el worktree suelto es lo limpio. Pero una slice **que ya tiene
-estado persistido** -porque un run anterior murio, o quedo esperando algo- **retoma por su paso y no
-vuelve a crear la rama**: si el worktree esta suelto, implementa entero sobre nada y revienta al
-commitear, con el trabajo hecho, el juez pasado y el harness ya pagado. Antes de relanzar una slice
-asi, **ponla en su rama**: `slice/NN-name`, o `slice/AS-255-NN-name` si la feature tiene historia de
-usuario.
-
-```bash
-git -C <ruta-del-worktree> switch slice/NN-name
-```
+**`--worktree <ruta>` sigue aceptandose** para un arbol que alguien monto a mano, y manda sobre derivar
+uno. Ese arbol tiene que colgar del mismo clon que `--repo-root`: si no, el run cierra en
+`bloqueada:worktree` en vez de montar nada en silencio.
 
 **Como se retira, y por que no a ciegas.** El programa commitea **al final de cada vuelta que deja sus
 controles en verde**, no solo al entregar, asi que un run bloqueado o abortado puede llevar ya varios
@@ -433,7 +418,7 @@ git worktree remove <ruta-del-worktree>
 git branch -d <rama-de-la-slice>
 ```
 
-Si falla cualquiera de las dos, **el arbol se queda** y se dice en que ruta y por que. Nada de esto lo
+Si falla cualquiera de las dos, **el arbol se queda** y se dice en que ruta y por que. Retirarlo no lo
 hace el programa todavia, asi que un arbol que nadie retire se queda para siempre: en la maquina donde
 se escribio esto habia **treinta y siete**, de dias distintos, y decidir cual se podia tirar costaba
 mirarlos uno a uno.
@@ -598,17 +583,14 @@ mirarlos uno a uno.
      crea igual que la de estado (`gh label create origen:AS-255 --repo <org>/<repo>`) y se
      reintenta.
 6. **Cierra** diciendo el numero/URL del padre, las subissues creadas con su numero, y que se ejecuta
-   con `slice-runner run <N> --repo <org>/<repo> --base master --worktree <ruta-del-worktree>`, una
-   invocacion por slice.
+   con `slice-runner run <N> --repo <org>/<repo> --base master`, una invocacion por slice.
 
-   **La ruta del worktree va siempre, y este es el unico sitio que explica por que.** Su valor por
-   omision es el directorio actual, asi que un run lanzado sin ella conduce donde estes parado: medido
-   en dos maquinas, es el mecanismo por el que el juez leyo **31 de 32 veces** una rama que no tenia
-   nada que ver con la slice que juzgaba. Quien copie el comando de aqui no puede caer en eso. El paso
-   siguiente monta el worktree cuando se reparte en paralelo; **si no vas a paralelizar, monta uno
-   igual** -en la practica todo run vive en uno-. Donde va, como se monta y como se retira estan en
-   **"El worktree de una slice"**, y sus tres condiciones fallan en silencio: leelas antes de montarlo,
-   no despues.
+   **El comando no lleva ruta de worktree y este es el unico sitio que explica por que.** El programa
+   monta el suyo, colgando de la raiz del clon, y el run se lanza desde esa raiz. Antes la ruta se
+   tecleaba y su valor por omision era el directorio actual: medido en dos maquinas, era el mecanismo
+   por el que el juez leyo **31 de 32 veces** una rama que no tenia nada que ver con la slice que
+   juzgaba. Que hace el programa segun lo que encuentre montado, y que significa `bloqueada:worktree`,
+   esta en **"El worktree de una slice"**.
 
 7. **Propon el reparto en paralelo y, si te lo confirman, montalo tu.** Una invocacion conduce **una**
    slice, asi que una feature de ocho son ocho invocaciones; en serie eso es toda la tarde. Se pueden
@@ -637,12 +619,11 @@ mirarlos uno a uno.
    **Espera confirmacion** (`check-alignment`): crear worktrees y lanzar runs gasta dinero en el
    harness de otra persona.
 
-   Con la confirmacion dada, montalo tu, un worktree por slice de la tanda, **con las tres condiciones
-   de "El worktree de una slice"** -donde va, y si arranca de cero o retoma con estado persistido-, y
-   lanza cada run:
+   Con la confirmacion dada, lanza cada run: el programa monta un worktree por slice, como cuenta
+   **"El worktree de una slice"**, asi que dos runs en paralelo solo necesitan slices distintas.
 
    ```bash
-   slice-runner run <padre> --repo <org>/<repo> --base <base> --slice <identificador> --worktree <ruta-del-worktree>
+   slice-runner run <padre> --repo <org>/<repo> --base <base> --slice <identificador>
    ```
 
    Cada run **en background**, nunca encadenados en una shell que bloquee: son procesos largos y el
@@ -791,11 +772,10 @@ trabajo. Ofrece corregirlas. Checklist:
   expand-contract).
 
 Si todo cumple: reporta `spec valida` y recuerda que se ejecuta con
-`uv run slice-runner run <N> --repo <org>/<repo> --base master --worktree <ruta-del-worktree>`.
+`uv run slice-runner run <N> --repo <org>/<repo> --base master`.
 
 ## Fin
 
 Reporta: numero/URL del issue padre, las subissues con su numero y su nombre, y el comando para
-ejecutarla (`uv run slice-runner run <N> --repo <org>/<repo> --base master --worktree
-<ruta-del-worktree>`, una invocacion por slice). No implementes nada: ese es el trabajo de
+ejecutarla (`uv run slice-runner run <N> --repo <org>/<repo> --base master`, una invocacion por slice). No implementes nada: ese es el trabajo de
 `slice-runner`.
