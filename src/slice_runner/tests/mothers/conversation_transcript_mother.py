@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import ClassVar
 
@@ -16,6 +17,14 @@ class ConversationTranscriptMother:
     def written_under(cls, root: Path, *, recorded: str = "conversation-turns") -> None:
         cls.destination_of(root, session=cls.SESSION).write_text(
             (cls._PAYLOADS / f"{recorded}.jsonl").read_text(encoding="utf-8"), encoding="utf-8"
+        )
+
+    @classmethod
+    def written_for_the_directory(cls, root: Path, *, directory: Path) -> None:
+        destination = root / "projects" / re.sub(r"[^A-Za-z0-9-]", "-", str(directory)) / f"{cls.SESSION}.jsonl"
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_text(
+            (cls._PAYLOADS / "conversation-turns.jsonl").read_text(encoding="utf-8"), encoding="utf-8"
         )
 
     @classmethod
