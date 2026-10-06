@@ -8,6 +8,7 @@ from slice_runner.domain.event import Event
 from slice_runner.domain.event_status import EventStatus
 from slice_runner.domain.run_state import RunState
 from slice_runner.domain.step import Step
+from slice_runner.tests.mothers.feature_slice_mother import FeatureSliceMother
 from slice_runner.tests.mothers.harness_spend_mother import HarnessSpendMother
 
 
@@ -27,6 +28,7 @@ class EventMother:
             spend=HarnessSpendMother.of_the_implementer_call(),
             status=EventStatus.ADVANCING,
             state=RunState.OPEN,
+            feature_slice=FeatureSliceMother.of_the_feature(),
         )
 
     @classmethod
@@ -40,6 +42,7 @@ class EventMother:
             spend=HarnessSpendMother.of_the_judge_call(),
             status=EventStatus.CLOSED,
             state=RunState.MERGED,
+            feature_slice=FeatureSliceMother.of_the_feature(),
         )
 
     @classmethod
@@ -49,6 +52,10 @@ class EventMother:
     @classmethod
     def closed_before_the_closing_state_was_recorded(cls) -> Event:
         return replace(cls.closed(), state=RunState.OPEN)
+
+    @classmethod
+    def advancing_before_the_feature_was_recorded(cls) -> Event:
+        return replace(cls.advancing(), feature_slice=None)
 
     @classmethod
     def advancing_again(cls, *, minutes_later: int) -> Event:

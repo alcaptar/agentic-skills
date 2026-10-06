@@ -10,6 +10,7 @@ from slice_runner.domain.issue_label import IssueLabel
 if TYPE_CHECKING:
     from slice_runner.domain.clock import Clock
     from slice_runner.domain.event_log import EventLog
+    from slice_runner.domain.feature_slice import FeatureSlice
     from slice_runner.domain.harness_spend import HarnessSpend
     from slice_runner.domain.run import Run
     from slice_runner.domain.run_repository import RunRepository
@@ -25,6 +26,7 @@ class RecordStepParams:
     label: IssueLabel | None
     transition: Transition
     spend: HarnessSpend
+    feature_slice: FeatureSlice
 
 
 @dataclass(frozen=True, kw_only=True, slots=True)
@@ -74,5 +76,6 @@ class RecordStep:
                 spend=params.spend,
                 status=status,
                 state=params.transition.state,
+                feature_slice=params.feature_slice,
             )
         )

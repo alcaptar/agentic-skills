@@ -16,6 +16,7 @@ from slice_runner.domain.run_repository import RunRepository
 from slice_runner.domain.run_state import RunState
 from slice_runner.domain.step import Step
 from slice_runner.domain.transition import Transition
+from slice_runner.tests.mothers.feature_slice_mother import FeatureSliceMother
 from slice_runner.tests.mothers.harness_spend_mother import HarnessSpendMother
 from slice_runner.tests.mothers.run_mother import RunMother
 
@@ -57,6 +58,7 @@ class _Given:
             label=label,
             transition=transition,
             spend=spend if spend is not None else HarnessSpend.nothing(),
+            feature_slice=FeatureSliceMother.of_the_feature(),
         )
 
 
@@ -90,6 +92,19 @@ class TestWhatItPersistsOfTheRun:
 
         assert result.run.spend == spend
         assert recorder.repository.write_run.call_args.kwargs["run"].spend == spend
+
+
+class TestWhatItLeavesOnTheEvent:
+    def test_the_event_names_the_parent_issue_and_the_slice_so_a_reader_can_group_by_feature_without_asking_github(
+        self,
+    ) -> None:
+        recorder = _Recorder()
+        transition = Transition(run=RunMother.running_the_controls())
+
+        recorder.action.execute(_Given.params(current=RunMother.implementing(), transition=transition))
+
+        emitted = recorder.events.emit.call_args.args[0]
+        assert emitted.feature_slice == FeatureSliceMother.of_the_feature()
 
 
 class TestHowItMovesTheLabel:

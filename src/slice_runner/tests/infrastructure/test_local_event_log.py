@@ -11,6 +11,7 @@ from slice_runner.infrastructure.local_event_log import LocalEventLog
 from slice_runner.tests.durable_store_home import WithTheDurableStoresOutOfTheRealHome
 from slice_runner.tests.infrastructure.stub_ledger import WiredStubLedgers
 from slice_runner.tests.mothers.event_mother import EventMother
+from slice_runner.tests.mothers.feature_slice_mother import FeatureSliceMother
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -53,6 +54,8 @@ class TestWhatIsWrittenDownOfAnEvent(WithTheDurableStoresOutOfTheRealHome):
                     "duration_api_ms": 32189,
                 },
                 "status": "advancing",
+                "parent": FeatureSliceMother.PARENT,
+                "name": FeatureSliceMother.NAME,
             }
         ]
 
@@ -95,6 +98,8 @@ class TestTheSameEventStillReachesStandardError(WithTheDurableStoresOutOfTheReal
                 "duration_api_ms": 32189,
             },
             "status": "advancing",
+            "parent": FeatureSliceMother.PARENT,
+            "name": FeatureSliceMother.NAME,
         }
 
     def test_two_consecutive_events_land_on_two_separable_lines_and_never_on_a_single_run_together(

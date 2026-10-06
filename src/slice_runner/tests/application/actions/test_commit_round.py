@@ -14,6 +14,7 @@ from slice_runner.domain.harness_spend import HarnessSpend
 from slice_runner.domain.protected_branch import ProtectedBranch
 from slice_runner.domain.step import Step
 from slice_runner.domain.workspace import Workspace
+from slice_runner.tests.mothers.feature_slice_mother import FeatureSliceMother
 
 _WORKTREE = "/repos/agentic-skills"
 _BRANCH = "slice/14-una-correccion-va-en-su-propio-commit"
@@ -57,6 +58,7 @@ class TestCommitRound:
             issue=_ISSUE,
             slice_id=_SLICE_ID,
             spend=HarnessSpend.nothing(),
+            feature_slice=FeatureSliceMother.of_the_feature(),
         )
 
     def test_a_round_with_something_staged_is_committed_with_the_message_it_was_given(
@@ -89,6 +91,15 @@ class TestCommitRound:
             _ISSUE,
             _NOW,
         )
+
+    def test_the_nothing_to_commit_event_names_the_parent_issue_and_the_slice(
+        self, action: CommitRound, workspace: Mock, events: Mock
+    ) -> None:
+        workspace.staged.return_value = ()
+
+        action.execute(self._params())
+
+        assert events.emit.call_args.args[0].feature_slice == FeatureSliceMother.of_the_feature()
 
     def test_a_round_that_commits_leaves_no_nothing_to_commit_event(self, action: CommitRound, events: Mock) -> None:
         action.execute(self._params())
