@@ -24,14 +24,14 @@ class FeatureStatusReport:
         run = status.sub_issue.run
         if run is not None:
             parts.append(run.step.value)
-            if status.spend.measured:
-                parts.append(f"${status.spend.cost_usd:.2f}")
+            if status.shown_cost_usd is not None:
+                parts.append(f"${status.shown_cost_usd:.2f}")
             if run.implement_retries > 0:
                 parts.append(f"retries={run.implement_retries}")
         elif status.record is not None:
             parts.append(status.record.state.value)
-            if status.record.spend is not None:
-                parts.append(f"${status.record.spend.cost_usd:.2f}")
+            if status.shown_cost_usd is not None:
+                parts.append(f"${status.shown_cost_usd:.2f}")
         if status.pull_request is not None:
             parts.append(f"#{status.pull_request}")
 
