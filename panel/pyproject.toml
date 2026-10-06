@@ -1,0 +1,31 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "slice-panel"
+version = "0.0.0"
+requires-python = ">=3.11"
+dependencies = ["textual>=0.80", "pydantic>=2.7"]
+
+[project.scripts]
+slice-panel = "slice_panel.infrastructure.cli:Cli.main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/slice_panel"]
+
+[dependency-groups]
+dev = ["mypy>=1.10", "pytest>=8", "pytest-asyncio>=0.23"]
+
+[tool.mypy]
+strict = true
+mypy_path = "src"
+plugins = ["pydantic.mypy"]
+
+[tool.pytest.ini_options]
+testpaths = ["src/slice_panel/tests"]
+pythonpath = ["src"]
+asyncio_mode = "auto"
+markers = [
+    "integration: lanza un subproceso real (se deselecciona con -m 'not integration')",
+]
