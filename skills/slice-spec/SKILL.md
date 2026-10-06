@@ -1,6 +1,6 @@
 ---
 name: slice-spec
-description: Crea (o valida) una spec de slices en el formato exacto que consume slice-runner. Usar cuando el usuario quiera "escribir una spec", "montar el plan de slices", "trocear una feature en slices", "slice-spec", o tenga una idea/feature y necesite convertirla en una spec ejecutable por slice-runner. Envuelve superpowers:brainstorming para el diseno y luego crea el issue padre (intencion, fuentes de convencion y controles) con una subissue por slice (titulo con identificador y nombre, intencion, criterios de aceptacion, senal y etiqueta de estado). Modo `validate` para revisar una spec existente contra el contrato. Cierra proponiendo que slices pueden correr en paralelo y, si se confirma, monta un worktree por slice y lanza sus runs. No implementa codigo: produce la spec que slice-runner luego ejecuta.
+description: Crea (o valida) una spec de slices en el formato exacto que consume slice-runner. Usar cuando el usuario quiera "escribir una spec", "montar el plan de slices", "trocear una feature en slices", "slice-spec", o tenga una idea/feature y necesite convertirla en una spec ejecutable por slice-runner. Disena por rondas de preguntas, con enfoques alternativos y una refutacion antes de crear, y luego crea el issue padre (intencion, fuentes de convencion y controles) con una subissue por slice (titulo con identificador y nombre, intencion, criterios de aceptacion, senal y etiqueta de estado). Modo `validate` para revisar una spec existente contra el contrato. Cierra proponiendo que slices pueden correr en paralelo y, si se confirma, monta un worktree por slice y lanza sus runs. No implementa codigo: produce la spec que slice-runner luego ejecuta.
 ---
 
 # Slice Spec
@@ -11,19 +11,19 @@ Emite `[slice-spec]` al inicio de cada respuesta mientras ejecutas este proceso,
 
 ## Description
 
-Skill fina que produce la **spec** que `slice-runner` consume, en su formato exacto. No re-piensa
-el diseno del producto: **delega el diseno en `superpowers:brainstorming`** y su unico trabajo es
-el **contrato de formato** (los nombres de slice, los criterios de aceptacion, las lineas que
-`slice-runner` sabe parsear). Es el `check-alignment` + `text-native` del flujo: la spec es el
+Skill que produce la **spec** que `slice-runner` consume, en su formato exacto. El diseno lo lleva
+por **rondas de preguntas** (`references/diseno.md`) hasta que no queda ninguna decision sin tomar, y
+despues aplica el **contrato de formato** (los nombres de slice, los criterios de aceptacion, las lineas
+que `slice-runner` sabe parsear). Es el `check-alignment` + `text-native` del flujo: la spec es el
 artefacto compartido entre humano y agente, y **vive en GitHub**: una feature = **un issue padre**
 mas **una subissue por slice**.
 
 Par natural: `/slice-spec` crea el issue padre y sus subissues, `uv run slice-runner run <N> --repo
-<org>/<repo> --base master --worktree <ruta-del-worktree>` las ejecuta, una invocacion por slice.
+<org>/<repo> --base master` las ejecuta, una invocacion por slice.
 
 Dos modos:
 
-- **Autoria (por defecto):** brainstorming -> crea el issue padre y una subissue por slice, bien formadas.
+- **Autoria (por defecto):** diseno por rondas -> crea el issue padre y una subissue por slice, bien formadas.
 - **`validate`:** revisa una spec existente contra el contrato -el issue padre `#N` con sus subissues,
   o el borrador de antes de crearlos- y reporta (o corrige) desviaciones con su regla y su ubicacion.
 
@@ -31,10 +31,12 @@ Dos modos:
 
 - **No implementa.** No escribe codigo ni tests; produce la spec. El estado terminal es una spec
   valida, no un plan de `writing-plans` ni una PR.
-- **El diseno lo lleva brainstorming.** No dupliques su trabajo (entender intencion, proponer
-  enfoques, validar diseno). Esta skill reengancha solo la **cola**: cuando el diseno esta
-  aprobado, en vez de `writing-plans` emite la spec de slices. La spec ES el plan que consume
-  slice-runner.
+- **El diseno se interroga, no se aprueba.** Un diseno que se aprueba deja decisiones sin tomar, y
+  cada una reaparece en la pausa de alineacion de una slice, donde cuesta una ronda o la toma el
+  implementador sin que nadie la vea. Por eso se trabaja por rondas sobre un arbol de decisiones, con
+  enfoques alternativos en cada decision de diseno, los hechos buscados por subagentes y no preguntados,
+  y una refutacion del borrador por alguien que no lo diseno (`references/diseno.md`). No hay
+  `writing-plans`: la spec ES el plan que consume slice-runner.
 - **Formato es contrato.** La spec la parsea `slice-runner` sin ambiguedad: el cuerpo del padre, el
   titulo y el cuerpo de cada subissue, y su etiqueta de estado. Si no cumple el contrato de abajo, no
   esta terminada.
@@ -103,8 +105,8 @@ Dos modos:
   slices en el cuerpo del padre, que seria estado duplicado que deriva.
 - **Trocear termina cuando el trabajo esta lanzado, no cuando el issue esta escrito.** Quien acaba de
   cortar es quien mejor sabe que va a tocar cada slice, asi que el reparto en paralelo -que puede ir
-  con que, y que no- se propone aqui (paso 7) y, confirmado, se monta aqui: un worktree por slice y su
-  run. Dejarlo para despues obliga a reconstruir a ojo lo que en este momento se sabe. **Lo que no se
+  con que, y que no- se propone aqui (paso 7) y, confirmado, se lanza aqui: un run por slice, cada uno en su
+  worktree. Dejarlo para despues obliga a reconstruir a ojo lo que en este momento se sabe. **Lo que no se
   hace es prometer que las slices son disjuntas**: se declara el solape que se espera, porque la
   version comoda ya ha fallado dos veces y una fusion avisada no cuesta nada.
 
@@ -373,47 +375,32 @@ SUSTITUYE: no
 
 ## El worktree de una slice
 
-Todo run vive en un worktree: el `CLAUDE.md` del repo dice *"no asumir worktree"* y en la practica es
-falso, se conducen varias en paralelo. Quien monta el arbol es hoy quien invoca -el programa aun no lo
-hace, y esa es la intencion de otro issue-, asi que **las tres condiciones de abajo las cumple una
-persona o no las cumple nadie**. Las tres fallan **en silencio**: un arbol mal colocado no da ningun
-error, simplemente hace que los controles midan otra cosa o no encuentren el codigo.
+Todo run vive en un worktree, y **lo monta el programa**: nadie lo teclea ni lo coloca. El run se
+lanza desde la raiz del clon -o con `--repo-root <ruta>`- y `slice-runner run` deriva la ruta de la
+identidad de la slice: `<raiz-del-repo>/.worktrees/<NN-name>`, del mismo sitio de donde sale la rama
+`slice/NN-name`, y la deja lista antes de entender nada. Tambien escribe `/.worktrees/` en
+`.git/info/exclude` del clon principal -el que git dice por `git rev-parse --git-common-dir`-, asi que
+el directorio no sale como no seguido ni obliga a tocar el `.gitignore` de nadie.
 
-**Donde va.** `<raiz-del-repo>/.worktrees/<NN-name>`, o el nombre que uses, con estas tres condiciones:
+Las tres condiciones que fallan en silencio -bajo la raiz del repo, o Docker no lo ve; con punto
+delante, o los controles recogen las copias de los tests; ignorado, porque git no lo hace solo- las
+cumple el programa por construccion. Las mediciones que las sostienen estan en `docs/design-notes.md`,
+seccion "El worktree del programa".
 
-- **Bajo la raiz del repo, o Docker no lo ve.** Cuando los controles corren en contenedor, el compose
-  monta la raiz y el arbol solo existe dentro si cuelga de ella. Un arbol hermano fuera del repo no
-  estaria montado y los controles no podrian correr.
-- **Con punto delante, o los controles se lo comen.** `pytest` y `ruff` no recursan dentro de un
-  directorio oculto y si dentro de uno visible: sin el punto, `make test` desde la raiz mide tambien
-  las copias de los tests de cada worktree.
-- **Ignorado, porque git no lo hace solo.** Un arbol anidado sale como `?? .worktrees/` en el
-  `git status` del clon principal. Su casa es `.git/info/exclude`, que es por clon y no se versiona,
-  asi que no obliga a tocar el `.gitignore` de nadie. **Preguntale a git donde esta ese fichero**
-  (`git rev-parse --git-common-dir`): dentro de un worktree, el punto de entrada de git es un
-  **fichero** que apunta al clon principal, no un directorio, asi que componer la ruta a mano escribe
-  donde nadie lee.
+**Lo que hace segun lo que encuentra**, clasificando por la rama que tiene tomada cada arbol y no por
+su ruta:
 
-Las mediciones que sostienen las tres estan en `docs/design-notes.md`, seccion "El worktree del
-programa".
+- nada montado: crea la rama desde `origin/<base>` y el worktree;
+- la rama existe y no tiene worktree: monta uno sobre ella;
+- el worktree ya esta en su rama: no toca nada;
+- el worktree esta registrado pero su directorio se borro a mano: lo sanea y monta;
+- la rama la tiene otro worktree, o el arbol esta en otra rama: **cierra el run** con la etiqueta
+  `bloqueada:worktree` y dice en que ruta esta el conflicto. Se libera esa ruta o esa rama y se
+  reinvoca con `-RETRY`.
 
-**Como se monta.** Un arbol por slice:
-
-```bash
-git worktree add <ruta-del-worktree> --detach origin/<base>
-```
-
-**El `--detach` vale para una slice que arranca de cero, y solo para esa.** El programa crea la rama el
-mismo antes de implementar, asi que ahi el worktree suelto es lo limpio. Pero una slice **que ya tiene
-estado persistido** -porque un run anterior murio, o quedo esperando algo- **retoma por su paso y no
-vuelve a crear la rama**: si el worktree esta suelto, implementa entero sobre nada y revienta al
-commitear, con el trabajo hecho, el juez pasado y el harness ya pagado. Antes de relanzar una slice
-asi, **ponla en su rama**: `slice/NN-name`, o `slice/AS-255-NN-name` si la feature tiene historia de
-usuario.
-
-```bash
-git -C <ruta-del-worktree> switch slice/NN-name
-```
+**`--worktree <ruta>` sigue aceptandose** para un arbol que alguien monto a mano, y manda sobre derivar
+uno. Ese arbol tiene que colgar del mismo clon que `--repo-root`: si no, el run cierra en
+`bloqueada:worktree` en vez de montar nada en silencio.
 
 **Como se retira, y por que no a ciegas.** El programa commitea **al final de cada vuelta que deja sus
 controles en verde**, no solo al entregar, asi que un run bloqueado o abortado puede llevar ya varios
@@ -433,20 +420,23 @@ git worktree remove <ruta-del-worktree>
 git branch -d <rama-de-la-slice>
 ```
 
-Si falla cualquiera de las dos, **el arbol se queda** y se dice en que ruta y por que. Nada de esto lo
+Si falla cualquiera de las dos, **el arbol se queda** y se dice en que ruta y por que. Retirarlo no lo
 hace el programa todavia, asi que un arbol que nadie retire se queda para siempre: en la maquina donde
 se escribio esto habia **treinta y siete**, de dias distintos, y decidir cual se podia tirar costaba
 mirarlos uno a uno.
 
 ## Steps — modo autoria (por defecto)
 
-1. **Invoca `superpowers:brainstorming`** y sigue su proceso para entender intencion, proponer
-   enfoques y validar el diseno con el usuario. **Excepcion al terminal de brainstorming:** no
-   invoques `writing-plans`; el paso siguiente es emitir la spec de slices (pasos 2-6).
-1b. **Investiga el repo antes de cortar (`check-alignment`).** Trocear sin mirar que hay ya produce
-   slices que construyen lo que existe, que traducen lo que otra esta jubilando, o que implementan algo
-   que ningun consumidor lee. Busca tu mismo, con los terminos del concepto que vas a trocear, y
-   contesta tres preguntas **con punteros, no con prosa**:
+1. **Disena por rondas (`check-alignment` + `cast-wide`).** Carga `references/diseno.md` y trabaja
+   el arbol de decisiones de la feature por rondas: toda la frontera numerada, enfoques alternativos en
+   cada decision de diseno, cada recomendacion con su base, y las ramas que siempre se visitan. Los
+   hechos los busca un subagente mientras preguntas (paso 1b); no se los pidas a la persona. Sigue
+   hasta que la frontera este vacia, y cierra con el paso 1c.
+1b. **Investiga el repo antes de cortar, con subagentes mientras corren las rondas
+   (`check-alignment`).** Trocear sin mirar que hay ya produce slices que construyen lo que existe, que
+   traducen lo que otra esta jubilando, o que implementan algo que ningun consumidor lee. Lanza la
+   busqueda en background, con los terminos del concepto que vas a trocear, y que conteste estas
+   preguntas **con punteros, no con prosa**:
 
    - **¿Que hay ya que esto necesite?** Busca en el arbol quien nombra el concepto. Vale una ruta que
      existe; no vale "el repo ya tiene puertos".
@@ -465,8 +455,8 @@ mirarlos uno a uno.
    vistazo, no un informe: para cuando dejes de encontrar cosas nuevas, y quedate con lo que de verdad
    cambia el corte.
 
-   Propon los hallazgos a la persona y **espera su confirmacion**, igual que con las fuentes y los
-   controles: ella sabe cual de esos precedentes se revirtio por un motivo que sigue vigente. Lo
+   Los hallazgos entran en las rondas del paso 1 y **la persona los confirma** ahi, igual que confirma
+   las fuentes y los controles: ella sabe cual de esos precedentes se revirtio por un motivo que sigue vigente. Lo
    confirmado se escribe en la seccion `## Lo que ya existe` del issue padre, y **se usa en el paso 2**:
    una pieza reutilizable suele quitar una slice entera, y un precedente revertido suele cambiar el
    orden. **La linea `- pieza:` que se escribe aqui es solo el puntero**: que hace hoy esa pieza lo
@@ -476,8 +466,9 @@ mirarlos uno a uno.
    **Si no hay nada, dilo con esa seccion vacia y su motivo**, no la omitas: ausencia declarada y
    ausencia silenciosa no son lo mismo, igual que en `SENAL:` y en los controles.
 
-1c. **Publica lo entendido del codigo y los criterios propuestos, y espera confirmacion de los dos
-   antes de cortar (`check-alignment`).** El paso 1b confirma punteros -rutas, numeros de issue,
+1c. **Cierra el diseno: publica lo entendido del codigo y los criterios propuestos, y espera
+   confirmacion de los dos antes de cortar (`check-alignment`).** Es la ronda que cierra el paso 1, con
+   la frontera ya vacia. El paso 1b confirma punteros -rutas, numeros de issue,
    sitios de acople-; lo que no confirma nadie es que se entendio **que hace** el codigo que el corte
    va a tocar, ni **que se va a considerar hecho**. Hoy el primer momento en que un malentendido del
    flujo, o un criterio que no era ese, se puede ver es leyendo las subissues ya creadas, o la pull
@@ -516,7 +507,7 @@ mirarlos uno a uno.
    lineas `ACEPTACION:` de cada slice salen de **repartir** los criterios de feature confirmados en el
    paso 1c, no de inventarlos aqui.
 
-2a. **Escribe la intencion, la de la feature y la de cada slice.** El brainstorming del paso 1 ya
+2a. **Escribe la intencion, la de la feature y la de cada slice.** El diseno del paso 1 ya
    entendio el problema: la seccion `## Intencion` es su destilado, no trabajo nuevo. Redactala con
    lo que esta mal hoy y como se nota, sin nombrar clases ni ficheros. Luego, slice a slice, escribe
    su `INTENCION:` y **pasale la vara**: nombra el cambio de mundo que la borraria; si no puedes
@@ -574,6 +565,13 @@ mirarlos uno a uno.
      vacio hace que `slice-runner` pare, y un control inventado finge una garantia que no existe.
 4. **Auto-validacion.** Aplica el checklist de `validate` (abajo) sobre lo que vas a crear -cuerpo del
    padre, titulo, etiqueta y cuerpo de cada subissue- y corrigelo antes de tocar GitHub.
+4b. **Haz que otro lo refute (`feedback-flip`).** Pasale el borrador entero -padre y subissues, solo
+   ese texto- a un subagente que no lo diseno, con el encargo de "La refutacion" de
+   `references/diseno.md`: que se rompe, que lineas se contradicen, que criterio no se puede cumplir o
+   medir, que afirmacion no se sostiene. Es el unico momento en que criterios, exclusiones y
+   sustituciones existen a la vez, y es entre ellos donde se esconden las contradicciones. Sus
+   objeciones forman una ultima ronda a la persona, con su recomendacion cada una; corrige el borrador
+   con lo que decida. Una sola pasada.
 5. **Muestra la spec completa por terminal, espera confirmacion, y solo entonces crea.** La spec ya no
    es un documento que se lea de un tiron, asi que lo que se revisa es lo que imprimes: el cuerpo del
    padre entero y, slice a slice, su titulo, su etiqueta y su cuerpo. Es una accion visible en el repo
@@ -598,17 +596,14 @@ mirarlos uno a uno.
      crea igual que la de estado (`gh label create origen:AS-255 --repo <org>/<repo>`) y se
      reintenta.
 6. **Cierra** diciendo el numero/URL del padre, las subissues creadas con su numero, y que se ejecuta
-   con `slice-runner run <N> --repo <org>/<repo> --base master --worktree <ruta-del-worktree>`, una
-   invocacion por slice.
+   con `slice-runner run <N> --repo <org>/<repo> --base master`, una invocacion por slice.
 
-   **La ruta del worktree va siempre, y este es el unico sitio que explica por que.** Su valor por
-   omision es el directorio actual, asi que un run lanzado sin ella conduce donde estes parado: medido
-   en dos maquinas, es el mecanismo por el que el juez leyo **31 de 32 veces** una rama que no tenia
-   nada que ver con la slice que juzgaba. Quien copie el comando de aqui no puede caer en eso. El paso
-   siguiente monta el worktree cuando se reparte en paralelo; **si no vas a paralelizar, monta uno
-   igual** -en la practica todo run vive en uno-. Donde va, como se monta y como se retira estan en
-   **"El worktree de una slice"**, y sus tres condiciones fallan en silencio: leelas antes de montarlo,
-   no despues.
+   **El comando no lleva ruta de worktree y este es el unico sitio que explica por que.** El programa
+   monta el suyo, colgando de la raiz del clon, y el run se lanza desde esa raiz. Antes la ruta se
+   tecleaba y su valor por omision era el directorio actual: medido en dos maquinas, era el mecanismo
+   por el que el juez leyo **31 de 32 veces** una rama que no tenia nada que ver con la slice que
+   juzgaba. Que hace el programa segun lo que encuentre montado, y que significa `bloqueada:worktree`,
+   esta en **"El worktree de una slice"**.
 
 7. **Propon el reparto en paralelo y, si te lo confirman, montalo tu.** Una invocacion conduce **una**
    slice, asi que una feature de ocho son ocho invocaciones; en serie eso es toda la tarde. Se pueden
@@ -637,12 +632,11 @@ mirarlos uno a uno.
    **Espera confirmacion** (`check-alignment`): crear worktrees y lanzar runs gasta dinero en el
    harness de otra persona.
 
-   Con la confirmacion dada, montalo tu, un worktree por slice de la tanda, **con las tres condiciones
-   de "El worktree de una slice"** -donde va, y si arranca de cero o retoma con estado persistido-, y
-   lanza cada run:
+   Con la confirmacion dada, lanza cada run: el programa monta un worktree por slice, como cuenta
+   **"El worktree de una slice"**, asi que dos runs en paralelo solo necesitan slices distintas.
 
    ```bash
-   slice-runner run <padre> --repo <org>/<repo> --base <base> --slice <identificador> --worktree <ruta-del-worktree>
+   slice-runner run <padre> --repo <org>/<repo> --base <base> --slice <identificador>
    ```
 
    Cada run **en background**, nunca encadenados en una shell que bloquee: son procesos largos y el
@@ -791,11 +785,10 @@ trabajo. Ofrece corregirlas. Checklist:
   expand-contract).
 
 Si todo cumple: reporta `spec valida` y recuerda que se ejecuta con
-`uv run slice-runner run <N> --repo <org>/<repo> --base master --worktree <ruta-del-worktree>`.
+`uv run slice-runner run <N> --repo <org>/<repo> --base master`.
 
 ## Fin
 
 Reporta: numero/URL del issue padre, las subissues con su numero y su nombre, y el comando para
-ejecutarla (`uv run slice-runner run <N> --repo <org>/<repo> --base master --worktree
-<ruta-del-worktree>`, una invocacion por slice). No implementes nada: ese es el trabajo de
+ejecutarla (`uv run slice-runner run <N> --repo <org>/<repo> --base master`, una invocacion por slice). No implementes nada: ese es el trabajo de
 `slice-runner`.

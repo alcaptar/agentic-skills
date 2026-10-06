@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from pathlib import Path
 from typing import TYPE_CHECKING
 from unittest.mock import Mock, call
 
@@ -18,7 +19,6 @@ from slice_runner.domain.event_status import EventStatus
 from slice_runner.domain.exceptions import (
     CiCommandFailedError,
     DirtyIndexError,
-    MissingBranchError,
     NoPullRequestError,
     NoSliceLeftError,
     UnchangedDiffError,
@@ -43,6 +43,7 @@ from slice_runner.tests.mothers.control_outcome_mother import ControlOutcomeMoth
 from slice_runner.tests.mothers.harness_call_mother import HarnessCallMother
 from slice_runner.tests.mothers.harness_spend_mother import HarnessSpendMother
 from slice_runner.tests.mothers.implementation_mother import ImplementationMother
+from slice_runner.tests.mothers.listed_worktree_mother import ListedWorktreeMother
 from slice_runner.tests.mothers.parent_issue_mother import ParentIssueMother
 from slice_runner.tests.mothers.pull_request_review_comment_mother import PullRequestReviewCommentMother
 from slice_runner.tests.mothers.pull_request_review_mother import PullRequestReviewMother
@@ -92,7 +93,7 @@ class TestConductSliceStartingANewRun:
         conductor.conduct()
 
         assert conductor.understanding.write.call_count == 2
-        assert (conductor.repository.pause_for_alignment.call_count, conductor.branches.create.call_count) == (1, 1)
+        assert conductor.repository.pause_for_alignment.call_count == 1
         recorded = conductor.closed
         assert recorded.run.understand_discards == 1
         assert recorded.discarded_call is not None
@@ -231,16 +232,7 @@ class TestConductSliceStartingANewRun:
         assert conductor.repository.write_label.call_count == 0
         assert conductor.understanding.write.call_count == 1
 
-    def test_the_branch_of_the_slice_is_cut_from_the_declared_base(self) -> None:
-        conductor = self._conductor()
-
-        conductor.conduct()
-
-        conductor.branches.create.assert_called_once_with(
-            worktree=Conductor.WORKTREE, name=_BRANCH, base=Conductor.BASE
-        )
-
-    def test_the_precheck_is_asked_about_the_declared_base_before_the_branch_is_cut(self) -> None:
+    def test_the_precheck_is_asked_about_the_declared_base_before_anything_is_mounted(self) -> None:
         conductor = self._conductor()
 
         conductor.conduct()
@@ -261,7 +253,7 @@ class TestConductSliceStartingANewRun:
             run=Run(step=Step.UNDERSTAND, spend=HarnessSpendMother.of_the_understanding_call()),
         )
 
-    def test_a_pause_that_never_lands_still_persists_the_spend_already_paid_but_cuts_no_branch(self) -> None:
+    def test_a_pause_that_never_lands_still_persists_the_spend_already_paid(self) -> None:
         conductor = self._conductor()
         conductor.repository.pause_for_alignment.side_effect = OSError("gh: rate limited")
 
@@ -273,7 +265,6 @@ class TestConductSliceStartingANewRun:
             issue=_SUBISSUE,
             run=Run(step=Step.UNDERSTAND, spend=HarnessSpendMother.of_the_understanding_call()),
         )
-        assert conductor.branches.create.call_count == 0
 
     def test_an_understanding_whose_comment_never_lands_still_persists_the_spend_already_paid(self) -> None:
         conductor = self._conductor()
@@ -289,23 +280,23 @@ class TestConductSliceStartingANewRun:
         )
         assert conductor.repository.pause_for_alignment.call_count == 0
 
-    def test_a_precheck_that_is_not_clear_ends_the_invocation_without_branching_or_writing_anything(self) -> None:
+    def test_a_precheck_that_is_not_clear_ends_the_invocation_without_mounting_or_writing_anything(self) -> None:
         conductor = self._conductor()
-        conductor.prechecks.execute.return_value = PrecheckResult(outcome=PrecheckOutcome.BRANCH_ALREADY_EXISTS)
+        conductor.prechecks.execute.return_value = PrecheckResult(outcome=PrecheckOutcome.PULL_REQUEST_ALREADY_OPEN)
 
         result = conductor.conduct()
 
         assert (result.halt, result.precheck) == (
             Halt.PRECHECKS_BLOCKED,
-            PrecheckResult(outcome=PrecheckOutcome.BRANCH_ALREADY_EXISTS),
+            PrecheckResult(outcome=PrecheckOutcome.PULL_REQUEST_ALREADY_OPEN),
         )
-        assert conductor.branches.create.call_count == 0
+        assert not conductor.worktrees.add_new_branch.called
         assert conductor.repository.write_understanding.call_count == 0
         assert conductor.repository.write_run.call_count == 0
 
     def test_a_precheck_with_no_reason_writes_nothing_to_the_subissue_beyond_the_halt_itself(self) -> None:
         conductor = self._conductor()
-        conductor.prechecks.execute.return_value = PrecheckResult(outcome=PrecheckOutcome.BRANCH_ALREADY_EXISTS)
+        conductor.prechecks.execute.return_value = PrecheckResult(outcome=PrecheckOutcome.PULL_REQUEST_ALREADY_OPEN)
 
         conductor.conduct()
 
@@ -315,7 +306,7 @@ class TestConductSliceStartingANewRun:
         self,
     ) -> None:
         conductor = self._conductor()
-        conductor.prechecks.execute.return_value = PrecheckResult(
+        conductor.check_sources.execute.return_value = PrecheckResult(
             outcome=PrecheckOutcome.UNREADABLE_SOURCE, reason="CLAUDE.md does not exist under the worktree"
         )
 
@@ -415,7 +406,7 @@ class TestConductSliceRespondingToAlignment:
 
         assert conductor.understanding.write.call_count == 2
 
-    def test_a_review_pauses_again_and_cuts_no_branch_after_persisting_the_correction_and_its_redraft(self) -> None:
+    def test_a_review_pauses_again_after_persisting_the_correction_and_its_redraft(self) -> None:
         conductor = self._conductor(budgets=Budgets(person_wait_seconds=0))
         conductor.repository.read_alignment_response.return_value = AlignmentResponse(
             kind=AlignmentResponseKind.REVIEW, correction="la senal no esta exenta"
@@ -424,7 +415,6 @@ class TestConductSliceRespondingToAlignment:
         conductor.conduct()
 
         assert conductor.repository.pause_for_alignment.call_count == 1
-        assert conductor.branches.create.call_count == 0
         assert conductor.repository.write_run.call_args_list == [
             call(
                 repo=Conductor.REPO,
@@ -927,18 +917,7 @@ class TestConductSliceResumingAnInterruptedRun:
         assert conductor.verify.execute.call_count == 0
         assert conductor.repository.write_precheck_reason.call_count == 0
 
-    def test_a_run_that_resumes_stops_before_implementing_when_its_declared_branch_no_longer_exists(self) -> None:
-        conductor = self._conductor()
-        conductor.branches.exists.return_value = False
-
-        with pytest.raises(MissingBranchError, match=f"resumes expecting the branch `{_BRANCH}`.*no such branch"):
-            conductor.conduct()
-
-        assert conductor.implement.execute.call_count == 0
-        assert conductor.verify.execute.call_count == 0
-        assert conductor.repository.write_run.call_count == 0
-
-    def test_a_run_whose_understanding_was_already_published_recreates_the_branch_without_asking_the_harness_again(
+    def test_a_run_whose_understanding_was_already_published_goes_on_without_asking_the_harness_again(
         self,
     ) -> None:
         conductor = Conductor(
@@ -946,25 +925,21 @@ class TestConductSliceResumingAnInterruptedRun:
                 RunMother.understanding_after_a_discard(HarnessSpendMother.of_the_understanding_call())
             )
         )
-        conductor.branches.exists.return_value = False
         conductor.repository.read_alignment_response.return_value = AlignmentResponse(kind=AlignmentResponseKind.GO)
 
         conductor.conduct()
 
         assert conductor.prechecks.execute.call_count == 0
-        assert conductor.branches.create.call_count == 1
         assert conductor.understanding.write.call_count == 0
         assert conductor.implement.execute.call_count == 1
 
-    def test_a_run_whose_understanding_is_still_pending_publishes_it_even_with_the_branch_missing(self) -> None:
+    def test_a_run_whose_understanding_is_still_pending_publishes_it_when_resumed(self) -> None:
         conductor = Conductor(chosen=SelectSliceResultMother.resumed_at(RunMother.about_to_publish_the_understanding()))
-        conductor.branches.exists.return_value = False
         conductor.repository.read_alignment_response.return_value = AlignmentResponse(kind=AlignmentResponseKind.GO)
 
         conductor.conduct()
 
-        assert conductor.prechecks.execute.call_count == 1
-        assert conductor.branches.create.call_count == 1
+        assert conductor.prechecks.execute.call_count == 0
         assert conductor.understanding.write.call_count == 1
         assert conductor.implement.execute.call_count == 1
 
@@ -1011,15 +986,6 @@ class TestConductSliceResumingCatchesUpTheBranch:
             repo=Conductor.REPO, issue=_SUBISSUE, paths=BranchCatchUpMother.CONFLICTING_PATHS
         )
 
-    def test_a_branch_that_no_longer_exists_is_never_asked_to_catch_up(self) -> None:
-        conductor = self._conductor()
-        conductor.branches.exists.return_value = False
-
-        with pytest.raises(MissingBranchError):
-            conductor.conduct()
-
-        assert conductor.branches.catch_up.call_count == 0
-
     def test_a_run_already_awaiting_the_ci_of_a_pull_request_already_open_is_never_asked_to_catch_up(self) -> None:
         conductor = Conductor(chosen=SelectSliceResultMother.resumed_at(RunMother.about_to_ask_the_ci()))
 
@@ -1043,8 +1009,8 @@ class _ResumedAwaitingTheCi:
 
 class TestConductSliceCatchesUpTheBranchWhenTheCiFindsAConflict(_ResumedAwaitingTheCi):
     def test_a_conflict_found_by_the_ci_is_caught_up_instead_of_closing_the_run(self) -> None:
-        conductor = self._conductor(budgets=Budgets(ci_wait_seconds=30))
-        conductor.ci.status.side_effect = [CiStatus.NO_CHECKS, CiStatus.PENDING]
+        conductor = self._conductor(budgets=Budgets(ci_wait_seconds=60))
+        conductor.ci.status.side_effect = [CiStatus.NO_CHECKS, CiStatus.PENDING, CiStatus.PENDING]
         conductor.forum.pull_request_state.return_value = PullRequestStatusMother.open_and_conflicting()
 
         result = conductor.conduct()
@@ -1062,8 +1028,8 @@ class TestConductSliceCatchesUpTheBranchWhenTheCiFindsAConflict(_ResumedAwaiting
         assert (conductor.implement.execute.call_count, conductor.verify.execute.call_count) == (0, 0)
 
     def test_a_catch_up_that_reaches_a_passing_round_commits_it_exactly_once(self) -> None:
-        conductor = self._conductor(budgets=Budgets(ci_wait_seconds=30))
-        conductor.ci.status.side_effect = [CiStatus.NO_CHECKS, CiStatus.PENDING]
+        conductor = self._conductor(budgets=Budgets(ci_wait_seconds=60))
+        conductor.ci.status.side_effect = [CiStatus.NO_CHECKS, CiStatus.PENDING, CiStatus.PENDING]
         conductor.forum.pull_request_state.return_value = PullRequestStatusMother.open_and_conflicting()
 
         conductor.conduct()
@@ -1116,8 +1082,8 @@ class TestConductSliceCatchesUpTheBranchWhenTheCiFindsAConflict(_ResumedAwaiting
         assert result.state is RunState.BLOCKED_CI_CONFLICT
 
     def test_a_control_round_that_fails_after_the_catch_up_still_sends_the_repaired_round_to_the_judge(self) -> None:
-        conductor = self._conductor(budgets=Budgets(ci_wait_seconds=30))
-        conductor.ci.status.side_effect = [CiStatus.NO_CHECKS, CiStatus.PENDING]
+        conductor = self._conductor(budgets=Budgets(ci_wait_seconds=60))
+        conductor.ci.status.side_effect = [CiStatus.NO_CHECKS, CiStatus.PENDING, CiStatus.PENDING]
         conductor.forum.pull_request_state.return_value = PullRequestStatusMother.open_and_conflicting()
         conductor.controls.run.side_effect = [ControlOutcomeMother.red(), ControlOutcomeMother.green()]
 
@@ -1128,8 +1094,8 @@ class TestConductSliceCatchesUpTheBranchWhenTheCiFindsAConflict(_ResumedAwaiting
     def test_a_control_round_that_fails_after_the_catch_up_still_commits_the_round_that_finally_passes(
         self,
     ) -> None:
-        conductor = self._conductor(budgets=Budgets(ci_wait_seconds=30))
-        conductor.ci.status.side_effect = [CiStatus.NO_CHECKS, CiStatus.PENDING]
+        conductor = self._conductor(budgets=Budgets(ci_wait_seconds=60))
+        conductor.ci.status.side_effect = [CiStatus.NO_CHECKS, CiStatus.PENDING, CiStatus.PENDING]
         conductor.forum.pull_request_state.return_value = PullRequestStatusMother.open_and_conflicting()
         conductor.controls.run.side_effect = [ControlOutcomeMother.red(), ControlOutcomeMother.green()]
 
@@ -1473,6 +1439,24 @@ class TestConductSliceReportingEvents:
 
         emitted = conductor.emitted_events
         assert (emitted[-1].step, emitted[-1].status) == (Step.AWAIT_MERGE, EventStatus.AWAITING_PERSON)
+
+    def test_an_alignment_with_no_response_yet_reports_awaiting_a_person_because_the_go_is_a_human_decision(
+        self,
+    ) -> None:
+        conductor = Conductor(
+            chosen=SelectSliceResultMother.about_to_start(
+                subissue=SubIssueMother.carrying(IssueLabel.AWAITING_ALIGNMENT)
+            ),
+            budgets=Budgets(person_wait_seconds=30),
+        )
+        conductor.repository.read_alignment_response.return_value = AlignmentResponse(
+            kind=AlignmentResponseKind.NOT_YET
+        )
+
+        conductor.conduct()
+
+        emitted = conductor.emitted_events
+        assert (emitted[-1].step, emitted[-1].status) == (Step.UNDERSTAND, EventStatus.AWAITING_PERSON)
 
     def test_a_pending_ci_reports_waiting_because_no_person_is_deciding_anything_yet(self) -> None:
         conductor = Conductor(
@@ -2761,3 +2745,247 @@ class TestConductSliceWhenTheCiCannotBeRead:
         assert result.state is RunState.MERGED
         recorded = conductor.metrics.record.call_args.args[0]
         assert recorded.ci_indeterminate_cause is CiIndeterminateCause.COMMAND_FAILED
+
+
+class TestConductSliceMountingTheWorktreeBeforeUnderstanding:
+    _MANUAL = "/trees/by-hand"
+
+    @staticmethod
+    def _conductor() -> Conductor:
+        conductor = Conductor(chosen=SelectSliceResultMother.about_to_start())
+        conductor.worktrees.listed.return_value = (ListedWorktreeMother.main_clone(),)
+        conductor.worktrees.branch_exists.return_value = False
+
+        return conductor
+
+    def test_a_new_run_mounts_the_worktree_that_hangs_from_the_root_and_the_identity_of_the_slice(self) -> None:
+        conductor = self._conductor()
+
+        conductor.conduct()
+
+        conductor.worktrees.add_new_branch.assert_called_once_with(
+            root=Conductor.ROOT, path=Conductor.WORKTREE, branch=_BRANCH, base=Conductor.BASE
+        )
+        assert Conductor.WORKTREE == f"{Conductor.ROOT}/.worktrees/05-prechecks-deterministas"
+
+    def test_the_derived_path_hangs_from_the_root_through_a_first_directory_that_starts_with_a_dot(self) -> None:
+        relative = Path(Conductor.WORKTREE).relative_to(Conductor.ROOT)
+
+        assert relative.parts[0].startswith(".")
+        assert Path(Conductor.WORKTREE).name == _BRANCH.removeprefix("slice/")
+
+    def test_a_new_run_ignores_the_directory_of_the_worktrees_in_the_clone(self) -> None:
+        conductor = self._conductor()
+
+        conductor.conduct()
+
+        conductor.worktrees.exclude.assert_called_once_with(root=Conductor.ROOT, rule="/.worktrees/")
+
+    def test_the_sources_are_read_from_the_freshly_mounted_worktree_and_not_from_the_root(self) -> None:
+        conductor = self._conductor()
+
+        conductor.conduct()
+
+        params = conductor.check_sources.execute.call_args.args[0]
+        assert params.worktree == Conductor.WORKTREE
+        assert params.worktree != Conductor.ROOT
+
+    def test_the_precheck_of_the_base_is_asked_from_the_root_of_the_clone(self) -> None:
+        conductor = self._conductor()
+
+        conductor.conduct()
+
+        assert conductor.prechecks.execute.call_args.args[0].root == Conductor.ROOT
+
+    def test_a_branch_taken_by_another_worktree_closes_the_run_in_the_state_that_names_the_worktree(self) -> None:
+        conductor = self._conductor()
+        conductor.worktrees.branch_exists.return_value = True
+        conductor.worktrees.listed.return_value = (
+            ListedWorktreeMother.main_clone(),
+            ListedWorktreeMother.mounted(path=self._MANUAL, branch=_BRANCH),
+        )
+
+        result = conductor.conduct()
+
+        assert (result.halt, result.state) == (Halt.RUN_CLOSED, RunState.BLOCKED_WORKTREE)
+        assert result.conflicting_path == self._MANUAL
+        assert conductor.metrics.record.call_args.args[0].state is RunState.BLOCKED_WORKTREE
+
+    def test_a_taken_branch_labels_the_subissue_and_reads_no_sources_nor_asks_the_harness(self) -> None:
+        conductor = self._conductor()
+        conductor.worktrees.branch_exists.return_value = True
+        conductor.worktrees.listed.return_value = (
+            ListedWorktreeMother.main_clone(),
+            ListedWorktreeMother.mounted(path=self._MANUAL, branch=_BRANCH),
+        )
+
+        conductor.conduct()
+
+        conductor.repository.write_label.assert_called_once_with(
+            repo=Conductor.REPO, issue=_SUBISSUE, remove=IssueLabel.PENDING, add=IssueLabel.BLOCKED_WORKTREE
+        )
+        assert conductor.check_sources.execute.call_count == 0
+        assert conductor.understanding.write.call_count == 0
+
+    def test_a_run_closed_before_it_started_persists_the_step_it_stands_on_so_that_a_retry_can_reopen_it(self) -> None:
+        conductor = self._conductor()
+        conductor.worktrees.branch_exists.return_value = True
+        conductor.worktrees.listed.return_value = (
+            ListedWorktreeMother.main_clone(),
+            ListedWorktreeMother.mounted(path=self._MANUAL, branch=_BRANCH),
+        )
+
+        conductor.conduct()
+
+        conductor.repository.write_run.assert_called_once_with(
+            repo=Conductor.REPO, issue=_SUBISSUE, run=Run(step=Step.MOUNT_WORKTREE)
+        )
+
+    def test_sources_that_cannot_be_read_after_mounting_end_the_invocation_and_leave_the_worktree_for_the_next(
+        self,
+    ) -> None:
+        conductor = self._conductor()
+        conductor.check_sources.execute.return_value = PrecheckResult(
+            outcome=PrecheckOutcome.UNREADABLE_SOURCE, reason="CLAUDE.md does not exist under the worktree"
+        )
+
+        first = conductor.conduct()
+        conductor.worktrees.listed.return_value = (
+            ListedWorktreeMother.main_clone(),
+            ListedWorktreeMother.mounted(path=Conductor.WORKTREE, branch=_BRANCH),
+        )
+        conductor.worktrees.branch_exists.return_value = True
+        conductor.check_sources.execute.return_value = PrecheckResult(outcome=PrecheckOutcome.CLEAR)
+        conductor.conduct()
+
+        assert (first.halt, first.precheck) == (
+            Halt.PRECHECKS_BLOCKED,
+            PrecheckResult(
+                outcome=PrecheckOutcome.UNREADABLE_SOURCE, reason="CLAUDE.md does not exist under the worktree"
+            ),
+        )
+        conductor.worktrees.add_new_branch.assert_called_once()
+        conductor.worktrees.add_on_branch.assert_not_called()
+        conductor.repository.write_precheck_reason.assert_called_once()
+
+    def test_a_worktree_given_by_hand_wins_over_deriving_one(self) -> None:
+        conductor = self._conductor()
+
+        conductor.conduct(worktree=self._MANUAL)
+
+        conductor.worktrees.add_new_branch.assert_called_once_with(
+            root=Conductor.ROOT, path=self._MANUAL, branch=_BRANCH, base=Conductor.BASE
+        )
+        assert conductor.check_sources.execute.call_args.args[0].worktree == self._MANUAL
+
+    def test_a_tree_by_hand_that_belongs_to_another_clone_than_the_root_mounts_nothing_and_closes(self) -> None:
+        conductor = self._conductor()
+        conductor.worktrees.common_dir.side_effect = lambda *, path: (
+            "/other/clone/.git" if path == self._MANUAL else Conductor.COMMON_DIR
+        )
+
+        result = conductor.conduct(worktree=self._MANUAL)
+
+        assert result.state is RunState.BLOCKED_WORKTREE
+        assert not conductor.worktrees.add_new_branch.called
+        assert not conductor.worktrees.add_on_branch.called
+        assert not conductor.worktrees.prune.called
+
+    def test_a_tree_by_hand_in_another_location_on_the_derived_branch_is_the_one_of_this_slice(self) -> None:
+        conductor = self._conductor()
+        conductor.worktrees.branch_exists.return_value = True
+        conductor.worktrees.listed.return_value = (
+            ListedWorktreeMother.main_clone(),
+            ListedWorktreeMother.mounted(path=self._MANUAL, branch=_BRANCH),
+        )
+
+        result = conductor.conduct(worktree=self._MANUAL)
+
+        assert result.state is not RunState.BLOCKED_WORKTREE
+        assert not conductor.worktrees.add_new_branch.called
+        assert conductor.check_sources.execute.call_args.args[0].worktree == self._MANUAL
+
+    def test_a_tree_by_hand_on_a_foreign_branch_closes_the_run(self) -> None:
+        conductor = self._conductor()
+        conductor.worktrees.listed.return_value = (
+            ListedWorktreeMother.main_clone(),
+            ListedWorktreeMother.mounted(path=self._MANUAL, branch="slice/00-other"),
+        )
+
+        result = conductor.conduct(worktree=self._MANUAL)
+
+        assert (result.state, result.conflicting_path) == (RunState.BLOCKED_WORKTREE, self._MANUAL)
+
+    def test_a_subissue_that_awaits_its_alignment_without_a_run_also_mounts_first(self) -> None:
+        conductor = Conductor(
+            chosen=SelectSliceResultMother.about_to_start(
+                subissue=SubIssueMother.carrying(IssueLabel.AWAITING_ALIGNMENT)
+            )
+        )
+
+        conductor.conduct()
+
+        conductor.worktrees.exclude.assert_called_once_with(root=Conductor.ROOT, rule="/.worktrees/")
+
+
+class TestConductSliceResumingMountsTheWorktreeFirst:
+    @staticmethod
+    def _conductor() -> Conductor:
+        return Conductor(chosen=SelectSliceResultMother.resumed_at(RunMother.implementing()))
+
+    def test_a_worktree_already_on_its_branch_is_left_as_it_is_and_the_run_goes_on(self) -> None:
+        conductor = self._conductor()
+
+        conductor.conduct()
+
+        conductor.worktrees.exclude.assert_called_once()
+        assert not conductor.worktrees.add_new_branch.called
+        assert not conductor.worktrees.add_on_branch.called
+        assert conductor.implement.execute.call_count == 1
+
+    def test_a_branch_that_is_gone_is_created_again_instead_of_stopping_the_run(self) -> None:
+        conductor = self._conductor()
+        conductor.worktrees.listed.return_value = (ListedWorktreeMother.main_clone(),)
+        conductor.worktrees.branch_exists.return_value = False
+
+        conductor.conduct()
+
+        conductor.worktrees.add_new_branch.assert_called_once()
+        assert conductor.implement.execute.call_count == 1
+
+    def test_a_worktree_whose_directory_was_deleted_by_hand_is_pruned_and_mounted_again(self) -> None:
+        conductor = self._conductor()
+        conductor.worktrees.listed.return_value = (
+            ListedWorktreeMother.main_clone(),
+            ListedWorktreeMother.whose_directory_was_deleted(path=Conductor.WORKTREE, branch=_BRANCH),
+        )
+
+        conductor.conduct()
+
+        conductor.worktrees.prune.assert_called_once_with(root=Conductor.ROOT)
+        conductor.worktrees.add_on_branch.assert_called_once()
+
+    def test_a_branch_taken_elsewhere_closes_the_run_from_whatever_step_it_stood_on(self) -> None:
+        conductor = self._conductor()
+        conductor.worktrees.listed.return_value = (
+            ListedWorktreeMother.main_clone(),
+            ListedWorktreeMother.mounted(path="/trees/by-hand", branch=_BRANCH),
+        )
+
+        result = conductor.conduct()
+
+        assert (result.state, result.step) == (RunState.BLOCKED_WORKTREE, Step.IMPLEMENT)
+        conductor.repository.write_label.assert_called_once_with(
+            repo=Conductor.REPO, issue=_SUBISSUE, remove=IssueLabel.IN_PROGRESS, add=IssueLabel.BLOCKED_WORKTREE
+        )
+        assert conductor.implement.execute.call_count == 0
+
+    def test_a_run_closed_on_the_worktree_before_it_ever_started_resumes_by_reading_the_sources_and_understanding(
+        self,
+    ) -> None:
+        conductor = Conductor(chosen=SelectSliceResultMother.resumed_at(Run(step=Step.MOUNT_WORKTREE)))
+
+        conductor.conduct()
+
+        assert conductor.check_sources.execute.call_count == 1
+        assert conductor.understanding.write.call_count == 1

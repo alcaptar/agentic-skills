@@ -230,12 +230,11 @@ def test_the_scan_counts_as_uncapped_every_way_of_launching_a_process_not_only_s
 _CONDUCT_SLICE = "src/slice_runner/application/actions/conduct_slice.py"
 
 _KNOWN_NOT_HARNESS_WRITING = {
-    ("_branches", "create"),
-    ("_branches", "exists"),
     ("_budgets", "cost_exhausted"),
     ("_budgets", "exhausted"),
     ("_budgets", "wait_exhausted"),
     ("_catch_up", "execute"),
+    ("_check_sources", "execute"),
     ("_clock", "sleep"),
     ("_close", "execute"),
     ("_commit", "execute"),
@@ -244,6 +243,7 @@ _KNOWN_NOT_HARNESS_WRITING = {
     ("_forum", "any_pull_request"),
     ("_forum", "pull_request_state"),
     ("_machine", "after"),
+    ("_mount", "execute"),
     ("_prechecks", "execute"),
     ("_pull_request", "body"),
     ("_pull_request", "commit_message"),
@@ -261,6 +261,7 @@ _KNOWN_NOT_HARNESS_WRITING = {
     ("_repository", "write_label"),
     ("_repository", "write_malformed_response"),
     ("_repository", "write_precheck_reason"),
+    ("_repository", "write_run"),
     ("_rescue", "execute"),
     ("_run_controls", "execute"),
     ("_select", "execute"),

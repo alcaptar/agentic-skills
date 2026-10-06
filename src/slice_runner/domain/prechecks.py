@@ -20,9 +20,7 @@ class SourcesCheck(StrEnum):
 
 @dataclass(frozen=True, kw_only=True, slots=True)
 class GroundSignals:
-    branch_exists: bool
     open_pull_request: int | None
-    sources_check: SourcesCheck
 
 
 class Prechecks:
@@ -47,24 +45,19 @@ class Prechecks:
 
         return PrecheckOutcome.CLEAR
 
-    @classmethod
-    def _of_the_ground(cls, *, parent: ParentIssue, ground: GroundSignals) -> PrecheckOutcome:
+    @staticmethod
+    def _of_the_ground(*, parent: ParentIssue, ground: GroundSignals) -> PrecheckOutcome:
         if ground.open_pull_request is not None:
             return PrecheckOutcome.PULL_REQUEST_ALREADY_OPEN
-        if ground.branch_exists:
-            return PrecheckOutcome.BRANCH_ALREADY_EXISTS
         if not parent.sources:
             return PrecheckOutcome.MISSING_SOURCES
-        of_the_sources = cls._of_the_sources_check(ground.sources_check)
-        if of_the_sources is not PrecheckOutcome.CLEAR:
-            return of_the_sources
         if not parent.controls.declared:
             return PrecheckOutcome.MISSING_CONTROLS
 
         return PrecheckOutcome.CLEAR
 
     @staticmethod
-    def _of_the_sources_check(check: SourcesCheck) -> PrecheckOutcome:
+    def of_the_sources(check: SourcesCheck) -> PrecheckOutcome:
         match check:
             case SourcesCheck.READABLE:
                 return PrecheckOutcome.CLEAR
