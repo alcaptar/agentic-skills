@@ -79,8 +79,22 @@ class TestARecordedConversation(WithTheDurableStoresOutOfTheRealHome):
                 "session": ConversationTranscriptMother.SESSION,
                 "ts": _STAMP.isoformat(),
                 "uses": [
-                    {"turn": 2, "tool": "Bash"},
-                    {"turn": 4, "tool": "Bash"},
+                    {
+                        "turn": 2,
+                        "tool": "Bash",
+                        "command": (
+                            "uv run pytest src/slice_runner/tests/infrastructure/test_local_process.py"
+                            " -x -q 2>&1 | tail -40"
+                        ),
+                    },
+                    {
+                        "turn": 4,
+                        "tool": "Bash",
+                        "command": (
+                            'grep -n "process_timeout_seconds"'
+                            " /Users/acapdev/repos/as-turnos/src/slice_runner/domain/budgets.py"
+                        ),
+                    },
                 ],
             }
         ]

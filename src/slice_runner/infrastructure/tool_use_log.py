@@ -15,6 +15,7 @@ class ToolUse:
     turn: int
     tool: str
     path: str | None
+    command: str | None
     failed: bool = False
 
 

@@ -131,6 +131,7 @@ class LocalConversationLog(ConversationLog):
             summary=summary,
             result=cls._excerpt(answered.content) if answered is not None else None,
             path=cls._path_of(tool_use.input),
+            command=cls._command_of(tool_use.input),
             failed=answered.is_error if answered is not None else False,
         )
 
@@ -142,6 +143,12 @@ class LocalConversationLog(ConversationLog):
                 return value
 
         return None
+
+    @staticmethod
+    def _command_of(tool_input: dict[str, object]) -> str | None:
+        value = tool_input.get("command")
+
+        return value if isinstance(value, str) else None
 
     @classmethod
     def _spend_of(cls, lines: list[dict[str, object]]) -> ConversationSpend:

@@ -47,10 +47,32 @@ class TestWhatIsWrittenDownOfACall(WithTheDurableStoresOutOfTheRealHome):
                 "ts": _STAMP.isoformat(),
                 "uses": [
                     {"turn": 1, "tool": "Read", "path": "src/x.py"},
-                    {"turn": 2, "tool": "Bash"},
+                    {"turn": 2, "tool": "Bash", "command": "make check"},
                 ],
             }
         ]
+
+    def test_a_long_command_is_written_whole_and_without_any_mark_of_having_been_cut(self, tmp_path: Path) -> None:
+        LocalToolUseLog(clock=self.frozen_at()).record(
+            HarnessCallToolUseMother.of_the_implementer_with_a_long_command()
+        )
+
+        assert WrittenToolUses.records_under(tmp_path)[0]["uses"] == [
+            {"turn": 1, "tool": "Bash", "command": HarnessCallToolUseMother.LONG_COMMAND}
+        ]
+
+    def test_a_row_written_before_commands_were_recorded_is_still_read_back(self) -> None:
+        row = {
+            "ts": _STAMP.isoformat(),
+            "repo": HarnessCallToolUseMother.REPO,
+            "issue": HarnessCallToolUseMother.ISSUE,
+            "slice_id": HarnessCallToolUseMother.SLICE_ID,
+            "step": "implement",
+            "session": HarnessCallToolUseMother.SESSION,
+            "uses": [{"turn": 1, "tool": "Read", "path": "src/x.py"}, {"turn": 2, "tool": "Bash"}],
+        }
+
+        assert CallToolUsePayload.model_validate(row).uses[1].command is None
 
 
 class TestTheLogOnlyGrows(WithTheDurableStoresOutOfTheRealHome):
