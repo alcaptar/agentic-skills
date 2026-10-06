@@ -24,7 +24,7 @@ class TestGitWorktrees:
     @staticmethod
     def _remote(tmp_path: Path) -> Path:
         remote = tmp_path / "remote.git"
-        Git.run(tmp_path, "init", "--bare", str(remote))
+        Git.run(tmp_path, "init", "--bare", "-b", Git.BASE_BRANCH, str(remote))
         seed = Git.init_repo(tmp_path / "seed")
         Git.run(seed, "commit", "--allow-empty", "-m", "base")
         Git.run(seed, "remote", "add", "origin", str(remote))

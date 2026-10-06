@@ -939,6 +939,7 @@ class TestConductSliceResumingAnInterruptedRun:
 
         conductor.conduct()
 
+        assert conductor.prechecks.execute.call_count == 0
         assert conductor.understanding.write.call_count == 1
         assert conductor.implement.execute.call_count == 1
 

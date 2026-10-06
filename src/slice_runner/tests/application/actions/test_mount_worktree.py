@@ -102,6 +102,18 @@ class TestMountWorktree:
         assert result == MountWorktreeResult(outcome=Outcome.WORKTREE_TAKEN, conflicting_path=mounting.ROOT)
         assert mounting.changed_nothing
 
+    def test_the_main_clone_on_the_branch_of_the_slice_is_not_taken_for_its_worktree_even_when_passed_as_the_path(
+        self,
+    ) -> None:
+        mounting = _Mounting()
+        mounting.worktrees.branch_exists.return_value = True
+        mounting.worktrees.listed.return_value = (ListedWorktreeMother.main_clone(on=mounting.BRANCH),)
+
+        result = mounting.mount(worktree=mounting.ROOT)
+
+        assert result == MountWorktreeResult(outcome=Outcome.WORKTREE_TAKEN, conflicting_path=mounting.ROOT)
+        assert mounting.changed_nothing
+
     def test_a_registered_worktree_whose_directory_is_gone_is_pruned_before_mounting_on_its_branch(self) -> None:
         mounting = _Mounting()
         mounting.worktrees.branch_exists.return_value = True
