@@ -33,6 +33,7 @@ from slice_runner.domain.exceptions import (
     NoSliceLeftError,
     UnchangedDiffError,
 )
+from slice_runner.domain.feature_slice import FeatureSlice
 from slice_runner.domain.halt import Halt
 from slice_runner.domain.harness_spend import HarnessSpend
 from slice_runner.domain.issue_label import IssueLabel
@@ -631,6 +632,7 @@ class ConductSlice:
                     issue=round_progress.subissue.number,
                     slice_id=round_progress.subissue.slice_id.canonical,
                     spend=round_progress.spend,
+                    feature_slice=self._feature_slice_of(round_progress),
                 )
             )
 
@@ -760,6 +762,10 @@ class ConductSlice:
 
         return opened
 
+    @staticmethod
+    def _feature_slice_of(progress: ConductSliceProgress) -> FeatureSlice:
+        return FeatureSlice(parent=progress.params.issue, name=progress.subissue.slice_id.name)
+
     def _recorded(self, progress: ConductSliceProgress, transition: Transition) -> ConductSliceProgress:
         recorded = self._record_step.execute(
             RecordStepParams(
@@ -770,6 +776,7 @@ class ConductSlice:
                 label=progress.label,
                 transition=transition,
                 spend=progress.spend,
+                feature_slice=self._feature_slice_of(progress),
             )
         )
 

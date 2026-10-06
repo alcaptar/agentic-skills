@@ -6,6 +6,7 @@ from slice_runner.domain.event_status import EventStatus
 from slice_runner.domain.run_state import RunState
 from slice_runner.infrastructure.event_payload import EventPayload
 from slice_runner.tests.mothers.event_mother import EventMother
+from slice_runner.tests.mothers.feature_slice_mother import FeatureSliceMother
 
 
 class TestWhatTheProgramEmits:
@@ -32,6 +33,8 @@ class TestWhatTheProgramEmits:
                 "duration_api_ms": 32189,
             },
             "status": "advancing",
+            "parent": FeatureSliceMother.PARENT,
+            "name": FeatureSliceMother.NAME,
         }
 
     def test_a_closing_event_writes_the_state_it_closed_with_under_closed_as(self) -> None:
@@ -77,3 +80,19 @@ class TestWhatTheProgramReads:
         row = EventPayload.from_domain(EventMother.blocked_by_the_judge()).to_contract()
 
         assert EventPayload.from_dict(row).to_domain() == EventMother.blocked_by_the_judge()
+
+    def test_a_row_written_before_the_feature_was_recorded_is_still_read_without_it(self) -> None:
+        event = EventPayload.from_dict(dict(self._ROW_OF_TODAY)).to_domain()
+
+        assert event.feature_slice is None
+
+    def test_a_row_with_the_parent_and_the_name_reads_back_with_the_feature_it_belongs_to(self) -> None:
+        row = EventPayload.from_domain(EventMother.advancing()).to_contract()
+
+        assert EventPayload.from_dict(row).to_domain().feature_slice == FeatureSliceMother.of_the_feature()
+
+    def test_an_event_without_the_feature_writes_neither_key(self) -> None:
+        row = EventPayload.from_domain(EventMother.advancing_before_the_feature_was_recorded()).to_contract()
+
+        assert "parent" not in row
+        assert "name" not in row

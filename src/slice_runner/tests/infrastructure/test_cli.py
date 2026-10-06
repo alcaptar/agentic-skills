@@ -6,7 +6,7 @@ import shutil
 import sys
 from dataclasses import replace
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 from unittest.mock import Mock, create_autospec
 
 import pytest
@@ -59,6 +59,7 @@ from slice_runner.tests.mothers.closed_slice_mother import ClosedSliceMother
 from slice_runner.tests.mothers.conversation_transcript_mother import ConversationTranscriptMother
 from slice_runner.tests.mothers.discarded_call_mother import DiscardedCallMother
 from slice_runner.tests.mothers.event_mother import EventMother
+from slice_runner.tests.mothers.feature_slice_mother import FeatureSliceMother
 from slice_runner.tests.mothers.gh_conversation_mother import GhConversationMother
 from slice_runner.tests.mothers.gh_response_mother import GhResponseMother
 from slice_runner.tests.mothers.harness_call_spend_mother import HarnessCallSpendMother
@@ -2778,6 +2779,104 @@ class TestTheStatusCommandParsing:
             Cli.parser().parse_args(["status", "38"])
 
         assert "the following arguments are required: --repo" in capsys.readouterr().err
+
+
+class TestTheCommandThatFollowsTheEventsAsJson(WithTheDurableStoresOutOfTheRealHome):
+    _ADVANCING: ClassVar[dict[str, object]] = {
+        "version": 1,
+        "ts": "2024-01-01T12:30:45+00:00",
+        "repo": EventMother.REPO,
+        "issue": EventMother.ISSUE,
+        "slice_id": "slice-05",
+        "step": "run-controls",
+        "status": "advancing",
+        "cost_usd": 0.3433209,
+        "parent": FeatureSliceMother.PARENT,
+        "name": FeatureSliceMother.NAME,
+    }
+    _MERGED: ClassVar[dict[str, object]] = {
+        "version": 1,
+        "ts": "2024-01-01T12:31:15+00:00",
+        "repo": EventMother.REPO,
+        "issue": EventMother.ISSUE,
+        "slice_id": "slice-05",
+        "step": "await-merge",
+        "status": "closed",
+        "cost_usd": 0.051877,
+        "closed_as": "merged",
+        "parent": FeatureSliceMother.PARENT,
+        "name": FeatureSliceMother.NAME,
+    }
+
+    @staticmethod
+    def _cli() -> Cli:
+        return Cli(process=ProcessDoubles.exiting(), budgets=Budgets())
+
+    @staticmethod
+    def _clock_interrupted_after(sleeps: int) -> Mock:
+        clock: Mock = create_autospec(Clock, spec_set=True, instance=True)
+        clock.sleep.side_effect = [None] * (sleeps - 1) + [KeyboardInterrupt()]
+
+        return clock
+
+    @staticmethod
+    def _printed(capsys: pytest.CaptureFixture[str]) -> list[dict[str, object]]:
+        return [json.loads(line) for line in capsys.readouterr().out.splitlines()]
+
+    def test_it_prints_the_snapshot_and_then_one_json_object_per_change_without_ending(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        reader = ScriptedEventReader(
+            EventBatch(events=(EventMother.advancing(),), cursor=EventCursor(offset=10)),
+            EventBatch(events=(EventMother.closed(),), cursor=EventCursor(offset=20)),
+        )
+
+        code = self._cli().follow(
+            repo=None, once=False, as_json=True, reader=reader, clock=self._clock_interrupted_after(2)
+        )
+
+        assert code == ExitCode.OK
+        assert self._printed(capsys) == [self._ADVANCING, self._MERGED]
+        assert reader.cursors == [EventCursor.start(), EventCursor(offset=10)]
+
+    def test_once_prints_only_the_snapshot_as_json_and_never_sleeps(self, capsys: pytest.CaptureFixture[str]) -> None:
+        reader = ScriptedEventReader(
+            EventBatch(events=(EventMother.advancing(),), cursor=EventCursor(offset=10)),
+            EventBatch(events=(EventMother.closed(),), cursor=EventCursor(offset=20)),
+        )
+        clock = self._clock_interrupted_after(1)
+
+        code = self._cli().follow(repo=None, once=True, as_json=True, reader=reader, clock=clock)
+
+        assert code == ExitCode.OK
+        assert self._printed(capsys) == [self._ADVANCING]
+        clock.sleep.assert_not_called()
+        assert len(reader.cursors) == 1
+
+    def test_a_row_written_before_the_feature_was_recorded_prints_without_the_parent_and_the_name(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        reader = ScriptedEventReader(
+            EventBatch(events=(EventMother.advancing_before_the_feature_was_recorded(),), cursor=EventCursor(offset=10))
+        )
+
+        self._cli().follow(repo=None, once=True, as_json=True, reader=reader, clock=self._clock_interrupted_after(1))
+
+        printed = self._printed(capsys)
+        assert "parent" not in printed[0]
+        assert "name" not in printed[0]
+        assert printed[0]["version"] == 1
+
+    def test_main_with_the_json_flag_reads_the_real_ledger_and_prints_objects(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        LocalEventLog().emit(EventMother.advancing())
+        capsys.readouterr()
+
+        code = Cli.main(["follow", "--once", "--json"])
+
+        assert code == ExitCode.OK
+        assert self._printed(capsys) == [self._ADVANCING]
 
 
 class TestTheCommandThatFollowsTheEvents(WithTheDurableStoresOutOfTheRealHome):

@@ -24,6 +24,7 @@ from slice_runner.domain.exceptions import (
     UnchangedDiffError,
     UnreadableCiError,
 )
+from slice_runner.domain.feature_slice import FeatureSlice
 from slice_runner.domain.halt import Halt
 from slice_runner.domain.harness_spend import HarnessSpend
 from slice_runner.domain.issue_label import IssueLabel
@@ -1420,6 +1421,14 @@ class TestConductSliceReportingEvents:
             ("slice-05", Step.AWAIT_MERGE, Conductor.NOW, after_the_judge),
             ("slice-05", Step.AWAIT_MERGE, Conductor.NOW, after_the_judge),
         ]
+
+    def test_every_event_names_the_parent_issue_of_the_feature_and_the_name_of_the_slice(self) -> None:
+        conductor = self._conductor()
+
+        conductor.conduct()
+
+        expected = FeatureSlice(parent=Conductor.ISSUE, name=SubIssueMother.pending().slice_id.name)
+        assert {e.feature_slice for e in conductor.emitted_events} == {expected}
 
     def test_the_happy_path_reports_advancing_for_every_step_until_the_run_closes_and_then_reports_closed(
         self,

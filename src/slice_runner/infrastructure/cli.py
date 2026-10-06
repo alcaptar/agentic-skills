@@ -89,6 +89,7 @@ from slice_runner.infrastructure.control_logs_directory import ControlLogsDirect
 from slice_runner.infrastructure.conversation_report import ConversationReport
 from slice_runner.infrastructure.conversation_tool_use_recorder import ConversationToolUseRecorder
 from slice_runner.infrastructure.diff_installed_code import DiffInstalledCode
+from slice_runner.infrastructure.event_follow_json_report import EventFollowJsonReport
 from slice_runner.infrastructure.event_follow_report import EventFollowReport
 from slice_runner.infrastructure.exit_code import ExitCode
 from slice_runner.infrastructure.feature_status_report import FeatureStatusReport
@@ -224,7 +225,11 @@ class Cli:
                 )
             case Subcommand.FOLLOW:
                 result = cls(process=LocalProcess(budgets=budgets), budgets=budgets).follow(
-                    repo=arguments.repo, once=arguments.once, reader=LocalEventReader(), clock=SystemClock()
+                    repo=arguments.repo,
+                    once=arguments.once,
+                    as_json=arguments.json,
+                    reader=LocalEventReader(),
+                    clock=SystemClock(),
                 )
 
         return result
@@ -360,6 +365,7 @@ class Cli:
         )
         follow.add_argument("--repo", help="keep only the events of this repo, as `<org>/<repo>`")
         follow.add_argument("--once", action="store_true", help="print the snapshot and exit")
+        follow.add_argument("--json", action="store_true", help="print each event as a JSON object")
 
         return parser
 
@@ -617,17 +623,17 @@ class Cli:
 
         return ExitCode.OK
 
-    def follow(self, *, repo: str | None, once: bool, reader: EventReader, clock: Clock) -> int:
+    def follow(self, *, repo: str | None, once: bool, reader: EventReader, clock: Clock, as_json: bool = False) -> int:
         query = FollowEvents(reader=reader)
         try:
             followed = query.execute(FollowEventsParams(cursor=EventCursor.start(), repo=repo))
-            self._printed(followed.snapshot)
+            self._printed(followed.snapshot, as_json=as_json)
             while not once:
                 clock.sleep(seconds=self._budgets.seconds_between_follow_reads)
                 followed = query.execute(
                     FollowEventsParams(cursor=followed.cursor, snapshot=followed.snapshot, repo=repo)
                 )
-                self._printed(followed.changes)
+                self._printed(followed.changes, as_json=as_json)
         except KeyboardInterrupt:
             return ExitCode.OK
         except UnreadableEventLogError as error:
@@ -636,8 +642,9 @@ class Cli:
         return ExitCode.OK
 
     @staticmethod
-    def _printed(events: tuple[Event, ...]) -> None:
-        for line in EventFollowReport(events=events).lines():
+    def _printed(events: tuple[Event, ...], *, as_json: bool) -> None:
+        report = EventFollowJsonReport(events=events) if as_json else EventFollowReport(events=events)
+        for line in report.lines():
             print(line, flush=True)
 
     def _why_the_run_stopped(self, error: Exception) -> ExitCode:

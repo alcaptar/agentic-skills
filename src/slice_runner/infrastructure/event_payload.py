@@ -7,6 +7,7 @@ from slice_runner.domain.canonical_slice_id import CanonicalSliceId
 from slice_runner.domain.event import Event
 from slice_runner.domain.event_status import EventStatus
 from slice_runner.domain.exceptions import UnreadableEventLogError
+from slice_runner.domain.feature_slice import FeatureSlice
 from slice_runner.domain.run_state import RunState
 from slice_runner.domain.slice_coordinates import SliceCoordinates
 from slice_runner.domain.step import Step
@@ -23,6 +24,8 @@ class EventPayload(StampedRow, ReadableLedgerRow):
     spend: SpendPayload
     status: EventStatus
     closed_as: RunState | None = None
+    parent: int | None = None
+    name: str | None = None
 
     @classmethod
     def json_schema(cls) -> dict[str, object]:
@@ -41,6 +44,8 @@ class EventPayload(StampedRow, ReadableLedgerRow):
             spend=SpendPayload.from_domain(event.spend),
             status=event.status,
             closed_as=None if event.state is RunState.OPEN else event.state,
+            parent=None if event.feature_slice is None else event.feature_slice.parent,
+            name=None if event.feature_slice is None else event.feature_slice.name,
         )
 
     @classmethod
@@ -59,4 +64,11 @@ class EventPayload(StampedRow, ReadableLedgerRow):
             spend=self.spend.to_domain(),
             status=self.status,
             state=RunState.OPEN if self.closed_as is None else self.closed_as,
+            feature_slice=self._feature_slice(),
         )
+
+    def _feature_slice(self) -> FeatureSlice | None:
+        if self.parent is None or self.name is None:
+            return None
+
+        return FeatureSlice(parent=self.parent, name=self.name)

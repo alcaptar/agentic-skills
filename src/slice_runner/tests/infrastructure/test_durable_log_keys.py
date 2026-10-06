@@ -293,4 +293,6 @@ class TestNoDurableStoreWritesAKeyInSpanish(ReadingTheLedger):
             "spend.ttft_ms",
             "spend.duration_api_ms",
             "status",
+            "parent",
+            "name",
         }
