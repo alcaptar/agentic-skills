@@ -7,6 +7,7 @@ from unittest.mock import Mock, create_autospec
 
 from slice_runner.application.actions.catch_up_branch import CatchUpBranch
 from slice_runner.application.actions.close_parent import CloseParent
+from slice_runner.application.actions.commit_round import CommitRound
 from slice_runner.application.actions.conduct_slice import (
     ConductSlice,
     ConductSliceParams,
@@ -93,6 +94,7 @@ class Conductor:
         self.prechecks = self._doubling(RunPrechecks, execute=PrecheckResult(outcome=PrecheckOutcome.CLEAR))
         self.implement = self._doubling(ImplementSlice, execute=ImplementationMother.of_two_paths())
         self.stage = self._doubling(StageSlice, execute=None)
+        self.commit = self._doubling(CommitRound, execute=None)
         self.verify = self._doubling(VerifySlice, execute=VerificationMother.passing())
         self.deliver = self._doubling(DeliverSlice, execute=self.PULL_REQUEST)
         self.close = self._doubling(CloseParent, execute=None)
@@ -157,6 +159,7 @@ class Conductor:
                 prechecks=self.prechecks,
                 implement=self.implement,
                 stage=self.stage,
+                commit=self.commit,
                 run_controls=RunControls(controls=self.controls),
                 verify=self.verify,
                 deliver=self.deliver,

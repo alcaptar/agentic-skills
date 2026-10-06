@@ -11,8 +11,10 @@ class TestSlicePullRequest:
 
         assert title == "feat(prechecks-deterministas): comprobar antes de tocar codigo"
 
-    def test_the_commit_message_opens_with_that_same_title_so_the_subject_line_stays_conventional(self) -> None:
-        message = SlicePullRequest().commit_message(SubIssueMother.pending())
+    def test_the_first_round_commit_message_opens_with_that_same_title_so_the_subject_line_stays_conventional(
+        self,
+    ) -> None:
+        message = SlicePullRequest().commit_message(SubIssueMother.pending(), round=1)
 
         assert message.splitlines()[0] == SlicePullRequest().title(SubIssueMother.pending())
 
@@ -21,17 +23,24 @@ class TestSlicePullRequest:
 
         assert title == "PROJ-1234-05 feat(prechecks-deterministas): comprobar antes de tocar codigo"
 
-    def test_a_subissue_carrying_a_user_story_keeps_the_commit_subject_without_the_key(self) -> None:
+    def test_a_subissue_carrying_a_user_story_keeps_the_first_round_commit_subject_without_the_key(self) -> None:
         subissue = SubIssueMother.carrying_a_user_story()
 
         title = SlicePullRequest().title(subissue)
-        commit_subject = SlicePullRequest().commit_message(subissue).splitlines()[0]
+        commit_subject = SlicePullRequest().commit_message(subissue, round=1).splitlines()[0]
 
         assert commit_subject == "feat(prechecks-deterministas): comprobar antes de tocar codigo"
         assert title != commit_subject
 
+    def test_a_correction_round_names_its_own_number_so_the_history_tells_it_apart_from_what_it_corrects(
+        self,
+    ) -> None:
+        message = SlicePullRequest().commit_message(SubIssueMother.pending(), round=2)
+
+        assert message.splitlines()[0] == "feat(prechecks-deterministas): comprobar antes de tocar codigo (vuelta 2)"
+
     def test_the_commit_message_credits_claude_as_co_author_because_a_harness_wrote_the_code(self) -> None:
-        message = SlicePullRequest().commit_message(SubIssueMother.pending())
+        message = SlicePullRequest().commit_message(SubIssueMother.pending(), round=1)
 
         assert message.endswith("Co-Authored-By: Claude <noreply@anthropic.com>")
         assert message.splitlines()[1] == ""

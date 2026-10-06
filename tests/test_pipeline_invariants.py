@@ -281,6 +281,7 @@ _KNOWN_NOT_HARNESS_WRITING = {
     ("_catch_up", "execute"),
     ("_clock", "sleep"),
     ("_close", "execute"),
+    ("_commit", "execute"),
     ("_deliver", "execute"),
     ("_deploy_watch", "watch"),
     ("_forum", "any_pull_request"),

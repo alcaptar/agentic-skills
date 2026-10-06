@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Literal, NoReturn
 
 from slice_runner.application.actions.catch_up_branch import CatchUpBranchParams
 from slice_runner.application.actions.close_parent import CloseParentParams
+from slice_runner.application.actions.commit_round import CommitRoundParams
 from slice_runner.application.actions.deliver_slice import DeliverSliceParams
 from slice_runner.application.actions.implement_slice import ImplementSliceParams
 from slice_runner.application.actions.record_closure import RecordClosureParams
@@ -44,6 +45,7 @@ if TYPE_CHECKING:
 
     from slice_runner.application.actions.catch_up_branch import CatchUpBranch
     from slice_runner.application.actions.close_parent import CloseParent
+    from slice_runner.application.actions.commit_round import CommitRound
     from slice_runner.application.actions.deliver_slice import DeliverSlice
     from slice_runner.application.actions.implement_slice import ImplementSlice
     from slice_runner.application.actions.record_closure import RecordClosure
@@ -157,6 +159,7 @@ class ConductSliceUseCases:
     prechecks: RunPrechecks
     implement: ImplementSlice
     stage: StageSlice
+    commit: CommitRound
     run_controls: RunControls
     verify: VerifySlice
     deliver: DeliverSlice
@@ -194,6 +197,7 @@ class ConductSlice:
         self._prechecks = use_cases.prechecks
         self._implement = use_cases.implement
         self._stage = use_cases.stage
+        self._commit = use_cases.commit
         self._run_controls = use_cases.run_controls
         self._verify = use_cases.verify
         self._deliver = use_cases.deliver
@@ -546,6 +550,7 @@ class ConductSlice:
             )
 
         round_progress = replace(progress, hygiene_refusal="")
+        round_number = round_progress.run.control_round_in_progress
         ran = self._run_controls.execute(
             RunControlsParams(
                 worktree=round_progress.params.worktree,
@@ -554,9 +559,17 @@ class ConductSlice:
                 repo=round_progress.params.repo,
                 issue=round_progress.params.issue,
                 slice_id=round_progress.subissue.slice_id,
-                control_rounds_logged=round_progress.run.control_rounds_logged,
+                round_in_progress=round_number,
             )
         )
+        if ran.outcome is Outcome.DONE:
+            self._commit.execute(
+                CommitRoundParams(
+                    worktree=round_progress.params.worktree,
+                    branch=round_progress.subissue.branch,
+                    message=self._pull_request.commit_message(round_progress.subissue, round=round_number),
+                )
+            )
 
         return SteppedSlice(progress=replace(round_progress, control_logs=ran.red_logs), outcome=ran.outcome)
 
@@ -624,11 +637,9 @@ class ConductSlice:
                 branch=progress.subissue.branch,
                 base=progress.params.base,
                 title=self._pull_request.title(progress.subissue),
-                commit_message=self._pull_request.commit_message(progress.subissue),
                 body=self._pull_request.body(
                     progress.subissue, debt=progress.debt, findings=progress.findings_of_the_last_round
                 ),
-                from_catch_up=progress.run.catching_up_the_branch,
             )
         )
 

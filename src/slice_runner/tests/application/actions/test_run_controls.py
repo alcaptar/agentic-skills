@@ -37,7 +37,7 @@ class TestRunControls:
         return RunControls(controls=controls_runner)
 
     @staticmethod
-    def _params(*, controls: Controls, control_rounds_logged: int = 0) -> RunControlsParams:
+    def _params(*, controls: Controls, round_in_progress: int = 1) -> RunControlsParams:
         return RunControlsParams(
             worktree=_WORKTREE,
             controls=controls,
@@ -45,7 +45,7 @@ class TestRunControls:
             repo=_REPO,
             issue=_ISSUE,
             slice_id=_SLICE_ID,
-            control_rounds_logged=control_rounds_logged,
+            round_in_progress=round_in_progress,
         )
 
     def test_an_exempt_repo_runs_no_command(self, action: RunControls, controls_runner: Mock) -> None:
@@ -66,11 +66,11 @@ class TestRunControls:
             ControlCommandMother.TESTS_NAME,
         ]
 
-    def test_the_round_directory_names_the_slice_and_the_next_round_after_what_was_already_logged(
+    def test_the_round_directory_names_the_slice_and_the_round_number_it_was_given(
         self, action: RunControls, controls_runner: Mock
     ) -> None:
         action.execute(
-            self._params(controls=ParentIssueMother.with_sources_and_controls().controls, control_rounds_logged=1)
+            self._params(controls=ParentIssueMother.with_sources_and_controls().controls, round_in_progress=2)
         )
 
         expected = _LOGS / _REPO / str(_ISSUE) / _SLICE_ID.canonical / "round-2"

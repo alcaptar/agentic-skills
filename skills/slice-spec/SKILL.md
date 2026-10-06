@@ -401,9 +401,11 @@ usuario.
 git -C <ruta-del-worktree> switch slice/NN-name
 ```
 
-**Como se retira, y por que no a ciegas.** El programa commitea **solo al entregar**, asi que todo run
-bloqueado o abortado tiene su trabajo sin commitear y borrar su arbol lo perderia entero. Antes de
-retirar, comprueba **las dos condiciones**, no las supongas:
+**Como se retira, y por que no a ciegas.** El programa commitea **al final de cada vuelta que deja sus
+controles en verde**, no solo al entregar, asi que un run bloqueado o abortado puede llevar ya varios
+commits propios en su rama sin que eso signifique que nada se perderia al borrar el worktree: esos
+commits siguen viviendo solo en local hasta que la rama llega a la base. Antes de retirar, comprueba
+**las dos condiciones**, no las supongas:
 
 ```bash
 git -C <ruta-del-worktree> status --porcelain          # vacio: no hay nada sin commitear

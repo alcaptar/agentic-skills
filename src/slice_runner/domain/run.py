@@ -50,6 +50,10 @@ class Run:
         return self.verify_rounds_logged + 1
 
     @property
+    def control_round_in_progress(self) -> int:
+        return self.control_rounds_logged + 1
+
+    @property
     def implement_retries(self) -> int:
         return (
             self.control_retries

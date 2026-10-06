@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, ClassVar
 
 from slice_runner.application.actions.catch_up_branch import CatchUpBranch
 from slice_runner.application.actions.close_parent import CloseParent
+from slice_runner.application.actions.commit_round import CommitRound
 from slice_runner.application.actions.conduct_slice import (
     ConductSlice,
     ConductSliceParams,
@@ -599,6 +600,7 @@ class Cli:
                     reader=GitDiffReader(process=self._process),
                 ),
                 stage=StageSlice(workspace=workspace),
+                commit=CommitRound(workspace=workspace),
                 run_controls=RunControls(controls=LocalControlRunner(process=self._process)),
                 verify=self._action(clock=clock, corpus=corpus),
                 deliver=DeliverSlice(workspace=workspace, forum=forum),

@@ -1038,14 +1038,14 @@ class TestConductSliceCatchesUpTheBranchWhenTheCiFindsAConflict(_ResumedAwaiting
 
         assert (conductor.implement.execute.call_count, conductor.verify.execute.call_count) == (0, 0)
 
-    def test_the_delivery_that_reopens_the_pull_request_is_told_it_comes_from_a_catch_up(self) -> None:
+    def test_a_catch_up_that_reaches_a_passing_round_commits_it_exactly_once(self) -> None:
         conductor = self._conductor(budgets=Budgets(ci_wait_seconds=30))
         conductor.ci.status.side_effect = [CiStatus.NO_CHECKS, CiStatus.PENDING]
         conductor.forum.pull_request_state.return_value = PullRequestStatusMother.open_and_conflicting()
 
         conductor.conduct()
 
-        assert conductor.deliver.execute.call_args.args[0].from_catch_up is True
+        assert conductor.commit.execute.call_count == 1
 
     def test_the_retry_that_returns_to_catch_up_waits_before_asking_the_ci_again(self) -> None:
         conductor = self._conductor(budgets=Budgets(catch_up_retries=1, seconds_between_ticks=45))
@@ -1102,7 +1102,7 @@ class TestConductSliceCatchesUpTheBranchWhenTheCiFindsAConflict(_ResumedAwaiting
 
         assert conductor.verify.execute.call_count == 1
 
-    def test_a_control_round_that_fails_after_the_catch_up_does_not_leave_the_next_delivery_skipping_its_commit(
+    def test_a_control_round_that_fails_after_the_catch_up_still_commits_the_round_that_finally_passes(
         self,
     ) -> None:
         conductor = self._conductor(budgets=Budgets(ci_wait_seconds=30))
@@ -1112,7 +1112,7 @@ class TestConductSliceCatchesUpTheBranchWhenTheCiFindsAConflict(_ResumedAwaiting
 
         conductor.conduct()
 
-        assert conductor.deliver.execute.call_args.args[0].from_catch_up is False
+        assert conductor.commit.execute.call_count == 1
 
 
 class TestConductSliceResumingWithSpendAlreadyPersisted:
@@ -1192,6 +1192,17 @@ class TestConductSliceOnTheHappyPath:
         conductor.conduct()
 
         assert conductor.stage.execute.call_args.args[0].paths == ImplementationMother.of_two_paths().paths
+
+    def test_a_control_round_that_passes_on_the_first_try_is_committed_once_with_round_one_and_verified_once(
+        self,
+    ) -> None:
+        conductor = self._conductor()
+
+        conductor.conduct()
+
+        assert conductor.commit.execute.call_count == 1
+        assert conductor.pull_request.commit_message.call_args.kwargs["round"] == 1
+        assert conductor.verify.execute.call_count == 1
 
     def test_the_pull_request_is_opened_on_the_branch_of_the_slice_with_what_the_writer_composed(self) -> None:
         conductor = self._conductor()
@@ -1619,6 +1630,23 @@ class TestConductSliceWhenTheControlsComeBackRed:
 
         assert conductor.verify.execute.call_count == 1
 
+    def test_a_control_round_that_comes_back_red_leaves_no_commit_because_nothing_passed_yet(self) -> None:
+        conductor = self._conductor(budgets=Budgets(control_retries=1))
+        conductor.controls.run.return_value = ControlOutcomeMother.red()
+
+        conductor.conduct()
+
+        assert conductor.commit.execute.call_count == 0
+
+    def test_a_control_round_that_passes_after_a_retry_commits_with_the_ordinal_of_that_round(self) -> None:
+        conductor = self._conductor(budgets=Budgets(control_retries=1))
+        conductor.controls.run.side_effect = [ControlOutcomeMother.red(), ControlOutcomeMother.green()]
+
+        conductor.conduct()
+
+        assert conductor.commit.execute.call_count == 1
+        assert conductor.pull_request.commit_message.call_args.kwargs["round"] == 2
+
 
 class TestConductSliceWhenTheStagedIndexIsRejected:
     @staticmethod
@@ -1673,6 +1701,19 @@ class TestConductSliceWhenTheStagedIndexIsRejected:
             repo=Conductor.REPO, issue=_SUBISSUE, remove=IssueLabel.IN_PROGRESS, add=IssueLabel.BLOCKED_HYGIENE
         )
         assert conductor.metrics.record.call_args.args[0].state is RunState.BLOCKED_HYGIENE
+
+    def test_a_dirty_index_in_a_later_round_does_not_add_a_second_commit_and_blocks_on_hygiene(
+        self,
+    ) -> None:
+        raised = FindingMother.without_line()
+        conductor = self._conductor(budgets=Budgets(hygiene_retries=0))
+        conductor.verify.execute.return_value = VerificationMother.vetoing(VerdictMother.failing(raised))
+        conductor.stage.execute.side_effect = [None, DirtyIndexError("src/leftover.py (not-declared)")]
+
+        result = conductor.conduct()
+
+        assert conductor.commit.execute.call_count == 1
+        assert result.state is RunState.BLOCKED_HYGIENE
 
 
 class TestConductSliceWhenAControlCannotBeMeasured:

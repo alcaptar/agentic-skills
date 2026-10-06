@@ -44,10 +44,10 @@ El programa te pasa, en el prompt de invocacion:
 - **Ruta del repo**: para leer con `Read`/`Grep`/`Glob` el codigo alrededor del diff, que necesitas para
   juzgar convenciones y boundaries.
 - **El diff completo de la slice**, al final de este prompt, bajo "## Diff de la slice". No es una ruta
-  que tengas que abrir: ya lo tienes delante. Es el **indice** contra el branch-point de la base, **no**
-  `HEAD`: el commit se hace despues de verificarte, asi que contra `HEAD` no habria nada que ver, y el
-  indice es exactamente lo que sera el commit. No esperes encontrar commits ni historia: lo que lees es
-  lo que ira en la pull request. Es tu fuente para todo lo que sea "que cambio".
+  que tengas que abrir: ya lo tienes delante. Es el rango contra el branch-point de la base, **no**
+  `HEAD`: junta lo que la rama ya lleva comiteado -una vuelta por commit, ver item 4- mas el **indice**
+  de la vuelta en curso, que es lo que sera su commit. Es tu fuente para todo lo que sea "que cambio" en
+  la slice entera, no solo en la ultima vuelta.
 - **La lista de ficheros que toca la slice**: una ruta por linea, en este mismo prompt. Es la que fija
   el **alcance**, no tu lectura del diff.
 - **El identificador de la slice y sus criterios de aceptacion**: el identificador es como se la nombra
@@ -146,10 +146,11 @@ Recorrela **entera** y reporta item a item. No la amplies con criterios propios 
    test por criterio de aceptacion**. En capas eximidas por la convencion del repo (p. ej. modelos
    ORM, migraciones), el control es "suite intacta + efecto verificado".
 
-   **La precedencia test-implementacion NO se verifica aqui y NO es hallazgo.** `slice-runner` entrega
-   la slice en **un solo commit**, asi que el historial no puede acreditar que el test se escribiera
-   primero: pedirlo produce un hallazgo de "no puedo constatarlo" en **todas** las slices, que es ruido
-   puro y erosiona la senal del resto de la rubrica. El ciclo red-green lo garantiza en origen el
+   **La precedencia test-implementacion NO se verifica aqui y NO es hallazgo.** `slice-runner` deja un
+   commit por vuelta, con el test y su implementacion dentro del mismo commit: el historial ahora
+   acredita el orden **entre vueltas** -que una correccion llego despues de lo que corrige-, pero no la
+   precedencia test-implementacion **dentro** de una vuelta, que sigue sin ser observable en este flujo
+   y reportarla seguiria siendo ruido garantizado. El ciclo red-green lo garantiza en origen el
    implementador (`superpowers:test-driven-development`, con su "watch it fail" obligatorio); tu no lo
    auditas. Si sientes la tentacion de reportar "el commit mezcla produccion y test": no lo hagas, es
    el formato esperado.

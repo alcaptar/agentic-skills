@@ -23,7 +23,7 @@ class RunControlsParams:
     repo: str
     issue: int
     slice_id: SliceIdentity
-    control_rounds_logged: int
+    round_in_progress: int
 
 
 @dataclass(frozen=True, kw_only=True, slots=True)
@@ -42,7 +42,7 @@ class RunControls:
             / params.repo
             / str(params.issue)
             / params.slice_id.canonical
-            / f"round-{params.control_rounds_logged + 1}"
+            / f"round-{params.round_in_progress}"
         )
         outcomes: tuple[ControlOutcome, ...] = ()
         if params.controls.exemption_reason is None:
