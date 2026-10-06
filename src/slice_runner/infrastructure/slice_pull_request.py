@@ -28,8 +28,8 @@ class SlicePullRequest(PullRequestWriter):
 
         return f"{subissue.slice_id.canonical} {conventional}"
 
-    def commit_message(self, subissue: SubIssue) -> str:
-        return SliceCommitMessage(subject=self._conventional_title(subissue)).rendered()
+    def commit_message(self, subissue: SubIssue, *, round: int) -> str:
+        return SliceCommitMessage(subject=self._conventional_title(subissue), round=round).rendered()
 
     @classmethod
     def _conventional_title(cls, subissue: SubIssue) -> str:
