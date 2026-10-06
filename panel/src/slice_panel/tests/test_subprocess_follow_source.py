@@ -14,6 +14,7 @@ from slice_panel.domain.follow_line import FollowLine
 from slice_panel.infrastructure.cli import Cli
 from slice_panel.infrastructure.panel_app import PanelApp
 from slice_panel.infrastructure.subprocess_follow_source import SubprocessFollowSource
+from slice_panel.tests.doubles import RecordingLauncher
 
 if TYPE_CHECKING:
     from slice_panel.domain.follow_source import FollowSource
@@ -82,7 +83,9 @@ class TestTheRealPanelOverTheLinesOfTheContract(RealProcess):
         stdout = "".join(f"{line}\n" for line in self.example_lines(key_from_the_future="x"))
         source = SubprocessFollowSource(argv=self.printing(stdout=stdout))
 
-        async with PanelApp(source=source).run_test() as pilot:
+        async with PanelApp(
+            source=source, launcher=RecordingLauncher(), clone_root=Path("/work/clone"), repo="org/repo"
+        ).run_test() as pilot:
             await pilot.app.workers.wait_for_complete()
             await pilot.pause()
             tree = pilot.app.query_one("#features", Tree)
@@ -96,7 +99,9 @@ class TestTheRealPanelOverTheLinesOfTheContract(RealProcess):
     async def test_the_screen_says_follow_ended_when_the_process_fails(self) -> None:
         source = SubprocessFollowSource(argv=self.printing(stderr="no network\n", exit_code=4))
 
-        async with PanelApp(source=source).run_test() as pilot:
+        async with PanelApp(
+            source=source, launcher=RecordingLauncher(), clone_root=Path("/work/clone"), repo="org/repo"
+        ).run_test() as pilot:
             await pilot.app.workers.wait_for_complete()
             await pilot.pause()
             notice = str(pilot.app.query_one("#notice", Static).content)

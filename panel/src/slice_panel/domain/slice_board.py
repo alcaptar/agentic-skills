@@ -8,6 +8,7 @@ from slice_panel.domain.slice_view import SliceView
 
 if TYPE_CHECKING:
     from slice_panel.domain.follow_line import FollowLine
+    from slice_panel.domain.slice_listing import SliceListing
 
 
 @dataclass(frozen=True, kw_only=True, slots=True)
@@ -20,6 +21,13 @@ class SliceBoard:
             return type(self)(slices=(*self.slices, SliceView.first(line)))
 
         return type(self)(slices=tuple(known.with_line(line) if each is known else each for each in self.slices))
+
+    def with_listing(self, listing: SliceListing) -> Self:
+        known = self.slice_of(repo=listing.repo, issue=listing.issue)
+        if known is None:
+            return type(self)(slices=(*self.slices, SliceView.listed(listing)))
+
+        return type(self)(slices=tuple(known.with_listing(listing) if each is known else each for each in self.slices))
 
     def slice_of(self, *, repo: str, issue: int) -> SliceView | None:
         return next((each for each in self.slices if each.repo == repo and each.issue == issue), None)

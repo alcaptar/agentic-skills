@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, ClassVar
 from conftest import _ROOT
 
 from slice_runner.domain.event_status import EventStatus
+from slice_runner.domain.issue_label import IssueLabel
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -44,6 +45,19 @@ class PanelScan:
                 return True
             if isinstance(node, ast.Name) and node.id in cls.FORBIDDEN_CALLS:
                 return True
+
+        return False
+
+    @classmethod
+    def production_modules(cls) -> list[Path]:
+        return [path for path in cls.modules() if "tests" not in path.relative_to(cls.PANEL).parts]
+
+    @staticmethod
+    def composes_a_merge(source: str) -> bool:
+        for node in ast.walk(ast.parse(source)):
+            if isinstance(node, ast.Constant) and isinstance(node.value, str):
+                if any("merge" in token.lower() for token in node.value.split()):
+                    return True
 
         return False
 
@@ -121,3 +135,35 @@ class TestTheVocabularyOfStatusesTheCopyHasToKeep:
         source = (PanelScan.PANEL / "src" / "slice_panel" / "domain" / "event_status.py").read_text(encoding="utf-8")
 
         assert PanelScan.vocabulary_of(source, "EventStatus") == {status.value for status in EventStatus}
+
+
+class TestThePanelNeverMerges:
+    def test_a_constant_naming_a_merge_trips_the_scan(self) -> None:
+        assert PanelScan.composes_a_merge("COMMAND = ('gh', 'pr', 'merge', '12')")
+        assert PanelScan.composes_a_merge("COMMAND = 'gh pr merge 12 --squash'")
+        assert PanelScan.composes_a_merge("FLAG = '--auto-merge'")
+
+    def test_a_constant_that_names_no_merge_does_not_trip_it(self) -> None:
+        assert not PanelScan.composes_a_merge("COMMAND = ('slice-runner', 'go', '--repo', 'org/repo')")
+
+    def test_the_scan_reaches_the_modules_that_compose_commands(self) -> None:
+        names = {path.name for path in PanelScan.production_modules()}
+
+        assert {"slice_runner_commands.py", "herdr_tabs.py", "cli.py"} <= names
+        assert "test_panel_app.py" not in names
+
+    def test_no_production_module_of_the_panel_composes_a_merge(self) -> None:
+        offenders = [
+            str(path.relative_to(_ROOT))
+            for path in PanelScan.production_modules()
+            if PanelScan.composes_a_merge(path.read_text(encoding="utf-8"))
+        ]
+
+        assert offenders == []
+
+
+class TestTheLabelTheCopyHasToKeep:
+    def test_the_label_that_marks_a_slice_awaiting_alignment_is_the_one_the_program_writes(self) -> None:
+        source = (PanelScan.PANEL / "src" / "slice_panel" / "domain" / "slice_label.py").read_text(encoding="utf-8")
+
+        assert PanelScan.vocabulary_of(source, "SliceLabel") == {IssueLabel.AWAITING_ALIGNMENT.value}
