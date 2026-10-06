@@ -19,6 +19,7 @@ class ConversationMother:
                             summary='{"command": "uv run pytest -x"}',
                             result="1 failed, 0 passed",
                             path=None,
+                            command="uv run pytest -x",
                         ),
                     ),
                 ),

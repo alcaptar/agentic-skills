@@ -228,7 +228,9 @@ class TestNoDurableStoreWritesAKeyInSpanish(ReadingTheLedger):
             "diff",
         }
 
-    def test_the_tool_use_keys_cover_a_use_that_touched_a_path_and_one_that_failed(self, tmp_path: Path) -> None:
+    def test_the_tool_use_keys_cover_a_use_that_touched_a_path_one_that_ran_a_command_and_one_that_failed(
+        self, tmp_path: Path
+    ) -> None:
         log = LocalToolUseLog(clock=self.frozen_at())
         log.record(HarnessCallToolUseMother.of_the_implementer())
         log.record(HarnessCallToolUseMother.of_the_implementer_with_a_failure())
@@ -247,6 +249,7 @@ class TestNoDurableStoreWritesAKeyInSpanish(ReadingTheLedger):
             "uses.turn",
             "uses.tool",
             "uses.path",
+            "uses.command",
             "uses.failed",
         }
 

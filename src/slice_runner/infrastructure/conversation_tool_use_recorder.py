@@ -39,7 +39,7 @@ class ConversationToolUseRecorder(ToolUseRecorder):
                 step=step,
                 session=session,
                 uses=tuple(
-                    ToolUse(turn=turn.number, tool=call.name, path=call.path, failed=call.failed)
+                    ToolUse(turn=turn.number, tool=call.name, path=call.path, command=call.command, failed=call.failed)
                     for turn in conversation.turns
                     for call in turn.tool_calls
                 ),
