@@ -92,6 +92,7 @@ from slice_runner.infrastructure.diff_installed_code import DiffInstalledCode
 from slice_runner.infrastructure.event_follow_json_report import EventFollowJsonReport
 from slice_runner.infrastructure.event_follow_report import EventFollowReport
 from slice_runner.infrastructure.exit_code import ExitCode
+from slice_runner.infrastructure.feature_status_json_report import FeatureStatusJsonReport
 from slice_runner.infrastructure.feature_status_report import FeatureStatusReport
 from slice_runner.infrastructure.gh_call import GhCall
 from slice_runner.infrastructure.gh_ci import GhCi
@@ -221,7 +222,7 @@ class Cli:
                 )
             case Subcommand.STATUS:
                 result = cls(process=LocalProcess(budgets=budgets), budgets=budgets).status(
-                    repo=arguments.repo, issue=arguments.issue
+                    repo=arguments.repo, issue=arguments.issue, as_json=arguments.json
                 )
             case Subcommand.FOLLOW:
                 result = cls(process=LocalProcess(budgets=budgets), budgets=budgets).follow(
@@ -358,6 +359,7 @@ class Cli:
         )
         status.add_argument("issue", type=int, help="number of the parent issue whose slices are shown")
         status.add_argument("--repo", required=True, help="repo of the issue, as `<org>/<repo>`")
+        status.add_argument("--json", action="store_true", help="print each slice as a JSON object")
 
         follow = subcommands.add_parser(
             Subcommand.FOLLOW,
@@ -599,7 +601,7 @@ class Cli:
 
         return ExitCode.OK
 
-    def status(self, *, repo: str, issue: int) -> int:
+    def status(self, *, repo: str, issue: int, as_json: bool = False) -> int:
         clock = SystemClock()
         gh_call = self._gh_call(clock=clock)
         try:
@@ -619,7 +621,11 @@ class Cli:
         except GhCommandFailedError as error:
             return self._reported(f"the status of the feature could not be read: {error}", ExitCode.RUN_INTERRUPTED)
 
-        print(FeatureStatusReport(statuses=statuses).rendered())
+        if as_json:
+            for line in FeatureStatusJsonReport(statuses=statuses).lines():
+                print(line)
+        else:
+            print(FeatureStatusReport(statuses=statuses).rendered())
 
         return ExitCode.OK
 
