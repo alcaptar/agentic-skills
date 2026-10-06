@@ -5,11 +5,12 @@ from pathlib import Path
 from typing import ClassVar
 
 from slice_runner.infrastructure.event_follow_line_payload import EventFollowLinePayload
+from slice_runner.infrastructure.understanding_line_payload import UnderstandingLinePayload
 from slice_runner.tests.mothers.event_mother import EventMother
 
 
-class TestTheFollowLineAgainstItsExamples:
-    _CONTRACT: ClassVar[Path] = Path(__file__).resolve().parents[4] / "contract" / "follow-line.json"
+class TheLineAgainstItsExamples:
+    _CONTRACT: ClassVar[Path]
 
     @classmethod
     def _declared(cls) -> dict[str, object]:
@@ -33,13 +34,7 @@ class TestTheFollowLineAgainstItsExamples:
 
     @staticmethod
     def _emitted() -> list[dict[str, object]]:
-        events = (
-            EventMother.advancing(),
-            EventMother.closed(),
-            EventMother.advancing_before_the_feature_was_recorded(),
-        )
-
-        return [EventFollowLinePayload.from_domain(event).to_contract() for event in events]
+        raise NotImplementedError
 
     def test_the_program_never_emits_a_key_the_examples_do_not_have(self) -> None:
         emitted = {key for line in self._emitted() for key in line}
@@ -62,3 +57,25 @@ class TestTheFollowLineAgainstItsExamples:
         left_out = {key for key in self._keys_of_the_examples() for line in self._emitted() if key not in line}
 
         assert left_out == set(optional)
+
+
+class TestTheFollowLineAgainstItsExamples(TheLineAgainstItsExamples):
+    _CONTRACT: ClassVar[Path] = Path(__file__).resolve().parents[4] / "contract" / "follow-line.json"
+
+    @staticmethod
+    def _emitted() -> list[dict[str, object]]:
+        events = (
+            EventMother.advancing(),
+            EventMother.closed(),
+            EventMother.advancing_before_the_feature_was_recorded(),
+        )
+
+        return [EventFollowLinePayload.from_domain(event).to_contract() for event in events]
+
+
+class TestTheUnderstandingLineAgainstItsExamples(TheLineAgainstItsExamples):
+    _CONTRACT: ClassVar[Path] = Path(__file__).resolve().parents[4] / "contract" / "understanding-line.json"
+
+    @staticmethod
+    def _emitted() -> list[dict[str, object]]:
+        return [UnderstandingLinePayload.from_domain(text).to_contract() for text in ("el contador vive en Run", "")]

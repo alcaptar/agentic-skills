@@ -14,3 +14,4 @@ class Subcommand(StrEnum):
     RESET = "reset"
     STATUS = "status"
     FOLLOW = "follow"
+    UNDERSTANDING = "understanding"
