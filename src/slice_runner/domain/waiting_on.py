@@ -15,7 +15,8 @@ class WaitingOn(StrEnum):
             case Step.UNDERSTAND | Step.AWAIT_MERGE:
                 return cls.PERSON
             case (
-                Step.IMPLEMENT
+                Step.MOUNT_WORKTREE
+                | Step.IMPLEMENT
                 | Step.RUN_CONTROLS
                 | Step.VERIFY
                 | Step.OPEN_PULL_REQUEST

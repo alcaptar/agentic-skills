@@ -18,6 +18,7 @@ class IssueLabel(StrEnum):
     BLOCKED_CI_RED = "bloqueada:ci-roja"
     BLOCKED_CI_INDETERMINATE = "bloqueada:ci-indeterminada"
     BLOCKED_CI_CONFLICT = "bloqueada:conflicto"
+    BLOCKED_WORKTREE = "bloqueada:worktree"
     ABORTED_BUDGET = "abortada:presupuesto"
     ABORTED_UNMEASURED_CALL = "abortada:llamada-no-medida"
 
@@ -36,6 +37,7 @@ class IssueLabel(StrEnum):
                 | RunState.BLOCKED_CI_RED
                 | RunState.BLOCKED_CI_INDETERMINATE
                 | RunState.BLOCKED_CI_CONFLICT
+                | RunState.BLOCKED_WORKTREE
             ):
                 return cls._of_the_blocked_reason(state)
             case RunState.ABORTED_BUDGET:
@@ -51,7 +53,8 @@ class IssueLabel(StrEnum):
             case Step.AWAIT_MERGE:
                 return cls.AWAITING_MERGE
             case (
-                Step.IMPLEMENT
+                Step.MOUNT_WORKTREE
+                | Step.IMPLEMENT
                 | Step.RUN_CONTROLS
                 | Step.VERIFY
                 | Step.OPEN_PULL_REQUEST
@@ -70,4 +73,5 @@ class IssueLabel(StrEnum):
             RunState.BLOCKED_CI_RED: cls.BLOCKED_CI_RED,
             RunState.BLOCKED_CI_INDETERMINATE: cls.BLOCKED_CI_INDETERMINATE,
             RunState.BLOCKED_CI_CONFLICT: cls.BLOCKED_CI_CONFLICT,
+            RunState.BLOCKED_WORKTREE: cls.BLOCKED_WORKTREE,
         }[state]

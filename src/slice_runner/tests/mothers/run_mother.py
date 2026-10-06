@@ -13,6 +13,10 @@ if TYPE_CHECKING:
 
 class RunMother:
     @staticmethod
+    def blocked_on_the_worktree() -> Run:
+        return Run(step=Step.IMPLEMENT, control_retries=1, verify_retries=1)
+
+    @staticmethod
     def implementing() -> Run:
         return Run(step=Step.IMPLEMENT)
 

@@ -29,6 +29,8 @@ class StateMachine:
                 closing = self._logged_a_verify_round(closing)
 
             return self._closed(closing, RunState.ABORTED_BUDGET)
+        if outcome is Outcome.WORKTREE_TAKEN:
+            return self._closed(run, RunState.BLOCKED_WORKTREE)
         if outcome is Outcome.CONFLICTING:
             return self._after_a_catch_up_conflict(run)
 
@@ -44,7 +46,8 @@ class StateMachine:
     def _after_a_catch_up_conflict(self, run: Run) -> Transition:
         match run.step:
             case (
-                Step.UNDERSTAND
+                Step.MOUNT_WORKTREE
+                | Step.UNDERSTAND
                 | Step.IMPLEMENT
                 | Step.RUN_CONTROLS
                 | Step.VERIFY
@@ -78,7 +81,7 @@ class StateMachine:
                 return self._with_the_retry_counter_reset(run, blocked=blocked)
             case IssueLabel.ABORTED_BUDGET:
                 return replace(run, spend=HarnessSpend.nothing())
-            case IssueLabel.ABORTED_UNMEASURED_CALL:
+            case IssueLabel.ABORTED_UNMEASURED_CALL | IssueLabel.BLOCKED_WORKTREE:
                 return run
             case _:
                 raise ImpossibleTransitionError(f"the label `{blocked}` names no closed run that can be reopened")
@@ -113,10 +116,18 @@ class StateMachine:
 
     def _after_the_step_of(self, run: Run, outcome: Outcome, *, call_died: bool) -> Transition:
         match run.step:
+            case Step.MOUNT_WORKTREE:
+                return self._after_mounting_the_worktree(run, outcome)
             case Step.UNDERSTAND | Step.IMPLEMENT | Step.RUN_CONTROLS | Step.VERIFY:
                 return self._after_producing(run, outcome, run.step, call_died=call_died)
             case Step.OPEN_PULL_REQUEST | Step.AWAIT_CI | Step.CATCH_UP | Step.AWAIT_MERGE:
                 return self._after_delivering(run, outcome, run.step)
+
+    def _after_mounting_the_worktree(self, run: Run, outcome: Outcome) -> Transition:
+        if outcome is Outcome.DONE:
+            return self._moving_to(run, Step.UNDERSTAND)
+
+        self._impossible(run, outcome)
 
     def _after_producing(
         self,

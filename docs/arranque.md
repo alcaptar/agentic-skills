@@ -38,13 +38,17 @@ En el repo donde vas a trabajar:
 | | |
 |---|---|
 | 1 | `/slice-spec` en una sesión de Claude Code. Ensena la spec por terminal antes de crear nada |
-| 2 | `slice-runner run <issue-padre> --repo <org>/<repo> --base master [--slice <identificador>]` |
+| 2 | Desde la raíz del clon: `slice-runner run <issue-padre> --repo <org>/<repo> --base master [--slice <identificador>]` |
 | 3 | Publica lo que ha entendido en la subissue. Contesta en otro comentario: `-GO`, o `-REVIEW <correccion>` |
 | 4 | Implementa, controles, juez, pull request, integración continua |
 | 5 | `gh pr ready <n>` y `gh pr merge <n> --merge --delete-branch` |
 
 - El número del paso 2 es el del issue **padre**, no el de la subissue. Pasar el de una subissue no
   falla con un mensaje útil: sale con "no queda ninguna rebanada" (código 9).
+- El programa monta el worktree de la rebanada en `.worktrees/<NN-nombre>`, colgando de la raíz del clon, y
+  no hace falta decirle dónde. Si lo lanzas desde otro directorio, `--repo-root <ruta>` señala el clon;
+  `--worktree <ruta>` solo es para un árbol montado a mano. Si la rama ya la tiene tomada otro árbol, el run
+  se cierra en `bloqueada:worktree` y dice en qué ruta está el conflicto.
 - `--slice <identificador>` elige cual conducir; sin el, coge la siguiente ejecutable en orden. El
   identificador es `slice-NN`, o `<CLAVE>-NN` (`STAFF-124-01`) si la feature declara historia de
   usuario: con clave, pedir `slice-NN` falla diciendo que esa slice no existe.

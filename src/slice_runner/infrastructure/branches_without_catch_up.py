@@ -8,12 +8,6 @@ class BranchesWithoutCatchUp(Branches):
     def __init__(self, *, branches: Branches) -> None:
         self._branches = branches
 
-    def exists(self, *, worktree: str, name: str) -> bool:
-        return self._branches.exists(worktree=worktree, name=name)
-
-    def create(self, *, worktree: str, name: str, base: str) -> None:
-        self._branches.create(worktree=worktree, name=name, base=base)
-
     def commits_behind_remote(self, *, worktree: str, base: str) -> int:
         return self._branches.commits_behind_remote(worktree=worktree, base=base)
 

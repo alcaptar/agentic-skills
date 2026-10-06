@@ -65,6 +65,7 @@ class SliceQueue:
                 | IssueLabel.BLOCKED_CI_RED
                 | IssueLabel.BLOCKED_CI_INDETERMINATE
                 | IssueLabel.BLOCKED_CI_CONFLICT
+                | IssueLabel.BLOCKED_WORKTREE
                 | IssueLabel.ABORTED_BUDGET
                 | IssueLabel.ABORTED_UNMEASURED_CALL
             ):

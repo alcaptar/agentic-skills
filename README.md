@@ -197,10 +197,10 @@ Vale igual para el `--slice` de `verify`, `read` y `spend`.
 
 | Subcomando | Para que sirve | Ejemplo |
 |---|---|---|
-| `run` | Conduce la siguiente slice ejecutable del issue de punta a punta -alinear, implementar, controlar, verificar, abrir la pull request, esperar la integracion continua- y para donde diga el estado. `--slice` nombra una slice concreta en vez de dejar que el programa elija. | `uv run slice-runner run 38 --repo alcaptar/agentic-skills --base master` |
+| `run` | Monta el worktree de la slice bajo `<raiz-del-clon>/.worktrees/` -`--repo-root`, el directorio actual por omision; `--worktree` solo para un arbol montado a mano- y conduce la siguiente slice ejecutable del issue de punta a punta -alinear, implementar, controlar, verificar, abrir la pull request, esperar la integracion continua- y para donde diga el estado. `--slice` nombra una slice concreta en vez de dejar que el programa elija. | `uv run slice-runner run 38 --repo alcaptar/agentic-skills --base master` |
 | `verify` | Juzga lo ya comiteado en la rama mas lo que hay staged, contra el branch-point de la base, y emite el veredicto por salida estandar (o el motivo de no tenerlo, por salida de error). | `uv run slice-runner verify --repo . --base master --slice slice-01` |
 | `explain` | Contesta que paso viene despues de un resultado, y cuando se agota un presupuesto, sin montar un run: es una funcion pura sobre el estado que le llega por entrada estandar. | `echo '{"run": {"step": "run-controls", "control_retries": 2}, "outcome": "failed"}' \| uv run slice-runner explain` |
-| `read` | Abre la conversacion grabada de una llamada concreta del rastro y la emite legible por salida estandar, para que la lea una persona. `--repo` e `--issue` identifican el run -son los mismos que fija `run`-, y `--worktree` es la ruta donde corrio la llamada. | `uv run slice-runner read --repo alcaptar/agentic-skills --issue 38 --worktree . --slice slice-04 --step implement` |
+| `read` | Abre la conversacion grabada de una llamada concreta del rastro y la emite legible por salida estandar, para que la lea una persona. `--repo` e `--issue` identifican el run -son los mismos que fija `run`-, y `--worktree` es la ruta donde corrio la llamada: `<raiz-del-clon>/.worktrees/<NN-nombre>`, no el directorio del clon. | `uv run slice-runner read --repo alcaptar/agentic-skills --issue 38 --worktree .worktrees/04-nombre-de-la-slice --slice slice-04 --step implement` |
 | `spend` | Suma lo que gasto el harness en las llamadas que sirvieron un paso de una slice (coste, turnos, duracion, numero de llamadas) y lo emite como JSON. `--repo` e `--issue` identifican el run, igual que en `read`. | `uv run slice-runner spend --repo alcaptar/agentic-skills --issue 38 --slice slice-04 --step implement` |
 | `doctor` | Comprueba si el entorno esta listo para conducir una slice -`git`, `gh` autenticado, `claude` y las skills `slice-spec`/`deploy-watch` instaladas- y lo emite legible por salida estandar, un chequeo por linea con el comando que lo arregla cuando falta. No arregla nada el mismo. `--repo` comprueba ademas que ese repo se puede leer, y `--worktree` junto con `--base` compara la base local contra su remoto y avisa si esta por detras -un aviso no cambia el codigo de salida-. Los tres son opcionales. | `uv run slice-runner doctor --repo alcaptar/agentic-skills --worktree . --base master` |
 | `metrics` | Relee `metrics.jsonl`, `calls.jsonl` y `spend.jsonl` -sin escribir ningun estado nuevo-, emite una linea de JSON por slice cerrada dentro de la ventana pedida -ya con su identidad, su configuracion, su tamano, su gasto y su resultado unidos- y cierra con una linea de resumen: las cinco tasas (veto del verificador, bloqueo por controles, slices al primer intento, media de reintentos de implementar, integracion continua roja) cada una con su numero de muestras, las medias de gasto del harness, el reparto de descartes del juez por causa, y los mismos agregados por modelo y por variante. `--repo` acota a un repo (por defecto todos) y `--since`/`--until` acotan por fecha (`YYYY-MM-DD`, por defecto desde el principio hasta ahora). `--out` -obligatorio- es la ruta donde se escribe una vista HTML autocontenida (coste frente a tamano, gasto por papel, vueltas en el tiempo, las mismas tasas), generada de esos mismos datos y que declara lo que no puede decir. | `uv run slice-runner metrics --repo alcaptar/agentic-skills --since 2026-01-01 --out /tmp/metrics.html` |
@@ -301,7 +301,7 @@ slices que corren en paralelo en worktrees distintos.
 `read` es quien la abre:
 
 ```bash
-uv run slice-runner read --repo alcaptar/agentic-skills --issue 38 --worktree . --slice slice-04 --step implement
+uv run slice-runner read --repo alcaptar/agentic-skills --issue 38 --worktree .worktrees/04-nombre-de-la-slice --slice slice-04 --step implement
 ```
 
 Parte de ese rastro -nunca de una busqueda por marca de tiempo- para encontrar la sesion, y de ahi lee
@@ -320,7 +320,7 @@ El codigo de salida es el contrato con quien lo invoca:
 | `2` | No hay veredicto de fiar: un proceso del run no se pudo lanzar, o el juez devolvio un veredicto incoherente |
 | `3` | No hay nada que juzgar: el indice esta vacio (¿falto el `git add`?) |
 | `4` | Error de uso: el repo o la base no resuelven, falta un argumento, el issue o el estado que se quiere leer no se pueden leer, `read` no encuentra la conversacion pedida, o el rastro/registro durable que `read` o `spend` leen trae una linea corrupta |
-| `5` | `run`: la slice cerro **sin** mergear (controles, juez, integracion continua, presupuesto o una llamada al arnes que no dejo nada que medir). Hay que mirar el issue; reinvocar sin tocar nada repite el cierre |
+| `5` | `run`: la slice cerro **sin** mergear (controles, juez, integracion continua, presupuesto, un worktree que no se pudo montar o una llamada al arnes que no dejo nada que medir). Hay que mirar el issue; reinvocar sin tocar nada repite el cierre |
 | `7` | `run`: se agoto la espera con el run todavia abierto -pausa de alineacion, integracion continua o merge-. Reinvocar es exactamente lo que toca. Esperando el merge, ademas, un comentario en la subissue dice que la pull request quedo sin fusionar y recuerda que en borrador el merge no puede ocurrir |
 | `8` | `run`: los prechecks pararon la invocacion antes de tocar codigo |
 | `9` | `run`: el issue no tiene ninguna slice ejecutable (todas cerradas, bloqueadas o abortadas) |
@@ -443,7 +443,7 @@ verde -> etiqueta la subissue `estado:esperando-merge` y **para**.
 
 Si algo se rompe, la etiqueta lo dice y el run para en vez de seguir: `bloqueada:controles`,
 `bloqueada:verify`, `bloqueada:sin-cambios`, `bloqueada:ci-roja`, `bloqueada:ci-indeterminada`, `bloqueada:conflicto`,
-`abortada:presupuesto` o `abortada:llamada-no-medida`.
+`bloqueada:worktree`, `abortada:presupuesto` o `abortada:llamada-no-medida`.
 
 **3. Mergear, o pedir un cambio (tu)**
 

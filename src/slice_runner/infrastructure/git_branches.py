@@ -16,23 +16,6 @@ class GitBranches(Branches):
     def __init__(self, *, process: Process) -> None:
         self._process = process
 
-    def exists(self, *, worktree: str, name: str) -> bool:
-        argv = ["git", "-C", worktree, "rev-parse", "--verify", "--quiet", f"refs/heads/{name}"]
-        output = self._process.run(argv, stdin="")
-        if output.code == 0:
-            return True
-        if output.code == 1:
-            return False
-
-        raise GitCommandFailedError.from_command(argv, output)
-
-    def create(self, *, worktree: str, name: str, base: str) -> None:
-        self._fetch(worktree)
-        argv = ["git", "-C", worktree, "switch", "-c", name, f"origin/{base}"]
-        output = self._process.run(argv, stdin="")
-        if output.code != 0:
-            raise GitCommandFailedError.from_command(argv, output)
-
     def commits_behind_remote(self, *, worktree: str, base: str) -> int:
         self._fetch(worktree)
         argv = ["git", "-C", worktree, "rev-list", "--count", f"{base}..origin/{base}"]
