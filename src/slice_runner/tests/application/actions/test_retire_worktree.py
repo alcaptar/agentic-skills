@@ -18,10 +18,7 @@ class _Retiring:
 
     def __init__(self) -> None:
         self.worktrees: Mock = create_autospec(Worktrees, spec_set=True, instance=True)
-        self.worktrees.listed.return_value = (
-            ListedWorktreeMother.main_clone(),
-            ListedWorktreeMother.mounted(path=self.PATH, branch=self.BRANCH),
-        )
+        self.worktrees.is_mounted.return_value = True
         self.worktrees.has_uncommitted_work.return_value = False
         self.worktrees.local_only_commits.return_value = 0
 
@@ -121,7 +118,7 @@ class TestRetireWorktree:
 
     def test_a_path_with_no_tree_of_the_slice_on_it_asks_and_removes_nothing(self) -> None:
         retiring = _Retiring()
-        retiring.worktrees.listed.return_value = (ListedWorktreeMother.main_clone(),)
+        retiring.worktrees.is_mounted.return_value = False
 
         retirement = retiring.retire()
 
@@ -130,17 +127,24 @@ class TestRetireWorktree:
         retiring.worktrees.local_only_commits.assert_not_called()
         assert retiring.removed_nothing
 
-    def test_a_tree_on_that_path_that_holds_another_branch_is_not_the_one_of_the_slice(self) -> None:
+    def test_a_tree_that_cannot_be_listed_is_kept_and_nothing_is_asked_or_removed(self) -> None:
         retiring = _Retiring()
-        retiring.worktrees.listed.return_value = (
-            ListedWorktreeMother.main_clone(),
-            ListedWorktreeMother.mounted(path=retiring.PATH, branch="slice/00-other"),
-        )
+        retiring.worktrees.is_mounted.side_effect = WorktreeRetirementError("git worktree list died")
 
         retirement = retiring.retire()
 
-        assert retirement is WorktreeRetirement.NOT_MOUNTED
+        assert retirement is WorktreeRetirement.KEPT_UNVERIFIABLE
+        retiring.worktrees.has_uncommitted_work.assert_not_called()
         assert retiring.removed_nothing
+
+    def test_the_mounting_is_asked_about_the_path_and_the_branch_of_the_slice(self) -> None:
+        retiring = _Retiring()
+
+        retiring.retire()
+
+        retiring.worktrees.is_mounted.assert_called_once_with(
+            root=retiring.ROOT, path=retiring.PATH, branch=retiring.BRANCH
+        )
 
     def test_the_uncommitted_work_is_asked_of_the_tree_and_the_local_only_commits_of_the_branch(self) -> None:
         retiring = _Retiring()

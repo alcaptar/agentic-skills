@@ -56,6 +56,16 @@ class GitWorktrees(Worktrees):
     def prune(self, *, root: str) -> None:
         self._git(root, "worktree", "prune")
 
+    def is_mounted(self, *, root: str, path: str, branch: str) -> bool:
+        listing = self._asked(root, "worktree", "list", "--porcelain")
+        entries = [block.splitlines() for block in listing.split("\n\n") if block.strip()]
+        sought = Path(path).resolve()
+
+        return any(
+            Path(entry.path).resolve() == sought and entry.branch == branch
+            for entry in (self._entry(lines, main=False) for lines in entries)
+        )
+
     def has_uncommitted_work(self, *, path: str) -> bool:
         return self._asked(path, "status", "--porcelain").strip() != ""
 

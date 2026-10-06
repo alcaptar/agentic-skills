@@ -246,6 +246,31 @@ class TestGitWorktrees:
         with pytest.raises(WorktreeRetirementError):
             self._worktrees().has_uncommitted_work(path=str(tmp_path / "does-not-exist"))
 
+    def test_a_tree_of_the_slice_on_its_path_is_mounted(self, tmp_path: Path) -> None:
+        clone = self._clone(tmp_path)
+        path = self._mounted(clone)
+
+        assert self._worktrees().is_mounted(root=str(clone), path=str(path), branch=self.BRANCH) is True
+
+    def test_a_path_with_no_tree_on_it_is_not_mounted(self, tmp_path: Path) -> None:
+        clone = self._clone(tmp_path)
+
+        mounted = self._worktrees().is_mounted(root=str(clone), path=str(clone / "nothing"), branch=self.BRANCH)
+
+        assert mounted is False
+
+    def test_a_tree_on_that_path_holding_another_branch_is_not_mounted_for_this_one(self, tmp_path: Path) -> None:
+        clone = self._clone(tmp_path)
+        path = self._mounted(clone)
+
+        assert self._worktrees().is_mounted(root=str(clone), path=str(path), branch="slice/00-other") is False
+
+    def test_asking_whether_a_tree_is_mounted_outside_any_repo_raises_instead_of_answering_false(
+        self, tmp_path: Path
+    ) -> None:
+        with pytest.raises(WorktreeRetirementError):
+            self._worktrees().is_mounted(root=str(tmp_path), path=str(tmp_path / "x"), branch=self.BRANCH)
+
     def test_a_branch_cut_from_the_base_with_no_commit_of_its_own_has_nothing_only_local(self, tmp_path: Path) -> None:
         clone = self._clone(tmp_path)
         self._mounted(clone)

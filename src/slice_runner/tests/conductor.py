@@ -107,6 +107,7 @@ class Conductor:
         self.check_sources = self._doubling(CheckSources, execute=PrecheckResult(outcome=PrecheckOutcome.CLEAR))
         self.worktrees: Mock = create_autospec(Worktrees, spec_set=True, instance=True)
         self.worktrees.listed.return_value = self._listing_of(chosen)
+        self.worktrees.is_mounted.return_value = True
         self.worktrees.branch_exists.return_value = chosen.subissue.run is not None
         self.worktrees.common_dir.return_value = self.COMMON_DIR
         self.worktrees.has_uncommitted_work.return_value = False

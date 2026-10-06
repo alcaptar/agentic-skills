@@ -44,12 +44,13 @@ class TestKeptWorktreeComment:
 
     @pytest.mark.parametrize(
         "retirement",
-        [retirement for retirement in WorktreeRetirement if retirement is not WorktreeRetirement.KEPT_UNEXPECTED],
+        [
+            retirement
+            for retirement in WorktreeRetirement
+            if retirement.kept and retirement is not WorktreeRetirement.KEPT_UNEXPECTED
+        ],
     )
     def test_only_the_leftover_asks_a_person_to_resolve_anything_by_hand(self, retirement: WorktreeRetirement) -> None:
-        if not retirement.kept:
-            return
-
         assert "git worktree remove" not in KeptWorktreeComment.rendered(path=_PATH, retirement=retirement)
 
     def test_the_comment_is_marked_as_automatic(self) -> None:

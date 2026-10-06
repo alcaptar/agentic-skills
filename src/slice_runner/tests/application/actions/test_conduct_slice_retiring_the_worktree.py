@@ -105,6 +105,7 @@ class TestConductSliceRetiringTheWorktreeOfAMergedRun(_Merging):
     @pytest.mark.parametrize(
         "keeping",
         [
+            {"is_mounted": WorktreeRetirementError("died")},
             {"has_uncommitted_work": True},
             {"local_only_commits": 1},
             {"has_uncommitted_work": WorktreeRetirementError("died")},
@@ -113,6 +114,7 @@ class TestConductSliceRetiringTheWorktreeOfAMergedRun(_Merging):
             {"delete_branch": WorktreeRetirementError("git refused")},
         ],
         ids=[
+            "unverifiable-listing",
             "uncommitted",
             "local-only",
             "unverifiable-status",
@@ -160,7 +162,7 @@ class TestConductSliceRetiringTheWorktreeOfAMergedRun(_Merging):
 
     def test_a_merged_run_with_no_tree_on_its_path_asks_nothing_and_removes_nothing(self) -> None:
         conductor = self.conductor()
-        conductor.worktrees.listed.return_value = (ListedWorktreeMother.main_clone(),)
+        conductor.worktrees.is_mounted.return_value = False
 
         conductor.conduct()
 
@@ -262,26 +264,42 @@ class TestConductSliceTheEndingsThatKeepTheWorktree(_Merging):
 
 class TestConductSliceWhenATreeIsFoundThatNobodyExpected(_Merging):
     @staticmethod
-    def _after_a_merge_that_left_its_tree() -> Conductor:
-        first = Conductor(chosen=SelectSliceResultMother.resumed_at(RunMother.awaiting_merge()))
-        first.worktrees.has_uncommitted_work.return_value = True
-        first.conduct()
-        second = Conductor(chosen=SelectSliceResultMother.about_to_start())
-        second.worktrees.listed.return_value = first.worktrees.listed.return_value
-        second.worktrees.branch_exists.return_value = True
+    def _after_an_abort_that_left_its_tree() -> Conductor:
+        aborted = SubIssueMother.blocked(IssueLabel.ABORTED_BUDGET, RunMother.aborted_before_touching_code())
+        conductor = Conductor(chosen=replace(SelectSliceResultMother.about_to_start(subissue=aborted), retry=_RETRY))
+        reopened = replace(aborted, label=IssueLabel.IN_PROGRESS)
+        conductor.reopen.execute.return_value = ReopenSliceResult(subissue=reopened, instruction=_RETRY.instruction)
+        conductor.worktrees.branch_exists.return_value = True
 
-        return second
+        return conductor
 
-    def test_a_tree_a_merged_run_could_not_retire_blocks_the_next_invocation_of_that_slice(self) -> None:
-        conductor = self._after_a_merge_that_left_its_tree()
+    def test_a_tree_an_abort_before_touching_code_could_not_retire_blocks_the_next_invocation_of_that_slice(
+        self,
+    ) -> None:
+        conductor = self._after_an_abort_that_left_its_tree()
 
         result = conductor.conduct()
 
         assert (result.halt, result.state) == (Halt.RUN_CLOSED, RunState.BLOCKED_LEFTOVER_WORKTREE)
         assert result.conflicting_path == Conductor.WORKTREE
 
+    def test_a_tree_left_by_a_stop_of_the_prechecks_is_reused_by_the_next_invocation(self) -> None:
+        conductor = Conductor(chosen=SelectSliceResultMother.about_to_start())
+        conductor.worktrees.branch_exists.return_value = True
+        conductor.worktrees.listed.return_value = (
+            ListedWorktreeMother.main_clone(),
+            ListedWorktreeMother.mounted(path=Conductor.WORKTREE, branch=_BRANCH),
+        )
+
+        result = conductor.conduct()
+
+        assert result.state is not RunState.BLOCKED_LEFTOVER_WORKTREE
+        assert not conductor.worktrees.add_new_branch.called
+        assert not conductor.worktrees.add_on_branch.called
+        assert conductor.check_sources.execute.call_count == 1
+
     def test_the_next_invocation_neither_mounts_over_the_old_tree_nor_reuses_it(self) -> None:
-        conductor = self._after_a_merge_that_left_its_tree()
+        conductor = self._after_an_abort_that_left_its_tree()
 
         conductor.conduct()
 
@@ -292,17 +310,20 @@ class TestConductSliceWhenATreeIsFoundThatNobodyExpected(_Merging):
         assert conductor.understanding.write.call_count == 0
 
     def test_the_blocked_slice_is_labelled_so_it_is_not_picked_up_again_on_its_own(self) -> None:
-        conductor = self._after_a_merge_that_left_its_tree()
+        conductor = self._after_an_abort_that_left_its_tree()
 
         conductor.conduct()
 
         conductor.repository.write_label.assert_called_once_with(
-            repo=Conductor.REPO, issue=_SUBISSUE, remove=IssueLabel.PENDING, add=IssueLabel.BLOCKED_LEFTOVER_WORKTREE
+            repo=Conductor.REPO,
+            issue=_SUBISSUE,
+            remove=IssueLabel.IN_PROGRESS,
+            add=IssueLabel.BLOCKED_LEFTOVER_WORKTREE,
         )
         assert conductor.closed.state is RunState.BLOCKED_LEFTOVER_WORKTREE
 
     def test_the_closing_names_the_path_and_leaves_the_tree_for_a_person_to_resolve(self) -> None:
-        conductor = self._after_a_merge_that_left_its_tree()
+        conductor = self._after_an_abort_that_left_its_tree()
 
         conductor.conduct()
 

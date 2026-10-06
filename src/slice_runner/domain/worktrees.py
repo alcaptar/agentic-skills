@@ -27,6 +27,9 @@ class Worktrees(ABC):
     def prune(self, *, root: str) -> None: ...
 
     @abstractmethod
+    def is_mounted(self, *, root: str, path: str, branch: str) -> bool: ...
+
+    @abstractmethod
     def has_uncommitted_work(self, *, path: str) -> bool: ...
 
     @abstractmethod

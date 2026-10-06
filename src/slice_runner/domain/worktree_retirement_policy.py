@@ -47,7 +47,7 @@ class WorktreeRetirementPolicy:
 
     @classmethod
     def expects_a_tree(cls, *, label: IssueLabel | None, run: Run | None) -> bool:
-        if label is IssueLabel.AWAITING_ALIGNMENT:
+        if label in (IssueLabel.AWAITING_ALIGNMENT, IssueLabel.PENDING):
             return True
         if run is None:
             return False

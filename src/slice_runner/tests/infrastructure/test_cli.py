@@ -1688,8 +1688,12 @@ class TestRetiringTheWorktreeFromTheCommandLine:
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
         invocation = RunInvocation(
-            children=GhConversationMother.the_slice_never_run(),
+            children=GhConversationMother.the_slice_aborted_before_touching_code(),
             answers=(
+                Answer(
+                    to=("gh", "issue", "view", "comments"),
+                    stdout=GhConversationMother.the_comments_of_a_person_asking_to_retry(),
+                ),
                 Answer(to=("git", "rev-list", "--count"), stdout="0\n"),
                 Answer(to=("gh", "pr", "list"), stdout=GhConversationMother.no_open_pull_request()),
             ),

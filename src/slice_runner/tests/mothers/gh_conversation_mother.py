@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, ClassVar
 
 from slice_runner.domain.issue_label import IssueLabel
 from slice_runner.domain.issue_state import IssueState
+from slice_runner.tests.mothers.run_mother import RunMother
 
 if TYPE_CHECKING:
     from slice_runner.domain.run import Run
@@ -93,6 +94,18 @@ class GhConversationMother:
     @classmethod
     def the_slice_never_run(cls) -> str:
         return cls._children(body=_SUBISSUE_PROSE, label=IssueLabel.PENDING, state=IssueState.OPEN)
+
+    @classmethod
+    def the_slice_aborted_before_touching_code(cls) -> str:
+        return cls._children(
+            body=f"{_SUBISSUE_PROSE}\n{cls._state_block(RunMother.aborted_before_touching_code())}\n",
+            label=IssueLabel.ABORTED_BUDGET,
+            state=IssueState.OPEN,
+        )
+
+    @classmethod
+    def the_comments_of_a_person_asking_to_retry(cls) -> str:
+        return json.dumps({"comments": [{"body": "-RETRY ya esta resuelto a mano"}]})
 
     @classmethod
     def the_slice_already_closed(cls) -> str:

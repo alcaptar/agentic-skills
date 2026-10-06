@@ -28,16 +28,14 @@ class RetireWorktree:
         self._worktrees = worktrees
 
     def execute(self, params: RetireWorktreeParams) -> RetireWorktreeResult:
-        if not self._is_mounted(params):
+        try:
+            mounted = self._worktrees.is_mounted(root=params.root, path=params.worktree, branch=params.branch)
+        except WorktreeRetirementError:
+            return RetireWorktreeResult(retirement=WorktreeRetirement.KEPT_UNVERIFIABLE)
+        if not mounted:
             return RetireWorktreeResult(retirement=WorktreeRetirement.NOT_MOUNTED)
 
         return RetireWorktreeResult(retirement=self._retiring(params))
-
-    def _is_mounted(self, params: RetireWorktreeParams) -> bool:
-        return any(
-            entry.path == params.worktree and entry.branch == params.branch
-            for entry in self._worktrees.listed(root=params.root)
-        )
 
     def _retiring(self, params: RetireWorktreeParams) -> WorktreeRetirement:
         try:
