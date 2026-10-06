@@ -82,6 +82,7 @@ from slice_runner.infrastructure.conducted_slice_payload import ConductedSlicePa
 from slice_runner.infrastructure.control_logs_directory import ControlLogsDirectory
 from slice_runner.infrastructure.conversation_report import ConversationReport
 from slice_runner.infrastructure.conversation_tool_use_recorder import ConversationToolUseRecorder
+from slice_runner.infrastructure.diff_installed_code import DiffInstalledCode
 from slice_runner.infrastructure.exit_code import ExitCode
 from slice_runner.infrastructure.feature_status_report import FeatureStatusReport
 from slice_runner.infrastructure.gh_call import GhCall
@@ -91,6 +92,7 @@ from slice_runner.infrastructure.gh_run_repository import GhCommandFailedError, 
 from slice_runner.infrastructure.git_branches import GitBranches
 from slice_runner.infrastructure.git_command_failed_error import GitCommandFailedError
 from slice_runner.infrastructure.git_diff_reader import GitDiffReader
+from slice_runner.infrastructure.git_upstream import GitUpstream
 from slice_runner.infrastructure.git_workspace import GitWorkspace
 from slice_runner.infrastructure.harness_invocation_runner import HarnessInvocationRunner
 from slice_runner.infrastructure.harness_telemetry import HarnessTelemetry
@@ -488,6 +490,8 @@ class Cli:
                 skills=LocalSkillLibrary(),
                 plugins=LocalPluginRegistry(),
                 provenance=UvProgramOrigin(),
+                installed_code=DiffInstalledCode(process=self._process),
+                upstream=GitUpstream(process=self._process),
             )
         ).execute(CheckReadinessParams(repo=repo, worktree=worktree, base=base))
 

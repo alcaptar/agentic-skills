@@ -9,12 +9,19 @@ import pytest
 from slice_runner.application.queries.check_readiness import CheckReadiness, CheckReadinessParams, CheckReadinessPorts
 from slice_runner.domain.branches import Branches
 from slice_runner.domain.check_verdict import CheckVerdict
-from slice_runner.domain.exceptions import UnreadableProvenanceError, UnresolvableBaseError
+from slice_runner.domain.exceptions import (
+    UnreachableUpstreamError,
+    UnreadableProvenanceError,
+    UnresolvableBaseError,
+)
 from slice_runner.domain.forum import Forum
+from slice_runner.domain.installed_code import InstalledCode
+from slice_runner.domain.installed_code_match import InstalledCodeMatch
 from slice_runner.domain.plugin_registry import PluginRegistry
 from slice_runner.domain.provenance import Provenance
 from slice_runner.domain.skill_library import SkillLibrary
 from slice_runner.domain.toolbox import Toolbox
+from slice_runner.domain.upstream import Upstream
 
 if TYPE_CHECKING:
     from slice_runner.domain.readiness import Readiness
@@ -67,12 +74,40 @@ class TestCheckReadiness:
         return provenance
 
     @pytest.fixture
+    def installed_code(self) -> Mock:
+        installed_code: Mock = create_autospec(InstalledCode, spec_set=True, instance=True)
+        installed_code.compared_with.return_value = InstalledCodeMatch.SAME
+        return installed_code
+
+    @pytest.fixture
+    def upstream(self) -> Mock:
+        upstream: Mock = create_autospec(Upstream, spec_set=True, instance=True)
+        upstream.commits_behind.return_value = 0
+        return upstream
+
+    @pytest.fixture
     def query(
-        self, *, toolbox: Mock, forum: Mock, branches: Mock, skills: Mock, plugins: Mock, provenance: Mock
+        self,
+        *,
+        toolbox: Mock,
+        forum: Mock,
+        branches: Mock,
+        skills: Mock,
+        plugins: Mock,
+        provenance: Mock,
+        installed_code: Mock,
+        upstream: Mock,
     ) -> CheckReadiness:
         return CheckReadiness(
             ports=CheckReadinessPorts(
-                toolbox=toolbox, forum=forum, branches=branches, skills=skills, plugins=plugins, provenance=provenance
+                toolbox=toolbox,
+                forum=forum,
+                branches=branches,
+                skills=skills,
+                plugins=plugins,
+                provenance=provenance,
+                installed_code=installed_code,
+                upstream=upstream,
             )
         )
 
@@ -250,6 +285,8 @@ class TestCheckReadiness:
             "helper discover_conventions.py",
             "helper discover_controles.py",
             "provenance",
+            "installed code",
+            "checkout upstream",
         }
         forum.can_read.assert_not_called()
         branches.commits_behind_remote.assert_not_called()
@@ -380,3 +417,119 @@ class TestCheckReadiness:
         provenance = self._check(readiness, "provenance")
         assert provenance.verdict is CheckVerdict.MISSING
         assert "deploy-watch" in provenance.detail
+
+    def test_the_installed_code_check_is_ready_when_it_is_the_one_of_the_checkout(
+        self, query: CheckReadiness, installed_code: Mock
+    ) -> None:
+        readiness = query.execute(CheckReadinessParams())
+
+        check = self._check(readiness, "installed code")
+        assert check.verdict is CheckVerdict.READY
+        installed_code.compared_with.assert_called_once_with(checkout=_CHECKOUT)
+
+    def test_the_installed_code_check_is_not_ready_telling_to_reinstall_when_it_differs_from_the_checkout(
+        self, query: CheckReadiness, installed_code: Mock
+    ) -> None:
+        installed_code.compared_with.return_value = InstalledCodeMatch.DIFFERENT
+
+        readiness = query.execute(CheckReadinessParams())
+
+        check = self._check(readiness, "installed code")
+        assert check.verdict is CheckVerdict.MISSING
+        assert check.fix == f"make -C {_CHECKOUT} install-program"
+        assert not readiness.ready
+
+    def test_the_installed_code_check_is_not_ready_saying_the_checkout_is_gone_when_it_no_longer_exists(
+        self, query: CheckReadiness, installed_code: Mock
+    ) -> None:
+        installed_code.compared_with.return_value = InstalledCodeMatch.CHECKOUT_GONE
+
+        readiness = query.execute(CheckReadinessParams())
+
+        check = self._check(readiness, "installed code")
+        assert check.verdict is CheckVerdict.MISSING
+        assert "no longer exists" in check.detail
+        assert str(_CHECKOUT) in check.detail
+        assert not readiness.ready
+
+    def test_the_installed_code_check_is_not_ready_when_the_checkout_it_came_from_cannot_be_read(
+        self, query: CheckReadiness, provenance: Mock, installed_code: Mock
+    ) -> None:
+        provenance.checkout.side_effect = UnreadableProvenanceError("no direct_url.json found")
+
+        readiness = query.execute(CheckReadinessParams())
+
+        check = self._check(readiness, "installed code")
+        assert check.verdict is CheckVerdict.MISSING
+        assert "no direct_url.json found" in check.detail
+        installed_code.compared_with.assert_not_called()
+
+    def test_the_installed_code_check_could_not_be_checked_when_the_comparison_fails_and_does_not_break_readiness(
+        self, query: CheckReadiness, installed_code: Mock
+    ) -> None:
+        installed_code.compared_with.side_effect = UnreadableProvenanceError("diff: trouble")
+
+        readiness = query.execute(CheckReadinessParams())
+
+        check = self._check(readiness, "installed code")
+        assert check.verdict is CheckVerdict.UNKNOWN
+        assert "diff: trouble" in check.detail
+        assert readiness.ready
+
+    def test_the_upstream_check_is_ready_when_the_checkout_is_not_behind_its_remote_branch(
+        self, query: CheckReadiness, upstream: Mock
+    ) -> None:
+        readiness = query.execute(CheckReadinessParams())
+
+        check = self._check(readiness, "checkout upstream")
+        assert check.verdict is CheckVerdict.READY
+        upstream.commits_behind.assert_called_once_with(checkout=_CHECKOUT)
+
+    def test_the_upstream_check_is_not_ready_saying_how_many_commits_the_checkout_lacks(
+        self, query: CheckReadiness, upstream: Mock
+    ) -> None:
+        upstream.commits_behind.return_value = 3
+
+        readiness = query.execute(CheckReadinessParams())
+
+        check = self._check(readiness, "checkout upstream")
+        assert check.verdict is CheckVerdict.MISSING
+        assert "3 commit(s)" in check.detail
+        assert check.fix == f"git -C {_CHECKOUT} pull, then make -C {_CHECKOUT} install-program"
+        assert not readiness.ready
+
+    def test_the_upstream_check_could_not_be_checked_when_the_remote_cannot_be_asked_and_does_not_break_readiness(
+        self, query: CheckReadiness, upstream: Mock
+    ) -> None:
+        upstream.commits_behind.side_effect = UnreachableUpstreamError("could not resolve host")
+
+        readiness = query.execute(CheckReadinessParams())
+
+        check = self._check(readiness, "checkout upstream")
+        assert check.verdict is CheckVerdict.UNKNOWN
+        assert "could not resolve host" in check.detail
+        assert readiness.ready
+
+    def test_the_upstream_check_could_not_be_checked_when_the_checkout_cannot_be_read(
+        self, query: CheckReadiness, provenance: Mock, upstream: Mock
+    ) -> None:
+        provenance.checkout.side_effect = UnreadableProvenanceError("no direct_url.json found")
+
+        readiness = query.execute(CheckReadinessParams())
+
+        check = self._check(readiness, "checkout upstream")
+        assert check.verdict is CheckVerdict.UNKNOWN
+        upstream.commits_behind.assert_not_called()
+
+    def test_the_base_check_is_emitted_the_same_with_the_new_checks_in_place(
+        self, query: CheckReadiness, branches: Mock, upstream: Mock
+    ) -> None:
+        branches.commits_behind_remote.return_value = 2
+        upstream.commits_behind.return_value = 5
+
+        readiness = query.execute(CheckReadinessParams(worktree="/repos/agentic-skills", base="master"))
+
+        base = self._check(readiness, "base")
+        assert base.verdict is CheckVerdict.WARNING
+        assert base.detail == "master is 2 commit(s) behind its remote"
+        branches.commits_behind_remote.assert_called_once_with(worktree="/repos/agentic-skills", base="master")

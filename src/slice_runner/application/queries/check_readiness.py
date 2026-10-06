@@ -4,17 +4,26 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar
 
 from slice_runner.domain.check_verdict import CheckVerdict
-from slice_runner.domain.exceptions import UnreadableProvenanceError, UnresolvableBaseError
+from slice_runner.domain.exceptions import (
+    UnreachableUpstreamError,
+    UnreadableProvenanceError,
+    UnresolvableBaseError,
+)
+from slice_runner.domain.installed_code_match import InstalledCodeMatch
 from slice_runner.domain.readiness import Readiness
 from slice_runner.domain.readiness_check import ReadinessCheck
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from slice_runner.domain.branches import Branches
     from slice_runner.domain.forum import Forum
+    from slice_runner.domain.installed_code import InstalledCode
     from slice_runner.domain.plugin_registry import PluginRegistry
     from slice_runner.domain.provenance import Provenance
     from slice_runner.domain.skill_library import SkillLibrary
     from slice_runner.domain.toolbox import Toolbox
+    from slice_runner.domain.upstream import Upstream
 
 
 @dataclass(frozen=True, kw_only=True, slots=True)
@@ -32,6 +41,8 @@ class CheckReadinessPorts:
     skills: SkillLibrary
     plugins: PluginRegistry
     provenance: Provenance
+    installed_code: InstalledCode
+    upstream: Upstream
 
 
 class CheckReadiness:
@@ -49,6 +60,8 @@ class CheckReadiness:
         self._skills = ports.skills
         self._plugins = ports.plugins
         self._provenance = ports.provenance
+        self._installed_code = ports.installed_code
+        self._upstream = ports.upstream
 
     def execute(self, params: CheckReadinessParams) -> Readiness:
         checks = [
@@ -59,6 +72,8 @@ class CheckReadiness:
             *(self._of_plugin(name) for name in self.PLUGINS),
             *(self._of_helper(relative) for relative in self.HELPERS),
             self._of_provenance(),
+            self._of_installed_code(),
+            self._of_upstream(),
         ]
         if params.repo is not None:
             checks.append(self._of_repo(params.repo))
@@ -207,3 +222,62 @@ class CheckReadiness:
                 )
 
         return ReadinessCheck(name="provenance", verdict=CheckVerdict.READY, detail=f"both come from {origin}")
+
+    def _of_installed_code(self) -> ReadinessCheck:
+        name = "installed code"
+        try:
+            checkout = self._provenance.checkout()
+        except UnreadableProvenanceError as error:
+            return ReadinessCheck(
+                name=name,
+                verdict=CheckVerdict.MISSING,
+                detail=f"could not tell which checkout the program came from: {error}",
+            )
+
+        try:
+            match = self._installed_code.compared_with(checkout=checkout)
+        except UnreadableProvenanceError as error:
+            return ReadinessCheck(
+                name=name, verdict=CheckVerdict.UNKNOWN, detail=f"could not compare it with {checkout}: {error}"
+            )
+
+        match match:
+            case InstalledCodeMatch.SAME:
+                return ReadinessCheck(name=name, verdict=CheckVerdict.READY, detail=f"is the code of {checkout}")
+            case InstalledCodeMatch.DIFFERENT:
+                return ReadinessCheck(
+                    name=name,
+                    verdict=CheckVerdict.MISSING,
+                    detail=f"differs from the code of {checkout}",
+                    fix=self._reinstall_fix(checkout),
+                )
+            case InstalledCodeMatch.CHECKOUT_GONE:
+                return ReadinessCheck(
+                    name=name,
+                    verdict=CheckVerdict.MISSING,
+                    detail=f"the checkout {checkout} the program came from no longer exists",
+                )
+
+    def _of_upstream(self) -> ReadinessCheck:
+        name = "checkout upstream"
+        try:
+            checkout = self._provenance.checkout()
+            behind = self._upstream.commits_behind(checkout=checkout)
+        except (UnreadableProvenanceError, UnreachableUpstreamError) as error:
+            return ReadinessCheck(
+                name=name, verdict=CheckVerdict.UNKNOWN, detail=f"could not check it against its remote: {error}"
+            )
+
+        if behind == 0:
+            return ReadinessCheck(name=name, verdict=CheckVerdict.READY, detail=f"{checkout} is up to date")
+
+        return ReadinessCheck(
+            name=name,
+            verdict=CheckVerdict.MISSING,
+            detail=f"{checkout} is {behind} commit(s) behind its remote branch",
+            fix=f"git -C {checkout} pull, then {self._reinstall_fix(checkout)}",
+        )
+
+    @staticmethod
+    def _reinstall_fix(checkout: Path) -> str:
+        return f"make -C {checkout} install-program"

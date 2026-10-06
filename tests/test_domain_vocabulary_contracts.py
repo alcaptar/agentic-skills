@@ -51,13 +51,14 @@ def test_no_label_in_the_vocabulary_lacks_a_source_in_the_translator_or_a_manual
 
 
 def test_the_verdict_vocabulary_of_the_doctor_holds_only_the_verdicts_a_check_produces_today() -> None:
-    """`CheckVerdict` closes over exactly `ready`, `warning` and `missing`.
+    """`CheckVerdict` closes over exactly `ready`, `warning`, `missing` and `unknown`.
 
     `slice-runner doctor` runs a check without a `MISSING`/`WARNING` split for git, gh, claude and
     the two skills, `MISSING` for an unreadable `--repo`, and `WARNING` for a `--base` that is
-    behind its remote -- a base that lags does not block the run the way a missing tool does.
+    behind its remote -- a base that lags does not block the run the way a missing tool does --,
+    and `UNKNOWN` for the upstream of the checkout that could not be asked.
     Adding a member here without a check that produces it would be dead vocabulary nobody ever
     emits, exactly the failure `IssueLabel`'s own contract above guards against for a different
     vocabulary.
     """
-    assert set(CheckVerdict) == {CheckVerdict.READY, CheckVerdict.WARNING, CheckVerdict.MISSING}
+    assert set(CheckVerdict) == {CheckVerdict.READY, CheckVerdict.WARNING, CheckVerdict.MISSING, CheckVerdict.UNKNOWN}

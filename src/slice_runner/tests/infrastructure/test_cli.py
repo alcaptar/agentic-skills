@@ -2090,8 +2090,16 @@ class TestTheCommandThatChecksReadiness:
         repo_readable: bool = True,
         commits_behind: int = 0,
         base_resolves: bool = True,
+        installed_code_differs: bool = False,
+        upstream_behind: int = 0,
+        upstream_reachable: bool = True,
     ) -> AnsweringByArgv:
         return AnsweringByArgv(
+            Answer(to=("diff", "-rq"), code=1 if installed_code_differs else 0),
+            Answer(to=("git", "fetch", "--quiet"), stdout="")
+            if upstream_reachable
+            else Answer(to=("git", "fetch", "--quiet"), code=128, stderr="fatal: unable to access"),
+            Answer(to=("git", "rev-list", "--count", "HEAD..@{upstream}"), stdout=f"{upstream_behind}\n"),
             Answer(to=("git", "--version"), stdout="git version 2.51.0\n"),
             Answer(to=("gh", "--version"), stdout="gh version 2.55.0\n"),
             Answer(to=("claude", "--version"), stdout="2.1.4\n"),
@@ -2131,8 +2139,42 @@ class TestTheCommandThatChecksReadiness:
             "helper discover_conventions.py",
             "helper discover_controles.py",
             "provenance",
+            "installed code",
+            "checkout upstream",
         ):
             assert name in printed
+
+    def test_the_installed_code_and_the_upstream_are_asked_through_the_injected_process(self) -> None:
+        process = self._process()
+
+        Cli(process=process, budgets=Budgets()).doctor()
+
+        assert any(call.argv[:2] == ["diff", "-rq"] for call in process.calls)
+        assert any(call.argv[-2:] == ["--count", "HEAD..@{upstream}"] for call in process.calls)
+
+    def test_installed_code_that_differs_from_its_checkout_exits_not_ready_and_prints_the_reinstall(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        code = Cli(process=self._process(installed_code_differs=True), budgets=Budgets()).doctor()
+
+        assert code == ExitCode.ENVIRONMENT_NOT_READY
+        assert "install-program" in capsys.readouterr().out
+
+    def test_a_checkout_behind_its_remote_exits_not_ready_saying_how_many_commits(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        code = Cli(process=self._process(upstream_behind=3), budgets=Budgets()).doctor()
+
+        assert code == ExitCode.ENVIRONMENT_NOT_READY
+        assert "3 commit(s)" in capsys.readouterr().out
+
+    def test_a_remote_that_cannot_be_asked_prints_unknown_and_does_not_make_the_doctor_fail(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        code = Cli(process=self._process(upstream_reachable=False), budgets=Budgets()).doctor()
+
+        assert code == ExitCode.OK
+        assert "unknown" in capsys.readouterr().out
 
     def test_something_missing_exits_with_its_own_code_distinct_from_a_usage_error(self) -> None:
         code = Cli(process=self._process(authenticated=False), budgets=Budgets()).doctor()
