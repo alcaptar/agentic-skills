@@ -7,3 +7,4 @@ class CheckVerdict(StrEnum):
     READY = "ready"
     WARNING = "warning"
     MISSING = "missing"
+    UNKNOWN = "unknown"

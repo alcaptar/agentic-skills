@@ -161,6 +161,10 @@ class UnreadableProvenanceError(ValueError):
     pass
 
 
+class UnreachableUpstreamError(ValueError):
+    pass
+
+
 class UnreadableSourceError(ValueError):
     pass
 
