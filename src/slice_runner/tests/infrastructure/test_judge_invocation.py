@@ -165,19 +165,63 @@ class TestWhatTravelsOnStandardInput:
         assert text.index("src/a.py") < text.index("directorios que puedes leer")
         assert text.index("directorios que puedes leer") < text.index(str(JudgeMother.YARDSTICK))
 
-    def test_a_prior_finding_with_a_line_is_cited_with_its_severity_rule_path_and_line(self) -> None:
+    def test_a_prior_finding_with_a_line_is_cited_with_its_severity_rule_path_line_evidence_and_detail(self) -> None:
         review = SliceUnderReviewMother.of_the_slice(prior_findings=(FindingMother.with_line(line=42),))
 
         text = JudgeInvocation(judge=_JUDGE, review=review, reader=_READER).text
 
-        assert "- hallazgos de la ronda anterior (1):\n  - [medium] convenciones en src/x.py:42\n" in text
+        assert (
+            "- hallazgos de la ronda anterior (1):\n"
+            "  - `f1` [medium] convenciones en src/x.py:42: prose in a `.py` (detalle: the why lives in the "
+            "pull request body)\n"
+        ) in text
 
     def test_a_prior_finding_with_no_line_is_cited_with_the_path_alone(self) -> None:
         review = SliceUnderReviewMother.of_the_slice(prior_findings=(FindingMother.without_line(),))
 
         text = JudgeInvocation(judge=_JUDGE, review=review, reader=_READER).text
 
-        assert "- hallazgos de la ronda anterior (1):\n  - [high] cobertura-capa en src/x.py\n" in text
+        assert (
+            "- hallazgos de la ronda anterior (1):\n"
+            "  - `f1` [high] cobertura-capa en src/x.py: the acceptance criterion has no test (detalle: the test "
+            "that accredits it is missing)\n"
+        ) in text
+
+    def test_two_prior_findings_get_distinguishable_identifiers_so_the_judge_can_cite_them_apart(self) -> None:
+        review = SliceUnderReviewMother.of_the_slice(
+            prior_findings=(FindingMother.with_line(line=42), FindingMother.without_line())
+        )
+
+        text = JudgeInvocation(judge=_JUDGE, review=review, reader=_READER).text
+
+        assert "`f1` [medium]" in text
+        assert "`f2` [high]" in text
+
+    def test_a_prior_finding_with_a_very_long_detail_carries_it_whole_without_being_truncated(self) -> None:
+        finding = FindingMother.with_a_very_long_detail()
+        review = SliceUnderReviewMother.of_the_slice(prior_findings=(finding,))
+
+        text = JudgeInvocation(judge=_JUDGE, review=review, reader=_READER).text
+
+        assert finding.detail in text
+
+    def test_two_declared_gaps_are_distinguishable_entries_in_the_prompt(self) -> None:
+        review = SliceUnderReviewMother.of_the_slice(debt=SliceUnderReviewMother.two_declared_gaps())
+
+        text = JudgeInvocation(judge=_JUDGE, review=review, reader=_READER).text
+
+        assert (
+            "- lo que el implementador declaro dejar fuera (2):\n"
+            "  - el cableado del subcomando queda para otra slice\n"
+            "  - la migracion de datos historicos\n"
+        ) in text
+
+    def test_no_declared_gaps_is_distinguishable_from_a_missing_input_by_the_zero_count(self) -> None:
+        review = SliceUnderReviewMother.of_the_slice(debt=())
+
+        text = JudgeInvocation(judge=_JUDGE, review=review, reader=_READER).text
+
+        assert "- lo que el implementador declaro dejar fuera (0):\n" in text
 
     def test_the_prompt_does_not_also_travel_in_the_argv(self) -> None:
         invocation = JudgeInvocation(

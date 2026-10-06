@@ -171,6 +171,23 @@ class TestReadingBackARowThisProgramWrote(ReadingARow):
 
         assert record.findings == SeverityCount(high=1, medium=0, low=0)
 
+    def test_the_count_of_what_was_declared_left_out_is_read_back_whole(self) -> None:
+        row = MetricsEntryPayload.from_domain(
+            ClosedSliceMother.merged_leaving_out("no cubri el binario", "falta el caso de rename"),
+            ts=_STAMP.isoformat(),
+        ).to_contract()
+
+        record = self._read(row)
+
+        assert record.declared_debt == 2
+
+    def test_a_closure_whose_declaration_was_never_written_is_read_back_with_no_declared_debt_at_all(self) -> None:
+        row = MetricsEntryPayload.from_domain(ClosedSliceMother.merged(), ts=_STAMP.isoformat()).to_contract()
+
+        record = self._read(row)
+
+        assert record.declared_debt is None
+
 
 class TestRejectingAnEarlierGeneration(ReadingARow):
     def test_a_row_written_by_the_generation_that_spoke_spanish_keys_fails_to_read_naming_the_generation(
@@ -179,6 +196,13 @@ class TestRejectingAnEarlierGeneration(ReadingARow):
         row = json.loads(_LEGACY_ROW.read_text(encoding="utf-8"))
 
         with pytest.raises(UnreadableMetricsLogError, match="generation"):
+            self._read(row)
+
+    def test_a_row_carrying_the_debt_key_from_before_it_was_renamed_is_rejected_instead_of_ignored(self) -> None:
+        row = MetricsEntryPayload.from_domain(ClosedSliceMother.merged(), ts=_STAMP.isoformat()).to_contract()
+        row["debt"] = 0
+
+        with pytest.raises(UnreadableMetricsLogError, match="debt"):
             self._read(row)
 
     def test_the_legacy_spanish_verdict_for_a_controls_block_is_rejected_instead_of_translated(self) -> None:
@@ -273,7 +297,7 @@ class TestRejectingCorruption(ReadingARow):
 
     def test_a_row_missing_a_required_field_is_rejected_instead_of_read_back_with_it_at_zero(self) -> None:
         row = MetricsEntryPayload.from_domain(ClosedSliceMother.merged(), ts=_STAMP.isoformat()).to_contract()
-        del row["debt"]
+        del row["name"]
 
         with pytest.raises(UnreadableMetricsLogError):
             self._read(row)

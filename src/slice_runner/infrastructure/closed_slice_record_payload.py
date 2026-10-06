@@ -69,7 +69,6 @@ class ClosedSliceRecordPayload(ContractModel):
     control_retries: int
     ci_retries: int
     verify_retries: int
-    correction_retries: int
     verify_discards: int
     understand_discards: int
     implement_discards: int
@@ -78,7 +77,7 @@ class ClosedSliceRecordPayload(ContractModel):
     spend: RecordedSpendPayload | None = None
     variant: str | None = None
     models: tuple[str, ...] = ()
-    debt: int
+    declared_debt: int | None = None
     diff: DiffStatsPayload | None = None
     budgets: dict[str, object]
     models_by_role: dict[str, object]
@@ -99,7 +98,6 @@ class ClosedSliceRecordPayload(ContractModel):
                 "control_retries": record.control_retries,
                 "ci_retries": record.ci_retries,
                 "verify_retries": record.verify_retries,
-                "correction_retries": record.correction_retries,
                 "verify_discards": record.verify_discards,
                 "understand_discards": record.understand_discards,
                 "implement_discards": record.implement_discards,
@@ -110,7 +108,7 @@ class ClosedSliceRecordPayload(ContractModel):
                 "spend": RecordedSpendPayload.from_domain(record.spend) if record.spend is not None else None,
                 "variant": record.variant,
                 "models": record.models,
-                "debt": record.debt,
+                "declared_debt": record.declared_debt,
                 "diff": DiffStatsPayload.from_domain(record.diff) if record.diff is not None else None,
                 "budgets": record.budgets,
                 "models_by_role": record.models_by_role,

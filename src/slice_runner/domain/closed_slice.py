@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
+from slice_runner.domain.declared_debt import DeclaredDebt
 from slice_runner.domain.harness_spend import HarnessSpend
 
 if TYPE_CHECKING:
@@ -32,7 +33,7 @@ class ClosedSlice:
     findings_of_the_last_round: tuple[Finding, ...] = field(default=())
     discarded_call: DiscardedCall | None = None
     ci_indeterminate_cause: CiIndeterminateCause | None = None
-    debt: tuple[str, ...] = field(default=())
+    debt: DeclaredDebt = field(default=DeclaredDebt())
     diff_stats: DiffStats | None = None
 
     @property

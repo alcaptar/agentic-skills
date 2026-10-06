@@ -1,6 +1,5 @@
-# Controles de calidad del repo. Mismos nombres de target que exigimos a la fixture de
-# smoke (`smoke/fixture/Makefile`) y que el paso 2 de `slice-runner` autodetecta: la vara
-# del harness es la misma que la de lo que valida.
+# Controles de calidad del repo. Mismos nombres de target que el paso 2 de `slice-runner`
+# autodetecta en un repo cualquiera.
 #
 # El toolchain lo gestiona uv (`[dependency-groups] dev` en pyproject.toml); `uv run` lo
 # instala solo la primera vez.
@@ -35,7 +34,18 @@ install: install-program install-skills
 # `--reinstall` no es redundante con `--force`: `--force` pisa el ejecutable que ya hubiera, pero
 # la rueda se reutiliza de cache mientras la version no cambie, y `version` es `0.0.0` fija. Sin el,
 # un `git pull` seguido de `make install` deja instalado el codigo viejo sin decirlo.
+#
+# Y no se instala con runs vivos: un run en marcha tiene su codigo ya cargado en memoria, asi que
+# sigue escribiendo filas con el esquema anterior en el fichero que el codigo nuevo va a releer.
+# Medido el 2026-08-28: eso mato el cierre de un run con 43,05 $ y 17 llamadas ya gastadas, y
+# archivar antes no evita nada porque las filas envenenadas se escriben despues. `FORCE=1` lo salta.
 install-program:
+	@if [ -z "$(FORCE)" ] && pgrep -f "slice-runner run " >/dev/null 2>&1; then \
+		echo "hay runs en marcha, y este programa se instala entero:"; \
+		pgrep -fl "slice-runner run " | sed 's/^/  /'; \
+		echo "espera a que cierren, o instala con FORCE=1 asumiendo que pueden morir al cerrar."; \
+		exit 1; \
+	fi
 	uv tool install --force --reinstall .
 
 # Un symlink ocupado apuntando a otro sitio **no se pisa**: se dice donde apunta y se para. El caso

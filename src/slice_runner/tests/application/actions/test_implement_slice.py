@@ -7,6 +7,7 @@ from unittest.mock import Mock, create_autospec
 import pytest
 
 from slice_runner.application.actions.implement_slice import ImplementSlice, ImplementSliceParams
+from slice_runner.domain.debt_ledger import DebtLedger
 from slice_runner.domain.diff_reader import DiffReader
 from slice_runner.domain.implementer import Implementer
 from slice_runner.tests.mothers.control_outcome_mother import ControlOutcomeMother
@@ -38,8 +39,13 @@ class TestImplementSlice:
         return reader
 
     @pytest.fixture
-    def action(self, implementer: Mock, reader: Mock) -> ImplementSlice:
-        return ImplementSlice(implementer=implementer, reader=reader)
+    def debt_ledger(self) -> Mock:
+        debt_ledger: Mock = create_autospec(DebtLedger, spec_set=True, instance=True)
+        return debt_ledger
+
+    @pytest.fixture
+    def action(self, implementer: Mock, reader: Mock, debt_ledger: Mock) -> ImplementSlice:
+        return ImplementSlice(implementer=implementer, reader=reader, debt_ledger=debt_ledger)
 
     @staticmethod
     def _params(
@@ -192,3 +198,34 @@ class TestImplementSlice:
 
         reader.dirty.assert_not_called()
         assert self._assigned(implementer).dirty_worktree_files == ()
+
+    def test_what_the_implementer_declares_left_out_is_written_to_the_ledger_in_the_same_call(
+        self, action: ImplementSlice, implementer: Mock, debt_ledger: Mock
+    ) -> None:
+        implementer.implement.return_value = ImplementationMother.with_debt()
+
+        action.execute(self._params())
+
+        recorded = debt_ledger.record.call_args.args[0]
+        assert recorded.left_out == ImplementationMother.with_debt().left_out
+
+    def test_the_declaration_is_written_with_the_coordinates_of_the_slice_being_implemented(
+        self, action: ImplementSlice, debt_ledger: Mock
+    ) -> None:
+        action.execute(self._params(subissue=SubIssueMother.pending()))
+
+        recorded = debt_ledger.record.call_args.args[0]
+        subissue = SubIssueMother.pending()
+        assert (recorded.coordinates.repo, recorded.coordinates.issue, recorded.coordinates.slice_id) == (
+            _REPO,
+            subissue.number,
+            subissue.slice_id.canonical_id,
+        )
+
+    def test_an_empty_left_out_list_is_still_written_instead_of_staying_silent(
+        self, action: ImplementSlice, debt_ledger: Mock
+    ) -> None:
+        action.execute(self._params())
+
+        recorded = debt_ledger.record.call_args.args[0]
+        assert recorded.left_out == ()

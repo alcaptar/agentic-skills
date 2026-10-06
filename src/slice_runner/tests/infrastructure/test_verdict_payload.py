@@ -7,11 +7,12 @@ import pytest
 
 from slice_runner.domain.exceptions import InvalidVerdictError
 from slice_runner.domain.finding import Finding
+from slice_runner.domain.prior_finding_ruling import PriorFindingState
 from slice_runner.domain.ruling import Ruling
 from slice_runner.domain.severity import Severity
 from slice_runner.infrastructure.verdict_payload import FindingPayload, VerdictPayload
 from slice_runner.tests.mothers.judge_output_mother import JudgeVerdictMother
-from slice_runner.tests.mothers.verdict_mother import FindingMother, VerdictMother
+from slice_runner.tests.mothers.verdict_mother import FindingMother, PriorFindingRulingMother, VerdictMother
 
 
 class TestTheContractVocabulary:
@@ -49,10 +50,16 @@ class TestWhatTheProgramEmits:
                     "detail": "the test that accredits it is missing",
                 }
             ],
+            "prior_rulings": [],
         }
 
     def test_a_verdict_survives_the_round_trip_through_the_contract_without_losing_a_field(self) -> None:
         verdict = VerdictMother.failing(FindingMother.with_line(11), FindingMother.without_line())
+
+        assert VerdictPayload.from_domain(verdict).to_domain() == verdict
+
+    def test_a_pronouncement_on_a_prior_finding_survives_the_round_trip_through_the_contract(self) -> None:
+        verdict = VerdictMother.pronouncing_on(PriorFindingRulingMother.retired())
 
         assert VerdictPayload.from_domain(verdict).to_domain() == verdict
 
@@ -85,6 +92,25 @@ class TestTheSchemaTheJudgeReceives:
         assert "$ref" not in emitted
         assert "$defs" not in emitted
 
+    def test_it_declares_the_pronouncement_on_a_prior_finding_as_optional_since_the_first_round_has_none(
+        self,
+    ) -> None:
+        required = VerdictPayload.json_schema()["required"]
+
+        assert isinstance(required, list)
+        assert "prior_rulings" not in required
+
+    def test_it_requires_the_id_and_the_state_of_a_pronouncement_but_not_the_reason(self) -> None:
+        required = self._at("properties", "prior_rulings", "items")["required"]
+
+        assert isinstance(required, list)
+        assert set(required) == {"id", "state"}
+
+    def test_it_spells_the_pronouncement_states_out_as_an_enum(self) -> None:
+        state = self._at("properties", "prior_rulings", "items", "properties", "state")
+
+        assert state["enum"] == [str(member) for member in PriorFindingState]
+
     @staticmethod
     def _at(*path: str) -> dict[str, object]:
         node: object = VerdictPayload.json_schema()
@@ -94,6 +120,36 @@ class TestTheSchemaTheJudgeReceives:
         assert isinstance(node, dict)
 
         return node
+
+
+class TestThePronouncementOnPriorFindings:
+    def test_a_pronouncement_with_no_reason_validates_because_only_retiring_one_requires_a_reason(self) -> None:
+        pronouncing = JudgeVerdictMother.passing() | {"prior_rulings": [{"id": "f1", "state": "corregido"}]}
+
+        payload = VerdictPayload.from_dict(pronouncing)
+
+        assert payload.to_domain().prior_rulings == (PriorFindingRulingMother.fixed(),)
+
+    def test_a_retired_pronouncement_carries_the_reason_it_was_retired_for(self) -> None:
+        reason = "el criterio que citaba ya no existe"
+        pronouncing = JudgeVerdictMother.passing() | {
+            "prior_rulings": [{"id": "f1", "state": "retirado", "reason": reason}]
+        }
+
+        payload = VerdictPayload.from_dict(pronouncing)
+
+        assert payload.to_domain().prior_rulings == (PriorFindingRulingMother.retired(reason=reason),)
+
+    def test_a_verdict_dict_written_before_this_slice_without_prior_rulings_is_still_read(self) -> None:
+        payload = VerdictPayload.from_dict(JudgeVerdictMother.passing())
+
+        assert payload.to_domain().prior_rulings == ()
+
+    def test_a_pronouncement_naming_a_state_outside_the_vocabulary_is_rejected_saying_which_one_it_was(self) -> None:
+        pronouncing = JudgeVerdictMother.passing() | {"prior_rulings": [{"id": "f1", "state": "descartado"}]}
+
+        with pytest.raises(InvalidVerdictError, match="'descartado'"):
+            VerdictPayload.from_dict(pronouncing)
 
 
 class TestWhatTheJudgeIsAllowedToReturn:

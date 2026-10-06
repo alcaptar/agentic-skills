@@ -9,6 +9,7 @@ import pytest
 
 from slice_runner.domain.budgets import Budgets
 from slice_runner.domain.ci_indeterminate_cause import CiIndeterminateCause
+from slice_runner.domain.closed_slice_scope import ClosedSliceScope
 from slice_runner.domain.diff_stats import DiffStats
 from slice_runner.domain.exceptions import RunNotClosedError, UnreadableMetricsLogError
 from slice_runner.domain.role_models import RoleModels
@@ -32,6 +33,9 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 _STAMP = WithTheDurableStoresOutOfTheRealHome.STAMP
+_WIDE_OPEN = ClosedSliceScope.of_a_repo_between(
+    repo=None, since=datetime(2000, 1, 1, tzinfo=UTC), until=datetime(2100, 1, 1, tzinfo=UTC)
+)
 
 
 class WrittenMetricsLog:
@@ -189,12 +193,21 @@ class TestHowMuchTheSliceChanged(WithTheDurableStoresOutOfTheRealHome):
             ClosedSliceMother.merged_leaving_out("no cubri el binario", "falta el caso de rename")
         )
 
-        assert WrittenMetricsLog.row_under(tmp_path)["debt"] == 2
+        assert WrittenMetricsLog.row_under(tmp_path)["declared_debt"] == 2
 
-    def test_a_slice_that_left_nothing_out_writes_zero_debt_instead_of_omitting_it(self, tmp_path: Path) -> None:
+    def test_a_slice_that_declared_leaving_nothing_out_writes_zero_declared_debt_instead_of_omitting_it(
+        self, tmp_path: Path
+    ) -> None:
+        LocalMetricsLog(clock=self.frozen_at()).record(ClosedSliceMother.merged_declaring_nothing_left_out())
+
+        assert WrittenMetricsLog.row_under(tmp_path)["declared_debt"] == 0
+
+    def test_a_slice_whose_declaration_was_never_written_omits_declared_debt_instead_of_writing_zero(
+        self, tmp_path: Path
+    ) -> None:
         LocalMetricsLog(clock=self.frozen_at()).record(ClosedSliceMother.merged())
 
-        assert WrittenMetricsLog.row_under(tmp_path)["debt"] == 0
+        assert "declared_debt" not in WrittenMetricsLog.row_under(tmp_path)
 
     def test_the_size_of_the_diff_measured_at_the_verify_that_passed_travels_as_its_own_group(
         self, tmp_path: Path
@@ -252,13 +265,13 @@ class TestWhatConfigurationTheRunWasConductedWith(WithTheDurableStoresOutOfTheRe
 
 
 class TestWhatTheRunAlreadyCounted(WithTheDurableStoresOutOfTheRealHome):
-    def test_the_retries_of_implementing_are_the_sum_of_the_five_ways_back_to_that_step(self, tmp_path: Path) -> None:
+    def test_the_retries_of_implementing_are_the_sum_of_the_four_ways_back_to_that_step(self, tmp_path: Path) -> None:
         run = RunMother.that_went_back_for_every_reason()
 
         LocalMetricsLog(clock=self.frozen_at()).record(ClosedSliceMother.merged_after_going_back_for_every_reason())
 
         assert WrittenMetricsLog.row_under(tmp_path)["implement_retries"] == (
-            run.control_retries + run.hygiene_retries + run.verify_retries + run.correction_retries + run.ci_retries
+            run.control_retries + run.hygiene_retries + run.verify_retries + run.ci_retries
         )
 
     def test_each_kind_of_retry_also_travels_on_its_own_so_the_sum_can_be_read_apart(self, tmp_path: Path) -> None:
@@ -272,20 +285,6 @@ class TestWhatTheRunAlreadyCounted(WithTheDurableStoresOutOfTheRealHome):
             run.verify_retries,
             run.ci_retries,
         )
-
-    def test_the_retries_a_veto_spent_travel_apart_from_the_ones_a_round_of_corrections_spent(
-        self, tmp_path: Path
-    ) -> None:
-        run = RunMother.that_went_back_for_every_reason()
-
-        LocalMetricsLog(clock=self.frozen_at()).record(ClosedSliceMother.merged_after_going_back_for_every_reason())
-
-        row = WrittenMetricsLog.row_under(tmp_path)
-        assert (row["verify_retries"], row["correction_retries"]) == (
-            run.verify_retries,
-            run.correction_retries,
-        )
-        assert row["verify_retries"] != row["correction_retries"]
 
     def test_the_findings_travel_counted_by_severity_and_not_as_a_single_total(self, tmp_path: Path) -> None:
         LocalMetricsLog(clock=self.frozen_at()).record(
@@ -401,9 +400,7 @@ class TestTheLedgerOnlyGrows(WithTheDurableStoresOutOfTheRealHome):
 
 class TestReadingBackTheClosedSlices(WithTheDurableStoresOutOfTheRealHome):
     def test_a_slice_never_recorded_returns_nothing_instead_of_failing(self, tmp_path: Path) -> None:
-        found = LocalMetricsLog(clock=self.frozen_at()).closed_slices(
-            repo=None, since=datetime(2000, 1, 1, tzinfo=UTC), until=datetime(2100, 1, 1, tzinfo=UTC)
-        )
+        found = LocalMetricsLog(clock=self.frozen_at()).closed_slices(_WIDE_OPEN)
 
         assert found == ()
 
@@ -415,9 +412,7 @@ class TestReadingBackTheClosedSlices(WithTheDurableStoresOutOfTheRealHome):
         log = LocalMetricsLog(clock=self.frozen_at(datetime(2026, 2, 1, tzinfo=UTC)))
         log.record(ClosedSliceMother.closed_as_for_issue(RunState.BLOCKED_VERIFY, issue=ClosedSliceMother.ISSUE + 1))
 
-        found = log.closed_slices(
-            repo=None, since=datetime(2000, 1, 1, tzinfo=UTC), until=datetime(2100, 1, 1, tzinfo=UTC)
-        )
+        found = log.closed_slices(_WIDE_OPEN)
 
         assert [record.state for record in found] == [RunState.MERGED, RunState.BLOCKED_VERIFY]
 
@@ -426,7 +421,9 @@ class TestReadingBackTheClosedSlices(WithTheDurableStoresOutOfTheRealHome):
         log.record(ClosedSliceMother.merged())
 
         found = log.closed_slices(
-            repo=None, since=datetime(2026, 2, 1, tzinfo=UTC), until=datetime(2026, 3, 1, tzinfo=UTC)
+            ClosedSliceScope.of_a_repo_between(
+                repo=None, since=datetime(2026, 2, 1, tzinfo=UTC), until=datetime(2026, 3, 1, tzinfo=UTC)
+            )
         )
 
         assert found == ()
@@ -436,7 +433,9 @@ class TestReadingBackTheClosedSlices(WithTheDurableStoresOutOfTheRealHome):
         log.record(ClosedSliceMother.merged())
 
         found = log.closed_slices(
-            repo="another/repo", since=datetime(2000, 1, 1, tzinfo=UTC), until=datetime(2100, 1, 1, tzinfo=UTC)
+            ClosedSliceScope.of_a_repo_between(
+                repo="another/repo", since=datetime(2000, 1, 1, tzinfo=UTC), until=datetime(2100, 1, 1, tzinfo=UTC)
+            )
         )
 
         assert found == ()
@@ -446,7 +445,11 @@ class TestReadingBackTheClosedSlices(WithTheDurableStoresOutOfTheRealHome):
         log.record(ClosedSliceMother.merged())
 
         found = log.closed_slices(
-            repo=ClosedSliceMother.REPO, since=datetime(2000, 1, 1, tzinfo=UTC), until=datetime(2100, 1, 1, tzinfo=UTC)
+            ClosedSliceScope.of_a_repo_between(
+                repo=ClosedSliceMother.REPO,
+                since=datetime(2000, 1, 1, tzinfo=UTC),
+                until=datetime(2100, 1, 1, tzinfo=UTC),
+            )
         )
 
         assert [record.repo for record in found] == [ClosedSliceMother.REPO]
@@ -462,9 +465,7 @@ class TestReadingBackTheClosedSlices(WithTheDurableStoresOutOfTheRealHome):
 
         log.record(closed)
 
-        found = log.closed_slices(
-            repo=None, since=datetime(2000, 1, 1, tzinfo=UTC), until=datetime(2100, 1, 1, tzinfo=UTC)
-        )
+        found = log.closed_slices(_WIDE_OPEN)
 
         assert len(found) == 1
         record = found[0]
@@ -482,7 +483,7 @@ class TestReadingBackTheClosedSlices(WithTheDurableStoresOutOfTheRealHome):
             fh.write("not json\n")
 
         with pytest.raises(UnreadableMetricsLogError):
-            log.closed_slices(repo=None, since=datetime(2000, 1, 1, tzinfo=UTC), until=datetime(2100, 1, 1, tzinfo=UTC))
+            log.closed_slices(_WIDE_OPEN)
 
 
 class TestDeduplicatingRepeatedClosuresOfTheSameSlice(WithTheDurableStoresOutOfTheRealHome):
@@ -494,9 +495,7 @@ class TestDeduplicatingRepeatedClosuresOfTheSameSlice(WithTheDurableStoresOutOfT
         log = LocalMetricsLog(clock=self.frozen_at(datetime(2026, 1, 2, tzinfo=UTC)))
         log.record(ClosedSliceMother.closed_as(RunState.MERGED))
 
-        found = log.closed_slices(
-            repo=None, since=datetime(2000, 1, 1, tzinfo=UTC), until=datetime(2100, 1, 1, tzinfo=UTC)
-        )
+        found = log.closed_slices(_WIDE_OPEN)
 
         assert [record.state for record in found] == [RunState.MERGED]
 
@@ -509,7 +508,9 @@ class TestDeduplicatingRepeatedClosuresOfTheSameSlice(WithTheDurableStoresOutOfT
         log.record(ClosedSliceMother.closed_as(RunState.MERGED))
 
         found = log.closed_slices(
-            repo=None, since=datetime(2026, 8, 8, tzinfo=UTC), until=datetime(2026, 8, 14, tzinfo=UTC)
+            ClosedSliceScope.of_a_repo_between(
+                repo=None, since=datetime(2026, 8, 8, tzinfo=UTC), until=datetime(2026, 8, 14, tzinfo=UTC)
+            )
         )
 
         assert [record.state for record in found] == [RunState.BLOCKED_VERIFY]
@@ -522,11 +523,38 @@ class TestDeduplicatingRepeatedClosuresOfTheSameSlice(WithTheDurableStoresOutOfT
         log = LocalMetricsLog(clock=self.frozen_at(datetime(2026, 1, 2, tzinfo=UTC)))
         log.record(ClosedSliceMother.merged_with_a_user_story_key())
 
-        found = log.closed_slices(
-            repo=None, since=datetime(2000, 1, 1, tzinfo=UTC), until=datetime(2100, 1, 1, tzinfo=UTC)
-        )
+        found = log.closed_slices(_WIDE_OPEN)
 
         assert [record.slice_id for record in found] == ["PROJ-1234-07"]
+
+
+class TestALineOfAnEarlierGenerationIsFilteredByTheSameIdentityTheRunAlreadyUses(WithTheDurableStoresOutOfTheRealHome):
+    def test_a_line_of_an_earlier_generation_belonging_to_another_issue_does_not_block_reading_this_one(
+        self, tmp_path: Path
+    ) -> None:
+        ledger = tmp_path / "slice-runner" / "runs" / "metrics.jsonl"
+        ledger.parent.mkdir(parents=True)
+        earlier = {"repo": ClosedSliceMother.REPO, "issue": ClosedSliceMother.ISSUE + 1, "name": "old-shape"}
+        ledger.write_text(json.dumps(earlier) + "\n", encoding="utf-8")
+        log = LocalMetricsLog(clock=self.frozen_at())
+        log.record(ClosedSliceMother.merged())
+
+        found = log.closed_slices(
+            ClosedSliceScope.of_these_issues(repo=ClosedSliceMother.REPO, issues=(ClosedSliceMother.ISSUE,))
+        )
+
+        assert [record.issue for record in found] == [ClosedSliceMother.ISSUE]
+
+    def test_a_line_of_an_earlier_generation_belonging_to_this_issue_is_still_refused(self, tmp_path: Path) -> None:
+        ledger = tmp_path / "slice-runner" / "runs" / "metrics.jsonl"
+        ledger.parent.mkdir(parents=True)
+        mine_but_earlier = {"repo": ClosedSliceMother.REPO, "issue": ClosedSliceMother.ISSUE, "name": "old-shape"}
+        ledger.write_text(json.dumps(mine_but_earlier) + "\n", encoding="utf-8")
+
+        with pytest.raises(UnreadableMetricsLogError, match="generation"):
+            LocalMetricsLog(clock=self.frozen_at()).closed_slices(
+                ClosedSliceScope.of_these_issues(repo=ClosedSliceMother.REPO, issues=(ClosedSliceMother.ISSUE,))
+            )
 
 
 class TestTheRetiredLogDirectoryIsNeverTouched(WithTheDurableStoresOutOfTheRealHome):
@@ -538,9 +566,7 @@ class TestTheRetiredLogDirectoryIsNeverTouched(WithTheDurableStoresOutOfTheRealH
         ).encode("utf-8")
         RetiredLedgerDirectory.seeded_without_opening(old_ledger, old_line)
 
-        found = LocalMetricsLog(clock=self.frozen_at()).closed_slices(
-            repo=None, since=datetime(2000, 1, 1, tzinfo=UTC), until=datetime(2100, 1, 1, tzinfo=UTC)
-        )
+        found = LocalMetricsLog(clock=self.frozen_at()).closed_slices(_WIDE_OPEN)
 
         assert found == ()
         assert RetiredLedgerDirectory.read_without_opening(old_ledger) == old_line

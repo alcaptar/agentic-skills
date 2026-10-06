@@ -27,8 +27,6 @@ git switch master && git pull --ff-only
 - **`make check` en verde antes de abrir la pull request.** `.github/workflows/check.yml` lo corre
   también en **toda** pull request, sin filtro de `paths`, así que la vara se mide donde se decide
   mergear; el local es para no descubrirlo en la integración continua.
-  `.github/workflows/smoke-fixture.yml` sigue aparte porque mide otro proyecto (`smoke/fixture/`, con su
-  propio lockfile) y si esta filtrado por `paths`.
 - **`git add` con rutas explicitas, nunca `-A` ni `.`** Lo que evita es arrastrar al commit lo que nadie
   declaró; para lo que **no** sirve es para stagear borrados, y la diferencia está medida: `git add --`
   con la ruta de un fichero borrado del árbol **si** lo stagea, pero con la de uno que tampoco está en el

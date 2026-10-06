@@ -162,4 +162,7 @@ invariantes del pipeline -como el tope por llamada a un proceso externo- que esc
 comparar dos copias de una misma prosa. El detalle, los targets sueltos, el marcador `integration` y el
 reparto de los dos arboles de test (y, dentro de `tests/`, el reparto por lo que cada fichero mide) estan
 en `docs/conventions/testing.md`. El estado del run vive en el issue de GitHub, asi que no hay panel ni
-estado local que verificar; la entrada/salida contra `gh` la valida el smoke real (`smoke/README.md`).
+estado local que verificar. **La entrada/salida real contra `gh` no la valida nada**: el smoke que la
+cubria se retiro el 2026-08-28 -su prosa describia el flujo del programa y se desincronizaba en cada
+cambio, generando hallazgos que ninguna slice podia arreglar-, y lo que queda son los dobles del puerto
+de proceso.

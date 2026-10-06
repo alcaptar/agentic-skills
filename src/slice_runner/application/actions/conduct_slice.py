@@ -126,10 +126,6 @@ class ConductSliceProgress:
         return self.verdicts[-1].findings if self.verdicts else ()
 
     @property
-    def findings_of_every_round(self) -> tuple[Finding, ...]:
-        return tuple(finding for verdict in self.verdicts for finding in verdict.findings)
-
-    @property
     def subissue(self) -> SubIssue:
         return self.chosen.subissue
 
@@ -594,6 +590,7 @@ class ConductSlice:
                     sources=progress.parent.sources,
                     checklist=progress.chosen.checklist,
                     prior_findings=progress.findings_of_the_last_round,
+                    debt=progress.debt,
                 )
             )
         except MeasuredCallError as rejection:
@@ -776,11 +773,8 @@ class ConductSlice:
                 run=progress.run,
                 budgets=self._budgets,
                 models=self._models,
-                findings=progress.findings_of_every_round,
-                findings_of_the_last_round=progress.findings_of_the_last_round,
                 discarded_call=progress.discarded_call,
                 ci_indeterminate_cause=progress.ci_indeterminate_cause,
-                debt=progress.debt,
                 conflicting_paths=progress.conflicting_paths,
             )
         )

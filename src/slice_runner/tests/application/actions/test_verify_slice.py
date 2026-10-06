@@ -17,6 +17,7 @@ from slice_runner.tests.mothers.verdict_mother import FindingMother, VerdictMoth
 from slice_runner.tests.mothers.verification_mother import (
     JudgeMother,
     SliceDiffMother,
+    SliceUnderReviewMother,
     VerificationMother,
     VerifySliceParamsMother,
 )
@@ -167,6 +168,16 @@ class TestVerifySlice:
 
         assert self._reviewed(verifier).prior_findings == findings
 
+    def test_what_the_implementer_declared_left_out_travels_to_the_judge_too(
+        self, action: VerifySlice, verifier: Mock
+    ) -> None:
+        debt = SliceUnderReviewMother.two_declared_gaps()
+        params = replace(_PARAMS, debt=debt)
+
+        action.execute(params)
+
+        assert self._reviewed(verifier).debt == debt
+
     def test_the_verification_comes_back_without_being_reinterpreted(self, action: VerifySlice, verifier: Mock) -> None:
         expected = VerificationMother.failing_after_a_denied_read()
         verifier.verify.return_value = expected
@@ -202,6 +213,16 @@ class TestVerifySlice:
         action.execute(_PARAMS)
 
         assert self._recorded(corpus).session == VerificationMother.SESSION
+
+    def test_the_recorded_pair_carries_how_many_prior_findings_the_judge_was_given(
+        self, action: VerifySlice, corpus: Mock
+    ) -> None:
+        findings = (FindingMother.with_line(), FindingMother.without_line())
+        params = replace(_PARAMS, prior_findings=findings)
+
+        action.execute(params)
+
+        assert self._recorded(corpus).prior_findings_given == len(findings)
 
     def test_a_vetoed_verification_is_recorded_too_because_the_corpus_is_not_only_the_clean_pairs(
         self, action: VerifySlice, corpus: Mock, verifier: Mock

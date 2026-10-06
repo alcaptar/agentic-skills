@@ -29,7 +29,6 @@ class ClosedSliceRecord:
     control_retries: int
     ci_retries: int
     verify_retries: int
-    correction_retries: int
     verify_discards: int
     understand_discards: int
     implement_discards: int
@@ -38,7 +37,7 @@ class ClosedSliceRecord:
     spend: RecordedSpend | None
     variant: str | None
     models: tuple[str, ...]
-    debt: int
+    declared_debt: int | None
     diff: DiffStats | None
     budgets: dict[str, object]
     models_by_role: dict[str, object]

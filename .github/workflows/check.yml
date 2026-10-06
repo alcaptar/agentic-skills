@@ -2,9 +2,10 @@ name: check
 
 # La vara que los issues de este repo declaran (`make linting`, `make check-types`, `make test`,
 # o sea `make check`) medida donde se decide mergear: SIN filtro de `paths`, para que ninguna PR
-# llegue al merge sin checks. Antes solo habia `smoke-fixture.yml`, filtrado por
-# `smoke/fixture/**`, asi que el resto de las PRs no tenia CI y `slice-runner` cerraba en
-# `bloqueada: ci-indeterminada` slices sanas.
+# llegue al merge sin checks. Nacio porque el unico workflow de entonces estaba filtrado por
+# rutas, asi que el resto de las PRs no tenia CI y `slice-runner` cerraba en
+# `bloqueada: ci-indeterminada` slices sanas. Aquel workflow se retiro con su proyecto el 2026-08-28;
+# este quedo como el unico, y sigue sin filtro por el mismo motivo.
 on:
   pull_request:
 

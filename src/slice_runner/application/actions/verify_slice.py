@@ -35,6 +35,7 @@ class VerifySliceParams:
     sources: tuple[Source, ...]
     checklist: tuple[ChecklistEntry, ...]
     prior_findings: tuple[Finding, ...]
+    debt: tuple[str, ...]
 
 
 class VerifySlice:
@@ -65,6 +66,7 @@ class VerifySlice:
                 sources=params.sources,
                 checklist=params.checklist,
                 prior_findings=params.prior_findings,
+                debt=params.debt,
             ),
         )
         self._corpus.record(
@@ -76,6 +78,7 @@ class VerifySlice:
                 session=verification.session,
                 diff=diff,
                 verdict=verification.verdict,
+                prior_findings_given=len(params.prior_findings),
             )
         )
 

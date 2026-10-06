@@ -38,6 +38,7 @@ from slice_runner.application.queries.spend_by_role import SpendByRole, SpendByR
 from slice_runner.application.queries.spend_of_step import SpendOfStep, SpendOfStepParams
 from slice_runner.domain.budgets import Budgets
 from slice_runner.domain.closed_slice_metrics import ClosedSliceMetrics
+from slice_runner.domain.closed_slice_scope import ClosedSliceScope
 from slice_runner.domain.exceptions import (
     BranchMismatchError,
     ConversationNotFoundError,
@@ -99,6 +100,7 @@ from slice_runner.infrastructure.local_call_trace import LocalCallTrace
 from slice_runner.infrastructure.local_control_runner import LocalControlRunner
 from slice_runner.infrastructure.local_conversation_log import LocalConversationLog
 from slice_runner.infrastructure.local_corpus import LocalCorpus
+from slice_runner.infrastructure.local_debt_ledger import LocalDebtLedger
 from slice_runner.infrastructure.local_event_log import LocalEventLog
 from slice_runner.infrastructure.local_metrics_log import LocalMetricsLog
 from slice_runner.infrastructure.local_plugin_registry import LocalPluginRegistry
@@ -364,9 +366,11 @@ class Cli:
     @classmethod
     def metrics(cls, *, repo: str | None, since: datetime, until: datetime, out: Path) -> int:
         clock = SystemClock()
-        scope = ListClosedSlicesParams(repo=repo, since=since, until=until)
+        scope = ClosedSliceScope.of_a_repo_between(repo=repo, since=since, until=until)
         try:
-            records = ListClosedSlices(metrics_log=LocalMetricsLog(clock=clock)).execute(scope)
+            records = ListClosedSlices(metrics_log=LocalMetricsLog(clock=clock)).execute(
+                ListClosedSlicesParams(scope=scope)
+            )
             role_spend = SpendByRole(
                 trace=LocalCallTrace(clock=clock), spend_log=LocalCallSpendLog(clock=clock)
             ).execute(SpendByRoleParams(records=records))
@@ -580,6 +584,7 @@ class Cli:
         machine = StateMachine(budgets=self._budgets)
         reader = ProcessSourceReader(process=self._process, budgets=self._budgets)
         corpus = LocalCorpus(clock=clock)
+        debt_ledger = LocalDebtLedger(clock=clock)
         calls = HarnessInvocationRunner(
             process=self._process,
             telemetry=HarnessTelemetry(
@@ -598,6 +603,7 @@ class Cli:
                 implement=ImplementSlice(
                     implementer=ClaudeImplementer(calls=calls, reader=reader),
                     reader=GitDiffReader(process=self._process),
+                    debt_ledger=debt_ledger,
                 ),
                 stage=StageSlice(workspace=workspace),
                 commit=CommitRound(workspace=workspace),
@@ -611,6 +617,7 @@ class Cli:
                     repository=repository,
                     spend_log=LocalCallSpendLog(clock=clock),
                     corpus=corpus,
+                    debt_ledger=debt_ledger,
                 ),
                 read_ci=ReadCiStatus(ci=GhCi(call=gh_call), forum=forum),
                 read_pull_request=ReadPullRequestStatus(forum=forum),
@@ -696,6 +703,7 @@ class Cli:
             sources=(),
             checklist=(),
             prior_findings=(),
+            debt=(),
         )
 
     @staticmethod

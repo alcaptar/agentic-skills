@@ -3,8 +3,8 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
-from slice_runner.application.queries.list_closed_slices import ListClosedSlicesParams
 from slice_runner.domain.closed_slice_metrics import UNKNOWN_LABEL, ClosedSliceMetrics
+from slice_runner.domain.closed_slice_scope import ClosedSliceScope
 from slice_runner.domain.diff_stats import DiffStats
 from slice_runner.domain.role_spend import RoleSpend
 from slice_runner.domain.run_state import RunState
@@ -29,7 +29,7 @@ class RenderingTheView:
         role_spend: tuple[RoleSpend, ...] = (),
     ) -> str:
         return ClosedSliceMetricsView.rendered(
-            scope=ListClosedSlicesParams(repo=repo, since=_SINCE, until=_UNTIL),
+            scope=ClosedSliceScope.of_a_repo_between(repo=repo, since=_SINCE, until=_UNTIL),
             records=records,
             role_spend=role_spend,
             metrics=ClosedSliceMetrics.of(records),

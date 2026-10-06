@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING, ClassVar
 
 from slice_runner.domain.budgets import Budgets
 from slice_runner.domain.closed_slice import ClosedSlice
+from slice_runner.domain.declared_debt import DeclaredDebt
 from slice_runner.domain.role_models import RoleModels
 from slice_runner.domain.run_state import RunState
 from slice_runner.tests.mothers.harness_spend_mother import HarnessSpendMother
@@ -79,8 +80,12 @@ class ClosedSliceMother:
         return cls._closed(RunState.BLOCKED_CI_INDETERMINATE, ci_indeterminate_cause=cause)
 
     @classmethod
-    def merged_leaving_out(cls, *debt: str) -> ClosedSlice:
-        return cls._closed(RunState.MERGED, debt=debt)
+    def merged_leaving_out(cls, *left_out: str) -> ClosedSlice:
+        return cls._closed(RunState.MERGED, debt=DeclaredDebt(declared=True, left_out=left_out))
+
+    @classmethod
+    def merged_declaring_nothing_left_out(cls) -> ClosedSlice:
+        return cls._closed(RunState.MERGED, debt=DeclaredDebt(declared=True, left_out=()))
 
     @classmethod
     def merged_measuring_the_diff(cls, stats: DiffStats) -> ClosedSlice:
@@ -124,7 +129,7 @@ class ClosedSliceMother:
         findings_of_the_last_round: tuple[Finding, ...] | None = None,
         discarded_call: DiscardedCall | None = None,
         ci_indeterminate_cause: CiIndeterminateCause | None = None,
-        debt: tuple[str, ...] = (),
+        debt: DeclaredDebt | None = None,
         diff_stats: DiffStats | None = None,
     ) -> ClosedSlice:
         return ClosedSlice(
@@ -141,6 +146,6 @@ class ClosedSliceMother:
             findings_of_the_last_round=findings if findings_of_the_last_round is None else findings_of_the_last_round,
             discarded_call=discarded_call,
             ci_indeterminate_cause=ci_indeterminate_cause,
-            debt=debt,
+            debt=debt or DeclaredDebt.nothing(),
             diff_stats=diff_stats,
         )

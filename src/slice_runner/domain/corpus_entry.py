@@ -17,3 +17,4 @@ class CorpusEntry:
     session: str
     diff: SliceDiff
     verdict: Verdict
+    prior_findings_given: int

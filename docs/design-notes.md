@@ -249,7 +249,37 @@ mide. Las reglas que salen de estas decisiones siguen en su capa.
   devuelven los mismos hallazgos dos veces seguidas-. De ahi que las dos causas dejaran de compartir
   contador, que es la misma regla que ya separaba la higiene de los controles. La reconstrucción se hizo
   por bloques consecutivos del mismo identificador de slice, que es lo único posible mientras el corpus no
-  tenga identidad ni instante por fila.
+  tenga identidad ni instante por fila. **El bullet siguiente cuenta como acabo ese contador.**
+- **Y por que la ronda de correccion se retiro entera.** Repartir el contador trato el sintoma. Medido
+  sobre los 91 hallazgos de los 27 veredictos que el corpus de veredictos tenia hasta el 2026-08-28 a las
+  13:00 -10 `high`, 28 `medium`, 53 `low`; el corpus es append-only, asi que sin ese corte el recuento de
+  hoy ya es otro-, **10 de los 27 veredictos eran un PASS que mandaba una ronda de correccion completa sin ser un veto**, y al leer
+  los 28 `medium` uno a uno, **20 escriben literalmente que no bloquean** -"no lo subo a high porque...",
+  "no lo trato como bloqueante", "No bloquea"- y **ninguno** alega que le faltara evidencia. Es decir: el
+  juez estaba siendo coherente con lo que la rubrica le decia -"los `medium`/`low` se reportan pero no
+  bloquean por si solos"- y el programa hacia lo contrario. La desalineacion no vivia en ninguno de los
+  dos, sino **entre el prompt y el codigo**, y era invisible para ambos porque el juez nunca ve la
+  consecuencia de su veredicto. Los dos bucles de tres rondas del corpus salen de ahi: `rollout@README.md`
+  en la slice-05 de #393 y `convenciones@local_corpus.py` en la slice-06 de #394, los dos con "no bloquea"
+  escrito al lado y los dos apuntando a algo que el implementador no podia tocar -la linea `SUSTITUYE` de
+  la spec, y un criterio de aceptacion que fijaba donde iba el dato-. La rubrica ya le daba al juez la
+  facultad de subir a FAIL cuando varios `medium` se acumulan, y **la uso cero veces de diez**: el
+  mecanismo para pedir otra vuelta ya existia y el juez ya habia decidido no usarlo. Por eso `medium` deja
+  de mandar a nadie a ningun sitio y viaja al cuerpo de la pull request, donde ya habia sitio para el
+  ("Hallazgos que el juez dejo pasar sin corregir"), y por eso los tres niveles se definen ahora por su
+  consecuencia y no por lo grave que suenen. Lo que impide que vuelva a divergir no es la redaccion: es
+  el contrato de `tests/test_skill_contracts.py` que compara la escala escrita con lo que
+  `Outcome.of_the_verdict` decide, y que se puso rojo al mutar cada una de las dos mitades por separado.
+  La regla "un `high` es un veto" no se perdio al quitar el umbral de `outcome.py`: al reves, **dejo de
+  estar declarada dos veces con dos particiones distintas** -`verdict.py` decia solo `HIGH` y
+  `outcome.py` decia todo lo que no fuera `LOW`, que es el antipatron de `docs/conventions/architecture.md`-
+  y se quedo en un solo sitio, `Verdict.__post_init__`, que rechaza un PASS con un `high` antes de que
+  ningun `Outcome` lo mire. Linea base contra la que medir si esto sirvio, **con su definicion, porque sin
+  ella no se recalcula**: sobre las filas de metricas que llevan `correction_retries` -la generacion en la
+  que ese contador existio-, quedandose con la ultima fila de cada `(repo, issue, slice_id, name)`, salen
+  **70 slices, 0,84 rondas de correccion por slice y 30 sin ninguna vuelta extra**. La media de reintentos
+  de verificacion en esa misma ventana es **0,03**, tan baja porque el veto casi nunca se reintento: lo que
+  se pagaba eran las correcciones.
 - **Los reintentos de una llamada a `gh`, y la espera entre ellos.** No hay corpus de fallos transitorios
   de la interfaz de programación de GitHub del que medir un percentil, al contrario que el resto de esta
   lista: la intención que trajo la slice es explícita en que se quiere cubrir -"un parpadeo de red, un
@@ -727,6 +757,30 @@ obligatorio de la carcasa -siempre está presente-, así que contarlo haría imp
 inventar una causa cuando el sobre no trae ninguna": con `is_error` en la lista, esa lista nunca
 estaría vacía.
 
+### El tamano de la ultima verificacion se muda de `diffs.jsonl` a `verdicts.jsonl` (2026-08-28)
+
+Medido antes de tocar nada: cerrar una slice abria `runs/diffs.jsonl` entero para sacar tres numeros
+-`files_changed`, `lines_added`, `lines_deleted`-, y ese fichero mide ~68 KB por fila con una fila por
+ronda de cada slice de cada feature verificada alguna vez en la maquina. `size_of_the_last_verification`
+ya preguntaba solo por esas tres cifras, pero las resolvia leyendo el ledger pesado -el mismo que la
+slice-09 (#415) partio en dos precisamente para que contar algo ligero no cargase el diff entero-, así
+que el coste de cerrar crecia con todo lo verificado alguna vez, no con el tamano de la slice que se
+cierra.
+
+El arreglo mueve las tres cifras a `CorpusVerdictPayload` -la fila ligera, que ya viajaba con
+`verify_round`, las cuatro coordenadas de `StampedRow` y el mismo sello que la pesada- y se las quita a
+`CorpusDiffPayload`, que deja de declarar `UNREADABLE`/`from_dict`: sin lectores, la capacidad de releerse
+se retira en vez de quedar sin usar. `LocalCorpus.size_of_the_last_verification` pasa a iterar
+`verdicts.jsonl` con el mismo filtro por identidad (`may_belong_to`) que ya usaba sobre el pesado, así que
+la semantica -ultima fila escrita que cuadra con las coordenadas- no cambia, solo el fichero que se abre
+para responderla.
+
+Consecuencia aceptada: `verdicts.jsonl` hereda el corte de generacion que ya tenia `diffs.jsonl` -una fila
+escrita antes de este cambio no trae `diff_stats`, así que `from_dict` la rechaza nombrando la generacion
+en vez de leerla sin esas cifras-. Y lo que **no** se retira: el cierre sigue recorriendo una linea por
+ronda de cada slice; lo que deja de pagar es el coste por byte de diff, no el crecimiento por numero de
+verificaciones.
+
 ## deploy-watch
 
 ### Decisiones clave
@@ -1024,6 +1078,54 @@ respuesta de la persona-, y **el tratamiento de una llamada al arnés está escr
 conductor**. Esa segunda es duplicación declarada, no un agujero: hay un invariante que escanea el árbol y
 falla si nace una cuarta llamada sin su descarte, que es más de lo que sostiene la prosa. Lo que no existe
 es la pieza que lo escribiría una sola vez.
+
+## El juez dice de lo suyo fuera de los hallazgos (2026-08-28, lo que se midió)
+
+El juez ya tenía mandado pronunciarse sobre cada hallazgo de la ronda anterior -corregido, sigue o
+retirado, con motivo si lo retira-, pero el único hueco donde cabía esa frase en el `structured_output`
+era un `finding` más. **Que se midió.** De los 53 hallazgos de severidad `low` del corpus, 9 eran eso: el
+juez diciendo que un defecto ya no está, contado por `SeverityCountPayload` como si el defecto siguiera
+vivo. `docs/conventions/architecture.md` ya nombra el sitio donde vive una decisión que se repite: aquí no
+era la decisión la que estaba repartida, era el **vocabulario** el que le faltaba un miembro, y por eso el
+programa metía en `findings` algo que no lo era.
+
+**Que se hizo.** Un campo propio del veredicto, `prior_rulings`, con su identificador, su desenlace y un
+motivo opcional. No toca `count_of`, `Verdict.__post_init__` ni `ruling`: un pronunciamiento nunca bloquea,
+así que no entra en la cuenta que sí lo hace.
+
+**Por qué el conteo de hallazgos previos se escribe ausente y no a cero.** La fila del corpus trae también
+`prior_findings_given`, cuántos hallazgos previos recibió el juez en esa verificación, para poder medir
+después cuántas veces se pronuncia y cuántas calla. Una fila escrita por una versión anterior de este
+programa no tiene ese dato -no es que hubiera cero hallazgos previos, es que la pregunta no existía
+todavía-, y un `= 0` por defecto habría fundido esas dos cosas en el mismo valor: quien mida después no
+podría distinguir "no había nada que pronunciar" de "esta fila no sabe contestar". El mismo patrón que ya
+usa `HarnessSpend` con un gasto no medido.
+
+**La frontera del identificador, y por qué las dos numeraciones no se cruzan.** El `id` que el juez cita en
+`prior_rulings` numera `progress.findings_of_the_last_round`: la última ronda de esta invocación, sin
+agrupar. Lo antepone `JudgeInvocation` -`` f"`f{position}` {CitedFinding.of(finding)}" ``-, no
+`CitedFinding.of`, que sigue devolviendo solo la cita sin identificador: es también el que compone el
+hallazgo en el prompt del implementador, y ese prompt no promete ningún identificador -el implementador no
+emite `prior_rulings`, así que citarle uno sería un token sin significado en un contrato con un agente
+distinto (`docs/conventions/infrastructure.md`)-. El `f{n}` que ve una persona en el comentario del veto
+numera `FindingsHistory.entries`: los hallazgos agrupados por regla y ruta sobre **todas** las rondas de
+la invocación, compuesto por separado en `VetoFindingsComment._payloads_of`. Un `f2` de un sitio y un `f2`
+del otro pueden ser hallazgos distintos. Compartir el formato entre los dos -o peor, la numeración- habría
+invitado a cruzarlos, que es más caro que la duplicación del prefijo `f{n}`.
+
+**Lo que queda declarado.** Contar cuántas rondas lleva un hallazgo en `sigue` para declararlo atascado -lo
+que motivó el #440- no es esta slice: esta solo le da el insumo, el identificador y el desenlace por
+ronda. Y bloquear o descartar un veredicto por un pronunciamiento que falta o por un retirado sin motivo
+tampoco: la rúbrica lo pide, esta slice solo lo mide.
+
+**Qué pasa si se revierte.** `prior_rulings` y `prior_findings_given` entran con default, así que una
+fila escrita por esta versión sigue en `extra="forbid"` intacta mientras nadie toque el modelo. Pero si se
+reinstala la versión anterior del programa, ese modelo no conoce ninguno de los dos campos, y
+`extra="forbid"` los rechaza: una fila escrita después de esta slice se vuelve ilegible
+(`UnreadableCorpusError`) para quien reinstale. No hay migración que lo resuelva -el histórico de otra
+generación no lo interpreta este programa, ver `docs/conventions/infrastructure.md`-, así que revertir
+exige archivar a mano las filas escritas entre el despliegue de esta slice y el revert, igual que ya se
+archiva el histórico de una generación anterior del log.
 
 ## Roadmap de autonomia (pendiente)
 

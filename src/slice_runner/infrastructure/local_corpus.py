@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, ClassVar
 
-from slice_runner.domain.corpus import Corpus
+from slice_runner.domain.corpus import Corpus, JudgedRound
 from slice_runner.infrastructure.corpus_diff_payload import CorpusDiffPayload
 from slice_runner.infrastructure.corpus_verdict_payload import CorpusVerdictPayload
 from slice_runner.infrastructure.durable_ledger import DurableLedger, ReadableDurableLedger
@@ -20,10 +20,10 @@ class LocalCorpus(Corpus):
 
     def __init__(self, *, clock: Clock) -> None:
         self._clock = clock
-        self._verdicts: DurableLedger[CorpusVerdictPayload] = DurableLedger(name=self.LEDGER, row=CorpusVerdictPayload)
-        self._diffs: ReadableDurableLedger[CorpusDiffPayload] = ReadableDurableLedger(
-            name=self.DIFF_LEDGER, row=CorpusDiffPayload
+        self._verdicts: ReadableDurableLedger[CorpusVerdictPayload] = ReadableDurableLedger(
+            name=self.LEDGER, row=CorpusVerdictPayload
         )
+        self._diffs: DurableLedger[CorpusDiffPayload] = DurableLedger(name=self.DIFF_LEDGER, row=CorpusDiffPayload)
 
     def record(self, entry: CorpusEntry) -> None:
         ts = self._clock.now().isoformat()
@@ -31,9 +31,16 @@ class LocalCorpus(Corpus):
         self._diffs.append(CorpusDiffPayload.from_domain(entry, ts=ts))
 
     def size_of_the_last_verification(self, coordinates: SliceCoordinates) -> DiffStats | None:
-        matching = self._diffs.rows_where(lambda data: CorpusDiffPayload.may_belong_to(data, coordinates))
-        latest: CorpusDiffPayload | None = None
-        for row in matching:
-            latest = row
+        latest = self._verdicts.last_row_where(lambda data: CorpusVerdictPayload.may_belong_to(data, coordinates))
 
-        return latest.stats.to_domain() if latest is not None else None
+        return latest.diff_stats.to_domain() if latest is not None else None
+
+    def rounds_of_the_slice(self, coordinates: SliceCoordinates) -> tuple[JudgedRound, ...]:
+        last_row_of: dict[int, CorpusVerdictPayload] = {}
+        for row in self._verdicts.rows_where(lambda data: CorpusVerdictPayload.may_belong_to(data, coordinates)):
+            last_row_of[row.verify_round] = row
+
+        return tuple(
+            JudgedRound(round=verify_round, verdict=row.verdict.to_domain())
+            for verify_round, row in sorted(last_row_of.items())
+        )

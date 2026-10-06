@@ -26,10 +26,15 @@ import pytest
 from conftest import _ROOT, _read, _rel, _tracked
 
 from slice_runner.domain.budgets import Budgets
+from slice_runner.domain.exceptions import InvalidVerdictError
 from slice_runner.domain.issue_label import IssueLabel
+from slice_runner.domain.outcome import Outcome
+from slice_runner.domain.prior_finding_ruling import PriorFindingState
 from slice_runner.domain.ruling import Ruling
 from slice_runner.domain.severity import Severity
 from slice_runner.domain.state_machine import StateMachine
+from slice_runner.domain.verdict import Verdict
+from slice_runner.infrastructure.cited_finding import CitedFinding
 from slice_runner.infrastructure.cli import Cli
 from slice_runner.infrastructure.exit_code import ExitCode
 from slice_runner.infrastructure.gh_run_repository import GhRunRepository
@@ -40,8 +45,9 @@ from slice_runner.infrastructure.slice_verifier_judge import SliceVerifierJudge
 from slice_runner.infrastructure.subissue_body import SubissueBody
 from slice_runner.infrastructure.transition_payload import TransitionPayload
 from slice_runner.infrastructure.transition_request_payload import TransitionRequestPayload
-from slice_runner.infrastructure.verdict_payload import FindingPayload
+from slice_runner.infrastructure.verdict_payload import FindingPayload, PriorFindingRulingPayload, VerdictPayload
 from slice_runner.tests.doubles import GhCallDoubles, ScriptedProcess
+from slice_runner.tests.mothers.verdict_mother import FindingMother
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -381,6 +387,52 @@ def test_validate_reports_the_missing_user_story_key_with_its_rule_and_location(
     assert not missing, (
         f"the `validate` mode of {_rel(_SPEC)} no longer states {missing}: a parent declaring a user "
         f"story whose subissue titles do not carry it needs to be caught and reported with its location"
+    )
+
+
+_QUANTITY_RULE_ANCHORS = (
+    "el numero es parte del criterio y no un detalle del test",
+    "assertea exactamente ese numero",
+    "la vara no es la palabra, es si el caso de uno discrimina",
+)
+"""Anchors for the rule that a criterion asking for a quantity has to say how many."""
+
+_QUANTITY_VALIDATE_ANCHORS = (
+    "Un criterio que pide una cantidad dice cuantas",
+    "el implementador lo pinea con una y quien juzga exige varias",
+)
+"""Anchors for the same yardstick as a `validate` checklist item, which is what makes it run."""
+
+_QUANTITY_QUESTION = "¿el caso de uno se distingue de lo que el programa ya hacia?"
+"""The question both halves share, so neither can drift into its own wording."""
+
+
+def test_the_quantity_yardstick_is_both_explained_and_run_when_a_spec_is_validated() -> None:
+    """A yardstick that is explained but never executed is the failure this repo is built around.
+
+    The two halves have to move together: the rule states why a criterion asking for a quantity has to
+    say how many -- with the case that measured it -- and the `validate` checklist is what applies it to
+    a spec. Writing only the rule leaves it as advice nobody runs; writing only the checklist item
+    leaves the deviation reported without the reason that makes it obvious. Anchoring the same question
+    in both is what keeps the two from drifting into different rules with the same name.
+    """
+    rules = " ".join(_spec_prose("### Reglas duras").split())
+    validate = " ".join(_spec_prose(_VALIDATE).split())
+
+    missing_rule = [anchor for anchor in _QUANTITY_RULE_ANCHORS if anchor not in rules]
+    missing_check = [anchor for anchor in _QUANTITY_VALIDATE_ANCHORS if anchor not in validate]
+
+    assert not missing_rule, f"the rules of {_rel(_SPEC)} no longer state {missing_rule}"
+    assert not missing_check, (
+        f"the `validate` mode of {_rel(_SPEC)} no longer states {missing_check}: without it the "
+        f"yardstick is explained but never applied to a spec"
+    )
+    without_the_question = [
+        half for half, prose in (("las reglas", rules), ("`validate`", validate)) if _QUANTITY_QUESTION not in prose
+    ]
+    assert not without_the_question, (
+        f"{without_the_question} de {_rel(_SPEC)} ya no hacen la pregunta que reconoce la desviacion: "
+        f"con una sola de las dos mitades son dos reglas con un nombre"
     )
 
 
@@ -769,15 +821,20 @@ def test_the_rubric_lists_excludes_among_the_inputs_that_can_arrive_empty() -> N
     the two need different verdicts (see the paragraph on reporting missing inputs).
     """
     rubric = _program_rubric()
-    assert "Seis de esos campos pueden llegarte vacios" in rubric, (
-        "the program's rubric still says five fields can arrive empty, but `SUSTITUYE` joined `EXCLUYE` "
-        "and `SENAL` on the same fail-soft path and needs to be counted among them"
+    assert "Siete de esos campos pueden llegarte vacios" in rubric, (
+        "the program's rubric still says a different count of fields can arrive empty, but "
+        "`SUSTITUYE`, `EXCLUYE`, `SENAL` and what the implementer declared left out all travel the "
+        "same fail-soft path and need to be counted together"
     )
     assert "el `EXCLUYE`" in rubric, (
         "the program's rubric no longer names `EXCLUYE` among the inputs that can arrive empty"
     )
     assert "el `SUSTITUYE`" in rubric, (
         "the program's rubric no longer names `SUSTITUYE` among the inputs that can arrive empty"
+    )
+    assert "lo que el implementador declaro dejar fuera" in rubric, (
+        "the program's rubric no longer names what the implementer declared left out among the inputs "
+        "that can arrive empty, so a slice resumed straight into verify has no reading for it"
     )
 
 
@@ -895,8 +952,8 @@ def test_the_rubric_demands_a_verdict_on_every_prior_finding_with_a_reason_to_re
     )
     for fate in ("**corregido**", "**sigue**", "**retirado**"):
         assert fate in rubric, f"the program's rubric no longer offers {fate} as a fate for a prior finding"
-    assert "el `detail` del veredicto tiene que decir por que" in rubric, (
-        "the program's rubric no longer demands a written reason in `detail` when a prior finding is retired"
+    assert "el `reason` de la entrada tiene que decir por que" in rubric, (
+        "the program's rubric no longer demands a written reason in `reason` when a prior finding is retired"
     )
 
 
@@ -913,6 +970,111 @@ def test_the_rubric_treats_prior_findings_as_precedent_and_not_as_a_yardstick_to
     assert "vuelve a citarlo contra el diff de esta ronda" in rubric, (
         "the program's rubric no longer requires re-citing a finding that still stands against the "
         "current diff instead of dragging the old citation forward"
+    )
+
+
+_PRIOR_FINDING_VOCABULARY = {
+    "identificador": "id",
+    "regla": "rule",
+    "ruta": "path",
+    "linea": "line",
+    "severidad": "severity",
+    "evidencia": "evidence",
+    "detalle": "detail",
+}
+
+
+def _prior_findings_bullet() -> str:
+    """The rubric's own description of what a prior finding carries."""
+    bullet = re.search(
+        r"^- \*\*Los hallazgos que tu mismo levantaste en la ronda anterior\*\*(.*?)\n(?=- |\n)",
+        _program_rubric(),
+        re.DOTALL | re.MULTILINE,
+    )
+    assert bullet, "cannot find the prior-findings bullet in the program's rubric"
+    return bullet.group(1)
+
+
+def _excludes_bullet() -> str:
+    """The rubric's own description of what `EXCLUYE` is: a prohibition, never a permission."""
+    bullet = re.search(
+        r"^- \*\*El `EXCLUYE` que declaro la slice\*\*(.*?)\n(?=- |\n)",
+        _program_rubric(),
+        re.DOTALL | re.MULTILINE,
+    )
+    assert bullet, "cannot find the EXCLUYE bullet in the program's rubric"
+    return bullet.group(1)
+
+
+def _debt_bullet() -> str:
+    """The rubric's own description of what the implementer declared left out."""
+    bullet = re.search(
+        r"^- \*\*Lo que el implementador declaro dejar fuera\*\*(.*?)\n(?=- |\n)",
+        _program_rubric(),
+        re.DOTALL | re.MULTILINE,
+    )
+    assert bullet, "cannot find the debt bullet in the program's rubric"
+    return bullet.group(1)
+
+
+_PROHIBITION_NOT_PERMISSION_VOCABULARY = {"prohibicion", "permiso"}
+
+
+def test_the_debt_bullet_shares_the_polarity_the_excludes_bullet_already_declares() -> None:
+    """A declared gap cannot buy its way out of a criterion any more than `EXCLUYE` can buy its way in.
+
+    `EXCLUYE` already tells the judge that a declared exclusion is a prohibition, never a permission --
+    the diff still fails for building what it named. `left_out` needs the same reading, or a slice could
+    dodge a criterion just by writing the gap down in its report instead of an unexplained omission.
+    Comparing the two bullets' vocabulary, instead of asserting a literal sentence in only one of them,
+    is what catches a rewrite that keeps the words in the excludes bullet but drops them from the debt
+    one -- or the other way round.
+    """
+    excludes_words = {word for word in _PROHIBITION_NOT_PERMISSION_VOCABULARY if word in _excludes_bullet()}
+    debt_words = {word for word in _PROHIBITION_NOT_PERMISSION_VOCABULARY if word in _debt_bullet()}
+
+    assert excludes_words == _PROHIBITION_NOT_PERMISSION_VOCABULARY, (
+        "the excludes bullet lost the prohibition/permission vocabulary this contract compares against"
+    )
+    assert debt_words == excludes_words, (
+        f"the debt bullet and the excludes bullet disagree on polarity: only in excludes "
+        f"{sorted(excludes_words - debt_words)}, only in debt {sorted(debt_words - excludes_words)}"
+    )
+
+
+def test_the_prior_finding_fields_the_rubric_names_are_the_ones_the_prompt_actually_carries() -> None:
+    """The bullet states what a prior finding brings; `CitedFinding` is what actually composes it.
+
+    `evidence` and `detail` used to be thrown away composing the cite, while the bullet only ever
+    promised regla/ruta/linea/severidad -- the two sides agreed by both being incomplete. Extracting a
+    field here without saying so in the bullet is silent again, the other way round.
+
+    The comparison is against the cite the judge's invocation sends, not against the whole prompt: the
+    rubric's own JSON example already contains a `"line": 42` and a `"medium"`, so measuring against
+    the full text would mark those fields as carried regardless of what the cite actually says. The
+    identifier is composed by `JudgeInvocation` itself, not by `CitedFinding`: it is the judge's own
+    numbering of that round, and the implementer's prompt -- the other consumer of `CitedFinding` --
+    never carries it.
+    """
+    bullet = _prior_findings_bullet()
+    documented = {field for word, field in _PRIOR_FINDING_VOCABULARY.items() if re.search(rf"\b{word}\b", bullet)}
+
+    finding = FindingMother.with_line(line=42)
+    cite = f"`f1` {CitedFinding.of(finding)}"
+    carried_values = {
+        "id": "f1",
+        "rule": finding.rule,
+        "path": finding.path,
+        "line": str(finding.line),
+        "severity": str(finding.severity),
+        "evidence": finding.evidence,
+        "detail": finding.detail,
+    }
+    carried = {field for field, value in carried_values.items() if value in cite}
+
+    assert documented == carried, (
+        f"the rubric's description of a prior finding and what the prompt actually carries disagree: "
+        f"only in the rubric {sorted(documented - carried)}, only in the prompt {sorted(carried - documented)}"
     )
 
 
@@ -1041,6 +1203,117 @@ def test_the_finding_keys_in_the_rubric_are_the_ones_the_program_maps_its_fields
     assert documented == mapped, (
         f"the finding in the program's rubric and the aliases of `FindingPayload` disagree: "
         f"only in the rubric {sorted(documented - mapped)}, only in the program {sorted(mapped - documented)}"
+    )
+
+
+def test_the_verdict_top_level_keys_in_the_rubric_are_the_ones_the_program_emits() -> None:
+    """The rubric's example JSON is the whole verdict, not just its findings.
+
+    Adding `prior_rulings` to `VerdictPayload` without touching this example -- or the other way
+    round -- leaves one side of the contract stale: the judge would be told a shape the program does
+    not parse, or the program would accept a field the judge is never shown.
+    """
+    schema = _sole_json_block_in(_program_rubric())
+    assert isinstance(schema, dict)
+
+    documented = set(schema)
+    emitted = set(VerdictPayload.model_fields)
+    assert documented == emitted, (
+        f"the top-level keys of the rubric's example verdict and `VerdictPayload` disagree: only in the "
+        f"rubric {sorted(documented - emitted)}, only in the program {sorted(emitted - documented)}"
+    )
+
+
+def _documented_pronouncement() -> dict[str, object]:
+    """The single example pronouncement in the rubric, where a prior ruling's fields are stated."""
+    schema = _sole_json_block_in(_program_rubric())
+    assert isinstance(schema, dict)
+    prior_rulings = schema["prior_rulings"]
+    assert isinstance(prior_rulings, list)
+    assert prior_rulings
+    first = prior_rulings[0]
+    assert isinstance(first, dict)
+    return first
+
+
+def test_the_pronouncement_keys_in_the_rubric_are_the_ones_the_program_maps_its_fields_to() -> None:
+    """Same drift the finding keys test guards against, on the pronouncement the judge emits per finding."""
+    documented = set(_documented_pronouncement())
+
+    mapped = PriorFindingRulingPayload.contract_keys()
+    assert documented == mapped, (
+        f"the pronouncement in the program's rubric and the aliases of `PriorFindingRulingPayload` "
+        f"disagree: only in the rubric {sorted(documented - mapped)}, only in the program "
+        f"{sorted(mapped - documented)}"
+    )
+
+
+def test_the_pronouncement_states_in_the_rubric_are_the_ones_the_program_accepts() -> None:
+    """Same drift as the ruling/severity vocabularies, on the three fates a prior finding can be given."""
+    documented = {value.strip() for value in str(_documented_pronouncement()["state"]).split("|")}
+
+    assert documented == set(PriorFindingState)
+
+
+_SEVERITY_CONSEQUENCE = re.compile(r"^  - `(high|medium|low)` -> (.+)$", re.MULTILINE)
+_SENDS_IT_BACK = "vuelve al implementador"
+_IS_A_VETO = f"el veredicto es {Ruling.FAIL}"
+
+
+def _documented_consequence_of() -> dict[Severity, str]:
+    return {Severity(level): said for level, said in _SEVERITY_CONSEQUENCE.findall(_program_rubric())}
+
+
+def _forces_a_veto(severity: Severity) -> bool:
+    try:
+        Verdict(ruling=Ruling.PASS, findings=(FindingMother.without_line(severity=severity),))
+    except InvalidVerdictError:
+        return True
+
+    return False
+
+
+def _sends_the_slice_back(severity: Severity) -> bool:
+    """What the program really does with one finding of this severity, both halves of it.
+
+    A `PASS` carrying a `high` is refused by `Verdict` itself, so the severity that forces `FAIL` is
+    read from that refusal rather than restated here; the rest go through `Outcome.of_the_verdict`.
+    """
+    if _forces_a_veto(severity):
+        return True
+
+    passing = Verdict(ruling=Ruling.PASS, findings=(FindingMother.without_line(severity=severity),))
+
+    return Outcome.of_the_verdict(passing) is not Outcome.DONE
+
+
+def test_the_severity_the_rubric_says_sends_the_slice_back_is_the_only_one_the_program_sends_back() -> None:
+    """The rubric tells the judge what each level costs, and the program is what makes that true.
+
+    This is the drift that already happened once and nobody could see: the rubric promised that
+    `medium` and `low` "no bloquean por si solos" while `Outcome.of_the_verdict` sent every non-`low`
+    finding back for a round of corrections. The judge was writing "esto no bloquea" next to a
+    `medium` and the program was ordering a correction for it, ten times out of ten, because neither
+    side can observe the other: the judge never sees what its own verdict caused.
+    """
+    documented = {severity: _SENDS_IT_BACK in said for severity, said in _documented_consequence_of().items()}
+
+    assert documented == {severity: _sends_the_slice_back(severity) for severity in Severity}, (
+        "the rubric and the program disagree on which severity sends the slice back to the implementer"
+    )
+
+
+def test_the_severity_the_rubric_calls_a_veto_is_the_one_a_passing_verdict_cannot_carry() -> None:
+    """The other half of the same scale, and the one a level's destination alone does not pin.
+
+    A rubric that told the judge to emit `PASS` with a `high` still sends the slice back, so the test
+    above passes while the judge is being asked for a verdict `Verdict.__post_init__` throws away as
+    incoherent -- it would burn a call per round and never reach the implementer.
+    """
+    documented = {severity: _IS_A_VETO in said for severity, said in _documented_consequence_of().items()}
+
+    assert documented == {severity: _forces_a_veto(severity) for severity in Severity}, (
+        "the rubric and the program disagree on which severity a passing verdict cannot carry"
     )
 
 

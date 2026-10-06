@@ -15,7 +15,6 @@ class Budgets:
     control_retries: int = 2
     hygiene_retries: int = 2
     verify_retries: int = 2
-    correction_retries: int = 2
     ci_retries: int = 1
     catch_up_retries: int = 3
     indeterminate_ticks: int = 10

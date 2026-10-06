@@ -102,28 +102,9 @@ _TABLE: list[tuple[Step, Outcome, dict[str, int], tuple[Step, RunState, int]]] =
     (Step.RUN_CONTROLS, Outcome.CONFLICTING, {}, (Step.RUN_CONTROLS, RunState.BLOCKED_CI_CONFLICT, 0)),
     (Step.VERIFY, Outcome.DONE, {}, (Step.OPEN_PULL_REQUEST, RunState.OPEN, 0)),
     (Step.VERIFY, Outcome.DISCARDED, {}, (Step.VERIFY, RunState.OPEN, 0)),
-    (Step.VERIFY, Outcome.CORRECTIONS_ORDERED, {}, (Step.IMPLEMENT, RunState.OPEN, 0)),
-    (
-        Step.VERIFY,
-        Outcome.CORRECTIONS_ORDERED,
-        {"correction_retries": 2},
-        (Step.OPEN_PULL_REQUEST, RunState.OPEN, 0),
-    ),
-    (
-        Step.VERIFY,
-        Outcome.CORRECTIONS_ORDERED,
-        {"verify_retries": 2},
-        (Step.IMPLEMENT, RunState.OPEN, 0),
-    ),
     (Step.VERIFY, Outcome.FAILED, {}, (Step.IMPLEMENT, RunState.OPEN, 0)),
     (Step.VERIFY, Outcome.FAILED, {"verify_retries": 1}, (Step.IMPLEMENT, RunState.OPEN, 0)),
     (Step.VERIFY, Outcome.FAILED, {"verify_retries": 2}, (Step.VERIFY, RunState.BLOCKED_VERIFY, 0)),
-    (
-        Step.VERIFY,
-        Outcome.FAILED,
-        {"correction_retries": 2},
-        (Step.IMPLEMENT, RunState.OPEN, 0),
-    ),
     (Step.VERIFY, Outcome.OVER_BUDGET, {}, (Step.VERIFY, RunState.ABORTED_BUDGET, 0)),
     (
         Step.VERIFY,
@@ -200,7 +181,7 @@ class TestTheExitCodeOfTheVerdict(BlindToTheToolboxOfThisMachine):
         code = Cli(process=process, budgets=Budgets()).verify(repo=str(repo), base=Git.BASE_BRANCH, slice_id=_SLICE)
 
         assert code == ExitCode.OK
-        assert json.loads(capsys.readouterr().out) == {"ruling": "PASS", "findings": []}
+        assert json.loads(capsys.readouterr().out) == {"ruling": "PASS", "findings": [], "prior_rulings": []}
 
     def test_a_fail_exits_with_one_and_emits_every_finding_whoever_retries_the_slice_needs(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
@@ -331,7 +312,7 @@ class TestWhatTheJudgeWasDeniedReading(BlindToTheToolboxOfThisMachine):
         output = capsys.readouterr()
         assert code == ExitCode.OK
         assert HarnessEnvelopeMother.DENIED_READ in output.err
-        assert json.loads(output.out) == {"ruling": "PASS", "findings": []}
+        assert json.loads(output.out) == {"ruling": "PASS", "findings": [], "prior_rulings": []}
 
     def test_a_run_with_nothing_denied_says_nothing_so_the_warning_keeps_meaning_something(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
@@ -1060,6 +1041,22 @@ class TestTheCommandThatEmitsClosedSliceMetrics:
 
         assert "the following arguments are required: --out" in capsys.readouterr().err
 
+    def test_a_row_from_another_repo_of_an_earlier_generation_does_not_break_metrics_scoped_to_this_one(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        self._append_row({"repo": "another/repo", "issue": 1, "name": "old-shape"})
+        self._closed()
+        out = tmp_path / "view.html"
+
+        code = Cli.metrics(
+            repo=ClosedSliceMother.REPO,
+            since=datetime(2000, 1, 1, tzinfo=UTC),
+            until=datetime(2100, 1, 1, tzinfo=UTC),
+            out=out,
+        )
+
+        assert code == ExitCode.OK
+
 
 class TestTheTransitionOfEveryPair:
     @pytest.mark.parametrize(("step", "outcome", "spent", "expected"), _TABLE)
@@ -1094,7 +1091,6 @@ class TestTheTransitionOfEveryPair:
                 "control_retries": 1,
                 "hygiene_retries": 0,
                 "verify_retries": 0,
-                "correction_retries": 0,
                 "ci_retries": 0,
                 "catch_up_retries": 0,
                 "indeterminate_ticks": 0,
@@ -1150,14 +1146,6 @@ class TestWhatEachBudgetPays:
         spent = json.loads(capsys.readouterr().out)["run"]
         assert (spent["verify_retries"], spent["control_retries"]) == (1, 0)
 
-    def test_a_veto_spends_a_retry_of_its_own_and_not_one_of_the_corrections(
-        self, capsys: pytest.CaptureFixture[str]
-    ) -> None:
-        Cli.explain(request=TransitionRequestMother.asking(Step.VERIFY, Outcome.FAILED), budgets=Budgets())
-
-        spent = json.loads(capsys.readouterr().out)["run"]
-        assert (spent["verify_retries"], spent["correction_retries"]) == (1, 0)
-
     def test_a_discarded_verdict_is_counted_apart_because_the_code_was_never_touched(
         self, capsys: pytest.CaptureFixture[str]
     ) -> None:
@@ -1169,36 +1157,6 @@ class TestWhatEachBudgetPays:
         emitted = json.loads(capsys.readouterr().out)
         assert emitted["state"] == RunState.OPEN
         assert (emitted["run"]["verify_discards"], emitted["run"]["verify_retries"]) == (1, 2)
-
-    def test_a_round_of_corrections_spends_a_retry_of_its_own_and_not_one_of_the_veto(
-        self, capsys: pytest.CaptureFixture[str]
-    ) -> None:
-        asked = TransitionRequestMother.asking(Step.VERIFY, Outcome.CORRECTIONS_ORDERED, correction_retries=1)
-
-        Cli.explain(request=asked, budgets=Budgets())
-
-        spent = json.loads(capsys.readouterr().out)["run"]
-        assert (spent["correction_retries"], spent["verify_retries"]) == (2, 0)
-
-    def test_the_last_corrections_become_debt_instead_of_blocking_a_slice_the_judge_did_not_veto(
-        self, capsys: pytest.CaptureFixture[str]
-    ) -> None:
-        asked = TransitionRequestMother.asking(Step.VERIFY, Outcome.CORRECTIONS_ORDERED, correction_retries=2)
-
-        Cli.explain(request=asked, budgets=Budgets())
-
-        emitted = json.loads(capsys.readouterr().out)
-        assert (emitted["run"]["step"], emitted["state"]) == (Step.OPEN_PULL_REQUEST, RunState.OPEN)
-
-    def test_the_correction_budget_is_configured_apart_from_the_veto_and_does_not_borrow_its_value(
-        self, capsys: pytest.CaptureFixture[str]
-    ) -> None:
-        asked = TransitionRequestMother.asking(Step.VERIFY, Outcome.CORRECTIONS_ORDERED, correction_retries=1)
-
-        Cli.explain(request=asked, budgets=Budgets(correction_retries=1, verify_retries=5))
-
-        emitted = json.loads(capsys.readouterr().out)
-        assert (emitted["run"]["step"], emitted["state"]) == (Step.OPEN_PULL_REQUEST, RunState.OPEN)
 
     def test_an_answer_from_the_ci_clears_the_ticks_that_had_none_because_the_window_wants_them_consecutive(
         self, capsys: pytest.CaptureFixture[str]
@@ -2498,6 +2456,20 @@ class TestTheCommandThatShowsFeatureStatus:
 
         assert code == ExitCode.USAGE_ERROR
         assert "not JSON" in capsys.readouterr().err
+
+    def test_a_row_of_an_earlier_generation_belonging_to_an_issue_outside_this_feature_does_not_break_status(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
+        ledger = DurableLedger(name=LocalMetricsLog.LEDGER, row=MetricsEntryPayload).path()
+        ledger.parent.mkdir(parents=True, exist_ok=True)
+        with ledger.open("a", encoding="utf-8") as fh:
+            fh.write(f"{json.dumps({'repo': self._REPO, 'issue': 999, 'name': 'old-shape'})}\n")
+
+        code = Cli(process=self._process(), budgets=Budgets()).status(repo=self._REPO, issue=self._ISSUE)
+
+        assert code == ExitCode.OK
+        assert capsys.readouterr().err == ""
 
 
 class TestTheStatusCommandParsing:

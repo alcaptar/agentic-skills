@@ -11,6 +11,8 @@ from slice_runner.domain.call_spend_log import CallSpendLog
 from slice_runner.domain.call_trace import CallTrace
 from slice_runner.domain.cited_source import CitedSource
 from slice_runner.domain.clock import Clock
+from slice_runner.domain.corpus import Corpus, JudgedRound
+from slice_runner.domain.debt_ledger import DebtDeclaration, DebtLedger
 from slice_runner.domain.exceptions import UnreadableSourceError
 from slice_runner.domain.gh_retry_policy import GhRetryPolicy
 from slice_runner.domain.harness_spend import HarnessSpend
@@ -33,6 +35,9 @@ if TYPE_CHECKING:
 
     from slice_runner.domain.call_spend_log import HarnessCallSpend
     from slice_runner.domain.call_trace import HarnessCall
+    from slice_runner.domain.corpus_entry import CorpusEntry
+    from slice_runner.domain.debt_entry import DebtEntry
+    from slice_runner.domain.diff_stats import DiffStats
     from slice_runner.domain.slice_coordinates import SliceCoordinates
     from slice_runner.domain.source import Source
     from slice_runner.domain.step import Step
@@ -337,6 +342,54 @@ class RecordedSpendLog(CallSpendLog):
             and call.coordinates.issue == coordinates.issue
             and call.coordinates.slice_id.text == coordinates.slice_id.text
         )
+
+
+class RecordedCorpus(Corpus):
+    def __init__(self) -> None:
+        self.entries: list[CorpusEntry] = []
+
+    def record(self, entry: CorpusEntry) -> None:
+        self.entries.append(entry)
+
+    def size_of_the_last_verification(self, coordinates: SliceCoordinates) -> DiffStats | None:
+        matching = [entry for entry in self.entries if self._matches(entry, coordinates)]
+
+        return matching[-1].diff.stats if matching else None
+
+    def rounds_of_the_slice(self, coordinates: SliceCoordinates) -> tuple[JudgedRound, ...]:
+        last_of: dict[int, CorpusEntry] = {}
+        for entry in self.entries:
+            if self._matches(entry, coordinates):
+                last_of[entry.verify_round] = entry
+
+        return tuple(
+            JudgedRound(round=verify_round, verdict=entry.verdict) for verify_round, entry in sorted(last_of.items())
+        )
+
+    @staticmethod
+    def _matches(entry: CorpusEntry, coordinates: SliceCoordinates) -> bool:
+        return (
+            entry.repo == coordinates.repo
+            and entry.issue == coordinates.issue
+            and entry.slice_id == coordinates.slice_id.text
+        )
+
+
+class RecordedDebtLedger(DebtLedger):
+    def __init__(self) -> None:
+        self.entries: list[DebtEntry] = []
+
+    def record(self, entry: DebtEntry) -> None:
+        self.entries.append(entry)
+
+    def declarations_of_the_slice(self, coordinates: SliceCoordinates) -> tuple[DebtDeclaration, ...]:
+        return tuple(
+            DebtDeclaration(left_out=entry.left_out) for entry in self.entries if self._matches(entry, coordinates)
+        )
+
+    @staticmethod
+    def _matches(entry: DebtEntry, coordinates: SliceCoordinates) -> bool:
+        return entry.coordinates == coordinates
 
 
 @dataclass(frozen=True, kw_only=True, slots=True)

@@ -129,7 +129,6 @@ sola al mergear.
 | `src/slice_runner/` | Programa orquestador | El trozo del pipeline que ya **no** es un agente: `run` conduce una slice de punta a punta; `verify`, que calcula el diff de la slice, se lo pasa **dentro del prompt** al juez -invocado como una llamada sin estado, `claude -p` con el esquema del veredicto- y emite el veredicto por salida estandar con su codigo de salida (tabla en "El paso que ya es un programa"); `explain` contesta que paso viene despues de un resultado y cuando se agota un presupuesto, sin montar un run; y `read` abre la conversacion grabada de una llamada concreta. Cada llamada al harness deja su rastro en `src/slice_runner/infrastructure/local_call_trace.py` y cada veredicto de `verify` en `src/slice_runner/infrastructure/local_corpus.py`, los dos escritos fuera del repo (ver "El paso que ya es un programa"). Capas separadas (`domain/`, `application/`, `infrastructure/`) y tests co-localizados. El *por que* de esta forma esta en `docs/design-notes.md`. |
 | `docs/` | Memoria del proyecto | `conventions/` (la vara de cada capa, cargada a demanda: la tabla de enrutado esta en `CLAUDE.md`), `design-notes.md` (cada decision y su porque, para no re-derivarlo), `research-agent-loops.md` (research citado), `maturity-map.md` (donde encaja el pipeline) y `12-factor.md` (auditoria contra los 12 factores + el spike que mide si `claude -p` sirve de agente sin estado). |
 | `tests/` | Unit tests offline | La logica pura se cubre en **dos arboles**: aqui la de los scripts -cuerpo del issue, controles, nucleo del deploy- y los **contratos duplicados a proposito** entre skills; en `src/slice_runner/tests/`, co-localizada dentro del paquete, la de `src/slice_runner/`. |
-| `smoke/` | Smoke test real | Lo que los unit tests no pueden cubrir: la entrada/salida real contra `gh` y la integracion continua de GitHub Actions, con una fixture autocontenida y las recetas para provocar cada camino de fallo. Ver `smoke/README.md`. |
 
 ### Como interactuan (el contrato entre piezas)
 
@@ -219,10 +218,11 @@ error, nunca mezclados. Ademas escribe: cada verificacion anexa una linea a
 `~/.claude/slice-runner/runs/verdicts.jsonl` -o al equivalente bajo `CLAUDE_CONFIG_DIR`- con el repo y el
 issue del run, el identificador de la slice, la ronda de verificacion -empieza en 1 y sube una por cada
 veredicto de la misma slice-, el identificador de sesion de la
-llamada que lo produjo, el veredicto entero, su conteo por severidad y cuando se escribio; el diff juzgado
-se anexa aparte, a `~/.claude/slice-runner/runs/diffs.jsonl`, unido a su fila por el mismo identificador de
-slice y la misma marca de tiempo -es lo que pesa, y separarlo es lo que deja contar hallazgos sin
-cargarlo-. Los dos son un registro append-only, y viven **fuera del repo** para que ningun `git add` de la
+llamada que lo produjo, el veredicto entero, su conteo por severidad, el tamano del diff juzgado -ficheros,
+lineas anadidas y lineas borradas- y cuando se escribio; el texto del diff se anexa aparte, a
+`~/.claude/slice-runner/runs/diffs.jsonl`, unido a su fila por el mismo identificador de slice y la misma
+marca de tiempo -es lo que pesa, y separarlo es lo que deja contar hallazgos y responder por el tamano de
+una slice sin cargarlo-. Los dos son un registro append-only, y viven **fuera del repo** para que ningun `git add` de la
 slice se los lleve a la pull request. Un `verify` suelto -invocado sin que `run` este conduciendo ningun
 issue- escribe esas filas con el repo vacio, el issue a `0` y la ronda siempre a `1`: no hay identidad real
 que registrar fuera de un run conducido. El identificador de sesion es lo que une esa fila con la suya de
@@ -244,18 +244,28 @@ marcha-, pero ahora tambien dura: reconstruir cuanto tardo o cuanto espero una s
 tener la terminal abierta cuando corrio. Lo que no anexa esta fila es el turno del arnes -numero, herramienta
 y objetivo-, porque eso ya lo escribe `tool-uses.jsonl` al terminar cada llamada.
 
-Los ocho almacenes durables del programa -`metrics.jsonl`, `calls.jsonl`, `spend.jsonl`, `events.jsonl`, el
-par `verdicts.jsonl`/`diffs.jsonl` y el par `tool-uses.jsonl`/`unrecorded-tool-uses.jsonl`- comparten el
-mismo patron de nombre, `~/.claude/slice-runner/runs/<concepto>.jsonl`, y lo comparten porque pasan por la
-misma pieza (`DurableLedger`): un adaptador solo le da su nombre y el payload de su fila, y es la pieza la
-que compone la ruta, crea el directorio si falta y anexa. Los ficheros de las dos generaciones anteriores
--bajo `log/` y `trace/`- no se leen ni se escriben mas: quedan como archivo, sin moverse ni borrarse. Los
-ocho declaran su esquema con un `json_schema()` propio (`HarnessCallPayload`, `CallSpendPayload`,
-`MetricsEntryPayload`, `CorpusVerdictPayload`, `CorpusDiffPayload`, `CallToolUsePayload`,
-`UnrecordedCallToolUsePayload`, `EventPayload`), asi que que campos trae esa fila se puede preguntar a un
-programa en vez de abrir el fichero.
+Y **lo que el implementador declara dejar fuera** anexa su linea a `~/.claude/slice-runner/runs/debt.jsonl`
+en la misma llamada en que llega -con el repo y el issue del run, la slice y la lista de huecos declarados,
+aunque venga vacia-, que es lo que hace que sobreviva a un run reiniciado entre la implementacion y el
+cierre: antes solo vivia en memoria del conductor, y una invocacion que se caia entre medias lo perdia
+entero y sin dejar rastro. La fila de cierre no compone esta deuda del progreso en memoria: pregunta a este
+almacen por las declaraciones de la slice entera y las une deduplicando por texto exacto, asi que dos
+vueltas que declaren huecos distintos aparecen las dos en la fila de cierre y la misma frase repetida en dos
+vueltas cuenta una sola vez. Una slice que nunca llego a declarar nada se distingue de una que declaro
+explicitamente que no dejo nada fuera: la primera no deja fila en este almacen.
 
-Y toda fila de los ocho trae marca de tiempo, repo, issue y la slice a la que pertenece: `spend.jsonl` ya
+Los nueve almacenes durables del programa -`metrics.jsonl`, `calls.jsonl`, `spend.jsonl`, `events.jsonl`,
+`debt.jsonl`, el par `verdicts.jsonl`/`diffs.jsonl` y el par `tool-uses.jsonl`/`unrecorded-tool-uses.jsonl`-
+comparten el mismo patron de nombre, `~/.claude/slice-runner/runs/<concepto>.jsonl`, y lo comparten porque
+pasan por la misma pieza (`DurableLedger`): un adaptador solo le da su nombre y el payload de su fila, y es
+la pieza la que compone la ruta, crea el directorio si falta y anexa. Los ficheros de las dos generaciones
+anteriores -bajo `log/` y `trace/`- no se leen ni se escriben mas: quedan como archivo, sin moverse ni
+borrarse. Los nueve declaran su esquema con un `json_schema()` propio (`HarnessCallPayload`,
+`CallSpendPayload`, `MetricsEntryPayload`, `CorpusVerdictPayload`, `CorpusDiffPayload`, `DebtPayload`,
+`CallToolUsePayload`, `UnrecordedCallToolUsePayload`, `EventPayload`), asi que que campos trae esa fila se
+puede preguntar a un programa en vez de abrir el fichero.
+
+Y toda fila de los nueve trae marca de tiempo, repo, issue y la slice a la que pertenece: `spend.jsonl` ya
 no necesita cruzarse por sesion contra `calls.jsonl` para saber cuanto costo una slice, y
 `tool-uses.jsonl`/`unrecorded-tool-uses.jsonl` se leen solos aunque sean los que dicen que toco el
 implementador. Las cuatro se declaran una sola vez (`StampedRow`) y el texto que nombra la slice sale de
@@ -268,10 +278,13 @@ despues conviven en el mismo fichero, y la que hablaba castellano -o dejaba una 
 no se lee a medias, falla nombrando que no es de esta generacion. Mientras eso no se archive a mano,
 `uv run slice-runner metrics`, `uv run slice-runner spend` y `uv run slice-runner read` salen con ese error
 en cuanto tocan una fila vieja de `~/.claude/slice-runner/runs/metrics.jsonl`, `spend.jsonl` o
-`calls.jsonl` respectivamente. Lo mismo le pasa a `diffs.jsonl` desde que el cierre pasa a leer ahi el
-tamano de la ultima verificacion: una fila vieja de esa slice no lee a medias, y el error no sale por un
-comando de lectura sino por `uv run slice-runner run` al cerrar. Archivar esas filas -moverlas fuera de
-`runs/`- es decision de quien opera: el programa no lo hace por su cuenta.
+`calls.jsonl` respectivamente. Lo mismo le pasa a `verdicts.jsonl` desde que el tamano de la ultima
+verificacion viaja en esa fila y el cierre lee de ahi: una fila vieja de esa slice, escrita antes de que el
+tamano se moviera a la fila ligera, no lee a medias, y el error no sale por un comando de lectura sino por
+`uv run slice-runner run` al cerrar. Y una fila de `metrics.jsonl` escrita antes de que `debt` se renombrara
+a `declared_debt` -otra cifra, la de los huecos unicos de la slice entera y no la de la vuelta que cerro-
+cae en el mismo corte: `uv run slice-runner metrics` sale con ese error en cuanto la toca. Archivar esas
+filas -moverlas fuera de `runs/`- es decision de quien opera: el programa no lo hace por su cuenta.
 
 Colapsar lector y escritor de `metrics.jsonl` en un solo modelo con `extra="forbid"` tiene una consecuencia:
 las dos claves que la fila escribia siempre a `null` -`duracion_s` y `coste_tokens`- dejan de emitirse.
@@ -337,7 +350,7 @@ echo '{"run": {"step": "run-controls", "control_retries": 2}, "outcome": "failed
 ```json
 {"run": {"step": "run-controls", "corrected": "", "understanding_pending": false,
  "previous_call_died": false, "catching_up_the_branch": false, "control_retries": 2,
- "hygiene_retries": 0, "verify_retries": 0, "correction_retries": 0, "ci_retries": 0, "catch_up_retries": 0,
+ "hygiene_retries": 0, "verify_retries": 0, "ci_retries": 0, "catch_up_retries": 0,
  "indeterminate_ticks": 0, "verify_discards": 0, "understand_discards": 0, "implement_discards": 0,
  "control_rounds_logged": 1, "verify_rounds_logged": 0, "last_reviewed_id": 0, "requested_changes": []},
  "state": "blocked-controls",
@@ -347,8 +360,7 @@ echo '{"run": {"step": "run-controls", "control_retries": 2}, "outcome": "failed
 La respuesta trae **el run entero** (con los contadores ya gastados), el estado en el que queda -`open`
 mientras siga vivo, y si no, el cierre concreto- y **cuantos segundos hay que esperar** antes del
 proximo tick, para que el numero de la ventana de gracia no lo decida quien tickea. Los presupuestos son
-dos reintentos de controles, dos de verificacion del veto del juez, dos de correcciones que el juez pide
-sin vetar -presupuesto propio, agotarlo entrega igual y no cierra la slice-, uno de integracion continua
+dos reintentos de controles, dos de verificacion del veto del juez, uno de integracion continua
 roja, y 10 ticks indeterminados consecutivos con 30 s o mas entre tick y tick. Por encima de todos ellos
 hay dos topes que no cuentan intentos sino gasto: **50 $ de harness por slice**, que cierra el run como abortado y es el
 backstop del unico bucle sin cierre propio -el descarte de un veredicto incoherente, que no gasta reintento
@@ -565,6 +577,12 @@ Lo que hace, y por que asi:
   PATH. Con el ahi no hace falta saber donde vive el checkout para conducir una slice de otro repo.
   El `--reinstall` no sobra: la version es `0.0.0` fija, asi que sin el la rueda se reutiliza de cache
   y un `git pull` te deja corriendo el codigo anterior sin decirlo.
+
+  **Y no instala si hay runs en marcha**: para, los lista y no toca nada. Un run vivo tiene su codigo
+  ya cargado en memoria, asi que sigue escribiendo filas con el esquema anterior en los ficheros que
+  el codigo nuevo va a releer, y al reanudarse muere leyendo lo que el mismo escribio. Archivar antes
+  no evita nada, porque esas filas se escriben **despues** de archivar. Si sabes lo que haces,
+  `make install-program FORCE=1` lo salta.
 - **`make install-skills`** — enlaza **tres** directorios bajo la configuracion de Claude Code
   (`CLAUDE_CONFIG_DIR` si esta puesto, `~/.claude` si no), y solo dos de ellos son skills:
   - `slice-spec` y `deploy-watch`, las skills.

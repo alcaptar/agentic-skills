@@ -181,7 +181,6 @@ class MetricsEntryPayload(StampedRow, ReadableLedgerRow):
     control_retries: int
     ci_retries: int
     verify_retries: int
-    correction_retries: int
     verify_discards: int
     understand_discards: int
     implement_discards: int
@@ -189,7 +188,7 @@ class MetricsEntryPayload(StampedRow, ReadableLedgerRow):
     discarded_call: DiscardedCallPayload | None = None
     ci_indeterminate_cause: DurableCiIndeterminateCause | None = None
     variant: str
-    debt: int
+    declared_debt: int | None = None
     diff: DiffStatsPayload | None = None
     budgets: dict[str, object]
     models_by_role: dict[str, object]
@@ -230,7 +229,6 @@ class MetricsEntryPayload(StampedRow, ReadableLedgerRow):
                 "control_retries": closed.run.control_retries,
                 "ci_retries": closed.run.ci_retries,
                 "verify_retries": closed.run.verify_retries,
-                "correction_retries": closed.run.correction_retries,
                 "verify_discards": closed.run.verify_discards,
                 "understand_discards": closed.run.understand_discards,
                 "implement_discards": closed.run.implement_discards,
@@ -242,7 +240,7 @@ class MetricsEntryPayload(StampedRow, ReadableLedgerRow):
                 if closed.ci_indeterminate_cause
                 else None,
                 "variant": cls.VARIANT,
-                "debt": len(closed.debt),
+                "declared_debt": len(closed.debt.left_out) if closed.debt.declared else None,
                 "diff": DiffStatsPayload.from_domain(closed.diff_stats) if closed.diff_stats is not None else None,
                 "budgets": asdict(closed.budgets),
                 "models_by_role": asdict(closed.models),

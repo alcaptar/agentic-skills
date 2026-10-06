@@ -6,6 +6,7 @@ from pydantic import Field
 
 from slice_runner.domain.exceptions import InvalidVerdictError
 from slice_runner.domain.finding import Finding
+from slice_runner.domain.prior_finding_ruling import PriorFindingRuling, PriorFindingState
 from slice_runner.domain.ruling import Ruling
 from slice_runner.domain.severity import Severity
 from slice_runner.domain.verdict import Verdict
@@ -49,9 +50,27 @@ class FindingPayload(ContractModel):
         )
 
 
+class PriorFindingRulingPayload(ContractModel):
+    id: str
+    state: PriorFindingState
+    reason: str = ""
+
+    @classmethod
+    def contract_keys(cls) -> set[str]:
+        return set(cls.model_fields)
+
+    @classmethod
+    def from_domain(cls, ruling: PriorFindingRuling) -> Self:
+        return cls.model_validate({"id": ruling.id, "state": ruling.state, "reason": ruling.reason})
+
+    def to_domain(self) -> PriorFindingRuling:
+        return PriorFindingRuling(id=self.id, state=self.state, reason=self.reason)
+
+
 class VerdictPayload(ContractModel):
     ruling: Ruling
     findings: list[FindingPayload]
+    prior_rulings: list[PriorFindingRulingPayload] = Field(default_factory=list)
 
     @classmethod
     def json_schema(cls) -> dict[str, object]:
@@ -67,8 +86,13 @@ class VerdictPayload(ContractModel):
             {
                 "ruling": verdict.ruling,
                 "findings": [FindingPayload.from_domain(finding) for finding in verdict.findings],
+                "prior_rulings": [PriorFindingRulingPayload.from_domain(ruling) for ruling in verdict.prior_rulings],
             }
         )
 
     def to_domain(self) -> Verdict:
-        return Verdict(ruling=self.ruling, findings=tuple(finding.to_domain() for finding in self.findings))
+        return Verdict(
+            ruling=self.ruling,
+            findings=tuple(finding.to_domain() for finding in self.findings),
+            prior_rulings=tuple(ruling.to_domain() for ruling in self.prior_rulings),
+        )

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
 from unittest.mock import Mock, create_autospec
 
 import pytest
@@ -9,6 +8,7 @@ from slice_runner.application.queries.show_feature_status import ShowFeatureStat
 from slice_runner.domain.branch_pull_request import BranchPullRequest
 from slice_runner.domain.call_spend_log import CallSpendLog
 from slice_runner.domain.canonical_slice_id import CanonicalSliceId
+from slice_runner.domain.closed_slice_scope import ClosedSliceScope
 from slice_runner.domain.forum import Forum
 from slice_runner.domain.harness_spend import HarnessSpend
 from slice_runner.domain.issue_label import IssueLabel
@@ -124,13 +124,15 @@ class TestShowFeatureStatus(_SharedQueryFixtures):
 
         assert len(statuses) == 2
 
-    def test_the_registry_is_asked_for_every_closed_slice_of_the_repo_without_a_time_window(
+    def test_the_registry_is_asked_for_the_repo_and_the_issues_of_the_children_just_read(
         self, query: ShowFeatureStatus, metrics: Mock
     ) -> None:
         query.execute(_PARAMS)
 
         metrics.closed_slices.assert_called_once_with(
-            repo=_REPO, since=datetime.min.replace(tzinfo=UTC), until=datetime.max.replace(tzinfo=UTC)
+            ClosedSliceScope.of_these_issues(
+                repo=_REPO, issues=(SubIssueMother.pending().number, SubIssueMother.of_another_repo().number)
+            )
         )
 
     def test_a_child_with_a_matching_row_in_the_registry_carries_it_in_its_status(

@@ -4,10 +4,13 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from slice_runner.domain.assignment import Assignment
+from slice_runner.domain.debt_entry import DebtEntry
+from slice_runner.domain.slice_coordinates import SliceCoordinates
 
 if TYPE_CHECKING:
     from pathlib import Path
 
+    from slice_runner.domain.debt_ledger import DebtLedger
     from slice_runner.domain.diff_reader import DiffReader
     from slice_runner.domain.finding import Finding
     from slice_runner.domain.implementation import Implementation
@@ -33,12 +36,22 @@ class ImplementSliceParams:
 
 
 class ImplementSlice:
-    def __init__(self, *, implementer: Implementer, reader: DiffReader) -> None:
+    def __init__(self, *, implementer: Implementer, reader: DiffReader, debt_ledger: DebtLedger) -> None:
         self._implementer = implementer
         self._reader = reader
+        self._debt_ledger = debt_ledger
 
     def execute(self, params: ImplementSliceParams) -> Implementation:
-        return self._implementer.implement(self._assignment(params))
+        implementation = self._implementer.implement(self._assignment(params))
+        self._debt_ledger.record(DebtEntry(coordinates=self._coordinates(params), left_out=implementation.left_out))
+
+        return implementation
+
+    @staticmethod
+    def _coordinates(params: ImplementSliceParams) -> SliceCoordinates:
+        return SliceCoordinates(
+            repo=params.repo, issue=params.subissue.number, slice_id=params.subissue.slice_id.canonical_id
+        )
 
     def _assignment(self, params: ImplementSliceParams) -> Assignment:
         return Assignment(
