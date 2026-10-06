@@ -8,6 +8,7 @@ if TYPE_CHECKING:
 
     from slice_runner.domain.event_status import EventStatus
     from slice_runner.domain.harness_spend import HarnessSpend
+    from slice_runner.domain.run_state import RunState
     from slice_runner.domain.step import Step
 
 
@@ -20,3 +21,4 @@ class Event:
     at: datetime
     spend: HarnessSpend
     status: EventStatus
+    state: RunState

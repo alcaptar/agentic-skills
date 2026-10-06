@@ -1,6 +1,6 @@
 ---
 name: slice-spec
-description: Crea (o valida) una spec de slices en el formato exacto que consume slice-runner. Usar cuando el usuario quiera "escribir una spec", "montar el plan de slices", "trocear una feature en slices", "slice-spec", o tenga una idea/feature y necesite convertirla en una spec ejecutable por slice-runner. Envuelve superpowers:brainstorming para el diseno y luego crea el issue padre (intencion, fuentes de convencion y controles) con una subissue por slice (titulo con identificador y nombre, intencion, criterios de aceptacion, senal y etiqueta de estado). Modo `validate` para revisar una spec existente contra el contrato. Cierra proponiendo que slices pueden correr en paralelo y, si se confirma, monta un worktree por slice y lanza sus runs. No implementa codigo: produce la spec que slice-runner luego ejecuta.
+description: Crea (o valida) una spec de slices en el formato exacto que consume slice-runner. Usar cuando el usuario quiera "escribir una spec", "montar el plan de slices", "trocear una feature en slices", "slice-spec", o tenga una idea/feature y necesite convertirla en una spec ejecutable por slice-runner. Disena por rondas de preguntas, con enfoques alternativos y una refutacion antes de crear, y luego crea el issue padre (intencion, fuentes de convencion y controles) con una subissue por slice (titulo con identificador y nombre, intencion, criterios de aceptacion, senal y etiqueta de estado). Modo `validate` para revisar una spec existente contra el contrato. Cierra proponiendo que slices pueden correr en paralelo y, si se confirma, monta un worktree por slice y lanza sus runs. No implementa codigo: produce la spec que slice-runner luego ejecuta.
 ---
 
 # Slice Spec
@@ -11,10 +11,10 @@ Emite `[slice-spec]` al inicio de cada respuesta mientras ejecutas este proceso,
 
 ## Description
 
-Skill fina que produce la **spec** que `slice-runner` consume, en su formato exacto. No re-piensa
-el diseno del producto: **delega el diseno en `superpowers:brainstorming`** y su unico trabajo es
-el **contrato de formato** (los nombres de slice, los criterios de aceptacion, las lineas que
-`slice-runner` sabe parsear). Es el `check-alignment` + `text-native` del flujo: la spec es el
+Skill que produce la **spec** que `slice-runner` consume, en su formato exacto. El diseno lo lleva
+por **rondas de preguntas** (`references/diseno.md`) hasta que no queda ninguna decision sin tomar, y
+despues aplica el **contrato de formato** (los nombres de slice, los criterios de aceptacion, las lineas
+que `slice-runner` sabe parsear). Es el `check-alignment` + `text-native` del flujo: la spec es el
 artefacto compartido entre humano y agente, y **vive en GitHub**: una feature = **un issue padre**
 mas **una subissue por slice**.
 
@@ -23,7 +23,7 @@ Par natural: `/slice-spec` crea el issue padre y sus subissues, `uv run slice-ru
 
 Dos modos:
 
-- **Autoria (por defecto):** brainstorming -> crea el issue padre y una subissue por slice, bien formadas.
+- **Autoria (por defecto):** diseno por rondas -> crea el issue padre y una subissue por slice, bien formadas.
 - **`validate`:** revisa una spec existente contra el contrato -el issue padre `#N` con sus subissues,
   o el borrador de antes de crearlos- y reporta (o corrige) desviaciones con su regla y su ubicacion.
 
@@ -31,10 +31,12 @@ Dos modos:
 
 - **No implementa.** No escribe codigo ni tests; produce la spec. El estado terminal es una spec
   valida, no un plan de `writing-plans` ni una PR.
-- **El diseno lo lleva brainstorming.** No dupliques su trabajo (entender intencion, proponer
-  enfoques, validar diseno). Esta skill reengancha solo la **cola**: cuando el diseno esta
-  aprobado, en vez de `writing-plans` emite la spec de slices. La spec ES el plan que consume
-  slice-runner.
+- **El diseno se interroga, no se aprueba.** Un diseno que se aprueba deja decisiones sin tomar, y
+  cada una reaparece en la pausa de alineacion de una slice, donde cuesta una ronda o la toma el
+  implementador sin que nadie la vea. Por eso se trabaja por rondas sobre un arbol de decisiones, con
+  enfoques alternativos en cada decision de diseno, los hechos buscados por subagentes y no preguntados,
+  y una refutacion del borrador por alguien que no lo diseno (`references/diseno.md`). No hay
+  `writing-plans`: la spec ES el plan que consume slice-runner.
 - **Formato es contrato.** La spec la parsea `slice-runner` sin ambiguedad: el cuerpo del padre, el
   titulo y el cuerpo de cada subissue, y su etiqueta de estado. Si no cumple el contrato de abajo, no
   esta terminada.
@@ -426,13 +428,16 @@ un run anterior no se reutiliza ni se pisa: la invocacion siguiente cierra en
 
 ## Steps — modo autoria (por defecto)
 
-1. **Invoca `superpowers:brainstorming`** y sigue su proceso para entender intencion, proponer
-   enfoques y validar el diseno con el usuario. **Excepcion al terminal de brainstorming:** no
-   invoques `writing-plans`; el paso siguiente es emitir la spec de slices (pasos 2-6).
-1b. **Investiga el repo antes de cortar (`check-alignment`).** Trocear sin mirar que hay ya produce
-   slices que construyen lo que existe, que traducen lo que otra esta jubilando, o que implementan algo
-   que ningun consumidor lee. Busca tu mismo, con los terminos del concepto que vas a trocear, y
-   contesta tres preguntas **con punteros, no con prosa**:
+1. **Disena por rondas (`check-alignment` + `cast-wide`).** Carga `references/diseno.md` y trabaja
+   el arbol de decisiones de la feature por rondas: toda la frontera numerada, enfoques alternativos en
+   cada decision de diseno, cada recomendacion con su base, y las ramas que siempre se visitan. Los
+   hechos los busca un subagente mientras preguntas (paso 1b); no se los pidas a la persona. Sigue
+   hasta que la frontera este vacia, y cierra con el paso 1c.
+1b. **Investiga el repo antes de cortar, con subagentes mientras corren las rondas
+   (`check-alignment`).** Trocear sin mirar que hay ya produce slices que construyen lo que existe, que
+   traducen lo que otra esta jubilando, o que implementan algo que ningun consumidor lee. Lanza la
+   busqueda en background, con los terminos del concepto que vas a trocear, y que conteste estas
+   preguntas **con punteros, no con prosa**:
 
    - **¿Que hay ya que esto necesite?** Busca en el arbol quien nombra el concepto. Vale una ruta que
      existe; no vale "el repo ya tiene puertos".
@@ -451,8 +456,8 @@ un run anterior no se reutiliza ni se pisa: la invocacion siguiente cierra en
    vistazo, no un informe: para cuando dejes de encontrar cosas nuevas, y quedate con lo que de verdad
    cambia el corte.
 
-   Propon los hallazgos a la persona y **espera su confirmacion**, igual que con las fuentes y los
-   controles: ella sabe cual de esos precedentes se revirtio por un motivo que sigue vigente. Lo
+   Los hallazgos entran en las rondas del paso 1 y **la persona los confirma** ahi, igual que confirma
+   las fuentes y los controles: ella sabe cual de esos precedentes se revirtio por un motivo que sigue vigente. Lo
    confirmado se escribe en la seccion `## Lo que ya existe` del issue padre, y **se usa en el paso 2**:
    una pieza reutilizable suele quitar una slice entera, y un precedente revertido suele cambiar el
    orden. **La linea `- pieza:` que se escribe aqui es solo el puntero**: que hace hoy esa pieza lo
@@ -462,8 +467,9 @@ un run anterior no se reutiliza ni se pisa: la invocacion siguiente cierra en
    **Si no hay nada, dilo con esa seccion vacia y su motivo**, no la omitas: ausencia declarada y
    ausencia silenciosa no son lo mismo, igual que en `SENAL:` y en los controles.
 
-1c. **Publica lo entendido del codigo y los criterios propuestos, y espera confirmacion de los dos
-   antes de cortar (`check-alignment`).** El paso 1b confirma punteros -rutas, numeros de issue,
+1c. **Cierra el diseno: publica lo entendido del codigo y los criterios propuestos, y espera
+   confirmacion de los dos antes de cortar (`check-alignment`).** Es la ronda que cierra el paso 1, con
+   la frontera ya vacia. El paso 1b confirma punteros -rutas, numeros de issue,
    sitios de acople-; lo que no confirma nadie es que se entendio **que hace** el codigo que el corte
    va a tocar, ni **que se va a considerar hecho**. Hoy el primer momento en que un malentendido del
    flujo, o un criterio que no era ese, se puede ver es leyendo las subissues ya creadas, o la pull
@@ -502,7 +508,7 @@ un run anterior no se reutiliza ni se pisa: la invocacion siguiente cierra en
    lineas `ACEPTACION:` de cada slice salen de **repartir** los criterios de feature confirmados en el
    paso 1c, no de inventarlos aqui.
 
-2a. **Escribe la intencion, la de la feature y la de cada slice.** El brainstorming del paso 1 ya
+2a. **Escribe la intencion, la de la feature y la de cada slice.** El diseno del paso 1 ya
    entendio el problema: la seccion `## Intencion` es su destilado, no trabajo nuevo. Redactala con
    lo que esta mal hoy y como se nota, sin nombrar clases ni ficheros. Luego, slice a slice, escribe
    su `INTENCION:` y **pasale la vara**: nombra el cambio de mundo que la borraria; si no puedes
@@ -560,6 +566,13 @@ un run anterior no se reutiliza ni se pisa: la invocacion siguiente cierra en
      vacio hace que `slice-runner` pare, y un control inventado finge una garantia que no existe.
 4. **Auto-validacion.** Aplica el checklist de `validate` (abajo) sobre lo que vas a crear -cuerpo del
    padre, titulo, etiqueta y cuerpo de cada subissue- y corrigelo antes de tocar GitHub.
+4b. **Haz que otro lo refute (`feedback-flip`).** Pasale el borrador entero -padre y subissues, solo
+   ese texto- a un subagente que no lo diseno, con el encargo de "La refutacion" de
+   `references/diseno.md`: que se rompe, que lineas se contradicen, que criterio no se puede cumplir o
+   medir, que afirmacion no se sostiene. Es el unico momento en que criterios, exclusiones y
+   sustituciones existen a la vez, y es entre ellos donde se esconden las contradicciones. Sus
+   objeciones forman una ultima ronda a la persona, con su recomendacion cada una; corrige el borrador
+   con lo que decida. Una sola pasada.
 5. **Muestra la spec completa por terminal, espera confirmacion, y solo entonces crea.** La spec ya no
    es un documento que se lea de un tiron, asi que lo que se revisa es lo que imprimes: el cuerpo del
    padre entero y, slice a slice, su titulo, su etiqueta y su cuerpo. Es una accion visible en el repo

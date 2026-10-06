@@ -6,6 +6,7 @@ from typing import ClassVar
 
 from slice_runner.domain.event import Event
 from slice_runner.domain.event_status import EventStatus
+from slice_runner.domain.run_state import RunState
 from slice_runner.domain.step import Step
 from slice_runner.tests.mothers.harness_spend_mother import HarnessSpendMother
 
@@ -25,6 +26,7 @@ class EventMother:
             at=datetime(2024, 1, 1, 12, 30, 45, tzinfo=UTC),
             spend=HarnessSpendMother.of_the_implementer_call(),
             status=EventStatus.ADVANCING,
+            state=RunState.OPEN,
         )
 
     @classmethod
@@ -37,7 +39,16 @@ class EventMother:
             at=datetime(2024, 1, 1, 12, 31, 15, tzinfo=UTC),
             spend=HarnessSpendMother.of_the_judge_call(),
             status=EventStatus.CLOSED,
+            state=RunState.MERGED,
         )
+
+    @classmethod
+    def blocked_by_the_judge(cls) -> Event:
+        return replace(cls.closed(), state=RunState.BLOCKED_VERIFY)
+
+    @classmethod
+    def closed_before_the_closing_state_was_recorded(cls) -> Event:
+        return replace(cls.closed(), state=RunState.OPEN)
 
     @classmethod
     def advancing_again(cls, *, minutes_later: int) -> Event:

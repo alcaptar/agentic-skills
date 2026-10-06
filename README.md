@@ -46,7 +46,7 @@ flowchart TD
     idea([idea o feature]) --> spec
 
     subgraph spec_phase["1 - Disenar"]
-        spec["<b>/slice-spec</b><br/>brainstorming + troceo vertical"]
+        spec["<b>/slice-spec</b><br/>diseno por rondas + troceo vertical"]
     end
 
     spec -->|crea| issue[("<b>Issue de GitHub</b><br/>1 issue padre + 1 subissue por slice<br/><i>unica fuente de verdad</i>")]
@@ -387,7 +387,7 @@ nadie se entere.
 > y el stock se corrompe en silencio.
 ```
 
-La skill hace brainstorming del diseno, propone el troceo vertical, descubre los controles y las
+La skill disena por rondas de preguntas hasta no dejar ninguna decision sin tomar, hace que otro agente refute el borrador, propone el troceo vertical, descubre los controles y las
 convenciones del repo (y **te los pregunta** para confirmarlos), y crea el issue padre `#42` con una
 subissue por slice. Sale algo asi:
 

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from slice_runner.domain.run_state import RunState
+
 if TYPE_CHECKING:
     from slice_runner.domain.event import Event
 
@@ -15,7 +17,11 @@ class EventFollowReport:
 
     @staticmethod
     def _line_of(event: Event) -> str:
-        return (
+        line = (
             f"{event.at.isoformat()} {event.repo} #{event.issue} {event.slice_id} "
             f"{event.step} {event.status} ${event.spend.cost_usd:.2f}"
         )
+        if event.state is RunState.OPEN:
+            return line
+
+        return f"{line} {event.state}"
