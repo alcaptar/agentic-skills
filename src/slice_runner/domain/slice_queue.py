@@ -61,6 +61,7 @@ class SliceQueue:
                 IssueLabel.BLOCKED_CONTROLS
                 | IssueLabel.BLOCKED_HYGIENE
                 | IssueLabel.BLOCKED_VERIFY
+                | IssueLabel.BLOCKED_UNCHANGED_DIFF
                 | IssueLabel.BLOCKED_CI_RED
                 | IssueLabel.BLOCKED_CI_INDETERMINATE
                 | IssueLabel.BLOCKED_CI_CONFLICT

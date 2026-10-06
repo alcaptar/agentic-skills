@@ -9,6 +9,7 @@ from slice_runner.domain.call_spend_log import CallSpendLog
 from slice_runner.domain.canonical_slice_id import CanonicalSliceId
 from slice_runner.domain.corpus import Corpus
 from slice_runner.domain.debt_ledger import DebtDeclaration, DebtLedger
+from slice_runner.domain.declared_debt import DeclaredDebt
 from slice_runner.domain.diff_stats import DiffStats
 from slice_runner.domain.harness_spend import HarnessSpend
 from slice_runner.domain.metrics_log import MetricsLog
@@ -268,8 +269,39 @@ class TestPublishingTheVetoFindings:
         closer.close(state=RunState.BLOCKED_VERIFY)
 
         closer.repository.publish_findings.assert_called_once_with(
-            repo=_REPO, issue=_ISSUE, history=FindingsHistoryMother.of_a_single_round(high, low)
+            repo=_REPO,
+            issue=_ISSUE,
+            history=FindingsHistoryMother.of_a_single_round(high, low),
+            debt=DeclaredDebt.nothing(),
         )
+
+    def test_a_closure_by_an_unchanged_diff_publishes_the_history_just_like_a_veto(self) -> None:
+        closer = _Closer()
+        high = FindingMother.without_line()
+        closer.corpus.rounds_of_the_slice.return_value = (JudgedRoundMother.of_the_round(1, high),)
+
+        closer.close(state=RunState.BLOCKED_UNCHANGED_DIFF)
+
+        closer.repository.publish_findings.assert_called_once_with(
+            repo=_REPO,
+            issue=_ISSUE,
+            history=FindingsHistoryMother.of_a_single_round(high),
+            debt=DeclaredDebt.nothing(),
+        )
+
+    def test_what_the_implementer_declared_left_out_is_published_next_to_what_the_judge_still_demands(self) -> None:
+        closer = _Closer()
+        closer.corpus.rounds_of_the_slice.return_value = (
+            JudgedRoundMother.of_the_round(1, FindingMother.without_line()),
+        )
+        closer.debt_ledger.declarations_of_the_slice.return_value = (
+            DebtDeclaration(left_out=("no cubri el caso de un binario",)),
+        )
+
+        closer.close(state=RunState.BLOCKED_UNCHANGED_DIFF)
+
+        published = closer.repository.publish_findings.call_args.kwargs["debt"]
+        assert published.left_out == ("no cubri el caso de un binario",)
 
     def test_a_closure_by_veto_with_no_findings_at_all_publishes_nothing(self) -> None:
         closer = _Closer()

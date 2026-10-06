@@ -27,6 +27,7 @@ from slice_runner.domain.exceptions import (
     MissingBranchError,
     NoPullRequestError,
     NoSliceLeftError,
+    UnchangedDiffError,
 )
 from slice_runner.domain.halt import Halt
 from slice_runner.domain.harness_spend import HarnessSpend
@@ -126,6 +127,10 @@ class ConductSliceProgress:
     @property
     def findings_of_the_last_round(self) -> tuple[Finding, ...]:
         return self.verdicts[-1].findings if self.verdicts else ()
+
+    @property
+    def judged_in_this_invocation(self) -> bool:
+        return bool(self.verdicts)
 
     @property
     def subissue(self) -> SubIssue:
@@ -616,8 +621,11 @@ class ConductSlice:
                     checklist=progress.chosen.checklist,
                     prior_findings=progress.findings_of_the_last_round,
                     debt=progress.debt,
+                    compares_with_the_last_verification=progress.judged_in_this_invocation,
                 )
             )
+        except UnchangedDiffError:
+            return SteppedSlice(progress=progress, outcome=Outcome.UNCHANGED)
         except MeasuredCallError as rejection:
             discarded = self._discarding(progress, rejection)
 

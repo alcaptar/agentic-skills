@@ -196,11 +196,50 @@ class AnsweringByArgv(Process):
 
         raise AssertionError(f"no answer was scripted for `{' '.join(argv)}`")
 
+    @property
+    def scripted(self) -> tuple[Answer, ...]:
+        return self._answers
+
     def invoked(self, *tokens: str) -> bool:
         return any(all(token in call.argv for token in tokens) for call in self.calls)
 
+    def times_invoked(self, *tokens: str) -> int:
+        return sum(1 for call in self.calls if all(token in call.argv for token in tokens))
+
     def ran(self, *argv: str) -> bool:
         return list(argv) in [call.argv for call in self.calls]
+
+
+class AnsweringByArgvWithADiffThatMoves(AnsweringByArgv):
+    def __init__(self, *answers: Answer, diffs: tuple[str, ...]) -> None:
+        super().__init__(*answers)
+        self._diffs = diffs
+        self._reads = 0
+
+    @classmethod
+    def over(cls, process: AnsweringByArgv, *, diffs: tuple[str, ...]) -> AnsweringByArgvWithADiffThatMoves:
+        return cls(*process.scripted, diffs=diffs)
+
+    def run(
+        self,
+        argv: list[str],
+        *,
+        stdin: str = "",
+        cwd: str | None = None,
+        on_line: Callable[[str], None] | None = None,
+    ) -> ProcessOutput:
+        if not self._reads_the_text_of_the_diff(argv):
+            return super().run(argv, stdin=stdin, cwd=cwd, on_line=on_line)
+
+        self.calls.append(RecordedCall(argv=list(argv), stdin=stdin))
+        text = self._diffs[min(self._reads, len(self._diffs) - 1)]
+        self._reads += 1
+
+        return ProcessOutput(code=0, stdout=text, stderr="")
+
+    @staticmethod
+    def _reads_the_text_of_the_diff(argv: list[str]) -> bool:
+        return "diff" in argv and "--cached" in argv and "--name-only" not in argv and "--numstat" not in argv
 
 
 class RaisingOnCommand(Process):
@@ -355,6 +394,11 @@ class RecordedCorpus(Corpus):
         matching = [entry for entry in self.entries if self._matches(entry, coordinates)]
 
         return matching[-1].diff.stats if matching else None
+
+    def fingerprint_of_the_last_verification(self, coordinates: SliceCoordinates) -> str | None:
+        matching = [entry for entry in self.entries if self._matches(entry, coordinates)]
+
+        return matching[-1].diff.fingerprint if matching else None
 
     def rounds_of_the_slice(self, coordinates: SliceCoordinates) -> tuple[JudgedRound, ...]:
         last_of: dict[int, CorpusEntry] = {}

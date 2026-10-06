@@ -28,6 +28,7 @@ if TYPE_CHECKING:
 class DurableVerdict(StrEnum):
     PASS = "pass"
     FAIL = "fail"
+    BLOCKED_UNCHANGED_DIFF = "blocked-unchanged-diff"
     BLOCKED_CONTROLS = "blocked-controls"
     BLOCKED_HYGIENE = "blocked-hygiene"
     ABORTED_BUDGET = "aborted-budget"
@@ -93,6 +94,7 @@ class DurableClosure:
 
     _VERDICTS_WITH_NO_CI: ClassVar[dict[RunState, DurableVerdict]] = {
         RunState.BLOCKED_VERIFY: DurableVerdict.FAIL,
+        RunState.BLOCKED_UNCHANGED_DIFF: DurableVerdict.BLOCKED_UNCHANGED_DIFF,
         RunState.BLOCKED_CONTROLS: DurableVerdict.BLOCKED_CONTROLS,
         RunState.BLOCKED_HYGIENE: DurableVerdict.BLOCKED_HYGIENE,
         RunState.ABORTED_BUDGET: DurableVerdict.ABORTED_BUDGET,
@@ -101,6 +103,7 @@ class DurableClosure:
 
     _STATES_WITH_NO_CI: ClassVar[dict[DurableVerdict, RunState]] = {
         DurableVerdict.FAIL: RunState.BLOCKED_VERIFY,
+        DurableVerdict.BLOCKED_UNCHANGED_DIFF: RunState.BLOCKED_UNCHANGED_DIFF,
         DurableVerdict.BLOCKED_CONTROLS: RunState.BLOCKED_CONTROLS,
         DurableVerdict.BLOCKED_HYGIENE: RunState.BLOCKED_HYGIENE,
         DurableVerdict.ABORTED_BUDGET: RunState.ABORTED_BUDGET,
@@ -126,6 +129,7 @@ class DurableClosure:
                 return cls(verdict=DurableVerdict.PASS, ci=DurableCi.CONFLICT)
             case (
                 RunState.BLOCKED_VERIFY
+                | RunState.BLOCKED_UNCHANGED_DIFF
                 | RunState.BLOCKED_CONTROLS
                 | RunState.BLOCKED_HYGIENE
                 | RunState.ABORTED_BUDGET
@@ -145,6 +149,7 @@ class DurableClosure:
                 return cls._MERGED_STATES[ci]
             case (
                 DurableVerdict.FAIL
+                | DurableVerdict.BLOCKED_UNCHANGED_DIFF
                 | DurableVerdict.BLOCKED_CONTROLS
                 | DurableVerdict.BLOCKED_HYGIENE
                 | DurableVerdict.ABORTED_BUDGET

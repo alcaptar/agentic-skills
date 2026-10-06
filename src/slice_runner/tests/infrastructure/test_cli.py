@@ -34,8 +34,16 @@ from slice_runner.infrastructure.reset_comment import ResetComment
 from slice_runner.infrastructure.system_clock import SystemClock
 from slice_runner.infrastructure.understanding_invocation import UnderstandingInvocation
 from slice_runner.infrastructure.uv_program_origin import UvProgramOrigin
+from slice_runner.infrastructure.veto_findings_comment import VetoFindingsComment
 from slice_runner.tests.argv import Argv
-from slice_runner.tests.doubles import Answer, AnsweringByArgv, RealExceptTheJudge, TimingOutProcess, UnrunnableJudge
+from slice_runner.tests.doubles import (
+    Answer,
+    AnsweringByArgv,
+    AnsweringByArgvWithADiffThatMoves,
+    RealExceptTheJudge,
+    TimingOutProcess,
+    UnrunnableJudge,
+)
 from slice_runner.tests.git_repo import Git
 from slice_runner.tests.mothers.closed_slice_mother import ClosedSliceMother
 from slice_runner.tests.mothers.conversation_transcript_mother import ConversationTranscriptMother
@@ -105,6 +113,7 @@ _TABLE: list[tuple[Step, Outcome, dict[str, int], tuple[Step, RunState, int]]] =
     (Step.VERIFY, Outcome.FAILED, {}, (Step.IMPLEMENT, RunState.OPEN, 0)),
     (Step.VERIFY, Outcome.FAILED, {"verify_retries": 1}, (Step.IMPLEMENT, RunState.OPEN, 0)),
     (Step.VERIFY, Outcome.FAILED, {"verify_retries": 2}, (Step.VERIFY, RunState.BLOCKED_VERIFY, 0)),
+    (Step.VERIFY, Outcome.UNCHANGED, {}, (Step.VERIFY, RunState.BLOCKED_UNCHANGED_DIFF, 0)),
     (Step.VERIFY, Outcome.OVER_BUDGET, {}, (Step.VERIFY, RunState.ABORTED_BUDGET, 0)),
     (
         Step.VERIFY,
@@ -1685,6 +1694,99 @@ class TestTheControlLogsOfARetriedRound(BlindToTheToolboxOfThisMachine):
 
         assert (self._slice_dir(logs, issue=first_issue) / "round-1" / "lint.log").exists()
         assert (self._slice_dir(logs, issue=second_issue) / "round-1" / "lint.log").exists()
+
+
+class TestWhenTheImplementerLeavesTheDiffUntouched(BlindToTheToolboxOfThisMachine):
+    @staticmethod
+    def _invocation() -> RunInvocation:
+        return RunInvocation(
+            children=GhConversationMother.the_slice_resumed_at(RunMother.judging()),
+            answers=(
+                Answer(to=("git", "rev-parse"), code=0),
+                Answer(to=("git", "fetch"), code=0),
+                Answer(to=("git", "rev-list", "--count"), stdout="0\n"),
+                Answer(to=("gh", "issue", "view", "--json", "comments"), stdout=json.dumps({"comments": []})),
+                Answer(
+                    to=(ImplementerInvocation.EXECUTABLE, "bypassPermissions"),
+                    stdout=json.dumps(HarnessEnvelopeMother.recorded(_IMPLEMENTER_PAYLOAD)),
+                ),
+                Answer(to=("git", "add")),
+                Answer(to=("git", "diff", "--cached", "--name-only"), stdout="hello.py\ntest_hello.py\n"),
+                Answer(to=("sh", "-c", GhConversationMother.CONTROL)),
+                Answer(to=("git", "diff", "--cached", "--numstat"), stdout="1\t0\thello.py\n1\t0\ttest_hello.py\n"),
+                Answer(to=("git", "diff", "--cached"), stdout="diff --git a/hello.py b/hello.py\n"),
+                Answer(
+                    to=(JudgeInvocation.EXECUTABLE, "--add-dir"),
+                    stdout=json.dumps(HarnessEnvelopeMother.carrying(JudgeVerdictMother.failing())),
+                ),
+                Answer(to=("git", "push")),
+            ),
+        )
+
+    @staticmethod
+    def _verdicts_under(tmp_path: Path) -> list[dict[str, object]]:
+        ledger = tmp_path / "no-toolbox" / "slice-runner" / "runs" / "verdicts.jsonl"
+
+        return [json.loads(line) for line in ledger.read_text(encoding="utf-8").splitlines()]
+
+    def test_the_second_round_with_the_same_diff_never_launches_the_process_of_the_judge(self, tmp_path: Path) -> None:
+        invocation = self._invocation()
+
+        invocation.conduct(logs=tmp_path / "logs", budgets=Budgets(verify_retries=1))
+
+        assert invocation.process.times_invoked(JudgeInvocation.EXECUTABLE, "--add-dir") == 1
+
+    def test_the_run_closes_naming_that_nothing_moved_with_an_exit_code_that_is_not_the_one_of_a_veto(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        invocation = self._invocation()
+
+        code = invocation.conduct(logs=tmp_path / "logs", budgets=Budgets(verify_retries=1))
+
+        assert code == ExitCode.UNCHANGED_DIFF
+        assert json.loads(capsys.readouterr().out)["state"] == "blocked-unchanged-diff"
+        labels = [
+            Argv(call.argv).value_of("--add-label") for call in invocation.process.calls if "--add-label" in call.argv
+        ]
+        assert labels[-1] == IssueLabel.BLOCKED_UNCHANGED_DIFF
+
+    def test_the_round_that_was_not_judged_leaves_no_row_in_the_corpus(self, tmp_path: Path) -> None:
+        invocation = self._invocation()
+
+        invocation.conduct(logs=tmp_path / "logs", budgets=Budgets(verify_retries=1))
+
+        assert [entry["verify_round"] for entry in self._verdicts_under(tmp_path)] == [1]
+
+    def test_the_comment_that_closes_the_run_carries_what_the_judge_still_demands(self, tmp_path: Path) -> None:
+        invocation = self._invocation()
+
+        invocation.conduct(logs=tmp_path / "logs", budgets=Budgets(verify_retries=1))
+
+        comments = [call.stdin for call in invocation.process.calls if call.argv[:3] == ["gh", "issue", "comment"]]
+        published = next(body for body in comments if VetoFindingsComment.is_the_veto_findings(body))
+        assert "Hallazgos vigentes tras la ultima ronda" in published
+
+    def test_a_diff_that_changes_in_a_byte_is_judged_again(self, tmp_path: Path) -> None:
+        invocation = self._invocation()
+        invocation.process = AnsweringByArgvWithADiffThatMoves.over(
+            invocation.process,
+            diffs=("diff --git a/hello.py b/hello.py\n+return 2\n", "diff --git a/hello.py b/hello.py\n+return 3\n"),
+        )
+
+        code = invocation.conduct(logs=tmp_path / "logs", budgets=Budgets(verify_retries=1))
+
+        assert invocation.process.times_invoked(JudgeInvocation.EXECUTABLE, "--add-dir") == 2
+        assert code == ExitCode.RUN_UNMERGED
+
+    def test_the_first_round_of_a_slice_is_judged_because_there_is_nothing_to_compare_with(
+        self, tmp_path: Path
+    ) -> None:
+        invocation = self._invocation()
+
+        invocation.conduct(logs=tmp_path / "logs", budgets=Budgets(verify_retries=0))
+
+        assert invocation.process.times_invoked(JudgeInvocation.EXECUTABLE, "--add-dir") == 1
+        assert [entry["verify_round"] for entry in self._verdicts_under(tmp_path)] == [1]
 
 
 class TestTheVerifyRoundOfARetriedVerdict(BlindToTheToolboxOfThisMachine):

@@ -14,6 +14,7 @@ class IssueLabel(StrEnum):
     BLOCKED_CONTROLS = "bloqueada:controles"
     BLOCKED_HYGIENE = "bloqueada:higiene"
     BLOCKED_VERIFY = "bloqueada:verify"
+    BLOCKED_UNCHANGED_DIFF = "bloqueada:sin-cambios"
     BLOCKED_CI_RED = "bloqueada:ci-roja"
     BLOCKED_CI_INDETERMINATE = "bloqueada:ci-indeterminada"
     BLOCKED_CI_CONFLICT = "bloqueada:conflicto"
@@ -31,6 +32,7 @@ class IssueLabel(StrEnum):
                 RunState.BLOCKED_CONTROLS
                 | RunState.BLOCKED_HYGIENE
                 | RunState.BLOCKED_VERIFY
+                | RunState.BLOCKED_UNCHANGED_DIFF
                 | RunState.BLOCKED_CI_RED
                 | RunState.BLOCKED_CI_INDETERMINATE
                 | RunState.BLOCKED_CI_CONFLICT
@@ -64,6 +66,7 @@ class IssueLabel(StrEnum):
             RunState.BLOCKED_CONTROLS: cls.BLOCKED_CONTROLS,
             RunState.BLOCKED_HYGIENE: cls.BLOCKED_HYGIENE,
             RunState.BLOCKED_VERIFY: cls.BLOCKED_VERIFY,
+            RunState.BLOCKED_UNCHANGED_DIFF: cls.BLOCKED_UNCHANGED_DIFF,
             RunState.BLOCKED_CI_RED: cls.BLOCKED_CI_RED,
             RunState.BLOCKED_CI_INDETERMINATE: cls.BLOCKED_CI_INDETERMINATE,
             RunState.BLOCKED_CI_CONFLICT: cls.BLOCKED_CI_CONFLICT,

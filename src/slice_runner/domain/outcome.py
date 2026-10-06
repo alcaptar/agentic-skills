@@ -26,6 +26,7 @@ class Outcome(StrEnum):
     CALL_NOT_MEASURED = "call-not-measured"
     CONFLICTING = "conflicting"
     CHANGES_REQUESTED = "changes-requested"
+    UNCHANGED = "unchanged"
 
     @classmethod
     def of_the_alignment(cls, kind: AlignmentResponseKind, *, redrafting: bool) -> Outcome:
