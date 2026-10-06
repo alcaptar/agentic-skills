@@ -13,6 +13,7 @@ from slice_runner.domain.run_state import RunState
 from slice_runner.domain.severity import Severity
 from slice_runner.domain.slice_coordinates import SliceCoordinates
 from slice_runner.domain.step import Step
+from slice_runner.domain.worktree_retirement import WorktreeRetirement
 from slice_runner.infrastructure.contract_model import ContractModel
 from slice_runner.infrastructure.corpus_verdict_payload import SeverityCountPayload
 from slice_runner.infrastructure.diff_stats_payload import DiffStatsPayload
@@ -32,6 +33,7 @@ class DurableVerdict(StrEnum):
     BLOCKED_CONTROLS = "blocked-controls"
     BLOCKED_HYGIENE = "blocked-hygiene"
     BLOCKED_WORKTREE = "blocked-worktree"
+    BLOCKED_LEFTOVER_WORKTREE = "blocked-leftover-worktree"
     ABORTED_BUDGET = "aborted-budget"
     ABORTED_UNMEASURED_CALL = "aborted-unmeasured-call"
 
@@ -99,6 +101,7 @@ class DurableClosure:
         RunState.BLOCKED_CONTROLS: DurableVerdict.BLOCKED_CONTROLS,
         RunState.BLOCKED_HYGIENE: DurableVerdict.BLOCKED_HYGIENE,
         RunState.BLOCKED_WORKTREE: DurableVerdict.BLOCKED_WORKTREE,
+        RunState.BLOCKED_LEFTOVER_WORKTREE: DurableVerdict.BLOCKED_LEFTOVER_WORKTREE,
         RunState.ABORTED_BUDGET: DurableVerdict.ABORTED_BUDGET,
         RunState.ABORTED_UNMEASURED_CALL: DurableVerdict.ABORTED_UNMEASURED_CALL,
     }
@@ -109,6 +112,7 @@ class DurableClosure:
         DurableVerdict.BLOCKED_CONTROLS: RunState.BLOCKED_CONTROLS,
         DurableVerdict.BLOCKED_HYGIENE: RunState.BLOCKED_HYGIENE,
         DurableVerdict.BLOCKED_WORKTREE: RunState.BLOCKED_WORKTREE,
+        DurableVerdict.BLOCKED_LEFTOVER_WORKTREE: RunState.BLOCKED_LEFTOVER_WORKTREE,
         DurableVerdict.ABORTED_BUDGET: RunState.ABORTED_BUDGET,
         DurableVerdict.ABORTED_UNMEASURED_CALL: RunState.ABORTED_UNMEASURED_CALL,
     }
@@ -136,6 +140,7 @@ class DurableClosure:
                 | RunState.BLOCKED_CONTROLS
                 | RunState.BLOCKED_HYGIENE
                 | RunState.BLOCKED_WORKTREE
+                | RunState.BLOCKED_LEFTOVER_WORKTREE
                 | RunState.ABORTED_BUDGET
                 | RunState.ABORTED_UNMEASURED_CALL
             ):
@@ -157,6 +162,7 @@ class DurableClosure:
                 | DurableVerdict.BLOCKED_CONTROLS
                 | DurableVerdict.BLOCKED_HYGIENE
                 | DurableVerdict.BLOCKED_WORKTREE
+                | DurableVerdict.BLOCKED_LEFTOVER_WORKTREE
                 | DurableVerdict.ABORTED_BUDGET
                 | DurableVerdict.ABORTED_UNMEASURED_CALL
             ):
@@ -200,6 +206,8 @@ class MetricsEntryPayload(StampedRow, ReadableLedgerRow):
     variant: str
     declared_debt: int | None = None
     diff: DiffStatsPayload | None = None
+    worktree_retirement: WorktreeRetirement = WorktreeRetirement.NOT_MOUNTED
+    worktree: str | None = None
     budgets: dict[str, object]
     models_by_role: dict[str, object]
 
@@ -252,6 +260,8 @@ class MetricsEntryPayload(StampedRow, ReadableLedgerRow):
                 "variant": cls.VARIANT,
                 "declared_debt": len(closed.debt.left_out) if closed.debt.declared else None,
                 "diff": DiffStatsPayload.from_domain(closed.diff_stats) if closed.diff_stats is not None else None,
+                "worktree_retirement": closed.worktree_retirement,
+                "worktree": closed.worktree if closed.worktree_retirement.kept else None,
                 "budgets": asdict(closed.budgets),
                 "models_by_role": asdict(closed.models),
             },

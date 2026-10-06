@@ -420,10 +420,11 @@ git worktree remove <ruta-del-worktree>
 git branch -d <rama-de-la-slice>
 ```
 
-Si falla cualquiera de las dos, **el arbol se queda** y se dice en que ruta y por que. Retirarlo no lo
-hace el programa todavia, asi que un arbol que nadie retire se queda para siempre: en la maquina donde
-se escribio esto habia **treinta y siete**, de dias distintos, y decidir cual se podia tirar costaba
-mirarlos uno a uno.
+Si falla cualquiera de las dos, o no se puede comprobar, **el arbol se queda** y el comentario de cierre
+y la fila de metricas dicen en que ruta y por que. El programa retira solo al cerrar un run fusionado o
+abortado sin haber tocado codigo; un run bloqueado conserva su arbol para reanudar. Un arbol que sobra de
+un run anterior no se reutiliza ni se pisa: la invocacion siguiente cierra en
+`bloqueada:worktree-sin-retirar` y dice el comando para quitarlo a mano (`git worktree remove <ruta>`).
 
 ## Steps — modo autoria (por defecto)
 
@@ -602,8 +603,8 @@ mirarlos uno a uno.
    monta el suyo, colgando de la raiz del clon, y el run se lanza desde esa raiz. Antes la ruta se
    tecleaba y su valor por omision era el directorio actual: medido en dos maquinas, era el mecanismo
    por el que el juez leyo **31 de 32 veces** una rama que no tenia nada que ver con la slice que
-   juzgaba. Que hace el programa segun lo que encuentre montado, y que significa `bloqueada:worktree`,
-   esta en **"El worktree de una slice"**.
+   juzgaba. Que hace el programa segun lo que encuentre montado, y que significan `bloqueada:worktree` y
+   `bloqueada:worktree-sin-retirar`, esta en **"El worktree de una slice"**.
 
 7. **Propon el reparto en paralelo y, si te lo confirman, montalo tu.** Una invocacion conduce **una**
    slice, asi que una feature de ocho son ocho invocaciones; en serie eso es toda la tarde. Se pueden

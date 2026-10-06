@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, ClassVar
 
 import pytest
 
+from slice_runner.domain.exceptions import WorktreeRetirementError
 from slice_runner.domain.listed_worktree import ListedWorktree
 from slice_runner.domain.slice_identity import SliceIdentity
 from slice_runner.infrastructure.git_command_failed_error import GitCommandFailedError
@@ -210,3 +211,129 @@ class TestGitWorktrees:
             self._worktrees().add_new_branch(
                 root=str(clone), path=str(occupied), branch=self.BRANCH, base=Git.BASE_BRANCH
             )
+
+    def test_a_clean_tree_has_no_uncommitted_work(self, tmp_path: Path) -> None:
+        path = self._mounted(self._clone(tmp_path))
+
+        assert self._worktrees().has_uncommitted_work(path=str(path)) is False
+
+    def test_a_modified_tracked_file_is_uncommitted_work(self, tmp_path: Path) -> None:
+        clone = self._clone(tmp_path)
+        path = self._mounted(clone)
+        (path / "tracked.txt").write_text("one")
+        Git.run(path, "add", "tracked.txt")
+        Git.run(path, "commit", "-m", "track it")
+        (path / "tracked.txt").write_text("two")
+
+        assert self._worktrees().has_uncommitted_work(path=str(path)) is True
+
+    def test_a_file_git_does_not_track_yet_is_uncommitted_work_too(self, tmp_path: Path) -> None:
+        path = self._mounted(self._clone(tmp_path))
+        (path / "new.txt").write_text("nobody added me")
+
+        assert self._worktrees().has_uncommitted_work(path=str(path)) is True
+
+    def test_a_staged_file_is_uncommitted_work(self, tmp_path: Path) -> None:
+        path = self._mounted(self._clone(tmp_path))
+        (path / "staged.txt").write_text("staged")
+        Git.run(path, "add", "staged.txt")
+
+        assert self._worktrees().has_uncommitted_work(path=str(path)) is True
+
+    def test_asking_about_a_path_that_is_no_worktree_raises_instead_of_answering_that_nothing_is_there(
+        self, tmp_path: Path
+    ) -> None:
+        with pytest.raises(WorktreeRetirementError):
+            self._worktrees().has_uncommitted_work(path=str(tmp_path / "does-not-exist"))
+
+    def test_a_tree_of_the_slice_on_its_path_is_mounted(self, tmp_path: Path) -> None:
+        clone = self._clone(tmp_path)
+        path = self._mounted(clone)
+
+        assert self._worktrees().is_mounted(root=str(clone), path=str(path), branch=self.BRANCH) is True
+
+    def test_a_path_with_no_tree_on_it_is_not_mounted(self, tmp_path: Path) -> None:
+        clone = self._clone(tmp_path)
+
+        mounted = self._worktrees().is_mounted(root=str(clone), path=str(clone / "nothing"), branch=self.BRANCH)
+
+        assert mounted is False
+
+    def test_a_tree_on_that_path_holding_another_branch_is_not_mounted_for_this_one(self, tmp_path: Path) -> None:
+        clone = self._clone(tmp_path)
+        path = self._mounted(clone)
+
+        assert self._worktrees().is_mounted(root=str(clone), path=str(path), branch="slice/00-other") is False
+
+    def test_asking_whether_a_tree_is_mounted_outside_any_repo_raises_instead_of_answering_false(
+        self, tmp_path: Path
+    ) -> None:
+        with pytest.raises(WorktreeRetirementError):
+            self._worktrees().is_mounted(root=str(tmp_path), path=str(tmp_path / "x"), branch=self.BRANCH)
+
+    def test_a_branch_cut_from_the_base_with_no_commit_of_its_own_has_nothing_only_local(self, tmp_path: Path) -> None:
+        clone = self._clone(tmp_path)
+        self._mounted(clone)
+
+        assert self._worktrees().local_only_commits(root=str(clone), branch=self.BRANCH) == 0
+
+    def test_every_commit_that_no_remote_has_counts_as_only_local(self, tmp_path: Path) -> None:
+        clone = self._clone(tmp_path)
+        path = self._mounted(clone)
+        Git.run(path, "commit", "--allow-empty", "-m", "one")
+        Git.run(path, "commit", "--allow-empty", "-m", "two")
+
+        assert self._worktrees().local_only_commits(root=str(clone), branch=self.BRANCH) == 2
+
+    def test_a_commit_that_was_pushed_is_no_longer_only_local(self, tmp_path: Path) -> None:
+        clone = self._clone(tmp_path)
+        path = self._mounted(clone)
+        Git.run(path, "commit", "--allow-empty", "-m", "one")
+        Git.run(path, "push", "origin", self.BRANCH)
+        Git.run(path, "commit", "--allow-empty", "-m", "two")
+
+        assert self._worktrees().local_only_commits(root=str(clone), branch=self.BRANCH) == 1
+
+    def test_asking_about_a_branch_that_does_not_exist_raises_instead_of_answering_zero(self, tmp_path: Path) -> None:
+        clone = self._clone(tmp_path)
+
+        with pytest.raises(WorktreeRetirementError):
+            self._worktrees().local_only_commits(root=str(clone), branch="slice/99-not-there")
+
+    def test_removing_a_clean_tree_takes_its_directory_and_its_registration_away(self, tmp_path: Path) -> None:
+        clone = self._clone(tmp_path)
+        path = self._mounted(clone)
+
+        self._worktrees().remove(root=str(clone), path=str(path))
+
+        assert not path.exists()
+        assert [entry.path for entry in self._worktrees().listed(root=str(clone))] == [str(clone.resolve())]
+
+    def test_removing_a_tree_with_uncommitted_work_is_refused_by_git_and_leaves_it_in_place(
+        self, tmp_path: Path
+    ) -> None:
+        clone = self._clone(tmp_path)
+        path = self._mounted(clone)
+        (path / "precious.txt").write_text("not committed")
+
+        with pytest.raises(WorktreeRetirementError):
+            self._worktrees().remove(root=str(clone), path=str(path))
+
+        assert (path / "precious.txt").read_text() == "not committed"
+
+    def test_deleting_the_branch_of_a_tree_that_is_gone_removes_it_from_the_clone(self, tmp_path: Path) -> None:
+        clone = self._clone(tmp_path)
+        path = self._mounted(clone)
+        Git.run(path, "commit", "--allow-empty", "-m", "never pushed")
+        worktrees = self._worktrees()
+        worktrees.remove(root=str(clone), path=str(path))
+
+        worktrees.delete_branch(root=str(clone), branch=self.BRANCH)
+
+        assert worktrees.branch_exists(root=str(clone), name=self.BRANCH) is False
+
+    def test_deleting_a_branch_that_does_not_exist_raises(self, tmp_path: Path) -> None:
+        clone = self._clone(tmp_path)
+
+        with pytest.raises(WorktreeRetirementError):
+            self._worktrees().delete_branch(root=str(clone), branch="slice/99-not-there")

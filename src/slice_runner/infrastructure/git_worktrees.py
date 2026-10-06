@@ -3,9 +3,11 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
+from slice_runner.domain.exceptions import WorktreeRetirementError
 from slice_runner.domain.listed_worktree import ListedWorktree
 from slice_runner.domain.worktrees import Worktrees
 from slice_runner.infrastructure.git_command_failed_error import GitCommandFailedError
+from slice_runner.infrastructure.process import ProcessNotRunnableError, ProcessTimedOutError
 
 if TYPE_CHECKING:
     from slice_runner.infrastructure.process import Process
@@ -54,6 +56,34 @@ class GitWorktrees(Worktrees):
     def prune(self, *, root: str) -> None:
         self._git(root, "worktree", "prune")
 
+    def is_mounted(self, *, root: str, path: str, branch: str) -> bool:
+        listing = self._asked(root, "worktree", "list", "--porcelain")
+        entries = [block.splitlines() for block in listing.split("\n\n") if block.strip()]
+        sought = Path(path).resolve()
+
+        return any(
+            Path(entry.path).resolve() == sought and entry.branch == branch
+            for entry in (self._entry(lines, main=False) for lines in entries)
+        )
+
+    def has_uncommitted_work(self, *, path: str) -> bool:
+        return self._asked(path, "status", "--porcelain").strip() != ""
+
+    def local_only_commits(self, *, root: str, branch: str) -> int:
+        counted = self._asked(root, "rev-list", "--count", f"{self.BRANCH_PREFIX}{branch}", "--not", "--remotes")
+        try:
+            return int(counted.strip())
+        except ValueError as unreadable:
+            raise WorktreeRetirementError(
+                f"git rev-list --count answered {counted!r}, which is no number"
+            ) from unreadable
+
+    def remove(self, *, root: str, path: str) -> None:
+        self._asked(root, "worktree", "remove", path)
+
+    def delete_branch(self, *, root: str, branch: str) -> None:
+        self._asked(root, "branch", "-D", branch)
+
     def exclude(self, *, root: str, rule: str) -> None:
         common = self.common_dir(path=root)
         if common == "":
@@ -85,6 +115,12 @@ class GitWorktrees(Worktrees):
     @staticmethod
     def _common_dir_argv(path: str) -> list[str]:
         return ["git", "-C", path, "rev-parse", "--path-format=absolute", "--git-common-dir"]
+
+    def _asked(self, root: str, *args: str) -> str:
+        try:
+            return self._git(root, *args)
+        except (GitCommandFailedError, ProcessTimedOutError, ProcessNotRunnableError) as failed:
+            raise WorktreeRetirementError(str(failed)) from failed
 
     def _git(self, root: str, *args: str) -> str:
         argv = ["git", "-C", root, *args]

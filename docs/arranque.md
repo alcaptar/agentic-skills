@@ -49,6 +49,11 @@ En el repo donde vas a trabajar:
   no hace falta decirle dónde. Si lo lanzas desde otro directorio, `--repo-root <ruta>` señala el clon;
   `--worktree <ruta>` solo es para un árbol montado a mano. Si la rama ya la tiene tomada otro árbol, el run
   se cierra en `bloqueada:worktree` y dice en qué ruta está el conflicto.
+- Al cerrar, el programa retira el worktree y su rama local solo si el run se fusionó, o abortó sin haber
+  tocado código, **y** el árbol no tiene nada sin comitear ni commits que solo existan en local. Si algo de eso
+  falla, o no se puede comprobar, el árbol se queda: el comentario de cierre y la fila de métricas dicen en qué
+  ruta y por qué. Un árbol que sobra de un run anterior no se reutiliza ni se pisa: la invocación siguiente se
+  cierra en `bloqueada:worktree-sin-retirar` con el comando para quitarlo a mano (`git worktree remove <ruta>`).
 - `--slice <identificador>` elige cual conducir; sin el, coge la siguiente ejecutable en orden. El
   identificador es `slice-NN`, o `<CLAVE>-NN` (`STAFF-124-01`) si la feature declara historia de
   usuario: con clave, pedir `slice-NN` falla diciendo que esa slice no existe.

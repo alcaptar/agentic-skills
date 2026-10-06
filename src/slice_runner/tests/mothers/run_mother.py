@@ -17,6 +17,10 @@ class RunMother:
         return Run(step=Step.IMPLEMENT, control_retries=1, verify_retries=1)
 
     @staticmethod
+    def aborted_before_touching_code() -> Run:
+        return Run(step=Step.UNDERSTAND)
+
+    @staticmethod
     def implementing() -> Run:
         return Run(step=Step.IMPLEMENT)
 

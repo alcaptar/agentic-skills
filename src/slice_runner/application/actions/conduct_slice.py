@@ -13,6 +13,7 @@ from slice_runner.application.actions.record_closure import RecordClosureParams
 from slice_runner.application.actions.record_step import RecordStepParams
 from slice_runner.application.actions.reopen_slice import ReopenSliceParams
 from slice_runner.application.actions.rescue_staged_work import RescueStagedWorkParams
+from slice_runner.application.actions.retire_worktree import RetireWorktreeParams
 from slice_runner.application.actions.run_controls import RunControlsParams
 from slice_runner.application.actions.seek_alignment import SeekAlignmentParams
 from slice_runner.application.actions.stage_slice import StageSliceParams
@@ -22,6 +23,7 @@ from slice_runner.application.queries.read_ci_status import ReadCiStatusParams
 from slice_runner.application.queries.read_pull_request_status import ReadPullRequestStatusParams
 from slice_runner.application.queries.run_prechecks import RunPrechecksParams
 from slice_runner.application.queries.select_slice import SelectSliceParams
+from slice_runner.domain.closing_worktree import ClosingWorktree
 from slice_runner.domain.discarded_call import DiscardedCall
 from slice_runner.domain.exceptions import (
     DirtyIndexError,
@@ -43,6 +45,8 @@ from slice_runner.domain.ruling import Ruling
 from slice_runner.domain.run import Run
 from slice_runner.domain.run_state import RunState
 from slice_runner.domain.step import Step
+from slice_runner.domain.worktree_retirement import WorktreeRetirement
+from slice_runner.domain.worktree_retirement_policy import WorktreeRetirementPolicy
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -58,6 +62,7 @@ if TYPE_CHECKING:
     from slice_runner.application.actions.record_step import RecordStep
     from slice_runner.application.actions.reopen_slice import ReopenSlice
     from slice_runner.application.actions.rescue_staged_work import RescueStagedWork
+    from slice_runner.application.actions.retire_worktree import RetireWorktree
     from slice_runner.application.actions.run_controls import RunControls
     from slice_runner.application.actions.seek_alignment import SeekAlignment
     from slice_runner.application.actions.stage_slice import StageSlice
@@ -104,6 +109,8 @@ class ConductSliceResult:
     precheck: PrecheckResult | None = None
     pull_request: int | None = None
     conflicting_path: str = ""
+    worktree: str = ""
+    worktree_retirement: WorktreeRetirement = WorktreeRetirement.NOT_MOUNTED
 
 
 @dataclass(frozen=True, kw_only=True, slots=True)
@@ -126,6 +133,7 @@ class ConductSliceProgress:
     discarded_call: DiscardedCall | None = None
     ci_indeterminate_cause: CiIndeterminateCause | None = None
     conflicting_paths: tuple[str, ...] = field(default=())
+    expects_a_tree: bool = True
 
     @property
     def spend(self) -> HarnessSpend:
@@ -168,6 +176,7 @@ class ConductSliceUseCases:
     reopen: ReopenSlice
     prechecks: RunPrechecks
     mount: MountWorktree
+    retire: RetireWorktree
     check_sources: CheckSources
     implement: ImplementSlice
     stage: StageSlice
@@ -208,6 +217,7 @@ class ConductSlice:
         self._reopen = use_cases.reopen
         self._prechecks = use_cases.prechecks
         self._mount = use_cases.mount
+        self._retire = use_cases.retire
         self._check_sources = use_cases.check_sources
         self._implement = use_cases.implement
         self._stage = use_cases.stage
@@ -251,6 +261,7 @@ class ConductSlice:
         for dangling in chosen.dangling:
             self._closing_a_merge_missed_between_invocations(params, dangling)
         retry = chosen.retry
+        expects_a_tree = self._expects_a_tree(params, chosen)
         if retry is not None:
             chosen = self._reopened(params, chosen, retry=retry)
         run = chosen.subissue.run or Run(step=Step.MOUNT_WORKTREE)
@@ -262,6 +273,7 @@ class ConductSlice:
             label=chosen.subissue.label,
             spends=(run.spend,) if run.spend.measured else (),
             retry_instruction=retry.instruction if retry is not None else "",
+            expects_a_tree=expects_a_tree,
         )
         of_the_subissue = Prechecks.of_the_subissue(chosen.subissue)
         if of_the_subissue is not PrecheckOutcome.CLEAR:
@@ -274,6 +286,12 @@ class ConductSlice:
             )
 
         return self._aligning(progress)
+
+    @staticmethod
+    def _expects_a_tree(params: ConductSliceParams, chosen: SelectSliceResult) -> bool:
+        return params.worktree is not None or WorktreeRetirementPolicy.expects_a_tree(
+            label=chosen.subissue.label, run=chosen.subissue.run
+        )
 
     def _resuming(self, progress: ConductSliceProgress) -> ConductSliceResult:
         return self._mounting(progress, then=self._resuming_on_the_mounted_worktree)
@@ -297,15 +315,18 @@ class ConductSlice:
                 worktree=progress.worktree,
                 branch=progress.subissue.branch,
                 base=progress.params.base,
+                expects_a_tree=progress.expects_a_tree,
             )
         )
-        if mounted.outcome is Outcome.WORKTREE_TAKEN:
-            return self._blocked_by_the_worktree(replace(progress, conflicting_paths=(mounted.conflicting_path,)))
+        if mounted.outcome is Outcome.WORKTREE_TAKEN or mounted.outcome is Outcome.WORKTREE_LEFT_BEHIND:
+            return self._blocked_by_the_worktree(
+                replace(progress, conflicting_paths=(mounted.conflicting_path,)), mounted.outcome
+            )
 
         return then(progress)
 
-    def _blocked_by_the_worktree(self, progress: ConductSliceProgress) -> ConductSliceResult:
-        transition = self._machine.after(progress.run, Outcome.WORKTREE_TAKEN)
+    def _blocked_by_the_worktree(self, progress: ConductSliceProgress, outcome: Outcome) -> ConductSliceResult:
+        transition = self._machine.after(progress.run, outcome)
         if progress.subissue.run is None:
             self._repository.write_run(repo=progress.params.repo, issue=progress.subissue.number, run=transition.run)
         closed = self._recorded(progress, transition)
@@ -778,6 +799,7 @@ class ConductSlice:
         ):
             return False
 
+        worktree = subissue.slice_id.worktree_under(params.root)
         self._record_closure.execute(
             RecordClosureParams(
                 repo=params.repo,
@@ -788,6 +810,13 @@ class ConductSlice:
                 run=run,
                 budgets=self._budgets,
                 models=self._models,
+                worktree=worktree,
+                worktree_retirement=self._retiring(
+                    RetireWorktreeParams(root=params.root, worktree=worktree, branch=subissue.branch),
+                    state=RunState.MERGED,
+                    step=run.step,
+                    derived=True,
+                ),
             )
         )
         label = subissue.label
@@ -811,7 +840,28 @@ class ConductSlice:
 
         return replace(progress, waited_seconds=progress.waited_seconds + seconds)
 
+    def _retiring(
+        self, tree: RetireWorktreeParams, *, state: RunState, step: Step, derived: bool
+    ) -> WorktreeRetirement:
+        closing = WorktreeRetirementPolicy.of_the_closing(state=state, step=step)
+        if closing is not ClosingWorktree.RETIRE or not derived:
+            return WorktreeRetirement.without_retiring(closing)
+
+        return self._retire.execute(tree).retirement
+
     def _closing(self, progress: ConductSliceProgress, state: RunState) -> ConductSliceResult:
+        if state is RunState.MERGED and not progress.subissue.signal_is_exempt:
+            self._deploy_watch.watch(
+                worktree=progress.worktree, repo=progress.params.repo, signal=progress.subissue.signal
+            )
+        retirement = self._retiring(
+            RetireWorktreeParams(
+                root=progress.params.root, worktree=progress.worktree, branch=progress.subissue.branch
+            ),
+            state=state,
+            step=progress.run.step,
+            derived=progress.params.worktree is None,
+        )
         self._record_closure.execute(
             RecordClosureParams(
                 repo=progress.params.repo,
@@ -825,17 +875,15 @@ class ConductSlice:
                 discarded_call=progress.discarded_call,
                 ci_indeterminate_cause=progress.ci_indeterminate_cause,
                 conflicting_paths=progress.conflicting_paths,
+                worktree=progress.worktree,
+                worktree_retirement=retirement,
             )
         )
         if state is RunState.MERGED:
             self._repository.clear_run(repo=progress.params.repo, issue=progress.subissue.number)
             self._close.execute(CloseParentParams(repo=progress.params.repo, issue=progress.params.issue))
-            if not progress.subissue.signal_is_exempt:
-                self._deploy_watch.watch(
-                    worktree=progress.worktree, repo=progress.params.repo, signal=progress.subissue.signal
-                )
 
-        return self._ending(progress, Halt.RUN_CLOSED, state=state)
+        return self._ending(progress, Halt.RUN_CLOSED, state=state, retirement=retirement)
 
     @staticmethod
     def _ending(
@@ -844,6 +892,7 @@ class ConductSlice:
         *,
         state: RunState = RunState.OPEN,
         precheck: PrecheckResult | None = None,
+        retirement: WorktreeRetirement = WorktreeRetirement.NOT_MOUNTED,
     ) -> ConductSliceResult:
         return ConductSliceResult(
             halt=halt,
@@ -851,5 +900,9 @@ class ConductSlice:
             step=progress.run.step,
             precheck=precheck,
             pull_request=progress.pull_request,
-            conflicting_path=progress.conflicting_paths[0] if state is RunState.BLOCKED_WORKTREE else "",
+            worktree=progress.worktree,
+            worktree_retirement=retirement,
+            conflicting_path=progress.conflicting_paths[0]
+            if state in (RunState.BLOCKED_WORKTREE, RunState.BLOCKED_LEFTOVER_WORKTREE)
+            else "",
         )

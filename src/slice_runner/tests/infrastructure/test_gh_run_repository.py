@@ -29,6 +29,7 @@ from slice_runner.domain.run import Run
 from slice_runner.domain.slice_identity import SliceIdentity
 from slice_runner.domain.source import Source, SourceKind
 from slice_runner.domain.step import Step
+from slice_runner.domain.worktree_retirement import WorktreeRetirement
 from slice_runner.infrastructure.automation_mark import AutomationMark
 from slice_runner.infrastructure.catch_up_conflict_comment import CatchUpConflictComment
 from slice_runner.infrastructure.gh_run_repository import GhCommandFailedError, GhRunRepository
@@ -1918,3 +1919,16 @@ class TestReadingTheHeadingOfEachSubissue:
         )
 
         assert [child.slice_id.canonical for child in children] == ["slice-01", "KEY-9-02"]
+
+
+class TestPublishingAKeptWorktree:
+    def test_the_call_is_a_comment_carrying_the_path_and_the_reason_as_stdin(self) -> None:
+        process = ScriptedProcess(ProcessOutput(code=0, stdout="", stderr=""))
+
+        GhRunRepository(call=GhCallDoubles.wired(process)).publish_kept_worktree(
+            repo=_REPO, issue=45, path="/clone/.worktrees/05-x", retirement=WorktreeRetirement.KEPT_UNCOMMITTED_WORK
+        )
+
+        assert process.calls[0].argv == ["gh", "issue", "comment", "45", "--repo", _REPO, "--body-file", "-"]
+        assert "`/clone/.worktrees/05-x`" in process.calls[0].stdin
+        assert "cambios sin comitear" in process.calls[0].stdin

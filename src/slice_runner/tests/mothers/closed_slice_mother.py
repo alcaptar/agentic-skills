@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import TYPE_CHECKING, ClassVar
 
 from slice_runner.domain.budgets import Budgets
@@ -17,11 +18,13 @@ if TYPE_CHECKING:
     from slice_runner.domain.finding import Finding
     from slice_runner.domain.harness_spend import HarnessSpend
     from slice_runner.domain.run import Run
+    from slice_runner.domain.worktree_retirement import WorktreeRetirement
 
 
 class ClosedSliceMother:
     REPO: ClassVar[str] = "alcaptar/agentic-skills"
     ISSUE: ClassVar[int] = 38
+    WORKTREE: ClassVar[str] = "/repo/.worktrees/02-the-slice"
     SLICE_ID: ClassVar[str] = "slice-07"
     NAME: ClassVar[str] = "controles-como-puerto"
     BUDGETS: ClassVar[Budgets] = Budgets()
@@ -109,6 +112,10 @@ class ClosedSliceMother:
             RunState.MERGED,
             run=RunMother.merged_after_retrying_controls_and_ci(control_retries=control_retries, ci_retries=ci_retries),
         )
+
+    @classmethod
+    def merged_with_its_worktree(cls, retirement: WorktreeRetirement) -> ClosedSlice:
+        return replace(cls._closed(RunState.MERGED), worktree=cls.WORKTREE, worktree_retirement=retirement)
 
     @classmethod
     def aborted_over_budget(cls, budgets: Budgets, *, spend: HarnessSpend | None = None) -> ClosedSlice:

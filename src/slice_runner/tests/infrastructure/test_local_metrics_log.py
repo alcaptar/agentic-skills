@@ -15,6 +15,7 @@ from slice_runner.domain.exceptions import RunNotClosedError, UnreadableMetricsL
 from slice_runner.domain.role_models import RoleModels
 from slice_runner.domain.run_state import RunState
 from slice_runner.domain.severity import Severity
+from slice_runner.domain.worktree_retirement import WorktreeRetirement
 from slice_runner.infrastructure import local_metrics_log
 from slice_runner.infrastructure.claude_config import ClaudeConfig
 from slice_runner.infrastructure.durable_ledger import DurableLedger
@@ -607,3 +608,44 @@ class TestTheAdapterOwnsOnlyItsNameAndItsPayload:
         assert stub.row is MetricsEntryPayload
         assert len(stub.appended) == 1
         assert not (tmp_path / "slice-runner").exists()
+
+
+class TestTheRowCarriesWhatBecameOfTheWorktree(WithTheDurableStoresOutOfTheRealHome):
+    @pytest.mark.parametrize("retirement", list(WorktreeRetirement))
+    def test_every_way_a_worktree_can_end_is_written_under_one_key_so_the_kept_ones_can_be_counted(
+        self, tmp_path: Path, retirement: WorktreeRetirement
+    ) -> None:
+        LocalMetricsLog(clock=self.frozen_at()).record(ClosedSliceMother.merged_with_its_worktree(retirement))
+
+        assert WrittenMetricsLog.row_under(tmp_path)["worktree_retirement"] == retirement.value
+
+    def test_a_kept_worktree_writes_the_path_where_it_stayed(self, tmp_path: Path) -> None:
+        closed = ClosedSliceMother.merged_with_its_worktree(WorktreeRetirement.KEPT_UNCOMMITTED_WORK)
+
+        LocalMetricsLog(clock=self.frozen_at()).record(closed)
+
+        assert WrittenMetricsLog.row_under(tmp_path)["worktree"] == closed.worktree
+
+    def test_a_retired_worktree_leaves_the_path_key_out(self, tmp_path: Path) -> None:
+        LocalMetricsLog(clock=self.frozen_at()).record(
+            ClosedSliceMother.merged_with_its_worktree(WorktreeRetirement.RETIRED)
+        )
+
+        assert "worktree" not in WrittenMetricsLog.row_under(tmp_path)
+
+    def test_a_row_written_before_the_worktree_was_retired_is_still_read_as_never_mounted(self, tmp_path: Path) -> None:
+        log = LocalMetricsLog(clock=self.frozen_at())
+        log.record(ClosedSliceMother.merged())
+        ledger = tmp_path / "slice-runner" / "runs" / "metrics.jsonl"
+        row = json.loads(ledger.read_text(encoding="utf-8"))
+        del row["worktree_retirement"]
+        ledger.write_text(json.dumps(row) + "\n", encoding="utf-8")
+
+        found = log.closed_slices(_WIDE_OPEN)
+
+        assert len(found) == 1
+
+    def test_the_new_leftover_closing_is_written_as_its_own_verdict(self, tmp_path: Path) -> None:
+        LocalMetricsLog(clock=self.frozen_at()).record(ClosedSliceMother.closed_as(RunState.BLOCKED_LEFTOVER_WORKTREE))
+
+        assert WrittenMetricsLog.row_under(tmp_path)["verdict"] == "blocked-leftover-worktree"

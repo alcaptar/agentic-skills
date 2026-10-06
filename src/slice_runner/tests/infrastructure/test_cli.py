@@ -93,6 +93,25 @@ _TABLE: list[tuple[Step, Outcome, dict[str, int], tuple[Step, RunState, int]]] =
     (Step.AWAIT_CI, Outcome.WORKTREE_TAKEN, {}, (Step.AWAIT_CI, RunState.BLOCKED_WORKTREE, 0)),
     (Step.CATCH_UP, Outcome.WORKTREE_TAKEN, {}, (Step.CATCH_UP, RunState.BLOCKED_WORKTREE, 0)),
     (Step.AWAIT_MERGE, Outcome.WORKTREE_TAKEN, {}, (Step.AWAIT_MERGE, RunState.BLOCKED_WORKTREE, 0)),
+    (
+        Step.MOUNT_WORKTREE,
+        Outcome.WORKTREE_LEFT_BEHIND,
+        {},
+        (Step.MOUNT_WORKTREE, RunState.BLOCKED_LEFTOVER_WORKTREE, 0),
+    ),
+    (Step.UNDERSTAND, Outcome.WORKTREE_LEFT_BEHIND, {}, (Step.UNDERSTAND, RunState.BLOCKED_LEFTOVER_WORKTREE, 0)),
+    (Step.IMPLEMENT, Outcome.WORKTREE_LEFT_BEHIND, {}, (Step.IMPLEMENT, RunState.BLOCKED_LEFTOVER_WORKTREE, 0)),
+    (Step.RUN_CONTROLS, Outcome.WORKTREE_LEFT_BEHIND, {}, (Step.RUN_CONTROLS, RunState.BLOCKED_LEFTOVER_WORKTREE, 0)),
+    (Step.VERIFY, Outcome.WORKTREE_LEFT_BEHIND, {}, (Step.VERIFY, RunState.BLOCKED_LEFTOVER_WORKTREE, 0)),
+    (
+        Step.OPEN_PULL_REQUEST,
+        Outcome.WORKTREE_LEFT_BEHIND,
+        {},
+        (Step.OPEN_PULL_REQUEST, RunState.BLOCKED_LEFTOVER_WORKTREE, 0),
+    ),
+    (Step.AWAIT_CI, Outcome.WORKTREE_LEFT_BEHIND, {}, (Step.AWAIT_CI, RunState.BLOCKED_LEFTOVER_WORKTREE, 0)),
+    (Step.CATCH_UP, Outcome.WORKTREE_LEFT_BEHIND, {}, (Step.CATCH_UP, RunState.BLOCKED_LEFTOVER_WORKTREE, 0)),
+    (Step.AWAIT_MERGE, Outcome.WORKTREE_LEFT_BEHIND, {}, (Step.AWAIT_MERGE, RunState.BLOCKED_LEFTOVER_WORKTREE, 0)),
     (Step.UNDERSTAND, Outcome.DONE, {}, (Step.IMPLEMENT, RunState.OPEN, 0)),
     (Step.UNDERSTAND, Outcome.PENDING, {}, (Step.UNDERSTAND, RunState.OPEN, 30)),
     (Step.UNDERSTAND, Outcome.CHANGES_REQUESTED, {}, (Step.UNDERSTAND, RunState.OPEN, 0)),
@@ -1619,6 +1638,73 @@ class TestWhenTheRunClosesWithoutBeingMerged:
         assert code == ExitCode.RUN_UNMERGED
         assert json.loads(captured.out) == {"halt": "run-closed", "state": "blocked-worktree", "step": "mount-worktree"}
         assert GhConversationMother.WORKTREE in captured.err
+        assert not invocation.process.invoked("git", "worktree", "add")
+
+
+class TestRetiringTheWorktreeFromTheCommandLine:
+    @staticmethod
+    def _merging(*, status: str = "", removing: bool = True) -> RunInvocation:
+        return RunInvocation(
+            children=GhConversationMother.the_slice_resumed_at(RunMother.awaiting_merge()),
+            answers=(
+                Answer(to=("git", "rev-parse"), code=0),
+                Answer(
+                    to=("gh", "pr", "list", "--state", "all"),
+                    stdout=GhConversationMother.the_pull_request_of_the_branch(),
+                ),
+                Answer(to=("gh", "pr", "view"), stdout=GhConversationMother.a_merged_pull_request()),
+                Answer(to=("git", "status", "--porcelain"), stdout=status),
+                Answer(to=("git", "rev-list", "--count"), stdout="0\n"),
+                *((Answer(to=("git", "worktree", "remove")), Answer(to=("git", "branch", "-D"))) if removing else ()),
+            ),
+        )
+
+    def test_a_merged_run_that_mounted_its_own_worktree_asks_git_to_remove_it_and_its_branch(
+        self, tmp_path: Path
+    ) -> None:
+        invocation = self._merging()
+
+        code = invocation.conduct(logs=tmp_path / "logs", worktree=None)
+
+        assert code == ExitCode.OK
+        assert invocation.process.invoked("git", "worktree", "remove", GhConversationMother.WORKTREE)
+        assert invocation.process.invoked("git", "branch", "-D", GhConversationMother.BRANCH)
+
+    def test_a_merged_run_with_work_left_in_its_worktree_keeps_it_says_where_and_still_exits_as_merged(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        invocation = self._merging(status=" M src/module.py\n", removing=False)
+
+        code = invocation.conduct(logs=tmp_path / "logs", worktree=None)
+
+        captured = capsys.readouterr()
+        assert code == ExitCode.OK
+        assert json.loads(captured.out)["state"] == "merged"
+        assert not invocation.process.invoked("git", "worktree", "remove")
+        assert GhConversationMother.WORKTREE in captured.err
+        assert "kept-uncommitted-work" in captured.err
+
+    def test_a_tree_left_by_an_earlier_run_closes_the_invocation_with_the_command_to_resolve_it_by_hand(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        invocation = RunInvocation(
+            children=GhConversationMother.the_slice_aborted_before_touching_code(),
+            answers=(
+                Answer(
+                    to=("gh", "issue", "view", "comments"),
+                    stdout=GhConversationMother.the_comments_of_a_person_asking_to_retry(),
+                ),
+                Answer(to=("git", "rev-list", "--count"), stdout="0\n"),
+                Answer(to=("gh", "pr", "list"), stdout=GhConversationMother.no_open_pull_request()),
+            ),
+        )
+
+        code = invocation.conduct(logs=tmp_path / "logs", worktree=None)
+
+        captured = capsys.readouterr()
+        assert code == ExitCode.RUN_UNMERGED
+        assert json.loads(captured.out)["state"] == "blocked-leftover-worktree"
+        assert f"git worktree remove {GhConversationMother.WORKTREE}" in captured.err
         assert not invocation.process.invoked("git", "worktree", "add")
 
 

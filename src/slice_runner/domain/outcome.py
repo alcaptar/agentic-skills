@@ -28,6 +28,7 @@ class Outcome(StrEnum):
     CHANGES_REQUESTED = "changes-requested"
     UNCHANGED = "unchanged"
     WORKTREE_TAKEN = "worktree-taken"
+    WORKTREE_LEFT_BEHIND = "worktree-left-behind"
 
     @classmethod
     def of_the_alignment(cls, kind: AlignmentResponseKind, *, redrafting: bool) -> Outcome:

@@ -9,6 +9,7 @@ from slice_runner.domain.declared_debt import DeclaredDebt
 from slice_runner.domain.findings_history import FindingsHistory
 from slice_runner.domain.run_state import RunState
 from slice_runner.domain.slice_coordinates import SliceCoordinates
+from slice_runner.domain.worktree_retirement import WorktreeRetirement
 
 if TYPE_CHECKING:
     from slice_runner.domain.budgets import Budgets
@@ -38,6 +39,8 @@ class RecordClosureParams:
     discarded_call: DiscardedCall | None = None
     ci_indeterminate_cause: CiIndeterminateCause | None = None
     conflicting_paths: tuple[str, ...] = field(default=())
+    worktree: str = ""
+    worktree_retirement: WorktreeRetirement = WorktreeRetirement.NOT_MOUNTED
 
 
 class RecordClosure:
@@ -79,6 +82,8 @@ class RecordClosure:
                 ci_indeterminate_cause=params.ci_indeterminate_cause,
                 debt=debt,
                 diff_stats=self._size_of(params),
+                worktree=params.worktree,
+                worktree_retirement=params.worktree_retirement,
             )
         )
         if params.state.publishes_the_findings and not history.is_empty:
@@ -86,6 +91,11 @@ class RecordClosure:
         if params.state is RunState.BLOCKED_CI_CONFLICT and params.conflicting_paths:
             self._repository.publish_catch_up_conflict(
                 repo=params.repo, issue=params.issue, paths=params.conflicting_paths
+            )
+
+        if params.worktree_retirement.kept:
+            self._repository.publish_kept_worktree(
+                repo=params.repo, issue=params.issue, path=params.worktree, retirement=params.worktree_retirement
             )
 
     def _spend_of(self, params: RecordClosureParams) -> HarnessSpend:

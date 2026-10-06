@@ -21,6 +21,7 @@ from slice_runner.application.actions.record_closure import RecordClosure
 from slice_runner.application.actions.record_step import RecordStep
 from slice_runner.application.actions.reopen_slice import ReopenSlice
 from slice_runner.application.actions.rescue_staged_work import RescueStagedWork
+from slice_runner.application.actions.retire_worktree import RetireWorktree
 from slice_runner.application.actions.run_controls import RunControls
 from slice_runner.application.actions.seek_alignment import SeekAlignment
 from slice_runner.application.actions.stage_slice import StageSlice
@@ -72,6 +73,7 @@ if TYPE_CHECKING:
     from slice_runner.domain.closed_slice import ClosedSlice
     from slice_runner.domain.event import Event
     from slice_runner.domain.harness_spend import HarnessSpend
+    from slice_runner.domain.listed_worktree import ListedWorktree
     from slice_runner.domain.slice_identity import SliceIdentity
     from slice_runner.domain.verdict import Verdict
 
@@ -104,12 +106,12 @@ class Conductor:
         self.prechecks = self._doubling(RunPrechecks, execute=PrecheckResult(outcome=PrecheckOutcome.CLEAR))
         self.check_sources = self._doubling(CheckSources, execute=PrecheckResult(outcome=PrecheckOutcome.CLEAR))
         self.worktrees: Mock = create_autospec(Worktrees, spec_set=True, instance=True)
-        self.worktrees.listed.return_value = (
-            ListedWorktreeMother.main_clone(),
-            ListedWorktreeMother.mounted(path=self.WORKTREE, branch=SubIssueMother.pending().branch),
-        )
-        self.worktrees.branch_exists.return_value = True
+        self.worktrees.listed.return_value = self._listing_of(chosen)
+        self.worktrees.is_mounted.return_value = True
+        self.worktrees.branch_exists.return_value = chosen.subissue.run is not None
         self.worktrees.common_dir.return_value = self.COMMON_DIR
+        self.worktrees.has_uncommitted_work.return_value = False
+        self.worktrees.local_only_commits.return_value = 0
         self.implement = self._doubling(ImplementSlice, execute=ImplementationMother.of_two_paths())
         self.stage = self._doubling(StageSlice, execute=None)
         self.commit = self._doubling(CommitRound, execute=None)
@@ -207,6 +209,7 @@ class Conductor:
                 reopen=self.reopen,
                 prechecks=self.prechecks,
                 mount=MountWorktree(worktrees=self.worktrees),
+                retire=RetireWorktree(worktrees=self.worktrees),
                 check_sources=self.check_sources,
                 implement=self.implement,
                 stage=self.stage,
@@ -239,6 +242,29 @@ class Conductor:
             machine=StateMachine(budgets=self.budgets),
             budgets=self.budgets,
             models=self.models,
+        )
+
+    def listing_the_tree_once_mounted(self) -> None:
+        def listed(*, root: str) -> tuple[ListedWorktree, ...]:
+            if self.worktrees.add_new_branch.called or self.worktrees.add_on_branch.called:
+                return self._mounted_listing()
+
+            return (ListedWorktreeMother.main_clone(),)
+
+        self.worktrees.listed.side_effect = listed
+
+    @classmethod
+    def _listing_of(cls, chosen: SelectSliceResult) -> tuple[ListedWorktree, ...]:
+        if chosen.subissue.run is None:
+            return (ListedWorktreeMother.main_clone(),)
+
+        return cls._mounted_listing()
+
+    @classmethod
+    def _mounted_listing(cls) -> tuple[ListedWorktree, ...]:
+        return (
+            ListedWorktreeMother.main_clone(),
+            ListedWorktreeMother.mounted(path=cls.WORKTREE, branch=SubIssueMother.pending().branch),
         )
 
     @staticmethod

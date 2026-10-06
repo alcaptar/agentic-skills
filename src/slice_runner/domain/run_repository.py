@@ -17,6 +17,7 @@ if TYPE_CHECKING:
     from slice_runner.domain.retry_response import RetryResponse
     from slice_runner.domain.run import Run
     from slice_runner.domain.sub_issue import SubIssue
+    from slice_runner.domain.worktree_retirement import WorktreeRetirement
 
 
 class RunRepository(ABC):
@@ -79,6 +80,9 @@ class RunRepository(ABC):
 
     @abstractmethod
     def publish_catch_up_conflict(self, *, repo: str, issue: int, paths: tuple[str, ...]) -> None: ...
+
+    @abstractmethod
+    def publish_kept_worktree(self, *, repo: str, issue: int, path: str, retirement: WorktreeRetirement) -> None: ...
 
     @abstractmethod
     def find_finding(self, *, repo: str, issue: int, finding_id: str) -> Finding | None: ...
