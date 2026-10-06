@@ -7,6 +7,7 @@ from unittest.mock import Mock, create_autospec
 
 from slice_runner.application.actions.catch_up_branch import CatchUpBranch
 from slice_runner.application.actions.close_parent import CloseParent
+from slice_runner.application.actions.commit_round import CommitRound
 from slice_runner.application.actions.conduct_slice import (
     ConductSlice,
     ConductSliceParams,
@@ -18,6 +19,7 @@ from slice_runner.application.actions.implement_slice import ImplementSlice
 from slice_runner.application.actions.record_closure import RecordClosure
 from slice_runner.application.actions.record_step import RecordStep
 from slice_runner.application.actions.reopen_slice import ReopenSlice
+from slice_runner.application.actions.rescue_staged_work import RescueStagedWork
 from slice_runner.application.actions.run_controls import RunControls
 from slice_runner.application.actions.seek_alignment import SeekAlignment
 from slice_runner.application.actions.stage_slice import StageSlice
@@ -50,6 +52,7 @@ from slice_runner.domain.run_repository import RunRepository
 from slice_runner.domain.slice_coordinates import SliceCoordinates
 from slice_runner.domain.state_machine import StateMachine
 from slice_runner.domain.understanding_writer import UnderstandingWriter
+from slice_runner.domain.workspace import Workspace
 from slice_runner.tests.doubles import RecordedCorpus, RecordedDebtLedger, RecordedSpendLog
 from slice_runner.tests.mothers.branch_catch_up_mother import BranchCatchUpMother
 from slice_runner.tests.mothers.control_outcome_mother import ControlOutcomeMother
@@ -95,6 +98,11 @@ class Conductor:
         self.prechecks = self._doubling(RunPrechecks, execute=PrecheckResult(outcome=PrecheckOutcome.CLEAR))
         self.implement = self._doubling(ImplementSlice, execute=ImplementationMother.of_two_paths())
         self.stage = self._doubling(StageSlice, execute=None)
+        self.commit = self._doubling(CommitRound, execute=None)
+        self.workspace: Mock = create_autospec(Workspace, spec_set=True, instance=True)
+        self.workspace.current_branch.return_value = SubIssueMother.pending().branch
+        self.workspace.staged.return_value = ()
+        self.rescue = RescueStagedWork(workspace=self.workspace)
         self.verify = self._doubling(VerifySlice, execute=VerificationMother.passing())
         self.deliver = self._doubling(DeliverSlice, execute=self.PULL_REQUEST)
         self.close = self._doubling(CloseParent, execute=None)
@@ -179,6 +187,8 @@ class Conductor:
                 prechecks=self.prechecks,
                 implement=self.implement,
                 stage=self.stage,
+                commit=self.commit,
+                rescue=self.rescue,
                 run_controls=RunControls(controls=self.controls),
                 verify=self.verify,
                 deliver=self.deliver,

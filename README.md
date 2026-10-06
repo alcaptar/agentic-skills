@@ -146,10 +146,13 @@ sola al mergear.
   salida va a disco: el orquestador reenvia rutas sin leerlas. Un `ruff` sucio no debe gastar un
   reintento adversarial, y un traceback de pytest en el contexto del unico agente cuyo valor es el
   juicio es contaminarlo gratis.
-- **El orden del tramo final no es cosmetico**: `git add` -> `pr-hygiene` -> controles ->
-  `diff-bundle` -> verificador -> **commit**. Se stagea antes de medir -un control que lee el indice
-  no ve un fichero nuevo sin stagear- y el commit va detras del veredicto, asi que un FALLA no deja
-  rastro que deshacer y la slice sigue siendo un solo commit sin `--amend`.
+- **El orden dentro de una vuelta no es cosmetico**: `git add` -> `pr-hygiene` -> controles ->
+  **commit de la vuelta** -> `diff-bundle` -> verificador. Se stagea antes de medir -un control que
+  lee el indice no ve un fichero nuevo sin stagear- y el commit va detras de que **esa** vuelta salga
+  verde en los controles, no del veredicto del juez: un control rojo no deja commit que deshacer, pero
+  un FALLA del juez si deja el commit de esa vuelta en la rama, porque el codigo que juzgo ya paso sus
+  controles. Cada vuelta que produce codigo -la del juez, la de un control rojo, la de una review- deja
+  su propio commit en la rama de la slice, sin `--amend`; la que no produce nada no deja ninguno.
 - **La intencion viaja y no se resume.** El issue abre con `## Intencion` y cada slice lleva su linea
   `INTENCION:`; de ahi sale el cuerpo de la pull request, que cuenta **el por que** en vez de narrar el
   diff -eso ya lo cuenta GitHub mejor-. Vara: si borras la slice, ¿que queda roto o imposible?
@@ -195,7 +198,7 @@ Vale igual para el `--slice` de `verify`, `read` y `spend`.
 | Subcomando | Para que sirve | Ejemplo |
 |---|---|---|
 | `run` | Conduce la siguiente slice ejecutable del issue de punta a punta -alinear, implementar, controlar, verificar, abrir la pull request, esperar la integracion continua- y para donde diga el estado. `--slice` nombra una slice concreta en vez de dejar que el programa elija. | `uv run slice-runner run 38 --repo alcaptar/agentic-skills --base master` |
-| `verify` | Juzga lo que hay staged contra el branch-point de la base y emite el veredicto por salida estandar (o el motivo de no tenerlo, por salida de error). | `uv run slice-runner verify --repo . --base master --slice slice-01` |
+| `verify` | Juzga lo ya comiteado en la rama mas lo que hay staged, contra el branch-point de la base, y emite el veredicto por salida estandar (o el motivo de no tenerlo, por salida de error). | `uv run slice-runner verify --repo . --base master --slice slice-01` |
 | `explain` | Contesta que paso viene despues de un resultado, y cuando se agota un presupuesto, sin montar un run: es una funcion pura sobre el estado que le llega por entrada estandar. | `echo '{"run": {"step": "run-controls", "control_retries": 2}, "outcome": "failed"}' \| uv run slice-runner explain` |
 | `read` | Abre la conversacion grabada de una llamada concreta del rastro y la emite legible por salida estandar, para que la lea una persona. `--repo` e `--issue` identifican el run -son los mismos que fija `run`-, y `--worktree` es la ruta donde corrio la llamada. | `uv run slice-runner read --repo alcaptar/agentic-skills --issue 38 --worktree . --slice slice-04 --step implement` |
 | `spend` | Suma lo que gasto el harness en las llamadas que sirvieron un paso de una slice (coste, turnos, duracion, numero de llamadas) y lo emite como JSON. `--repo` e `--issue` identifican el run, igual que en `read`. | `uv run slice-runner spend --repo alcaptar/agentic-skills --issue 38 --slice slice-04 --step implement` |
@@ -209,7 +212,7 @@ uv run slice-runner run 38 --repo alcaptar/agentic-skills --base master --slice 
 uv run slice-runner verify --repo . --base master --slice slice-01
 ```
 
-Juzga **lo que hay staged** contra el branch-point de la base -que es lo que sera el commit-, emite el
+Juzga **lo ya comiteado en la rama mas lo que hay staged** contra el branch-point de la base, emite el
 veredicto como JSON por salida estandar y **cualquier motivo por el que no haya veredicto** por salida de
 error, nunca mezclados. Ademas escribe: cada verificacion anexa una linea a
 `~/.claude/slice-runner/runs/verdicts.jsonl` -o al equivalente bajo `CLAUDE_CONFIG_DIR`- con el repo y el
@@ -433,7 +436,7 @@ uv run slice-runner run 42 --repo <org>/<repo> --base master
 
 Y hace, sin intervencion: lee el issue padre y elige la subissue `#43` -> la etiqueta
 `estado:en-curso` -> **te muestra su entendimiento y espera tu go/no-go** -> implementa con TDD -> deja
-los controles verdes -> juzga el diff con `claude -p` -> commit -> abre la pull request
+los controles verdes -> **commit de esa vuelta** -> juzga el diff con `claude -p` -> abre la pull request
 `feat(cantidad-value-object): ...` con `Closes #43` -> tickea en background hasta integracion continua
 verde -> etiqueta la subissue `estado:esperando-merge` y **para**.
 
