@@ -4,6 +4,8 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 from unittest.mock import Mock, create_autospec
 
+import pytest
+
 from slice_runner.application.actions.record_step import RecordStep, RecordStepParams
 from slice_runner.domain.clock import Clock
 from slice_runner.domain.event_log import EventLog
@@ -156,21 +158,27 @@ class TestTheEventItEmits:
 
         assert recorder.events.emit.call_args.args[0].status is EventStatus.CLOSED
 
-    def test_each_closing_transition_emits_the_state_it_closed_with(self) -> None:
-        for state in (RunState.MERGED, RunState.BLOCKED_VERIFY):
-            recorder = _Recorder()
-            transition = Transition(run=RunMother.awaiting_merge(), state=state)
+    @pytest.mark.parametrize("state", [RunState.MERGED, RunState.BLOCKED_VERIFY])
+    def test_a_closing_transition_emits_the_state_it_closed_with(self, state: RunState) -> None:
+        recorder = _Recorder()
+        transition = Transition(run=RunMother.awaiting_merge(), state=state)
 
-            recorder.action.execute(_Given.params(current=RunMother.awaiting_merge(), transition=transition))
+        recorder.action.execute(_Given.params(current=RunMother.awaiting_merge(), transition=transition))
 
-            assert recorder.events.emit.call_args.args[0].closed_as is state
+        assert recorder.events.emit.call_args.args[0].state is state
 
-    def test_a_transition_that_does_not_close_emits_no_closing_state(self) -> None:
+    def test_a_transition_that_advances_emits_the_open_state(self) -> None:
         recorder = _Recorder()
 
         recorder.action.execute(
             _Given.params(current=RunMother.implementing(), transition=Transition(run=RunMother.judging()))
         )
+
+        assert recorder.events.emit.call_args.args[0].state is RunState.OPEN
+
+    def test_a_transition_that_waits_emits_the_open_state(self) -> None:
+        recorder = _Recorder()
+
         recorder.action.execute(
             _Given.params(
                 current=RunMother.awaiting_merge(),
@@ -178,7 +186,7 @@ class TestTheEventItEmits:
             )
         )
 
-        assert [call.args[0].closed_as for call in recorder.events.emit.call_args_list] == [None, None]
+        assert recorder.events.emit.call_args.args[0].state is RunState.OPEN
 
     def test_the_event_carries_the_accumulated_spend_so_the_log_shows_what_the_run_costs_so_far(self) -> None:
         recorder = _Recorder()

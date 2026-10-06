@@ -26,7 +26,7 @@ class EventMother:
             at=datetime(2024, 1, 1, 12, 30, 45, tzinfo=UTC),
             spend=HarnessSpendMother.of_the_implementer_call(),
             status=EventStatus.ADVANCING,
-            closed_as=None,
+            state=RunState.OPEN,
         )
 
     @classmethod
@@ -39,16 +39,16 @@ class EventMother:
             at=datetime(2024, 1, 1, 12, 31, 15, tzinfo=UTC),
             spend=HarnessSpendMother.of_the_judge_call(),
             status=EventStatus.CLOSED,
-            closed_as=RunState.MERGED,
+            state=RunState.MERGED,
         )
 
     @classmethod
     def blocked_by_the_judge(cls) -> Event:
-        return replace(cls.closed(), closed_as=RunState.BLOCKED_VERIFY)
+        return replace(cls.closed(), state=RunState.BLOCKED_VERIFY)
 
     @classmethod
     def closed_before_the_closing_state_was_recorded(cls) -> Event:
-        return replace(cls.closed(), closed_as=None)
+        return replace(cls.closed(), state=RunState.OPEN)
 
     @classmethod
     def advancing_again(cls, *, minutes_later: int) -> Event:

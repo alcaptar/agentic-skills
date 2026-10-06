@@ -73,6 +73,6 @@ class RecordStep:
                 at=self._clock.now(),
                 spend=params.spend,
                 status=status,
-                closed_as=params.transition.state if status is EventStatus.CLOSED else None,
+                state=params.transition.state,
             )
         )

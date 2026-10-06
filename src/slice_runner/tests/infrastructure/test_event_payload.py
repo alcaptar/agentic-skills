@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+from typing import ClassVar
+
+from slice_runner.domain.event_status import EventStatus
+from slice_runner.domain.run_state import RunState
 from slice_runner.infrastructure.event_payload import EventPayload
 from slice_runner.tests.mothers.event_mother import EventMother
 
@@ -42,11 +46,32 @@ class TestWhatTheProgramEmits:
 
 
 class TestWhatTheProgramReads:
-    def test_a_closing_row_written_before_the_closing_state_existed_is_still_read_without_it(self) -> None:
-        row = EventPayload.from_domain(EventMother.closed_before_the_closing_state_was_recorded()).to_contract()
-        assert "closed_as" not in row
+    _ROW_OF_TODAY: ClassVar[dict[str, object]] = {
+        "slice_id": "slice-05",
+        "repo": EventMother.REPO,
+        "issue": EventMother.ISSUE,
+        "step": "await-merge",
+        "ts": "2024-01-01T12:31:15+00:00",
+        "spend": {
+            "cost_usd": 0.0512,
+            "turns": 3,
+            "duration_ms": 1000,
+            "calls": 1,
+            "models": ["claude-sonnet-5"],
+            "input_tokens": 1,
+            "output_tokens": 1,
+            "cache_creation_tokens": 1,
+            "cache_read_tokens": 1,
+            "ttft_ms": 1,
+            "duration_api_ms": 1,
+        },
+        "status": "closed",
+    }
 
-        assert EventPayload.from_dict(row).to_domain() == EventMother.closed_before_the_closing_state_was_recorded()
+    def test_a_closing_row_written_before_the_closing_state_existed_is_still_read(self) -> None:
+        event = EventPayload.from_dict(dict(self._ROW_OF_TODAY)).to_domain()
+
+        assert (event.status, event.state) == (EventStatus.CLOSED, RunState.OPEN)
 
     def test_a_closing_row_reads_back_with_the_state_it_closed_with(self) -> None:
         row = EventPayload.from_domain(EventMother.blocked_by_the_judge()).to_contract()

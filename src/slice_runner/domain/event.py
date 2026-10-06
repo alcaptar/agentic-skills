@@ -21,4 +21,4 @@ class Event:
     at: datetime
     spend: HarnessSpend
     status: EventStatus
-    closed_as: RunState | None
+    state: RunState

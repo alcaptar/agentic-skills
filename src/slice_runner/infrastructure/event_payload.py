@@ -40,7 +40,7 @@ class EventPayload(StampedRow, ReadableLedgerRow):
             step=event.step,
             spend=SpendPayload.from_domain(event.spend),
             status=event.status,
-            closed_as=event.closed_as,
+            closed_as=None if event.state is RunState.OPEN else event.state,
         )
 
     @classmethod
@@ -58,5 +58,5 @@ class EventPayload(StampedRow, ReadableLedgerRow):
             at=datetime.fromisoformat(self.ts),
             spend=self.spend.to_domain(),
             status=self.status,
-            closed_as=self.closed_as,
+            state=RunState.OPEN if self.closed_as is None else self.closed_as,
         )
