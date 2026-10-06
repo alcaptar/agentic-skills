@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from dataclasses import replace
+from datetime import UTC, datetime, timedelta
 from typing import ClassVar
 
 from slice_runner.domain.event import Event
@@ -12,6 +13,7 @@ from slice_runner.tests.mothers.harness_spend_mother import HarnessSpendMother
 class EventMother:
     REPO: ClassVar[str] = "alcaptar/agentic-skills"
     ISSUE: ClassVar[int] = 150
+    ANOTHER_REPO: ClassVar[str] = "alcaptar/another-repo"
 
     @classmethod
     def advancing(cls) -> Event:
@@ -36,3 +38,21 @@ class EventMother:
             spend=HarnessSpendMother.of_the_judge_call(),
             status=EventStatus.CLOSED,
         )
+
+    @classmethod
+    def advancing_again(cls, *, minutes_later: int) -> Event:
+        event = cls.advancing()
+
+        return replace(event, at=event.at + timedelta(minutes=minutes_later))
+
+    @classmethod
+    def advancing_in_another_slice(cls) -> Event:
+        return replace(cls.advancing(), slice_id="slice-06")
+
+    @classmethod
+    def advancing_in_another_repo(cls) -> Event:
+        return replace(cls.advancing(), repo=cls.ANOTHER_REPO)
+
+    @classmethod
+    def waiting_on_a_machine(cls) -> Event:
+        return replace(cls.advancing_again(minutes_later=1), step=Step.AWAIT_CI, status=EventStatus.WAITING)

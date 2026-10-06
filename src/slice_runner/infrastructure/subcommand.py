@@ -13,3 +13,4 @@ class Subcommand(StrEnum):
     METRICS = "metrics"
     RESET = "reset"
     STATUS = "status"
+    FOLLOW = "follow"

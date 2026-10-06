@@ -342,6 +342,13 @@ mide. Las reglas que salen de estas decisiones siguen en su capa.
   `catch_up_retries` y cierra en `bloqueada:conflicto` -el desenlace que esta pieza existe para evitar-. Va
   en el reintento y no en la lectura de la integración continua porque es el único punto del ciclo con un
   tope garantizado independiente de cuanto tarde la ronda de controles que sigue.
+- **`follow` espera entre lecturas con `seconds_between_follow_reads`, y no comparte número con
+  `seconds_between_ticks`.** Son conceptos distintos: el tick separa preguntas a GitHub, que cobra cuota y
+  tarda en recalcular, y la lectura de `follow` mira un fichero local que solo crece, donde esperar más
+  solo retrasa lo que una persona está mirando. Valor inicial 5 segundos, **elegido y no medido**: a ese
+  ritmo el fichero crece lo bastante despacio (un tick de `await-merge` cada 30 segundos por run) para que
+  casi todas las lecturas vuelvan vacías sin que la línea de un cambio tarde en verse. Mover uno no mueve
+  el otro, que es lo que `docs/conventions/domain.md` acepta al exigir un número por concepto.
 
 ### El descarte de aprobación pagada, y por que hay dos comprobaciones de coste
 
