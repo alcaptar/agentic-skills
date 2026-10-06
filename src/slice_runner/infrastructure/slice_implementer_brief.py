@@ -83,6 +83,9 @@ esperado -> GREEN minimo -> REFACTOR), incluida su referencia `writing-good-test
   para quien tiene que stagearla. Un borrado se declara en tu informe como cualquier otra ruta que
   toques.
 - **Planes y design-docs.** No escribas ninguno.
+- **`slice-runner`, ni ningun otro ejecutable de este programa.** Mientras implementas, no lo lances
+  (ni `verify` ni nada): te verificarias a ti mismo, y esa llamada cobra fuera del presupuesto de la
+  slice, que no la cuenta. Quien verifica es otro agente, despues.
 
 ## Lo que devuelves
 
