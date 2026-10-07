@@ -7,6 +7,7 @@ import pytest
 from slice_runner.application.queries.follow_events import FollowEvents, FollowEventsParams
 from slice_runner.domain.event_cursor import EventCursor
 from slice_runner.domain.event_reader import EventBatch
+from slice_runner.domain.run_state import RunState
 from slice_runner.tests.doubles import ScriptedEventReader
 from slice_runner.tests.mothers.event_mother import EventMother
 
@@ -82,6 +83,20 @@ class TestWhatCountsAsAChange:
         result = FollowEvents(reader=reader).execute(FollowEventsParams(cursor=EventCursor.start()))
 
         assert result.changes == (EventMother.advancing(), waiting)
+
+    def test_a_closing_row_that_goes_from_blocked_to_merged_on_the_same_step_is_a_change_and_the_snapshot_ends_merged(
+        self,
+    ) -> None:
+        blocked = EventMother.blocked_by_the_judge()
+        merged = EventMother.closed()
+        reader = ScriptedEventReader(EventBatch(events=(merged,), cursor=EventCursor(offset=20)))
+
+        result = FollowEvents(reader=reader).execute(
+            FollowEventsParams(cursor=EventCursor(offset=10), snapshot=(blocked,))
+        )
+
+        assert result.changes == (merged,)
+        assert [event.state for event in result.snapshot] == [RunState.MERGED]
 
     def test_interleaved_slices_are_compared_each_against_its_own_previous_row(self) -> None:
         reader = ScriptedEventReader(

@@ -47,6 +47,7 @@ from slice_runner.domain.ruling import Ruling
 from slice_runner.domain.run import Run
 from slice_runner.domain.run_state import RunState
 from slice_runner.domain.step import Step
+from slice_runner.domain.transition import Transition
 from slice_runner.domain.worktree_retirement import WorktreeRetirement
 from slice_runner.domain.worktree_retirement_policy import WorktreeRetirementPolicy
 
@@ -88,7 +89,6 @@ if TYPE_CHECKING:
     from slice_runner.domain.run_repository import RunRepository
     from slice_runner.domain.state_machine import StateMachine
     from slice_runner.domain.sub_issue import SubIssue
-    from slice_runner.domain.transition import Transition
     from slice_runner.domain.verdict import Verdict
 
 
@@ -635,7 +635,9 @@ class ConductSlice:
                     issue=round_progress.subissue.number,
                     slice_id=round_progress.subissue.slice_id.canonical,
                     spend=round_progress.spend,
-                    feature_slice=self._feature_slice_of(round_progress),
+                    feature_slice=self._feature_slice_of(
+                        params=round_progress.params, subissue=round_progress.subissue
+                    ),
                 )
             )
 
@@ -766,8 +768,8 @@ class ConductSlice:
         return opened
 
     @staticmethod
-    def _feature_slice_of(progress: ConductSliceProgress) -> FeatureSlice:
-        return FeatureSlice(parent=progress.params.issue, name=progress.subissue.slice_id.name)
+    def _feature_slice_of(*, params: ConductSliceParams, subissue: SubIssue) -> FeatureSlice:
+        return FeatureSlice(parent=params.issue, name=subissue.slice_id.name)
 
     def _recorded(self, progress: ConductSliceProgress, transition: Transition) -> ConductSliceProgress:
         recorded = self._record_step.execute(
@@ -779,7 +781,7 @@ class ConductSlice:
                 label=progress.label,
                 transition=transition,
                 spend=progress.spend,
-                feature_slice=self._feature_slice_of(progress),
+                feature_slice=self._feature_slice_of(params=progress.params, subissue=progress.subissue),
             )
         )
 
@@ -829,9 +831,18 @@ class ConductSlice:
                 ),
             )
         )
-        label = subissue.label
-        if label is not None:
-            self._repository.remove_label(repo=params.repo, issue=subissue.number, remove=label)
+        self._record_step.execute(
+            RecordStepParams(
+                repo=params.repo,
+                issue=subissue.number,
+                slice_id=subissue.slice_id.canonical,
+                current=run,
+                label=subissue.label,
+                transition=Transition(run=run, state=RunState.MERGED),
+                spend=run.spend,
+                feature_slice=self._feature_slice_of(params=params, subissue=subissue),
+            )
+        )
         self._repository.clear_run(repo=params.repo, issue=subissue.number)
         self._close.execute(CloseParentParams(repo=params.repo, issue=params.issue))
 
