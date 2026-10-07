@@ -76,7 +76,9 @@ class ClosedSliceMother:
 
     @classmethod
     def merged_discarding_because_of(cls, discarded: DiscardedCall | None) -> ClosedSlice:
-        return cls._closed(RunState.MERGED, run=RunMother.that_went_back_for_every_reason(), discarded_call=discarded)
+        return cls._closed(
+            RunState.MERGED, run=replace(RunMother.that_went_back_for_every_reason(), discarded_call=discarded)
+        )
 
     @classmethod
     def blocked_indeterminate_because_of(cls, cause: CiIndeterminateCause | None) -> ClosedSlice:
@@ -100,7 +102,7 @@ class ClosedSliceMother:
 
     @classmethod
     def merged_discarding_and_measuring_the_diff(cls, discarded: DiscardedCall, stats: DiffStats) -> ClosedSlice:
-        return cls._closed(RunState.MERGED, discarded_call=discarded, diff_stats=stats)
+        return cls._closed(RunState.MERGED, run=RunMother.awaiting_merge_after_discarding(discarded), diff_stats=stats)
 
     @classmethod
     def merged_with_config(cls, *, budgets: Budgets | None = None, models: RoleModels | None = None) -> ClosedSlice:
@@ -134,7 +136,6 @@ class ClosedSliceMother:
         spends: tuple[HarnessSpend, ...] | None = None,
         findings: tuple[Finding, ...] = (),
         findings_of_the_last_round: tuple[Finding, ...] | None = None,
-        discarded_call: DiscardedCall | None = None,
         ci_indeterminate_cause: CiIndeterminateCause | None = None,
         debt: DeclaredDebt | None = None,
         diff_stats: DiffStats | None = None,
@@ -151,7 +152,6 @@ class ClosedSliceMother:
             spends=(HarnessSpendMother.of_the_implementer_call(),) if spends is None else spends,
             findings=findings,
             findings_of_the_last_round=findings if findings_of_the_last_round is None else findings_of_the_last_round,
-            discarded_call=discarded_call,
             ci_indeterminate_cause=ci_indeterminate_cause,
             debt=debt or DeclaredDebt.nothing(),
             diff_stats=diff_stats,

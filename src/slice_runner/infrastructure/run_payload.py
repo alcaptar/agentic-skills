@@ -10,6 +10,7 @@ from slice_runner.domain.harness_spend import HarnessSpend
 from slice_runner.domain.run import Run
 from slice_runner.domain.step import Step
 from slice_runner.infrastructure.contract_model import ContractModel
+from slice_runner.infrastructure.discarded_call_payload import DiscardedCallPayload
 from slice_runner.infrastructure.requested_change_payload import RequestedChangePayload
 from slice_runner.infrastructure.spend_payload import SpendPayload
 
@@ -39,6 +40,7 @@ class RunPayload(ContractModel):
     verify_rounds_logged: Spent = 0
     last_reviewed_id: Spent = 0
     requested_changes: list[RequestedChangePayload] = Field(default_factory=list)
+    discarded_call: DiscardedCallPayload | None = None
     spend: SpendPayload | None = None
     spend_before_reopening: SpendPayload | None = None
 
@@ -84,6 +86,9 @@ class RunPayload(ContractModel):
             verify_rounds_logged=run.verify_rounds_logged,
             last_reviewed_id=run.last_reviewed_id,
             requested_changes=[RequestedChangePayload.from_domain(change) for change in run.requested_changes],
+            discarded_call=DiscardedCallPayload.from_domain(run.discarded_call)
+            if run.discarded_call is not None
+            else None,
             spend=SpendPayload.from_domain(run.spend) if run.spend.measured else None,
         )
 
@@ -109,5 +114,6 @@ class RunPayload(ContractModel):
             verify_rounds_logged=self.verify_rounds_logged,
             last_reviewed_id=self.last_reviewed_id,
             requested_changes=tuple(payload.to_domain() for payload in self.requested_changes),
+            discarded_call=self.discarded_call.to_domain() if self.discarded_call is not None else None,
             spend=self.spend.to_domain() if self.spend is not None else HarnessSpend.nothing(),
         )

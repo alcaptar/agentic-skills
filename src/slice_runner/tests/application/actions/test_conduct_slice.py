@@ -99,6 +99,24 @@ class TestConductSliceStartingANewRun:
             )
         )
 
+    def test_a_discard_of_the_understanding_in_the_invocation_that_paused_appears_in_the_row_of_the_one_that_closes(
+        self,
+    ) -> None:
+        conductor = self._conductor()
+        conductor.understanding.write.side_effect = [
+            RejectionMother.invalid_understanding_report(),
+            UnderstandingMother.of_the_chosen_slice(),
+        ]
+
+        conductor.conduct_after_the_person_agrees()
+
+        paused = conductor.repository.write_run.call_args_list[-1].kwargs["run"]
+        assert paused.discarded_call is not None
+        assert paused.discarded_call.step is Step.UNDERSTAND
+        assert paused.discarded_call.cause is DiscardCause.FAILED_CALL
+        recorded = conductor.closed
+        assert recorded.run.discarded_call == paused.discarded_call
+
     def test_a_call_whose_envelope_has_no_structured_output_is_discarded_and_retried_within_budget(self) -> None:
         conductor = self._conductor()
         conductor.understanding.write.side_effect = [
@@ -138,8 +156,8 @@ class TestConductSliceStartingANewRun:
 
         conductor.conduct()
 
-        assert conductor.closed.discarded_call is not None
-        assert conductor.closed.discarded_call.reason == "a" * 200
+        assert conductor.closed.run.discarded_call is not None
+        assert conductor.closed.run.discarded_call.reason == "a" * 200
 
     def test_a_call_whose_envelope_has_no_structured_output_twice_over_closes_the_run_naming_that_cause(self) -> None:
         conductor = Conductor(chosen=SelectSliceResultMother.about_to_start(), budgets=Budgets(slice_cost_usd=0.03))
@@ -151,9 +169,9 @@ class TestConductSliceStartingANewRun:
         conductor.conduct()
 
         recorded = conductor.closed
-        assert recorded.discarded_call is not None
-        assert recorded.discarded_call.step is Step.UNDERSTAND
-        assert recorded.discarded_call.cause is DiscardCause.NO_STRUCTURED_OUTPUT
+        assert recorded.run.discarded_call is not None
+        assert recorded.run.discarded_call.step is Step.UNDERSTAND
+        assert recorded.run.discarded_call.cause is DiscardCause.NO_STRUCTURED_OUTPUT
 
     def test_discard_after_discard_of_the_understanding_closes_the_run_and_writes_its_label(self) -> None:
         conductor = Conductor(chosen=SelectSliceResultMother.about_to_start(), budgets=Budgets(slice_cost_usd=0.03))
@@ -171,9 +189,9 @@ class TestConductSliceStartingANewRun:
         )
         recorded = conductor.metrics.record.call_args.args[0]
         assert recorded.state is RunState.ABORTED_BUDGET
-        assert recorded.discarded_call is not None
-        assert recorded.discarded_call.step is Step.UNDERSTAND
-        assert recorded.discarded_call.cause is DiscardCause.FAILED_CALL
+        assert recorded.run.discarded_call is not None
+        assert recorded.run.discarded_call.step is Step.UNDERSTAND
+        assert recorded.run.discarded_call.cause is DiscardCause.FAILED_CALL
         assert conductor.repository.pause_for_alignment.call_count == 0
 
     def test_the_invocation_that_asks_for_alignment_ends_instead_of_writing_any_code(self) -> None:
@@ -1550,9 +1568,9 @@ class TestConductSliceImplementing:
         assert conductor.implement.execute.call_count == 2
         recorded = conductor.closed
         assert recorded.run.implement_discards == 1
-        assert recorded.discarded_call is not None
-        assert recorded.discarded_call.step is Step.IMPLEMENT
-        assert recorded.discarded_call.cause is DiscardCause.FAILED_CALL
+        assert recorded.run.discarded_call is not None
+        assert recorded.run.discarded_call.step is Step.IMPLEMENT
+        assert recorded.run.discarded_call.cause is DiscardCause.FAILED_CALL
         assert recorded.spend == HarnessSpend.summing(
             (
                 HarnessSpendMother.of_a_call_that_cost_nothing(),
@@ -2027,7 +2045,7 @@ class TestConductSliceWhenTheJudgeSpeaks:
                 HarnessSpendMother.of_the_judge_call(),
             )
         )
-        assert recorded.discarded_call.cause is DiscardCause.INCOHERENT_VERDICT
+        assert recorded.run.discarded_call.cause is DiscardCause.INCOHERENT_VERDICT
 
     def test_a_call_that_left_no_verdict_at_all_is_discarded_as_a_failed_call_and_not_as_an_incoherent_one(
         self,
@@ -2037,7 +2055,7 @@ class TestConductSliceWhenTheJudgeSpeaks:
 
         conductor.conduct()
 
-        assert conductor.metrics.record.call_args.args[0].discarded_call.cause is DiscardCause.FAILED_CALL
+        assert conductor.metrics.record.call_args.args[0].run.discarded_call.cause is DiscardCause.FAILED_CALL
 
 
 class TestConductSliceWhenTheImplementerMovedNothing:
@@ -2124,9 +2142,9 @@ class TestConductSliceWhenTheCostOfTheSliceRunsOut:
         )
         recorded = conductor.metrics.record.call_args.args[0]
         assert recorded.state is RunState.ABORTED_BUDGET
-        assert recorded.discarded_call is not None
-        assert recorded.discarded_call.step is Step.VERIFY
-        assert recorded.discarded_call.cause is DiscardCause.INCOHERENT_VERDICT
+        assert recorded.run.discarded_call is not None
+        assert recorded.run.discarded_call.step is Step.VERIFY
+        assert recorded.run.discarded_call.cause is DiscardCause.INCOHERENT_VERDICT
         assert recorded.run.verify_rounds_logged == 0
 
     def test_discard_after_discard_of_the_implementation_closes_the_run_and_writes_its_label(self) -> None:
@@ -2147,9 +2165,9 @@ class TestConductSliceWhenTheCostOfTheSliceRunsOut:
         )
         recorded = conductor.metrics.record.call_args.args[0]
         assert recorded.state is RunState.ABORTED_BUDGET
-        assert recorded.discarded_call is not None
-        assert recorded.discarded_call.step is Step.IMPLEMENT
-        assert recorded.discarded_call.cause is DiscardCause.FAILED_CALL
+        assert recorded.run.discarded_call is not None
+        assert recorded.run.discarded_call.step is Step.IMPLEMENT
+        assert recorded.run.discarded_call.cause is DiscardCause.FAILED_CALL
 
     def test_a_discard_with_cost_left_asks_the_judge_again_instead_of_closing(self) -> None:
         conductor = self._judging(budgets=Budgets(slice_cost_usd=0.2))
@@ -2184,8 +2202,8 @@ class TestConductSliceWhenTheCostOfTheSliceRunsOut:
         assert conductor.verify.execute.call_count == 1
         assert result.state is RunState.ABORTED_UNMEASURED_CALL
         recorded = conductor.metrics.record.call_args.args[0]
-        assert recorded.discarded_call.step is Step.VERIFY
-        assert recorded.discarded_call.cause is DiscardCause.FAILED_CALL
+        assert recorded.run.discarded_call.step is Step.VERIFY
+        assert recorded.run.discarded_call.cause is DiscardCause.FAILED_CALL
 
     def test_a_call_with_no_measurement_closes_the_run_even_after_an_earlier_call_of_the_run_was_measured(
         self,

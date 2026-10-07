@@ -128,7 +128,6 @@ class ConductSliceProgress:
     understanding: str = ""
     pull_request: int | None = None
     waited_seconds: int = 0
-    discarded_call: DiscardedCall | None = None
     ci_indeterminate_cause: CiIndeterminateCause | None = None
     conflicting_paths: tuple[str, ...] = field(default=())
     expects_a_tree: bool = True
@@ -678,7 +677,9 @@ class ConductSlice:
         spends = progress.spends if rejection.spend is None else (*progress.spends, rejection.spend)
 
         return replace(
-            progress, spends=spends, discarded_call=DiscardedCall.of_the_rejection(progress.run.step, rejection)
+            progress,
+            spends=spends,
+            run=replace(progress.run, discarded_call=DiscardedCall.of_the_rejection(progress.run.step, rejection)),
         )
 
     def _opening_the_pull_request(self, progress: ConductSliceProgress) -> SteppedSlice:
@@ -870,7 +871,6 @@ class ConductSlice:
                 run=progress.run,
                 budgets=self._budgets,
                 models=self._models,
-                discarded_call=progress.discarded_call,
                 ci_indeterminate_cause=progress.ci_indeterminate_cause,
                 conflicting_paths=progress.conflicting_paths,
                 worktree=progress.worktree,

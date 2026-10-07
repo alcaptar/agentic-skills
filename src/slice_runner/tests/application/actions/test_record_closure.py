@@ -102,9 +102,9 @@ class TestTheRowItWrites:
         closer = _Closer()
         discarded = DiscardedCallMother.of_an_incoherent_verdict()
 
-        written = closer.close(discarded_call=discarded)
+        written = closer.close(run=RunMother.awaiting_merge_after_discarding(discarded))
 
-        assert written.discarded_call == discarded
+        assert written.run.discarded_call == discarded
 
     def test_the_size_of_the_diff_measured_at_the_last_verify_reaches_the_row(self) -> None:
         closer = _Closer()

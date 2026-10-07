@@ -18,7 +18,6 @@ if TYPE_CHECKING:
     from slice_runner.domain.corpus import Corpus
     from slice_runner.domain.debt_ledger import DebtLedger
     from slice_runner.domain.diff_stats import DiffStats
-    from slice_runner.domain.discarded_call import DiscardedCall
     from slice_runner.domain.harness_spend import HarnessSpend
     from slice_runner.domain.metrics_log import MetricsLog
     from slice_runner.domain.role_models import RoleModels
@@ -36,7 +35,6 @@ class RecordClosureParams:
     run: Run
     budgets: Budgets
     models: RoleModels
-    discarded_call: DiscardedCall | None = None
     ci_indeterminate_cause: CiIndeterminateCause | None = None
     conflicting_paths: tuple[str, ...] = field(default=())
     worktree: str = ""
@@ -78,7 +76,6 @@ class RecordClosure:
                 findings_of_the_last_round=tuple(
                     appearance.finding for appearance in history.appearances_of_the_last_round
                 ),
-                discarded_call=params.discarded_call,
                 ci_indeterminate_cause=params.ci_indeterminate_cause,
                 debt=debt,
                 diff_stats=self._size_of(params),
