@@ -20,7 +20,6 @@ from slice_runner.application.actions.implement_slice import ImplementSlice
 from slice_runner.application.actions.mount_worktree import MountWorktree
 from slice_runner.application.actions.record_closure import RecordClosure
 from slice_runner.application.actions.record_step import RecordStep
-from slice_runner.application.actions.reopen_slice import ReopenSlice
 from slice_runner.application.actions.rescue_staged_work import RescueStagedWork
 from slice_runner.application.actions.retire_worktree import RetireWorktree
 from slice_runner.application.actions.run_controls import RunControls
@@ -32,8 +31,6 @@ from slice_runner.application.queries.read_ci_status import ReadCiStatus
 from slice_runner.application.queries.read_pull_request_status import ReadPullRequestStatus
 from slice_runner.application.queries.run_prechecks import RunPrechecks
 from slice_runner.application.queries.select_slice import SelectSlice
-from slice_runner.domain.alignment_response import AlignmentResponse
-from slice_runner.domain.alignment_response_kind import AlignmentResponseKind
 from slice_runner.domain.alignment_stage import AlignmentStage
 from slice_runner.domain.branches import Branches
 from slice_runner.domain.budgets import Budgets
@@ -106,7 +103,6 @@ class Conductor:
         self.budgets = budgets or Budgets()
         self.models = models or self.MODELS
         self.select = self._doubling(SelectSlice, execute=chosen)
-        self.reopen = self._doubling(ReopenSlice, execute=None)
         self.prechecks = self._doubling(RunPrechecks, execute=PrecheckResult(outcome=PrecheckOutcome.CLEAR))
         self.check_sources = self._doubling(CheckSources, execute=PrecheckResult(outcome=PrecheckOutcome.CLEAR))
         self.worktrees: Mock = create_autospec(Worktrees, spec_set=True, instance=True)
@@ -127,7 +123,6 @@ class Conductor:
         self.deliver = self._doubling(DeliverSlice, execute=self.PULL_REQUEST)
         self.close = self._doubling(CloseParent, execute=None)
         self.repository: Mock = create_autospec(RunRepository, spec_set=True, instance=True)
-        self.repository.read_alignment_response.return_value = AlignmentResponse(kind=AlignmentResponseKind.NOT_YET)
         self.repository.read_understanding.return_value = self.UNDERSTANDING
         self.branches: Mock = create_autospec(Branches, spec_set=True, instance=True)
         self.branches.catch_up.return_value = BranchCatchUpMother.caught_up()
@@ -226,7 +221,6 @@ class Conductor:
         return ConductSlice(
             use_cases=ConductSliceUseCases(
                 select=self.select,
-                reopen=self.reopen,
                 prechecks=self.prechecks,
                 mount=MountWorktree(worktrees=self.worktrees),
                 retire=RetireWorktree(worktrees=self.worktrees),

@@ -861,7 +861,6 @@ class Cli:
         return ConductSlice(
             use_cases=ConductSliceUseCases(
                 select=SelectSlice(repository=repository),
-                reopen=ReopenSlice(repository=repository, machine=machine),
                 prechecks=RunPrechecks(branches=branches, forum=forum),
                 mount=MountWorktree(worktrees=worktrees),
                 retire=RetireWorktree(worktrees=worktrees),

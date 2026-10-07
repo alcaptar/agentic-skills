@@ -1720,12 +1720,9 @@ class TestRetiringTheWorktreeFromTheCommandLine:
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
         invocation = RunInvocation(
-            children=GhConversationMother.the_slice_aborted_before_touching_code(),
+            children=GhConversationMother.the_slice_resumed_at(replace(RunMother.implementing(), tree_unexpected=True)),
             answers=(
-                Answer(
-                    to=("gh", "issue", "view", "comments"),
-                    stdout=GhConversationMother.the_comments_of_a_person_asking_to_retry(),
-                ),
+                Answer(to=("gh", "issue", "view", "--json", "comments"), stdout=json.dumps({"comments": []})),
                 Answer(to=("git", "rev-list", "--count"), stdout="0\n"),
                 Answer(to=("gh", "pr", "list"), stdout=GhConversationMother.no_open_pull_request()),
             ),
@@ -3276,34 +3273,71 @@ class TestTheCommandThatReadsTheUnderstanding:
         assert (arguments.issue, arguments.repo, arguments.json) == (45, "alcaptar/agentic-skills", True)
 
 
-class TestTheAlignmentCommentsAreReadByTheNextRunAndNotWhileItWaits:
+class TestACommentTypedOnTheSubissueChangesNothingInTheNextRun:
+    WRITING_COMMANDS: ClassVar[tuple[list[str], ...]] = (["issue", "edit"], ["issue", "comment"])
+
     @staticmethod
-    def _invocation(typed: str) -> RunInvocation:
-        return RunInvocation(
+    def _awaiting_alignment(typed: str | None) -> RunInvocation:
+        return TestACommentTypedOnTheSubissueChangesNothingInTheNextRun._with(
             children=GhConversationMother.the_slice_resumed_at(
                 RunMother.awaiting_alignment(), label=IssueLabel.AWAITING_ALIGNMENT
             ),
+            typed=typed,
+        )
+
+    @staticmethod
+    def _blocked(typed: str | None) -> RunInvocation:
+        return TestACommentTypedOnTheSubissueChangesNothingInTheNextRun._with(
+            children=GhConversationMother.the_slice_aborted_before_touching_code(), typed=typed
+        )
+
+    @staticmethod
+    def _with(*, children: str, typed: str | None) -> RunInvocation:
+        comments = [UnderstandingComment.MARKER] if typed is None else [UnderstandingComment.MARKER, typed]
+
+        return RunInvocation(
+            children=children,
             answers=(
                 Answer(
                     to=("gh", "issue", "view", "comments"),
-                    stdout=GhConversationMother.the_comments_of_a_person_typing(typed),
+                    stdout=json.dumps({"comments": [{"body": body} for body in comments]}),
                 ),
                 Answer(to=("git", "rev-list", "--count"), stdout="0\n"),
                 Answer(to=("gh", "pr", "list"), stdout=GhConversationMother.no_open_pull_request()),
             ),
         )
 
-    def test_a_run_with_no_answer_yet_ends_the_invocation_after_reading_the_comments_without_calling_the_model(
+    @classmethod
+    def _outcome(
+        cls, invocation: RunInvocation, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> tuple[int, list[tuple[list[str], str]]]:
+        code = invocation.conduct(logs=tmp_path / "logs")
+        capsys.readouterr()
+        writes = [
+            (call.argv, call.stdin) for call in invocation.process.calls if call.argv[1:3] in cls.WRITING_COMMANDS
+        ]
+
+        return code, writes
+
+    @pytest.mark.parametrize("token", ["-GO", "-REVIEW cambia el nombre de la clase"])
+    def test_a_go_or_a_review_typed_while_the_slice_waits_leaves_the_same_label_state_block_and_exit_code(
+        self, token: str, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        without = self._outcome(self._awaiting_alignment(None), tmp_path / "without", capsys)
+
+        with_the_comment = self._outcome(self._awaiting_alignment(token), tmp_path / "with", capsys)
+
+        assert with_the_comment == without
+        assert without[0] == ExitCode.AWAITING_ALIGNMENT
+
+    def test_a_retry_typed_on_a_blocked_slice_leaves_the_same_label_state_block_and_exit_code(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        invocation = self._invocation("un comentario cualquiera")
+        without = self._outcome(self._blocked(None), tmp_path / "without", capsys)
 
-        code = invocation.conduct(logs=tmp_path / "logs")
+        with_the_comment = self._outcome(self._blocked("-RETRY ya esta resuelto a mano"), tmp_path / "with", capsys)
 
-        assert code == ExitCode.AWAITING_ALIGNMENT
-        assert json.loads(capsys.readouterr().out)["halt"] == "awaiting-alignment"
-        assert invocation.process.invoked("comments")
-        assert not invocation.process.invoked("stream-json")
+        assert with_the_comment == without
 
 
 class TestARunBlockWrittenByAnEarlierVersionIsStillRead:

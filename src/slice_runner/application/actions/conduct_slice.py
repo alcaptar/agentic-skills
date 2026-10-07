@@ -11,7 +11,6 @@ from slice_runner.application.actions.implement_slice import ImplementSliceParam
 from slice_runner.application.actions.mount_worktree import MountWorktreeParams
 from slice_runner.application.actions.record_closure import RecordClosureParams
 from slice_runner.application.actions.record_step import RecordStepParams
-from slice_runner.application.actions.reopen_slice import ReopenSliceParams
 from slice_runner.application.actions.rescue_staged_work import RescueStagedWorkParams
 from slice_runner.application.actions.retire_worktree import RetireWorktreeParams
 from slice_runner.application.actions.run_controls import RunControlsParams
@@ -63,7 +62,6 @@ if TYPE_CHECKING:
     from slice_runner.application.actions.mount_worktree import MountWorktree
     from slice_runner.application.actions.record_closure import RecordClosure
     from slice_runner.application.actions.record_step import RecordStep
-    from slice_runner.application.actions.reopen_slice import ReopenSlice
     from slice_runner.application.actions.rescue_staged_work import RescueStagedWork
     from slice_runner.application.actions.retire_worktree import RetireWorktree
     from slice_runner.application.actions.run_controls import RunControls
@@ -84,7 +82,6 @@ if TYPE_CHECKING:
     from slice_runner.domain.parent_issue import ParentIssue
     from slice_runner.domain.pull_request_writer import PullRequestWriter
     from slice_runner.domain.reported_path import ReportedPath
-    from slice_runner.domain.retry_response import RetryResponse
     from slice_runner.domain.role_models import RoleModels
     from slice_runner.domain.run_repository import RunRepository
     from slice_runner.domain.state_machine import StateMachine
@@ -174,7 +171,6 @@ class HaltedSlice:
 @dataclass(frozen=True, kw_only=True, slots=True)
 class ConductSliceUseCases:
     select: SelectSlice
-    reopen: ReopenSlice
     prechecks: RunPrechecks
     mount: MountWorktree
     retire: RetireWorktree
@@ -215,7 +211,6 @@ class ConductSlice:
         models: RoleModels,
     ) -> None:
         self._select = use_cases.select
-        self._reopen = use_cases.reopen
         self._prechecks = use_cases.prechecks
         self._mount = use_cases.mount
         self._retire = use_cases.retire
@@ -252,19 +247,11 @@ class ConductSlice:
             reconciled = sum(
                 self._closing_a_merge_missed_between_invocations(params, dangling) for dangling in unselectable.dangling
             )
-            for subissue, response in unselectable.malformed_retries:
-                if response.reason is not None:
-                    self._repository.write_malformed_response(
-                        repo=params.repo, issue=subissue.number, reason=response.reason
-                    )
             raise self._reported_after_reconciling(unselectable, reconciled) from unselectable
 
         for dangling in chosen.dangling:
             self._closing_a_merge_missed_between_invocations(params, dangling)
-        retry = chosen.retry
         expects_a_tree = self._expects_a_tree(params, chosen)
-        if retry is not None:
-            chosen = self._reopened(params, chosen, retry=retry)
         run = chosen.subissue.run or Run(step=Step.MOUNT_WORKTREE)
         progress = ConductSliceProgress(
             params=params,
@@ -377,15 +364,6 @@ class ConductSlice:
         closed = self._recorded(progress, transition)
 
         return self._closing(closed, transition.state)
-
-    def _reopened(
-        self, params: ConductSliceParams, chosen: SelectSliceResult, *, retry: RetryResponse
-    ) -> SelectSliceResult:
-        reopened = self._reopen.execute(
-            ReopenSliceParams(repo=params.repo, subissue=chosen.subissue, instruction=retry.instruction)
-        )
-
-        return replace(chosen, subissue=reopened.subissue)
 
     def _aligning(self, progress: ConductSliceProgress) -> ConductSliceResult:
         precheck = self._prechecks.execute(
@@ -852,7 +830,6 @@ class ConductSlice:
     def _reported_after_reconciling(unselectable: NoSliceLeftError, reconciled: int) -> NoSliceLeftError:
         error = NoSliceLeftError(f"{unselectable}; reconciled {reconciled} dangling slice(s) before giving up")
         error.dangling = unselectable.dangling
-        error.malformed_retries = unselectable.malformed_retries
 
         return error
 
