@@ -7,10 +7,12 @@ from textual.app import App
 from textual.containers import Horizontal, VerticalScroll
 from textual.widgets import Footer, Static, Tree
 
+from slice_panel.application.actions.give_order import GiveOrder, GiveOrderParams
+from slice_panel.application.actions.launch_run import LaunchRun, LaunchRunParams
+from slice_panel.domain.exceptions import FeatureUnknownError, OrderRefusedError
 from slice_panel.domain.follow_ended import FollowEnded
 from slice_panel.domain.slice_board import SliceBoard
 from slice_panel.infrastructure.herdr_tab_created_payload import HerdrTabCreatedRejectedError
-from slice_panel.infrastructure.herdr_tabs import HerdrTabs
 from slice_panel.infrastructure.slice_runner_commands import SliceRunnerCommands
 from slice_panel.infrastructure.status_line_payload import StatusLinePayload, StatusRejectedError
 from slice_panel.infrastructure.text_prompt import TextPrompt
@@ -27,10 +29,11 @@ if TYPE_CHECKING:
     from slice_panel.domain.feature_group import FeatureGroup
     from slice_panel.domain.follow_line import FollowLine
     from slice_panel.domain.follow_source import FollowSource
+    from slice_panel.domain.process_launcher import ProcessLauncher
+    from slice_panel.domain.process_outcome import ProcessOutcome
+    from slice_panel.domain.run_tabs import RunTabs
     from slice_panel.domain.slice_view import SliceView
     from slice_panel.domain.tab_handle import TabHandle
-    from slice_panel.infrastructure.process_launcher import ProcessLauncher
-    from slice_panel.infrastructure.process_outcome import ProcessOutcome
 
 
 class PanelApp(App[None]):
@@ -52,12 +55,14 @@ class PanelApp(App[None]):
     WORKERS: ClassVar[str] = "orders"
 
     def __init__(
-        self, *, source: FollowSource, launcher: ProcessLauncher, clone_root: Path, repo: str, workspace: str
+        self, *, source: FollowSource, launcher: ProcessLauncher, tabs: RunTabs, clone_root: Path, repo: str
     ) -> None:
         super().__init__()
         self._source = source
         self._launcher = launcher
-        self._tabs = HerdrTabs(launcher=launcher, workspace=workspace)
+        self._tabs = tabs
+        self._launch_run = LaunchRun(tabs=tabs, clone_root=clone_root)
+        self._give_order = GiveOrder(launcher=launcher, launch=self._launch_run, clone_root=clone_root)
         self._clone_root = clone_root
         self._repo = repo
         self._board = SliceBoard()
@@ -197,19 +202,15 @@ class PanelApp(App[None]):
         return outcome
 
     async def _give(self, view: SliceView, order: Sequence[str]) -> None:
-        if await self._ran(order) is not None:
-            await self._launch(view)
+        await self._opening(view, self._give_order.execute(GiveOrderParams(view=view, order=order)))
 
     async def _launch(self, view: SliceView) -> None:
-        if view.parent is None:
-            self._say(f"the feature of {view.slice_id} is unknown, so its run cannot be launched")
-            return
-        command = SliceRunnerCommands.run(repo=view.repo, parent=view.parent, slice_id=view.slice_id)
+        await self._opening(view, self._launch_run.execute(LaunchRunParams(view=view)))
+
+    async def _opening(self, view: SliceView, opening: Coroutine[object, object, TabHandle]) -> None:
         try:
-            self._opened[(view.repo, view.issue)] = await self._tabs.opened(
-                command, cwd=self._clone_root, label=view.slice_id
-            )
-        except (OSError, HerdrTabCreatedRejectedError) as error:
+            self._opened[(view.repo, view.issue)] = await opening
+        except (OSError, OrderRefusedError, FeatureUnknownError, HerdrTabCreatedRejectedError) as error:
             self._say(str(error))
 
     async def _focus(self, handle: TabHandle) -> None:

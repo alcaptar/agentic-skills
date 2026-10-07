@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 from slice_panel.domain.call_budget import CallBudget
-from slice_panel.infrastructure.process_launcher import ProcessTimedOutError
+from slice_panel.domain.exceptions import ProcessTimedOutError
 from slice_panel.infrastructure.subprocess_process_launcher import SubprocessProcessLauncher
 
 if TYPE_CHECKING:

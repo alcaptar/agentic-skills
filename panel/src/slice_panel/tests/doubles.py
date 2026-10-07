@@ -1,9 +1,11 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 from slice_panel.domain.follow_source import FollowSource
-from slice_panel.infrastructure.process_launcher import ProcessLauncher
+from slice_panel.domain.process_launcher import ProcessLauncher
+from slice_panel.domain.run_tabs import RunTabs
+from slice_panel.domain.tab_handle import TabHandle
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Mapping, Sequence
@@ -11,7 +13,7 @@ if TYPE_CHECKING:
 
     from slice_panel.domain.follow_ended import FollowEnded
     from slice_panel.domain.follow_line import FollowLine
-    from slice_panel.infrastructure.process_outcome import ProcessOutcome
+    from slice_panel.domain.process_outcome import ProcessOutcome
 
 
 class ScriptedFollowSource(FollowSource):
@@ -44,3 +46,19 @@ class RecordingLauncher(ProcessLauncher):
 
     def calls_to(self, *prefix: str) -> list[tuple[str, ...]]:
         return [call for call in self.calls if call[: len(prefix)] == prefix]
+
+
+class RecordingTabs(RunTabs):
+    HANDLE: ClassVar[TabHandle] = TabHandle(tab_id="w1:t9")
+
+    def __init__(self) -> None:
+        self.opened_runs: list[tuple[str, int, str, Path]] = []
+        self.focused_tabs: list[TabHandle] = []
+
+    async def opened_run_of(self, *, repo: str, parent: int, slice_id: str, cwd: Path) -> TabHandle:
+        self.opened_runs.append((repo, parent, slice_id, cwd))
+
+        return self.HANDLE
+
+    async def focused(self, handle: TabHandle) -> None:
+        self.focused_tabs.append(handle)

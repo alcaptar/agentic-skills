@@ -3,9 +3,9 @@ from __future__ import annotations
 import shlex
 from typing import TYPE_CHECKING, ClassVar
 
-from slice_panel.infrastructure.process_launcher import ProcessTimedOutError
+from slice_panel.domain.exceptions import ProcessTimedOutError
 from slice_panel.infrastructure.understanding_screen import UnderstandingScreen
-from slice_panel.tests.doubles import RecordingLauncher
+from slice_panel.tests.doubles import RecordingLauncher, RecordingTabs
 from slice_panel.tests.mothers.follow_line_mother import FollowLineMother
 from slice_panel.tests.mothers.herdr_mother import HerdrMother
 from slice_panel.tests.mothers.outcome_mother import OutcomeMother
@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     from textual.pilot import Pilot
 
     from slice_panel.domain.follow_line import FollowLine
-    from slice_panel.infrastructure.process_outcome import ProcessOutcome
+    from slice_panel.domain.process_outcome import ProcessOutcome
 
 REPO = FollowLineMother.REPO
 
@@ -206,6 +206,30 @@ class TestLaunchingARun(WithAnOrderedSlice):
             notice = self.notice(pilot)
 
         assert "no herdr server is running" in notice
+
+
+class TestTheTabsComeFromOutside(WithAnOrderedSlice):
+    async def test_l_asks_the_injected_tabs_for_the_run_and_never_calls_herdr_itself(self) -> None:
+        launcher = RecordingLauncher()
+        tabs = RecordingTabs()
+        async with self.panel(self.LINES, launcher=launcher, tabs=tabs).run_test() as pilot:
+            await self.settled(pilot)
+            await pilot.press("l")
+            await self.settled(pilot)
+
+        assert tabs.opened_runs == [(REPO, 140, "slice-05", CLONE_ROOT)]
+        assert launcher.calls_to("herdr") == []
+
+    async def test_enter_focuses_through_the_injected_tabs_the_tab_they_opened(self) -> None:
+        tabs = RecordingTabs()
+        async with self.panel(self.LINES, launcher=RecordingLauncher(), tabs=tabs).run_test() as pilot:
+            await self.settled(pilot)
+            await pilot.press("l")
+            await self.settled(pilot)
+            await pilot.press("enter")
+            await self.settled(pilot)
+
+        assert tabs.focused_tabs == [tabs.HANDLE]
 
 
 class TestEveryCallHasATimeLimit(WithAnOrderedSlice):

@@ -8,6 +8,7 @@ from textual.widgets import Footer, Static, Tree
 from textual.widgets._footer import FooterKey
 
 from slice_panel.domain.follow_ended import FollowEnded
+from slice_panel.infrastructure.herdr_tabs import HerdrTabs
 from slice_panel.infrastructure.panel_app import PanelApp
 from slice_panel.infrastructure.slice_runner_commands import SliceRunnerCommands
 from slice_panel.tests.doubles import RecordingLauncher, ScriptedFollowSource
@@ -22,6 +23,7 @@ if TYPE_CHECKING:
     from textual.pilot import Pilot
 
     from slice_panel.domain.follow_line import FollowLine
+    from slice_panel.domain.run_tabs import RunTabs
 
 
 CLONE_ROOT = Path("/work/clone")
@@ -50,13 +52,16 @@ class OnScreen:
         lines: Sequence[FollowLine],
         ended: FollowEnded | None = None,
         launcher: RecordingLauncher | None = None,
+        tabs: RunTabs | None = None,
     ) -> PanelApp:
+        launcher_in_use = launcher or cls.launcher_that_knows_the_waiting_slice()
+
         return PanelApp(
             source=cls.source_of(lines, ended),
-            launcher=launcher or cls.launcher_that_knows_the_waiting_slice(),
+            launcher=launcher_in_use,
             clone_root=CLONE_ROOT,
             repo=FollowLineMother.REPO,
-            workspace=HerdrMother.WORKSPACE,
+            tabs=tabs or HerdrTabs(launcher=launcher_in_use, workspace=HerdrMother.WORKSPACE),
         )
 
     @staticmethod
