@@ -1,15 +1,19 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
-from textual.widgets import Static, Tree
+from textual.binding import Binding
+from textual.widgets import Footer, Static, Tree
+from textual.widgets._footer import FooterKey
 
 from slice_panel.domain.follow_ended import FollowEnded
 from slice_panel.infrastructure.panel_app import PanelApp
 from slice_panel.infrastructure.slice_runner_commands import SliceRunnerCommands
 from slice_panel.tests.doubles import RecordingLauncher, ScriptedFollowSource
 from slice_panel.tests.mothers.follow_line_mother import FollowLineMother
+from slice_panel.tests.mothers.herdr_mother import HerdrMother
+from slice_panel.tests.mothers.outcome_mother import OutcomeMother
 from slice_panel.tests.mothers.status_output_mother import StatusOutputMother
 
 if TYPE_CHECKING:
@@ -52,6 +56,7 @@ class OnScreen:
             launcher=launcher or cls.launcher_that_knows_the_waiting_slice(),
             clone_root=CLONE_ROOT,
             repo=FollowLineMother.REPO,
+            workspace=HerdrMother.WORKSPACE,
         )
 
     @staticmethod
@@ -87,8 +92,13 @@ class TestTheFeaturesOnTheLeft(OnScreen):
 
             shown = self.tree_lines(pilot)
 
-        assert [line.strip() for line in shown if line.startswith("feature")] == ["feature 140", "feature 200"]
-        assert shown.index("feature 140") < shown.index("feature 200")
+        assert shown == [
+            "feature 140",
+            "  #150 slice-05 follow-speaks-json  advancing",
+            "  #151 slice-06 the-panel  awaiting-person  <- waits for you",
+            "feature 200",
+            "  #210 slice-01 another-feature-slice  advancing",
+        ]
 
     async def test_the_lines_without_a_parent_get_a_group_of_their_own(self) -> None:
         lines = [FollowLineMother.advancing_without_the_feature()]
@@ -97,8 +107,7 @@ class TestTheFeaturesOnTheLeft(OnScreen):
 
             shown = self.tree_lines(pilot)
 
-        assert shown[0] == "no feature"
-        assert "slice-05" in shown[1]
+        assert shown == ["no feature", "  #150 slice-05  advancing"]
 
     async def test_a_slice_keeps_its_last_known_parent_when_a_later_line_comes_without_one(self) -> None:
         lines = [FollowLineMother.advancing(), FollowLineMother.advancing_without_the_feature()]
@@ -119,6 +128,48 @@ class TestTheFeaturesOnTheLeft(OnScreen):
             shown = self.tree_lines(pilot)
 
         assert shown[1].endswith("closed")
+
+    async def test_a_slice_that_status_says_is_closed_shows_as_closed_whatever_the_last_event_of_follow_says(
+        self,
+    ) -> None:
+        listing = SliceRunnerCommands.status(repo=FollowLineMother.REPO, parent=FollowLineMother.PARENT)
+        launcher = RecordingLauncher(
+            {listing: StatusOutputMother.of_a_slice_merged_by_hand_while_follow_still_says_advancing()}
+        )
+        async with self.panel([FollowLineMother.advancing()], launcher=launcher).run_test() as pilot:
+            await self.settled(pilot)
+            await pilot.press("a")
+            await pilot.press(*"140", "enter")
+            await self.settled(pilot)
+
+            shown = self.tree_lines(pilot)
+            detail = self.detail(pilot)
+
+        assert shown == ["feature 140", "  #150 slice-05 follow-speaks-json  closed"]
+        assert "status: closed" in detail
+
+    async def test_a_slice_that_status_says_is_closed_does_not_wait_for_you_even_if_follow_says_it_awaits_a_person(
+        self,
+    ) -> None:
+        awaiting = FollowLineMother.awaiting_person()
+        listing = SliceRunnerCommands.status(repo=awaiting.repo, parent=FollowLineMother.PARENT)
+        closed_row = StatusOutputMother.row("slice-06", "the-panel", awaiting.issue, label=None, closed=True)
+        understanding = SliceRunnerCommands.understanding(repo=awaiting.repo, issue=awaiting.issue)
+        launcher = RecordingLauncher(
+            {
+                listing: OutcomeMother.succeeded(closed_row + "\n"),
+                understanding: StatusOutputMother.a_long_understanding(),
+            }
+        )
+        async with self.panel([awaiting], launcher=launcher).run_test() as pilot:
+            await self.settled(pilot)
+            await pilot.press("a")
+            await pilot.press(*"140", "enter")
+            await self.settled(pilot)
+
+            shown = self.tree_lines(pilot)
+
+        assert shown == ["feature 140", "  #151 slice-06 the-panel  closed"]
 
 
 class TestTheSlicesThatWaitForAPerson(OnScreen):
@@ -203,3 +254,48 @@ class TestWhenFollowEnds(OnScreen):
             notice = self.notice(pilot)
 
         assert notice == ""
+
+
+class TestTheScreenFitsATallTree(OnScreen):
+    SIZE: ClassVar[tuple[int, int]] = (120, 20)
+    LINES: ClassVar[int] = 60
+
+    async def test_the_footer_and_the_notice_stay_inside_the_screen_when_the_tree_is_taller_than_it(self) -> None:
+        ended = FollowEnded(exit_code=3, detail="gh is not authenticated")
+        lines = FollowLineMother.of_many_slices(self.LINES)
+        async with self.panel(lines, ended).run_test(size=self.SIZE) as pilot:
+            await self.settled(pilot)
+
+            screen = pilot.app.screen.region
+            tree = pilot.app.query_one("#features", Tree)
+            footer = pilot.app.query_one(Footer)
+            notice = pilot.app.query_one("#notice", Static)
+
+            assert tree.virtual_size.height > screen.height
+            assert notice.display
+            assert screen.contains_region(notice.region)
+            assert screen.contains_region(footer.region)
+            assert notice.region.bottom <= footer.region.y
+
+    async def test_an_order_that_cannot_be_given_says_why_inside_the_screen_with_a_tall_tree(self) -> None:
+        lines = FollowLineMother.of_many_slices(self.LINES)
+        async with self.panel(lines, launcher=RecordingLauncher()).run_test(size=self.SIZE) as pilot:
+            await self.settled(pilot)
+            await pilot.press("e")
+            await self.settled(pilot)
+
+            screen = pilot.app.screen.region
+            notice = pilot.app.query_one("#notice", Static)
+
+            assert "no understanding has been read" in self.notice(pilot)
+            assert screen.contains_region(notice.region)
+
+    async def test_the_footer_teaches_every_binding_with_its_description(self) -> None:
+        async with self.panel([FollowLineMother.advancing()]).run_test(size=self.SIZE) as pilot:
+            await self.settled(pilot)
+
+            taught = {(each.key, each.description) for each in pilot.app.query(FooterKey)}
+
+        declared = {(each.key, each.description) for each in Binding.make_bindings(PanelApp.BINDINGS)}
+
+        assert declared <= taught

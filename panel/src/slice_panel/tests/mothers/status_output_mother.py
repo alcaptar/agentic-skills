@@ -33,6 +33,10 @@ class StatusOutputMother:
         return OutcomeMother.succeeded("\n".join(rows) + "\n")
 
     @classmethod
+    def of_a_slice_merged_by_hand_while_follow_still_says_advancing(cls) -> ProcessOutcome:
+        return OutcomeMother.succeeded(cls.row("slice-05", "follow-speaks-json", 150, label=None, closed=True) + "\n")
+
+    @classmethod
     def a_long_understanding(cls) -> ProcessOutcome:
         text = "\n".join(f"understanding line {number}" for number in range(1, cls.UNDERSTANDING_LINES + 1))
 

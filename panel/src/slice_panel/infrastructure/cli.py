@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import shutil
 import sys
 from pathlib import Path
@@ -21,6 +22,7 @@ class Cli:
     FOLLOW_ARGV: ClassVar[tuple[str, ...]] = ("slice-runner", "follow", "--json")
     ROOT_ARGV: ClassVar[tuple[str, ...]] = ("git", "rev-parse", "--show-toplevel")
     REPO_ARGV: ClassVar[tuple[str, ...]] = ("gh", "repo", "view", "--json", "nameWithOwner", "--jq", ".nameWithOwner")
+    WORKSPACE_VARIABLE: ClassVar[str] = "HERDR_WORKSPACE_ID"
     SECONDS_PER_CALL: ClassVar[float] = 60.0
 
     @classmethod
@@ -33,6 +35,13 @@ class Cli:
             sys.stderr.write("slice-panel needs herdr to open the runs in tabs, and it is not on the PATH\n")
 
             return ExitCode.HERDR_MISSING
+        workspace = os.environ.get(cls.WORKSPACE_VARIABLE, "")
+        if not workspace:
+            sys.stderr.write(
+                f"slice-panel must be started inside a herdr workspace: {cls.WORKSPACE_VARIABLE} is not set\n"
+            )
+
+            return ExitCode.WORKSPACE_UNKNOWN
         launcher = SubprocessProcessLauncher(budget=CallBudget(seconds_per_call=cls.SECONDS_PER_CALL))
         try:
             clone_root, repo = asyncio.run(cls._clone_of(launcher))
@@ -40,7 +49,9 @@ class Cli:
             sys.stderr.write(f"slice-panel must be started inside the clone it launches runs from: {error}\n")
 
             return ExitCode.CLONE_UNKNOWN
-        PanelApp(source=cls.follow_source(), launcher=launcher, clone_root=clone_root, repo=repo).run()
+        PanelApp(
+            source=cls.follow_source(), launcher=launcher, clone_root=clone_root, repo=repo, workspace=workspace
+        ).run()
 
         return ExitCode.OK
 

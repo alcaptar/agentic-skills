@@ -84,7 +84,7 @@ class TestTheRealPanelOverTheLinesOfTheContract(RealProcess):
         source = SubprocessFollowSource(argv=self.printing(stdout=stdout))
 
         async with PanelApp(
-            source=source, launcher=RecordingLauncher(), clone_root=Path("/work/clone"), repo="org/repo"
+            source=source, launcher=RecordingLauncher(), clone_root=Path("/work/clone"), repo="org/repo", workspace="w1"
         ).run_test() as pilot:
             await pilot.app.workers.wait_for_complete()
             await pilot.pause()
@@ -100,7 +100,7 @@ class TestTheRealPanelOverTheLinesOfTheContract(RealProcess):
         source = SubprocessFollowSource(argv=self.printing(stderr="no network\n", exit_code=4))
 
         async with PanelApp(
-            source=source, launcher=RecordingLauncher(), clone_root=Path("/work/clone"), repo="org/repo"
+            source=source, launcher=RecordingLauncher(), clone_root=Path("/work/clone"), repo="org/repo", workspace="w1"
         ).run_test() as pilot:
             await pilot.app.workers.wait_for_complete()
             await pilot.pause()

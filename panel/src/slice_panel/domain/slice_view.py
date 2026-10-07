@@ -66,6 +66,8 @@ class SliceView:
         return replace(self, name=self.name or listing.name, parent=listing.parent, listing=listing)
 
     def status(self) -> str:
+        if self._closed_by_status():
+            return self.CLOSED
         if self.latest is not None:
             return self.latest.status
         if self.listing is not None and self.listing.closed:
@@ -74,7 +76,12 @@ class SliceView:
         return self.UNLABELLED if self.listing is None or self.listing.label is None else self.listing.label
 
     def waits_for_alignment(self) -> bool:
+        if self._closed_by_status():
+            return False
         if self.latest is not None:
             return self.latest.awaits_a_person()
 
         return self.listing is not None and self.listing.label == SliceLabel.AWAITING_ALIGNMENT
+
+    def _closed_by_status(self) -> bool:
+        return self.listing is not None and self.listing.closed

@@ -85,5 +85,12 @@ class FollowLineMother:
         )
 
     @classmethod
+    def of_many_slices(cls, count: int) -> list[FollowLine]:
+        return [
+            replace(cls.advancing(), issue=1000 + number, slice_id=f"slice-{number:02d}", name=f"slice-number-{number}")
+            for number in range(count)
+        ]
+
+    @classmethod
     def with_a_status_the_panel_does_not_know(cls) -> FollowLine:
         return replace(cls.advancing(), status="teleporting")
