@@ -737,6 +737,56 @@ class TestConductSliceClosingAMergeMissedBetweenInvocations:
 
         assert conductor.close.execute.call_count == 0
 
+    def test_a_dangling_subissue_whose_pull_request_merged_leaves_one_closing_event_as_merged_with_its_feature_and_name(
+        self,
+    ) -> None:
+        dangling = SubIssueMother.dangling()
+        conductor = self._conductor(dangling=(dangling,))
+
+        conductor.conduct()
+
+        merged = [event for event in conductor.emitted_events if event.state is RunState.MERGED]
+        assert [(event.status, event.slice_id, event.feature_slice) for event in merged] == [
+            (
+                EventStatus.CLOSED,
+                dangling.slice_id.canonical,
+                FeatureSlice(parent=Conductor.ISSUE, name=dangling.slice_id.name),
+            )
+        ]
+
+    def test_two_invocations_in_a_row_leave_exactly_one_merged_closing_event_for_the_reconciled_slice(self) -> None:
+        dangling = SubIssueMother.dangling()
+        conductor = self._conductor(dangling=(dangling,))
+        conductor.select.execute.side_effect = lambda _params: SelectSliceResultMother.about_to_start(
+            dangling=() if conductor.repository.clear_run.called else (dangling,)
+        )
+
+        conductor.conduct()
+        conductor.conduct()
+
+        merged = [event for event in conductor.emitted_events if event.state is RunState.MERGED]
+        assert len(merged) == 1
+
+    def test_a_dangling_subissue_whose_pull_request_closed_without_merging_leaves_no_merged_closing_event(
+        self,
+    ) -> None:
+        dangling = SubIssueMother.dangling()
+        conductor = self._conductor(dangling=(dangling,))
+        conductor.forum.pull_request_state.return_value = PullRequestStatusMother.closed()
+
+        conductor.conduct()
+
+        assert [event for event in conductor.emitted_events if event.state is RunState.MERGED] == []
+
+    def test_a_dangling_subissue_with_no_pull_request_found_leaves_no_merged_closing_event(self) -> None:
+        dangling = SubIssueMother.dangling()
+        conductor = self._conductor(dangling=(dangling,))
+        conductor.forum.any_pull_request.return_value = None
+
+        conductor.conduct()
+
+        assert [event for event in conductor.emitted_events if event.state is RunState.MERGED] == []
+
 
 class TestConductSliceWhenTheNamedSliceCannotBeSelected:
     @staticmethod

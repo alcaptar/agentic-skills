@@ -46,4 +46,7 @@ class FollowEvents:
 
     @staticmethod
     def _differs_from(previous: Event | None, event: Event) -> bool:
-        return previous is None or (previous.step, previous.status) != (event.step, event.status)
+        if previous is None:
+            return True
+
+        return (previous.step, previous.status, previous.state) != (event.step, event.status, event.state)
