@@ -3,8 +3,9 @@ from __future__ import annotations
 import asyncio
 from typing import TYPE_CHECKING
 
-from slice_panel.infrastructure.process_launcher import ProcessLauncher, ProcessTimedOutError
-from slice_panel.infrastructure.process_outcome import ProcessOutcome
+from slice_panel.domain.exceptions import ProcessTimedOutError
+from slice_panel.domain.process_launcher import ProcessLauncher
+from slice_panel.domain.process_outcome import ProcessOutcome
 
 if TYPE_CHECKING:
     from collections.abc import Sequence

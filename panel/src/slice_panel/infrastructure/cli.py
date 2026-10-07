@@ -9,13 +9,14 @@ from typing import TYPE_CHECKING, ClassVar
 
 from slice_panel.domain.call_budget import CallBudget
 from slice_panel.infrastructure.exit_code import ExitCode
+from slice_panel.infrastructure.herdr_tabs import HerdrTabs
 from slice_panel.infrastructure.panel_app import PanelApp
 from slice_panel.infrastructure.subprocess_follow_source import SubprocessFollowSource
 from slice_panel.infrastructure.subprocess_process_launcher import SubprocessProcessLauncher
 
 if TYPE_CHECKING:
     from slice_panel.domain.follow_source import FollowSource
-    from slice_panel.infrastructure.process_launcher import ProcessLauncher
+    from slice_panel.domain.process_launcher import ProcessLauncher
 
 
 class Cli:
@@ -50,7 +51,11 @@ class Cli:
 
             return ExitCode.CLONE_UNKNOWN
         PanelApp(
-            source=cls.follow_source(), launcher=launcher, clone_root=clone_root, repo=repo, workspace=workspace
+            source=cls.follow_source(),
+            launcher=launcher,
+            tabs=HerdrTabs(launcher=launcher, workspace=workspace),
+            clone_root=clone_root,
+            repo=repo,
         ).run()
 
         return ExitCode.OK

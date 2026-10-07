@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, ClassVar
 from slice_panel.tests.mothers.outcome_mother import OutcomeMother
 
 if TYPE_CHECKING:
-    from slice_panel.infrastructure.process_outcome import ProcessOutcome
+    from slice_panel.domain.process_outcome import ProcessOutcome
 
 
 class StatusOutputMother:

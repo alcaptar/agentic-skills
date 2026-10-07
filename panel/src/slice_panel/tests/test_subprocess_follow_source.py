@@ -12,6 +12,7 @@ from textual.widgets import Static, Tree
 from slice_panel.domain.follow_ended import FollowEnded
 from slice_panel.domain.follow_line import FollowLine
 from slice_panel.infrastructure.cli import Cli
+from slice_panel.infrastructure.herdr_tabs import HerdrTabs
 from slice_panel.infrastructure.panel_app import PanelApp
 from slice_panel.infrastructure.subprocess_follow_source import SubprocessFollowSource
 from slice_panel.tests.doubles import RecordingLauncher
@@ -83,8 +84,13 @@ class TestTheRealPanelOverTheLinesOfTheContract(RealProcess):
         stdout = "".join(f"{line}\n" for line in self.example_lines(key_from_the_future="x"))
         source = SubprocessFollowSource(argv=self.printing(stdout=stdout))
 
+        launcher = RecordingLauncher()
         async with PanelApp(
-            source=source, launcher=RecordingLauncher(), clone_root=Path("/work/clone"), repo="org/repo", workspace="w1"
+            source=source,
+            launcher=launcher,
+            tabs=HerdrTabs(launcher=launcher, workspace="w1"),
+            clone_root=Path("/work/clone"),
+            repo="org/repo",
         ).run_test() as pilot:
             await pilot.app.workers.wait_for_complete()
             await pilot.pause()
@@ -99,8 +105,13 @@ class TestTheRealPanelOverTheLinesOfTheContract(RealProcess):
     async def test_the_screen_says_follow_ended_when_the_process_fails(self) -> None:
         source = SubprocessFollowSource(argv=self.printing(stderr="no network\n", exit_code=4))
 
+        launcher = RecordingLauncher()
         async with PanelApp(
-            source=source, launcher=RecordingLauncher(), clone_root=Path("/work/clone"), repo="org/repo", workspace="w1"
+            source=source,
+            launcher=launcher,
+            tabs=HerdrTabs(launcher=launcher, workspace="w1"),
+            clone_root=Path("/work/clone"),
+            repo="org/repo",
         ).run_test() as pilot:
             await pilot.app.workers.wait_for_complete()
             await pilot.pause()
