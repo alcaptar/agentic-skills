@@ -121,10 +121,6 @@ class GhConversationMother:
         )
 
     @classmethod
-    def the_comments_of_a_person_asking_to_retry(cls) -> str:
-        return json.dumps({"comments": [{"body": "-RETRY ya esta resuelto a mano"}]})
-
-    @classmethod
     def the_slice_marked_in_progress_that_never_persisted_a_run(cls) -> str:
         return cls._children(body=_SUBISSUE_PROSE, label=IssueLabel.IN_PROGRESS, state=IssueState.OPEN)
 
@@ -251,6 +247,7 @@ class GhConversationMother:
             "verify_discards": run.verify_discards,
             "control_rounds_logged": run.control_rounds_logged,
             "verify_rounds_logged": run.verify_rounds_logged,
+            "tree_unexpected": run.tree_unexpected,
         }
 
         return f"<!-- slice-runner:estado\n{json.dumps(state)}\n-->"

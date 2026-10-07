@@ -4,11 +4,9 @@ import json
 import re
 from typing import TYPE_CHECKING, ClassVar
 
-from slice_runner.domain.alignment_response import AlignmentResponse
 from slice_runner.domain.exceptions import LaggingSearchIndexError, UnreadableIssueError
 from slice_runner.domain.issue_label import IssueLabel
 from slice_runner.domain.parent_issue import ParentIssue
-from slice_runner.domain.retry_response import RetryResponse
 from slice_runner.domain.run_repository import RunRepository
 from slice_runner.domain.slice_identity import SliceIdentity
 from slice_runner.domain.sub_issue import SubIssue
@@ -19,7 +17,6 @@ from slice_runner.infrastructure.gh_comments_payload import GhCommentPayload, Gh
 from slice_runner.infrastructure.gh_parent_view_payload import GhParentViewPayload
 from slice_runner.infrastructure.gh_sub_issue_payload import GhSubIssuePayload
 from slice_runner.infrastructure.kept_worktree_comment import KeptWorktreeComment
-from slice_runner.infrastructure.malformed_response_comment import MalformedResponseComment
 from slice_runner.infrastructure.order_comment import OrderComment
 from slice_runner.infrastructure.parent_body import ParentBody
 from slice_runner.infrastructure.reset_comment import ResetComment
@@ -33,7 +30,6 @@ if TYPE_CHECKING:
     from slice_runner.domain.declared_debt import DeclaredDebt
     from slice_runner.domain.finding import Finding
     from slice_runner.domain.findings_history import FindingsHistory
-    from slice_runner.domain.malformed_reason import MalformedReason
     from slice_runner.domain.order import Order
     from slice_runner.domain.precheck_outcome import PrecheckOutcome
     from slice_runner.domain.run import Run
@@ -157,16 +153,6 @@ class GhRunRepository(RunRepository):
 
         return UnderstandingComment.written_in(published[-1])
 
-    def read_alignment_response(self, *, repo: str, issue: int) -> AlignmentResponse:
-        window = self._after_the_understanding(self._comment_bodies(repo=repo, issue=issue))
-
-        return AlignmentResponse.of_the_comments(self._without_acknowledged_malformed(window))
-
-    def read_retry_instruction(self, *, repo: str, issue: int) -> RetryResponse:
-        window = self._after_the_last_reopening(self._comment_bodies(repo=repo, issue=issue))
-
-        return RetryResponse.of_the_comments(self._without_acknowledged_malformed(window))
-
     def mark_order(self, *, repo: str, issue: int, order: Order, text: str) -> None:
         self._run(
             ["gh", "issue", "comment", str(issue), "--repo", repo, "--body-file", "-"],
@@ -181,13 +167,6 @@ class GhRunRepository(RunRepository):
             safe_to_repeat=False,
         )
 
-    def write_malformed_response(self, *, repo: str, issue: int, reason: MalformedReason) -> None:
-        self._run(
-            ["gh", "issue", "comment", str(issue), "--repo", repo, "--body-file", "-"],
-            stdin=MalformedResponseComment.rendered(reason),
-            safe_to_repeat=False,
-        )
-
     def _comment_bodies(self, *, repo: str, issue: int) -> tuple[str, ...]:
         output = self._run(
             ["gh", "issue", "view", str(issue), "--repo", repo, "--json", "comments"], safe_to_repeat=True
@@ -195,29 +174,6 @@ class GhRunRepository(RunRepository):
         payload = GhCommentsPayload.from_dict(self._decoded_object(output))
 
         return tuple(GhCommentPayload.from_dict(comment).body for comment in payload.comments)
-
-    @staticmethod
-    def _after_the_understanding(bodies: tuple[str, ...]) -> tuple[str, ...]:
-        for index in range(len(bodies) - 1, -1, -1):
-            if UnderstandingComment.is_the_understanding(bodies[index]):
-                return bodies[index + 1 :]
-
-        return ()
-
-    @staticmethod
-    def _after_the_last_reopening(bodies: tuple[str, ...]) -> tuple[str, ...]:
-        for index in range(len(bodies) - 1, -1, -1):
-            if OrderComment.is_a_reopening(bodies[index]):
-                return bodies[index + 1 :]
-
-        return bodies
-
-    @staticmethod
-    def _without_acknowledged_malformed(bodies: tuple[str, ...]) -> tuple[str, ...]:
-        while bodies and MalformedResponseComment.is_the_marker(bodies[-1]):
-            bodies = bodies[:-2]
-
-        return bodies
 
     def write_label(self, *, repo: str, issue: int, remove: IssueLabel | None, add: IssueLabel) -> None:
         argv = self._edit_of(repo=repo, issue=issue, add=add, remove=remove)

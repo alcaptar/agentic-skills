@@ -4,13 +4,10 @@ from dataclasses import replace
 
 import pytest
 
-from slice_runner.application.actions.reopen_slice import ReopenSliceResult
 from slice_runner.domain.budgets import Budgets
 from slice_runner.domain.exceptions import WorktreeRetirementError
 from slice_runner.domain.halt import Halt
 from slice_runner.domain.issue_label import IssueLabel
-from slice_runner.domain.retry_response import RetryResponse
-from slice_runner.domain.retry_response_kind import RetryResponseKind
 from slice_runner.domain.run_state import RunState
 from slice_runner.domain.worktree_retirement import WorktreeRetirement
 from slice_runner.tests.conductor import Conductor
@@ -23,7 +20,6 @@ from slice_runner.tests.mothers.sub_issue_mother import SubIssueMother
 
 _SUBISSUE = SubIssueMother.pending().number
 _BRANCH = SubIssueMother.pending().branch
-_RETRY = RetryResponse(kind=RetryResponseKind.RETRY, instruction="ya esta resuelto a mano")
 
 
 class _Merging:
@@ -265,10 +261,12 @@ class TestConductSliceTheEndingsThatKeepTheWorktree(_Merging):
 class TestConductSliceWhenATreeIsFoundThatNobodyExpected(_Merging):
     @staticmethod
     def _after_an_abort_that_left_its_tree() -> Conductor:
-        aborted = SubIssueMother.blocked(IssueLabel.ABORTED_BUDGET, RunMother.aborted_before_touching_code())
-        conductor = Conductor(chosen=replace(SelectSliceResultMother.about_to_start(subissue=aborted), retry=_RETRY))
-        reopened = replace(aborted, label=IssueLabel.IN_PROGRESS)
-        conductor.reopen.execute.return_value = ReopenSliceResult(subissue=reopened, instruction=_RETRY.instruction)
+        reopened = replace(RunMother.implementing(), tree_unexpected=True)
+        conductor = Conductor(chosen=SelectSliceResultMother.resumed_at(reopened))
+        conductor.worktrees.listed.return_value = (
+            ListedWorktreeMother.main_clone(),
+            ListedWorktreeMother.mounted(path=Conductor.WORKTREE, branch=_BRANCH),
+        )
         conductor.worktrees.branch_exists.return_value = True
 
         return conductor
@@ -331,11 +329,10 @@ class TestConductSliceWhenATreeIsFoundThatNobodyExpected(_Merging):
         assert not conductor.worktrees.remove.called
         assert not conductor.worktrees.has_uncommitted_work.called
 
-    def test_a_blocked_run_that_is_reinvoked_with_a_retry_reuses_the_tree_it_kept(self) -> None:
+    def test_a_blocked_run_reopened_by_the_retry_subcommand_reuses_the_tree_it_kept(self) -> None:
         blocked = SubIssueMother.blocked(IssueLabel.BLOCKED_VERIFY, RunMother.blocked_on_verify())
-        conductor = Conductor(chosen=replace(SelectSliceResultMother.about_to_start(subissue=blocked), retry=_RETRY))
         reopened = replace(blocked, run=RunMother.implementing(), label=IssueLabel.IN_PROGRESS)
-        conductor.reopen.execute.return_value = ReopenSliceResult(subissue=reopened, instruction=_RETRY.instruction)
+        conductor = Conductor(chosen=SelectSliceResultMother.about_to_start(subissue=reopened))
 
         result = conductor.conduct()
 
@@ -343,17 +340,6 @@ class TestConductSliceWhenATreeIsFoundThatNobodyExpected(_Merging):
         assert not conductor.worktrees.add_new_branch.called
         assert not conductor.worktrees.add_on_branch.called
         assert conductor.implement.execute.call_count == 1
-
-    def test_a_run_reopened_after_a_leftover_finds_the_old_tree_still_there_and_blocks_again(self) -> None:
-        blocked = SubIssueMother.blocked(IssueLabel.BLOCKED_LEFTOVER_WORKTREE, RunMother.blocked_on_the_worktree())
-        conductor = Conductor(chosen=replace(SelectSliceResultMother.about_to_start(subissue=blocked), retry=_RETRY))
-        reopened = replace(blocked, label=IssueLabel.IN_PROGRESS)
-        conductor.reopen.execute.return_value = ReopenSliceResult(subissue=reopened, instruction=_RETRY.instruction)
-
-        result = conductor.conduct()
-
-        assert result.state is RunState.BLOCKED_LEFTOVER_WORKTREE
-        assert conductor.implement.execute.call_count == 0
 
     @staticmethod
     def _reopened_by_the_retry_subcommand_after_a_leftover() -> Conductor:

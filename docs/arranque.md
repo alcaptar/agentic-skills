@@ -39,7 +39,7 @@ En el repo donde vas a trabajar:
 |---|---|
 | 1 | `/slice-spec` en una sesión de Claude Code. Ensena la spec por terminal antes de crear nada |
 | 2 | Desde la raíz del clon: `slice-runner run <issue-padre> --repo <org>/<repo> --base master [--slice <identificador>]` |
-| 3 | Publica lo que ha entendido en la subissue y **termina** con el código 17. Contesta con `slice-runner go <subissue> --repo <org>/<repo>`, o con `slice-runner review <subissue> --repo <org>/<repo> <correccion>`; un comentario `-GO` o `-REVIEW <correccion>` sigue valiendo |
+| 3 | Publica lo que ha entendido en la subissue y **termina** con el código 17. Contesta con `slice-runner go <subissue> --repo <org>/<repo>`, o con `slice-runner review <subissue> --repo <org>/<repo> <correccion>` |
 | 4 | Vuelve a lanzar el paso 2. Con `go` implementa; con `review` rehace el entendimiento, lo publica y vuelve a parar |
 | 5 | Implementa, controles, juez, pull request, integración continua |
 | 6 | `gh pr ready <n>` y `gh pr merge <n> --merge --delete-branch` |
@@ -62,10 +62,8 @@ En el repo donde vas a trabajar:
   dice qué orden se dio. No lanzan el run ni invocan al modelo. Dos `review` seguidos dejan solo la segunda
   corrección. Una orden sobre una slice que no está en el estado que necesita sale con el código 18 y no
   escribe nada.
-- Los comentarios siguen valiendo como segunda vía, y se leen en el siguiente `run`, no mientras espera:
-  `-GO` se lee por coincidencia exacta -con texto detrás **no arranca**-, `-REVIEW <correccion>` pide
-  rehacer el entendimiento y `-RETRY <instruccion>` reabre una slice bloqueada. Con varias respuestas, gana
-  la última escrita.
+- Un comentario escrito a mano en la subissue no es una orden: solo `go`, `review` y `retry` deciden cómo
+  sale la pausa.
 - Las pull requests nacen **listas para revisar** y **asignadas a ti**, con los commits acreditando a
   Claude como co-autor. Mergear sigue siendo tuyo: el programa nunca mergea.
 
@@ -82,7 +80,7 @@ Nunca: mergear ni hacer rollback.
 | Síntoma | Que es |
 |---|---|
 | Código de salida 7 | Se agoto la espera (30 min). Reinvoca: retoma donde estaba |
-| Código de salida 17 | Espera tu orden: `go` o `review` -o un comentario `-GO` o `-REVIEW`-. Reinvocar sin darla termina igual |
+| Código de salida 17 | Espera tu orden: `go` o `review`. Reinvocar sin darla termina igual |
 | Parece parado | Espera tu `go`, la integración continua o el merge. Mira la etiqueta de la subissue |
 | La pull request no se mergea sola | Correcto: el merge lo decides tu |
 | Otro código de salida | Tabla en `README.md`, apartado "El paso que ya es un programa" |

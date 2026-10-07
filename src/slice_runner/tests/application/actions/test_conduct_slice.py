@@ -8,9 +8,6 @@ from unittest.mock import Mock, call
 import pytest
 
 from slice_runner.application.actions.close_parent import CloseParentParams
-from slice_runner.application.actions.reopen_slice import ReopenSliceParams, ReopenSliceResult
-from slice_runner.domain.alignment_response import AlignmentResponse
-from slice_runner.domain.alignment_response_kind import AlignmentResponseKind
 from slice_runner.domain.alignment_stage import AlignmentStage
 from slice_runner.domain.budgets import Budgets
 from slice_runner.domain.ci_indeterminate_cause import CiIndeterminateCause
@@ -29,12 +26,9 @@ from slice_runner.domain.feature_slice import FeatureSlice
 from slice_runner.domain.halt import Halt
 from slice_runner.domain.harness_spend import HarnessSpend
 from slice_runner.domain.issue_label import IssueLabel
-from slice_runner.domain.malformed_reason import MalformedReason
 from slice_runner.domain.precheck_outcome import PrecheckOutcome
 from slice_runner.domain.precheck_result import PrecheckResult
 from slice_runner.domain.requested_change import RequestedChange
-from slice_runner.domain.retry_response import RetryResponse
-from slice_runner.domain.retry_response_kind import RetryResponseKind
 from slice_runner.domain.role_models import RoleModels
 from slice_runner.domain.run import Run
 from slice_runner.domain.run_state import RunState
@@ -388,7 +382,7 @@ class TestConductSliceWhileTheUnderstandingAwaitsAPerson:
         )
 
 
-class TestConductSliceReadingTheAlignmentCommentsOnTheNextRun:
+class TestConductSliceWhileTheAlignmentWaitsForAnOrder:
     @staticmethod
     def _conductor() -> Conductor:
         return Conductor(
@@ -397,91 +391,16 @@ class TestConductSliceReadingTheAlignmentCommentsOnTheNextRun:
             )
         )
 
-    def test_no_comment_yet_ends_the_invocation_after_reading_them_once_without_touching_the_harness(self) -> None:
+    def test_a_run_awaiting_the_person_ends_the_invocation_without_touching_the_forum_or_the_harness(self) -> None:
         conductor = self._conductor()
 
         result = conductor.conduct()
 
         assert result.halt is Halt.AWAITING_ALIGNMENT
-        conductor.repository.read_alignment_response.assert_called_once()
+        assert conductor.repository.write_understanding.call_count == 0
         assert conductor.understanding.write.call_count == 0
         assert conductor.implement.execute.call_count == 0
         assert conductor.clock.sleep.call_count == 0
-
-    def test_a_go_comment_starts_the_implementation_in_the_same_invocation(self) -> None:
-        conductor = self._conductor()
-        conductor.repository.read_alignment_response.return_value = AlignmentResponse(kind=AlignmentResponseKind.GO)
-
-        conductor.conduct()
-
-        assert conductor.understanding.write.call_count == 0
-        assert conductor.implement.execute.call_count == 1
-
-    def test_a_go_comment_moves_the_label_to_in_progress_before_the_implementer_is_asked_to_start(self) -> None:
-        conductor = self._conductor()
-        conductor.repository.read_alignment_response.return_value = AlignmentResponse(kind=AlignmentResponseKind.GO)
-        manager = Mock()
-        manager.attach_mock(conductor.repository.write_label, "write_label")
-        manager.attach_mock(conductor.implement.execute, "implement")
-
-        conductor.conduct()
-
-        assert [call[0] for call in manager.mock_calls][:2] == ["write_label", "implement"]
-
-    def test_a_review_comment_publishes_the_rewritten_understanding_once_and_ends_waiting_for_the_person(self) -> None:
-        conductor = self._conductor()
-        conductor.repository.read_alignment_response.return_value = AlignmentResponse(
-            kind=AlignmentResponseKind.REVIEW, correction="la senal no esta exenta"
-        )
-
-        result = conductor.conduct()
-
-        conductor.repository.write_understanding.assert_called_once_with(
-            repo=Conductor.REPO, issue=_SUBISSUE, understanding=Conductor.UNDERSTANDING
-        )
-        assert conductor.understanding.write.call_count == 1
-        assert result.halt is Halt.AWAITING_ALIGNMENT
-
-    def test_a_review_comment_persists_its_correction_with_the_run_that_waits_again(self) -> None:
-        conductor = self._conductor()
-        conductor.repository.read_alignment_response.return_value = AlignmentResponse(
-            kind=AlignmentResponseKind.REVIEW, correction="la senal no esta exenta"
-        )
-
-        conductor.conduct()
-
-        persisted = conductor.repository.write_run.call_args_list[-1].kwargs["run"]
-        assert (persisted.corrected, persisted.alignment) == ("la senal no esta exenta", AlignmentStage.AWAITING)
-
-    def test_a_review_comment_already_published_by_a_prior_invocation_writes_no_new_call(self) -> None:
-        conductor = Conductor(
-            chosen=SelectSliceResultMother.resumed_at(
-                RunMother.awaiting_alignment_after_a_published_correction("la senal no esta exenta"),
-                label=IssueLabel.AWAITING_ALIGNMENT,
-            )
-        )
-        conductor.repository.read_alignment_response.return_value = AlignmentResponse(
-            kind=AlignmentResponseKind.REVIEW, correction="la senal no esta exenta"
-        )
-
-        result = conductor.conduct()
-
-        assert conductor.understanding.write.call_count == 0
-        assert result.halt is Halt.AWAITING_ALIGNMENT
-
-    def test_a_malformed_comment_is_answered_once_and_the_invocation_ends_waiting(self) -> None:
-        conductor = self._conductor()
-        conductor.repository.read_alignment_response.return_value = AlignmentResponse(
-            kind=AlignmentResponseKind.MALFORMED, reason=MalformedReason.GO_CARRIES_TEXT
-        )
-
-        result = conductor.conduct()
-
-        conductor.repository.write_malformed_response.assert_called_once_with(
-            repo=Conductor.REPO, issue=_SUBISSUE, reason=MalformedReason.GO_CARRIES_TEXT
-        )
-        assert result.halt is Halt.AWAITING_ALIGNMENT
-        assert conductor.implement.execute.call_count == 0
 
 
 class TestConductSliceWithTheUnderstandingAgreed:
@@ -827,23 +746,6 @@ class TestConductSliceWhenTheNamedSliceCannotBeSelected:
 
         assert conductor.metrics.record.call_count == 0
 
-    def test_a_sibling_with_a_malformed_retry_comment_is_answered_with_what_it_is_missing_before_raising(
-        self,
-    ) -> None:
-        conductor = Conductor(chosen=SelectSliceResultMother.about_to_start())
-        malformed_sibling = SubIssueMother.blocked(IssueLabel.BLOCKED_CI_RED, RunMother.blocked_on_red_ci())
-        malformed = RetryResponse(kind=RetryResponseKind.MALFORMED, reason=MalformedReason.MISSING_INSTRUCTION)
-        error = self._unselectable(dangling=())
-        error.malformed_retries = ((malformed_sibling, malformed),)
-        conductor.select.execute.side_effect = error
-
-        with pytest.raises(NoSliceLeftError):
-            conductor.conduct()
-
-        conductor.repository.write_malformed_response.assert_called_once_with(
-            repo=Conductor.REPO, issue=malformed_sibling.number, reason=MalformedReason.MISSING_INSTRUCTION
-        )
-
     def test_the_failure_after_reconciling_a_dangling_run_says_how_many_it_reconciled_before_giving_up(self) -> None:
         conductor = Conductor(chosen=SelectSliceResultMother.about_to_start())
         conductor.select.execute.side_effect = self._unselectable(dangling=(SubIssueMother.dangling(),))
@@ -867,84 +769,7 @@ class TestConductSliceWhenTheNamedSliceCannotBeSelected:
             conductor.conduct()
 
 
-class TestConductSliceReopeningABlockedRun:
-    @staticmethod
-    def _blocked_and_reopened(label: IssueLabel, blocked_run: Run, reopened_run: Run) -> tuple[Conductor, Run]:
-        blocked = SubIssueMother.blocked(label, blocked_run)
-        retry = RetryResponse(kind=RetryResponseKind.RETRY, instruction=_RETRY_INSTRUCTION)
-        chosen = replace(SelectSliceResultMother.about_to_start(subissue=blocked), retry=retry)
-        conductor = Conductor(chosen=chosen)
-        reopened = replace(
-            blocked, run=replace(reopened_run, retry_instruction=_RETRY_INSTRUCTION), label=IssueLabel.IN_PROGRESS
-        )
-        conductor.reopen.execute.return_value = ReopenSliceResult(subissue=reopened, instruction=_RETRY_INSTRUCTION)
-
-        return conductor, blocked.run or reopened_run
-
-    def test_a_chosen_slice_carrying_a_retry_response_is_reopened_before_anything_is_conducted(self) -> None:
-        conductor, _ = self._blocked_and_reopened(
-            IssueLabel.BLOCKED_CONTROLS,
-            RunMother.blocked_on_controls(),
-            replace(RunMother.blocked_on_controls(), control_retries=0),
-        )
-        blocked = SubIssueMother.blocked(IssueLabel.BLOCKED_CONTROLS, RunMother.blocked_on_controls())
-
-        conductor.conduct()
-
-        conductor.reopen.execute.assert_called_once_with(
-            ReopenSliceParams(repo=Conductor.REPO, subissue=blocked, instruction=_RETRY_INSTRUCTION)
-        )
-
-    def test_a_slice_chosen_without_a_retry_response_is_never_sent_to_be_reopened(self) -> None:
-        conductor = Conductor(chosen=SelectSliceResultMother.resumed_at(RunMother.implementing()))
-
-        conductor.conduct()
-
-        assert conductor.reopen.execute.call_count == 0
-
-    def test_the_run_that_resumes_is_the_one_reopen_slice_handed_back_not_the_stale_blocked_one(self) -> None:
-        conductor, _ = self._blocked_and_reopened(
-            IssueLabel.BLOCKED_VERIFY,
-            RunMother.blocked_on_verify(),
-            replace(RunMother.blocked_on_verify(), verify_retries=0),
-        )
-        conductor.verify.execute.side_effect = [
-            VerificationMother.vetoing(VerdictMother.failing()),
-            VerificationMother.passing(),
-        ]
-
-        conductor.conduct()
-
-        assert conductor.verify.execute.call_count == 2
-        assert conductor.implement.execute.call_count == 1
-
-    def test_the_retry_instruction_that_reopened_the_slice_travels_to_the_implementer(self) -> None:
-        conductor, _ = self._blocked_and_reopened(
-            IssueLabel.BLOCKED_VERIFY,
-            RunMother.blocked_on_verify(),
-            replace(RunMother.blocked_on_verify(), verify_retries=0),
-        )
-        conductor.verify.execute.side_effect = [
-            VerificationMother.vetoing(VerdictMother.failing()),
-            VerificationMother.passing(),
-        ]
-
-        conductor.conduct()
-
-        assert conductor.implement.execute.call_args.args[0].retry_instruction == _RETRY_INSTRUCTION
-
-    def test_reopening_a_run_blocked_on_controls_names_the_next_round_after_the_ones_already_logged(self) -> None:
-        conductor, _ = self._blocked_and_reopened(
-            IssueLabel.BLOCKED_CONTROLS,
-            RunMother.blocked_on_controls(),
-            replace(RunMother.blocked_on_controls(), control_retries=0),
-        )
-
-        conductor.conduct()
-
-        slice_dir = Conductor.slice_dir(SubIssueMother.pending().slice_id)
-        assert conductor.controls.run.call_args.kwargs["out"] == slice_dir / "round-4"
-
+class TestConductSliceResumingARunReopenedByAnEarlierInvocation:
     def test_a_fresh_invocation_resuming_a_run_reopened_by_an_earlier_one_still_names_the_round_after_the_ones_logged(
         self,
     ) -> None:
