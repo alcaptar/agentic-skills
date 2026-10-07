@@ -11,7 +11,6 @@ if TYPE_CHECKING:
     from slice_runner.domain.budgets import Budgets
     from slice_runner.domain.ci_indeterminate_cause import CiIndeterminateCause
     from slice_runner.domain.diff_stats import DiffStats
-    from slice_runner.domain.discarded_call import DiscardedCall
     from slice_runner.domain.finding import Finding
     from slice_runner.domain.role_models import RoleModels
     from slice_runner.domain.run import Run
@@ -32,7 +31,6 @@ class ClosedSlice:
     spends: tuple[HarnessSpend, ...] = field(default=())
     findings: tuple[Finding, ...] = field(default=())
     findings_of_the_last_round: tuple[Finding, ...] = field(default=())
-    discarded_call: DiscardedCall | None = None
     ci_indeterminate_cause: CiIndeterminateCause | None = None
     debt: DeclaredDebt = field(default=DeclaredDebt())
     diff_stats: DiffStats | None = None

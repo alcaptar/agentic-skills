@@ -251,8 +251,8 @@ class MetricsEntryPayload(StampedRow, ReadableLedgerRow):
                 "understand_discards": closed.run.understand_discards,
                 "implement_discards": closed.run.implement_discards,
                 "harness": SpendPayload.from_domain(spend) if spend.measured else None,
-                "discarded_call": DiscardedCallPayload.from_domain(closed.discarded_call)
-                if closed.discarded_call is not None
+                "discarded_call": DiscardedCallPayload.from_domain(closed.run.discarded_call)
+                if closed.run.discarded_call is not None
                 else None,
                 "ci_indeterminate_cause": DurableCiIndeterminateCause.of(closed.ci_indeterminate_cause)
                 if closed.ci_indeterminate_cause

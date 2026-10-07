@@ -38,6 +38,7 @@ from slice_runner.infrastructure.understanding_comment import UnderstandingComme
 from slice_runner.infrastructure.veto_findings_comment import VetoFindingsComment
 from slice_runner.tests.argv import Argv
 from slice_runner.tests.doubles import GhCallDoubles, ScriptedProcess
+from slice_runner.tests.mothers.discarded_call_mother import DiscardedCallMother
 from slice_runner.tests.mothers.findings_history_mother import FindingsHistoryMother
 from slice_runner.tests.mothers.gh_response_mother import GhResponseMother
 from slice_runner.tests.mothers.harness_spend_mother import HarnessSpendMother
@@ -375,6 +376,29 @@ class TestReadingTheChildren:
 
         by_slice = {child.slice_id.canonical: child for child in children}
         assert by_slice["slice-01"].run == RunMother.awaiting_ci()
+
+    def test_a_state_block_with_a_discarded_call_reads_it_back_so_the_invocation_that_closes_can_write_it(self) -> None:
+        with_discard = [
+            {
+                "number": 1,
+                "title": "slice-01 (x): y",
+                "body": (
+                    "INTENCION: z\n\n"
+                    "<!-- slice-runner:estado\n"
+                    '{"step": "await-merge", "discarded_call": '
+                    '{"step": "verify", "cause": "failed-call", "reason": "claude: command not found"}}\n'
+                    "-->\n"
+                ),
+                "labels": [],
+                "state": "OPEN",
+            }
+        ]
+
+        children = GhRunRepository(call=GhCallDoubles.wired(self._process(children=with_discard))).read_children(
+            repo=_REPO, parent=43, expected=1
+        )
+
+        assert children[0].run == RunMother.awaiting_merge_after_discarding(DiscardedCallMother.of_a_failed_call())
 
     def test_a_state_block_with_a_spend_reads_it_back_so_a_reinvocation_sees_the_prior_cost(self) -> None:
         with_spend = [
@@ -771,6 +795,21 @@ class TestWritingTheExecutionStateBlock:
             '"models": ["claude-sonnet-5"], "input_tokens": 13, "output_tokens": 1159, '
             '"cache_creation_tokens": 42251, "cache_read_tokens": 241303, "ttft_ms": 5588, '
             '"duration_api_ms": 32189}}\n'
+            "-->\n"
+        )
+
+    def test_a_run_with_a_discarded_call_writes_it_under_its_own_key_so_the_closing_invocation_reads_it(self) -> None:
+        process = self._process(body=_SUB2_BODY)
+
+        GhRunRepository(call=GhCallDoubles.wired(process)).write_run(
+            repo=_OTHER_REPO,
+            issue=44,
+            run=RunMother.awaiting_merge_after_discarding(DiscardedCallMother.of_a_failed_call()),
+        )
+
+        assert process.calls[1].stdin.endswith(
+            '"last_reviewed_id": 0, "requested_changes": [], '
+            '"discarded_call": {"step": "verify", "cause": "failed-call", "reason": "claude: command not found"}}\n'
             "-->\n"
         )
 

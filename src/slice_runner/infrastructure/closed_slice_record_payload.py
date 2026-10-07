@@ -3,15 +3,13 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Self
 
 from slice_runner.domain.ci_indeterminate_cause import CiIndeterminateCause
-from slice_runner.domain.discard_cause import DiscardCause
 from slice_runner.domain.run_state import RunState
-from slice_runner.domain.step import Step
 from slice_runner.infrastructure.contract_model import ContractModel
 from slice_runner.infrastructure.diff_stats_payload import DiffStatsPayload
+from slice_runner.infrastructure.discarded_call_payload import DiscardedCallPayload
 
 if TYPE_CHECKING:
     from slice_runner.domain.closed_slice_record import ClosedSliceRecord
-    from slice_runner.domain.discarded_call import DiscardedCall
     from slice_runner.domain.recorded_spend import RecordedSpend
     from slice_runner.domain.severity_count import SeverityCount
 
@@ -44,16 +42,6 @@ class SeverityCountPayload(ContractModel):
     @classmethod
     def from_domain(cls, count: SeverityCount) -> Self:
         return cls(high=count.high, medium=count.medium, low=count.low)
-
-
-class DiscardedCallPayload(ContractModel):
-    step: Step
-    cause: DiscardCause
-    reason: str
-
-    @classmethod
-    def from_domain(cls, discarded: DiscardedCall) -> Self:
-        return cls(step=discarded.step, cause=discarded.cause, reason=discarded.reason)
 
 
 class ClosedSliceRecordPayload(ContractModel):

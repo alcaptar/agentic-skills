@@ -9,6 +9,7 @@ from slice_runner.domain.step import Step
 from slice_runner.tests.mothers.pull_request_review_comment_mother import PullRequestReviewCommentMother
 
 if TYPE_CHECKING:
+    from slice_runner.domain.discarded_call import DiscardedCall
     from slice_runner.domain.harness_spend import HarnessSpend
 
 
@@ -84,6 +85,10 @@ class RunMother:
     @staticmethod
     def awaiting_merge() -> Run:
         return Run(step=Step.AWAIT_MERGE)
+
+    @staticmethod
+    def awaiting_merge_after_discarding(discarded: DiscardedCall) -> Run:
+        return Run(step=Step.AWAIT_MERGE, discarded_call=discarded)
 
     @staticmethod
     def awaiting_merge_after_reviewing(review_id: int) -> Run:
