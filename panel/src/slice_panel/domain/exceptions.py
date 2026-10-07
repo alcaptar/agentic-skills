@@ -21,3 +21,8 @@ class FeatureUnknownError(ValueError):
 class OrderRefusedError(ValueError):
     def __init__(self, outcome: ProcessOutcome, argv: Sequence[str]) -> None:
         super().__init__(outcome.stderr or outcome.stdout or f"`{' '.join(argv)}` exited {outcome.exit_code}")
+
+
+class ServerDidNotStartError(OSError):
+    def __init__(self, seconds: float) -> None:
+        super().__init__(f"the herdr server did not answer within {seconds:g}s of being started")

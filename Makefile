@@ -4,7 +4,7 @@
 # El toolchain lo gestiona uv (`[dependency-groups] dev` en pyproject.toml); `uv run` lo
 # instala solo la primera vez.
 
-.PHONY: install install-program install-skills test check-types check-style check-format linting fix-linting check
+.PHONY: install install-program install-skills install-panel test check-types check-style check-format linting fix-linting check
 
 # El entregable son dos mitades que se instalan distinto: el programa es una rueda de
 # Python y las skills son ficheros que Claude Code lee de su directorio de configuracion.
@@ -29,7 +29,7 @@ LINKED := slice-spec deploy-watch slice-runner
 # en un `CLAUDE_HOME` de usar y tirar (`make install-skills CLAUDE_HOME=<ruta>`) y lo cubre
 # `tests/test_install.py`; `install-program` escribe en el entorno de la maquina y eso no cabe
 # en la suite, asi que queda declarado sin test en vez de fingido con uno.
-install: install-program install-skills
+install: install-program install-skills install-panel
 
 # `--reinstall` no es redundante con `--force`: `--force` pisa el ejecutable que ya hubiera, pero
 # la rueda se reutiliza de cache mientras la version no cambie, y `version` es `0.0.0` fija. Sin el,
@@ -47,6 +47,12 @@ install-program:
 		exit 1; \
 	fi
 	uv tool install --force --reinstall .
+
+# El panel es un paquete aparte (`panel/`) con su propio `pyproject.toml` y su propio ejecutable,
+# `slice-panel`. Sin instalarlo no hay comando que escribir desde cualquier terminal. Lleva
+# `--reinstall` por lo mismo que `install-program`: su version tambien esta fija en `0.0.0`.
+install-panel:
+	uv tool install --force --reinstall ./panel
 
 # Un symlink ocupado apuntando a otro sitio **no se pisa**: se dice donde apunta y se para. El caso
 # real es quien tenga `slice-runner` apuntando a `agentic-skills-legacy` de cuando ese nombre era la

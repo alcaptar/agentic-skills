@@ -1,11 +1,16 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, ClassVar, NoReturn
 
+from slice_panel.domain.clock import Clock
+from slice_panel.domain.created_workspace import CreatedWorkspace
 from slice_panel.domain.follow_source import FollowSource
 from slice_panel.domain.process_launcher import ProcessLauncher
 from slice_panel.domain.run_tabs import RunTabs
+from slice_panel.domain.server_state import ServerState
 from slice_panel.domain.tab_handle import TabHandle
+from slice_panel.domain.workspace_host import WorkspaceHost
+from slice_panel.infrastructure.unbounded_processes import UnboundedProcesses
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Mapping, Sequence
@@ -62,3 +67,94 @@ class RecordingTabs(RunTabs):
 
     async def focused(self, handle: TabHandle) -> None:
         self.focused_tabs.append(handle)
+
+
+class AttachedToTheSessionError(Exception):
+    pass
+
+
+class FakeClock(Clock):
+    def __init__(self) -> None:
+        self._now = 0.0
+        self.slept: list[float] = []
+
+    def now(self) -> float:
+        return self._now
+
+    async def sleep(self, seconds: float) -> None:
+        self.slept.append(seconds)
+        self._now += seconds
+
+
+class RecordingWorkspaceHost(WorkspaceHost):
+    CREATED: ClassVar[CreatedWorkspace] = CreatedWorkspace(workspace_id="w9", root_pane="w9:p1")
+    SPLIT_PANE: ClassVar[str] = "w9:p2"
+
+    def __init__(
+        self,
+        *,
+        server_states: Sequence[ServerState] = (ServerState.RUNNING,),
+        workspaces: Mapping[str, Sequence[str]] | None = None,
+        pane_cwds: Mapping[str, Sequence[Path]] | None = None,
+    ) -> None:
+        self._server_states = server_states
+        self._workspaces = workspaces or {}
+        self._pane_cwds = pane_cwds or {}
+        self._asked_state = 0
+        self.events: list[tuple[object, ...]] = []
+
+    async def server_state(self) -> ServerState:
+        self.events.append(("server_state",))
+        answer = self._server_states[min(self._asked_state, len(self._server_states) - 1)]
+        self._asked_state += 1
+
+        return answer
+
+    async def started_server(self) -> None:
+        self.events.append(("started_server",))
+
+    async def workspaces_labelled(self, label: str) -> tuple[str, ...]:
+        self.events.append(("workspaces_labelled", label))
+
+        return tuple(self._workspaces.get(label, ()))
+
+    async def pane_cwds_of(self, workspace: str) -> tuple[Path, ...]:
+        self.events.append(("pane_cwds_of", workspace))
+
+        return tuple(self._pane_cwds.get(workspace, ()))
+
+    async def created_workspace(self, *, root: Path, label: str) -> CreatedWorkspace:
+        self.events.append(("created_workspace", root, label))
+
+        return self.CREATED
+
+    async def started_agent(self, *, name: str, pane: str) -> None:
+        self.events.append(("started_agent", name, pane))
+
+    async def split_right(self, pane: str) -> str:
+        self.events.append(("split_right", pane))
+
+        return self.SPLIT_PANE
+
+    async def ran_in(self, *, pane: str, command: Sequence[str]) -> None:
+        self.events.append(("ran_in", pane, tuple(command)))
+
+    async def focused(self, workspace: str) -> None:
+        self.events.append(("focused", workspace))
+
+    async def attached(self) -> NoReturn:
+        self.events.append(("attached",))
+        raise AttachedToTheSessionError
+
+
+class RecordingUnboundedProcesses(UnboundedProcesses):
+    def __init__(self) -> None:
+        self.detached: list[tuple[str, ...]] = []
+        self.replacements: list[tuple[str, ...]] = []
+
+    def spawned_detached(self, argv: Sequence[str]) -> None:
+        self.detached.append(tuple(argv))
+
+    def replaced_by(self, argv: Sequence[str]) -> NoReturn:
+        self.replacements.append(tuple(argv))
+        raise AttachedToTheSessionError
