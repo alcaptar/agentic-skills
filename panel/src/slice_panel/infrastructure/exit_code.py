@@ -7,4 +7,4 @@ class ExitCode(IntEnum):
     OK = 0
     HERDR_MISSING = 1
     CLONE_UNKNOWN = 2
-    WORKSPACE_UNKNOWN = 3
+    SERVER_UNREACHABLE = 4
