@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, ClassVar
 
 from slice_panel.application.actions.open_environment import OpenEnvironment, OpenEnvironmentParams
 from slice_panel.domain.call_budget import CallBudget
-from slice_panel.domain.exceptions import ServerDidNotStartError
+from slice_panel.domain.exceptions import MountingFailedError, ServerDidNotStartError
 from slice_panel.domain.server_wait import ServerWait
 from slice_panel.infrastructure.asyncio_clock import AsyncioClock
 from slice_panel.infrastructure.exit_code import ExitCode
@@ -96,6 +96,10 @@ class Cli:
             sys.stderr.write(f"slice-panel could not open the environment: {error}\n")
 
             return ExitCode.SERVER_UNREACHABLE
+        except MountingFailedError as error:
+            sys.stderr.write(f"slice-panel could not open the environment: {error}\n")
+
+            return ExitCode.MOUNTING_FAILED
 
         return ExitCode.OK
 

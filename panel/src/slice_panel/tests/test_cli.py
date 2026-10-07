@@ -71,7 +71,7 @@ class WithHerdrOnThePath(WithoutDrawing):
             ("herdr", "workspace", "create", "--cwd", "/work/clone", "--label", "clone", "--no-focus"): (
                 HerdrMother.workspace_created()
             ),
-            ("herdr", "agent", "start", "coordinador", "--kind", "claude", "--pane", HerdrMother.PANE): (
+            ("herdr", "agent", "start", "coordinador-clone", "--kind", "claude", "--pane", HerdrMother.PANE): (
                 OutcomeMother.succeeded()
             ),
             ("herdr", "pane", "split", HerdrMother.PANE, "--direction", "right", "--no-focus"): (
@@ -99,7 +99,7 @@ class TestWithoutAWorkspace(WithHerdrOnThePath):
             self.STATUS,
             ("herdr", "workspace", "list"),
             ("herdr", "workspace", "create", "--cwd", "/work/clone", "--label", "clone", "--no-focus"),
-            ("herdr", "agent", "start", "coordinador", "--kind", "claude", "--pane", HerdrMother.PANE),
+            ("herdr", "agent", "start", "coordinador-clone", "--kind", "claude", "--pane", HerdrMother.PANE),
             ("herdr", "pane", "split", HerdrMother.PANE, "--direction", "right", "--no-focus"),
             ("herdr", "pane", "run", "w1:p4", "slice-panel"),
             ("herdr", "workspace", "focus", HerdrMother.WORKSPACE),
@@ -149,6 +149,48 @@ class TestWithoutAWorkspace(WithHerdrOnThePath):
 
         with pytest.raises(HerdrFailedError):
             self.run(RecordingLauncher(answers), RecordingUnboundedProcesses())
+
+    def test_a_step_that_fails_after_creating_the_workspace_closes_it_exits_with_its_own_code_and_says_which(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        split = ("herdr", "pane", "split", HerdrMother.PANE, "--direction", "right", "--no-focus")
+        close = ("herdr", "workspace", "close", HerdrMother.WORKSPACE)
+        answers = {
+            **self.mounting_answers(),
+            split: OutcomeMother.failed("split boom"),
+            close: OutcomeMother.succeeded(),
+        }
+        launcher = RecordingLauncher(answers)
+        unbounded = RecordingUnboundedProcesses()
+
+        code = self.run(launcher, unbounded)
+
+        captured = capsys.readouterr()
+        assert code == ExitCode.MOUNTING_FAILED
+        assert "split-pane" in captured.err
+        assert "split boom" in captured.err
+        assert captured.out == ""
+        assert launcher.calls[-1] == close
+        assert unbounded.replacements == []
+
+    def test_a_failing_cleanup_exits_with_the_same_code_and_says_both_failures(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        split = ("herdr", "pane", "split", HerdrMother.PANE, "--direction", "right", "--no-focus")
+        close = ("herdr", "workspace", "close", HerdrMother.WORKSPACE)
+        answers = {
+            **self.mounting_answers(),
+            split: OutcomeMother.failed("split boom"),
+            close: OutcomeMother.failed("close boom"),
+        }
+
+        code = self.run(RecordingLauncher(answers), RecordingUnboundedProcesses())
+
+        captured = capsys.readouterr()
+        assert code == ExitCode.MOUNTING_FAILED
+        assert "split boom" in captured.err
+        assert "close boom" in captured.err
+        assert captured.out == ""
 
     def test_outside_a_clone_nothing_is_asked_of_herdr_and_the_exit_code_says_so(
         self, capsys: pytest.CaptureFixture[str]
