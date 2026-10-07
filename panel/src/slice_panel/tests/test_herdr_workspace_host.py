@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from slice_panel.domain.exceptions import ProcessTimedOutError
+from slice_panel.domain.exceptions import AgentNameTakenError, ProcessTimedOutError
 from slice_panel.domain.server_state import ServerState
 from slice_panel.infrastructure.herdr_payload_rejected import HerdrPayloadRejectedError
 from slice_panel.infrastructure.herdr_tabs import HerdrFailedError
@@ -131,12 +131,48 @@ class TestTheCreationCommands(WithAHost):
         with pytest.raises(HerdrFailedError, match="pane not found"):
             await self.host(launcher).started_agent(name="coordinador", pane="w1:p3")
 
+    @pytest.mark.parametrize(
+        "answer", [HerdrMother.agent_name_taken_on_stdout(), HerdrMother.agent_name_taken_on_stderr()]
+    )
+    async def test_a_name_herdr_says_is_taken_is_told_apart_from_any_other_failure(
+        self, answer: ProcessOutcome
+    ) -> None:
+        argv = ("herdr", "agent", "start", "coordinador-clone", "--kind", "claude", "--pane", "w1:p3")
+        launcher = RecordingLauncher({argv: answer})
+
+        with pytest.raises(AgentNameTakenError, match="coordinador-clone"):
+            await self.host(launcher).started_agent(name="coordinador-clone", pane="w1:p3")
+
+    async def test_any_other_herdr_error_while_starting_the_agent_stays_a_plain_herdr_failure(self) -> None:
+        argv = ("herdr", "agent", "start", "coordinador-clone", "--kind", "claude", "--pane", "w1:p3")
+        launcher = RecordingLauncher({argv: HerdrMother.other_herdr_error()})
+
+        with pytest.raises(HerdrFailedError, match="pane_not_found"):
+            await self.host(launcher).started_agent(name="coordinador-clone", pane="w1:p3")
+
     async def test_a_command_that_times_out_is_not_swallowed(self) -> None:
         argv = ("herdr", "workspace", "focus", "w1")
         launcher = RecordingLauncher({argv: ProcessTimedOutError(argv, 60.0)})
 
         with pytest.raises(ProcessTimedOutError):
             await self.host(launcher).focused("w1")
+
+
+class TestTheWorkspaceIsClosedById(WithAHost):
+    async def test_the_workspace_is_closed_with_the_close_command(self) -> None:
+        argv = ("herdr", "workspace", "close", "w1")
+        launcher = RecordingLauncher({argv: OutcomeMother.succeeded()})
+
+        await self.host(launcher).closed_workspace("w1")
+
+        assert launcher.calls == [argv]
+
+    async def test_a_failing_close_raises_with_what_herdr_said(self) -> None:
+        argv = ("herdr", "workspace", "close", "w1")
+        launcher = RecordingLauncher({argv: OutcomeMother.failed("workspace not found")})
+
+        with pytest.raises(HerdrFailedError, match="workspace not found"):
+            await self.host(launcher).closed_workspace("w1")
 
 
 class TestTheFocusAndTheAttach(WithAHost):

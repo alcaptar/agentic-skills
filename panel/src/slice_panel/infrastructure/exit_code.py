@@ -8,3 +8,4 @@ class ExitCode(IntEnum):
     HERDR_MISSING = 1
     CLONE_UNKNOWN = 2
     SERVER_UNREACHABLE = 4
+    MOUNTING_FAILED = 5

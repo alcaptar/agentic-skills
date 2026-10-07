@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING, ClassVar, NoReturn
 
 from slice_panel.domain.clock import Clock
 from slice_panel.domain.created_workspace import CreatedWorkspace
+from slice_panel.domain.exceptions import AgentNameTakenError
 from slice_panel.domain.follow_source import FollowSource
 from slice_panel.domain.process_launcher import ProcessLauncher
 from slice_panel.domain.run_tabs import RunTabs
@@ -96,10 +97,14 @@ class RecordingWorkspaceHost(WorkspaceHost):
         server_states: Sequence[ServerState] = (ServerState.RUNNING,),
         workspaces: Mapping[str, Sequence[str]] | None = None,
         pane_cwds: Mapping[str, Sequence[Path]] | None = None,
+        taken_agent_names: Sequence[str] = (),
+        failures: Mapping[str, BaseException] | None = None,
     ) -> None:
         self._server_states = server_states
         self._workspaces = workspaces or {}
         self._pane_cwds = pane_cwds or {}
+        self._agent_names = set(taken_agent_names)
+        self._failures = failures or {}
         self._asked_state = 0
         self.events: list[tuple[object, ...]] = []
 
@@ -130,21 +135,36 @@ class RecordingWorkspaceHost(WorkspaceHost):
 
     async def started_agent(self, *, name: str, pane: str) -> None:
         self.events.append(("started_agent", name, pane))
+        self._fail_if_asked("started_agent")
+        if name in self._agent_names:
+            raise AgentNameTakenError(name)
+        self._agent_names.add(name)
 
     async def split_right(self, pane: str) -> str:
         self.events.append(("split_right", pane))
+        self._fail_if_asked("split_right")
 
         return self.SPLIT_PANE
 
     async def ran_in(self, *, pane: str, command: Sequence[str]) -> None:
         self.events.append(("ran_in", pane, tuple(command)))
+        self._fail_if_asked("ran_in")
 
     async def focused(self, workspace: str) -> None:
         self.events.append(("focused", workspace))
+        self._fail_if_asked("focused")
+
+    async def closed_workspace(self, workspace: str) -> None:
+        self.events.append(("closed_workspace", workspace))
+        self._fail_if_asked("closed_workspace")
 
     async def attached(self) -> NoReturn:
         self.events.append(("attached",))
         raise AttachedToTheSessionError
+
+    def _fail_if_asked(self, operation: str) -> None:
+        if operation in self._failures:
+            raise self._failures[operation]
 
 
 class RecordingUnboundedProcesses(UnboundedProcesses):

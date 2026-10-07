@@ -3,7 +3,9 @@ from __future__ import annotations
 import shlex
 from typing import TYPE_CHECKING, ClassVar, NoReturn
 
+from slice_panel.domain.exceptions import AgentNameTakenError
 from slice_panel.domain.workspace_host import WorkspaceHost
+from slice_panel.infrastructure.herdr_error_payload import HerdrErrorPayload
 from slice_panel.infrastructure.herdr_pane_list_payload import HerdrPaneListPayload
 from slice_panel.infrastructure.herdr_pane_split_payload import HerdrPaneSplitPayload
 from slice_panel.infrastructure.herdr_server_status import HerdrServerStatus
@@ -24,6 +26,7 @@ if TYPE_CHECKING:
 
 class HerdrWorkspaceHost(WorkspaceHost):
     EXECUTABLE: ClassVar[str] = "herdr"
+    AGENT_NAME_TAKEN: ClassVar[str] = "agent_name_taken"
 
     def __init__(self, *, launcher: ProcessLauncher, unbounded: UnboundedProcesses) -> None:
         self._launcher = launcher
@@ -55,7 +58,11 @@ class HerdrWorkspaceHost(WorkspaceHost):
         return HerdrWorkspaceCreatedPayload.parsed(created.stdout).to_domain()
 
     async def started_agent(self, *, name: str, pane: str) -> None:
-        await self._succeeded("agent", "start", name, "--kind", "claude", "--pane", pane)
+        argv = (self.EXECUTABLE, "agent", "start", name, "--kind", "claude", "--pane", pane)
+        outcome = await self._launcher.ran(argv)
+        if outcome.exit_code != 0 and HerdrErrorPayload.code_of(outcome) == self.AGENT_NAME_TAKEN:
+            raise AgentNameTakenError(name)
+        self._checked(outcome)
 
     async def split_right(self, pane: str) -> str:
         split = await self._succeeded("pane", "split", pane, "--direction", "right", "--no-focus")
@@ -68,11 +75,17 @@ class HerdrWorkspaceHost(WorkspaceHost):
     async def focused(self, workspace: str) -> None:
         await self._succeeded("workspace", "focus", workspace)
 
+    async def closed_workspace(self, workspace: str) -> None:
+        await self._succeeded("workspace", "close", workspace)
+
     async def attached(self) -> NoReturn:
         self._unbounded.replaced_by((self.EXECUTABLE,))
 
     async def _succeeded(self, *arguments: str) -> ProcessOutcome:
-        outcome = await self._launcher.ran((self.EXECUTABLE, *arguments))
+        return self._checked(await self._launcher.ran((self.EXECUTABLE, *arguments)))
+
+    @staticmethod
+    def _checked(outcome: ProcessOutcome) -> ProcessOutcome:
         if outcome.exit_code != 0:
             raise HerdrFailedError(f"herdr failed: {outcome.stderr or outcome.stdout}")
 

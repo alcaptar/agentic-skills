@@ -97,3 +97,26 @@ class HerdrMother:
         body = {"id": "cli:pane:split", "result": {"type": "pane_split", "pane": {"pane_id": pane}}}
 
         return OutcomeMother.succeeded(json.dumps(body))
+
+    @classmethod
+    def agent_name_taken_on_stdout(cls) -> ProcessOutcome:
+        return ProcessOutcome(exit_code=1, stdout=cls._agent_name_taken_body(), stderr="")
+
+    @classmethod
+    def agent_name_taken_on_stderr(cls) -> ProcessOutcome:
+        return ProcessOutcome(exit_code=1, stdout="", stderr=cls._agent_name_taken_body())
+
+    @classmethod
+    def other_herdr_error(cls) -> ProcessOutcome:
+        body = {"id": "cli:agent:start", "error": {"code": "pane_not_found", "message": "pane w1:p3 not found"}}
+
+        return ProcessOutcome(exit_code=1, stdout=json.dumps(body), stderr="")
+
+    @staticmethod
+    def _agent_name_taken_body() -> str:
+        body = {
+            "id": "cli:agent:start",
+            "error": {"code": "agent_name_taken", "message": "agent name coordinador-clone is already in use"},
+        }
+
+        return json.dumps(body)
