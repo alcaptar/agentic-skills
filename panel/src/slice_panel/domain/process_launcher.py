@@ -7,12 +7,7 @@ if TYPE_CHECKING:
     from collections.abc import Sequence
     from pathlib import Path
 
-    from slice_panel.infrastructure.process_outcome import ProcessOutcome
-
-
-class ProcessTimedOutError(OSError):
-    def __init__(self, argv: Sequence[str], seconds: float) -> None:
-        super().__init__(f"`{' '.join(argv)}` did not finish in {seconds:g}s")
+    from slice_panel.domain.process_outcome import ProcessOutcome
 
 
 class ProcessLauncher(ABC):

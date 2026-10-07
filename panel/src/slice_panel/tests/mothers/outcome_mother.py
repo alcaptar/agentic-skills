@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from slice_panel.infrastructure.process_outcome import ProcessOutcome
+from slice_panel.domain.process_outcome import ProcessOutcome
 
 
 class OutcomeMother:
