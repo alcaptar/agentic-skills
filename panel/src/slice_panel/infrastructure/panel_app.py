@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, ClassVar
 from rich.text import Text
 from textual.app import App
 from textual.containers import Horizontal, VerticalScroll
-from textual.widgets import Static, Tree
+from textual.widgets import Footer, Static, Tree
 
 from slice_panel.domain.follow_ended import FollowEnded
 from slice_panel.domain.slice_board import SliceBoard
@@ -35,9 +35,9 @@ if TYPE_CHECKING:
 
 class PanelApp(App[None]):
     CSS: ClassVar[str] = """
+    Horizontal { height: 1fr; }
     #features { width: 40%; }
-    #notice { dock: bottom; color: white; background: darkred; }
-    #notice:empty { display: none; }
+    #notice { display: none; height: auto; color: white; background: darkred; }
     """
 
     BINDINGS: ClassVar = [
@@ -51,11 +51,13 @@ class PanelApp(App[None]):
     PREVIEW_LINES: ClassVar[int] = 8
     WORKERS: ClassVar[str] = "orders"
 
-    def __init__(self, *, source: FollowSource, launcher: ProcessLauncher, clone_root: Path, repo: str) -> None:
+    def __init__(
+        self, *, source: FollowSource, launcher: ProcessLauncher, clone_root: Path, repo: str, workspace: str
+    ) -> None:
         super().__init__()
         self._source = source
         self._launcher = launcher
-        self._tabs = HerdrTabs(launcher=launcher)
+        self._tabs = HerdrTabs(launcher=launcher, workspace=workspace)
         self._clone_root = clone_root
         self._repo = repo
         self._board = SliceBoard()
@@ -72,6 +74,7 @@ class PanelApp(App[None]):
             with VerticalScroll():
                 yield Static("", id="detail")
         yield Static("", id="notice")
+        yield Footer()
 
     def on_mount(self) -> None:
         self.run_worker(self._consume(), exclusive=True)
@@ -91,7 +94,7 @@ class PanelApp(App[None]):
     def _announce(self, ended: FollowEnded) -> None:
         code = "" if ended.exit_code is None else f" (exit {ended.exit_code})"
         detail = f": {ended.detail}" if ended.detail else ""
-        self.query_one("#notice", Static).update(f"follow ended{code}{detail}")
+        self._say(f"follow ended{code}{detail}")
 
     def on_tree_node_highlighted(self, event: Tree.NodeHighlighted[tuple[str, int]]) -> None:
         if event.node.data is not None:
@@ -177,7 +180,9 @@ class PanelApp(App[None]):
         self.run_worker(work, group=self.WORKERS)
 
     def _say(self, text: str) -> None:
-        self.query_one("#notice", Static).update(Text(text))
+        notice = self.query_one("#notice", Static)
+        notice.update(Text(text))
+        notice.display = bool(text)
 
     async def _ran(self, argv: Sequence[str]) -> ProcessOutcome | None:
         try:
@@ -263,7 +268,7 @@ class PanelApp(App[None]):
 
     @staticmethod
     def _slice_label(view: SliceView) -> Text:
-        title = f"{view.slice_id} {view.name}" if view.name else view.slice_id
+        title = f"#{view.issue} {view.slice_id} {view.name}" if view.name else f"#{view.issue} {view.slice_id}"
         if view.waits_for_alignment():
             return Text(f"{title}  {view.status()}  <- waits for you", style="bold yellow")
 

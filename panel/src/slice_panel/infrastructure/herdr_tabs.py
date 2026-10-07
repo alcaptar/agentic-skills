@@ -21,13 +21,25 @@ class HerdrFailedError(OSError):
 class HerdrTabs:
     EXECUTABLE: ClassVar[str] = "herdr"
 
-    def __init__(self, *, launcher: ProcessLauncher) -> None:
+    def __init__(self, *, launcher: ProcessLauncher, workspace: str) -> None:
         self._launcher = launcher
+        self._workspace = workspace
 
     async def opened(self, command: Sequence[str], *, cwd: Path, label: str) -> TabHandle:
         created = self._succeeded(
             await self._launcher.ran(
-                (self.EXECUTABLE, "tab", "create", "--cwd", str(cwd), "--label", label, "--no-focus")
+                (
+                    self.EXECUTABLE,
+                    "tab",
+                    "create",
+                    "--cwd",
+                    str(cwd),
+                    "--workspace",
+                    self._workspace,
+                    "--label",
+                    label,
+                    "--no-focus",
+                )
             )
         )
         payload = HerdrTabCreatedPayload.parsed(created.stdout)
