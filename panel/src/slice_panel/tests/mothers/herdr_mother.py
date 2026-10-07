@@ -12,14 +12,15 @@ if TYPE_CHECKING:
 class HerdrMother:
     TAB: ClassVar[str] = "w1:t2"
     PANE: ClassVar[str] = "w1:p3"
+    WORKSPACE: ClassVar[str] = "w1"
 
     @classmethod
     def tab_created(cls) -> ProcessOutcome:
         body = {
             "id": "cli:tab:create",
             "result": {
-                "tab": {"tab_id": cls.TAB, "workspace_id": "w1", "label": "slice-05"},
-                "root_pane": {"pane_id": cls.PANE, "tab_id": cls.TAB},
+                "tab": {"tab_id": cls.TAB, "workspace_id": cls.WORKSPACE},
+                "root_pane": {"pane_id": cls.PANE},
                 "type": "tab_created",
             },
         }

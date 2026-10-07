@@ -39,6 +39,8 @@ class Commands:
         "create",
         "--cwd",
         str(CLONE_ROOT),
+        "--workspace",
+        HerdrMother.WORKSPACE,
         "--label",
         "slice-05",
         "--no-focus",
