@@ -56,16 +56,15 @@ class Cli:
             return ExitCode.HERDR_MISSING
         try:
             clone_root = Path(asyncio.run(cls._answer_of(launcher, cls.ROOT_ARGV)))
-            workspace = os.environ.get(cls.WORKSPACE_VARIABLE, "")
-            if not workspace:
-                return cls._opened_environment(
-                    launcher=launcher, unbounded=unbounded, clock=clock, clone_root=clone_root
-                )
+        except OSError as error:
+            return cls._clone_unknown(error)
+        workspace = os.environ.get(cls.WORKSPACE_VARIABLE, "")
+        if not workspace:
+            return cls._opened_environment(launcher=launcher, unbounded=unbounded, clock=clock, clone_root=clone_root)
+        try:
             repo = asyncio.run(cls._answer_of(launcher, cls.REPO_ARGV))
         except OSError as error:
-            sys.stderr.write(f"slice-panel must be started inside the clone it launches runs from: {error}\n")
-
-            return ExitCode.CLONE_UNKNOWN
+            return cls._clone_unknown(error)
         PanelApp(
             source=cls.follow_source(),
             launcher=launcher,
@@ -75,6 +74,12 @@ class Cli:
         ).run()
 
         return ExitCode.OK
+
+    @staticmethod
+    def _clone_unknown(error: OSError) -> int:
+        sys.stderr.write(f"slice-panel must be started inside the clone it launches runs from: {error}\n")
+
+        return ExitCode.CLONE_UNKNOWN
 
     @classmethod
     def _opened_environment(

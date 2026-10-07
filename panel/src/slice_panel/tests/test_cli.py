@@ -9,6 +9,7 @@ import pytest
 
 from slice_panel.infrastructure.cli import Cli
 from slice_panel.infrastructure.exit_code import ExitCode
+from slice_panel.infrastructure.herdr_tabs import HerdrFailedError
 from slice_panel.infrastructure.panel_app import PanelApp
 from slice_panel.tests.doubles import (
     AttachedToTheSessionError,
@@ -141,6 +142,13 @@ class TestWithoutAWorkspace(WithHerdrOnThePath):
         assert "10" in captured.err
         assert captured.out == ""
         assert launcher.calls_to("herdr", "workspace") == []
+
+    def test_a_herdr_command_that_fails_while_mounting_is_not_reported_as_an_unknown_clone(self) -> None:
+        create = ("herdr", "workspace", "create", "--cwd", "/work/clone", "--label", "clone", "--no-focus")
+        answers = {**self.mounting_answers(), create: OutcomeMother.failed("boom", exit_code=1)}
+
+        with pytest.raises(HerdrFailedError):
+            self.run(RecordingLauncher(answers), RecordingUnboundedProcesses())
 
     def test_outside_a_clone_nothing_is_asked_of_herdr_and_the_exit_code_says_so(
         self, capsys: pytest.CaptureFixture[str]
