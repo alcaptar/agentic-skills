@@ -27,6 +27,10 @@ impl ChildScreens {
         KeyEvent::new(code, KeyModifiers::NONE)
     }
 
+    pub fn press_with_alt(code: KeyCode) -> KeyEvent {
+        KeyEvent::new(code, KeyModifiers::ALT)
+    }
+
     pub fn press_with_control(character: char) -> KeyEvent {
         KeyEvent::new(KeyCode::Char(character), KeyModifiers::CONTROL)
     }
@@ -81,10 +85,73 @@ mod the_bytes_of_a_key {
     }
 
     #[test]
-    fn a_key_with_no_translation_gives_no_bytes() {
+    fn shift_tab_and_the_editing_keys_are_their_xterm_sequences() {
         let parser = ChildScreens::plain();
+        let screen = parser.screen();
 
-        assert!(KeyBytes::of(ChildScreens::press(KeyCode::F(5)), parser.screen()).is_empty());
+        assert_eq!(KeyBytes::of(ChildScreens::press(KeyCode::BackTab), screen), b"\x1b[Z");
+        assert_eq!(KeyBytes::of(ChildScreens::press(KeyCode::Insert), screen), b"\x1b[2~");
+        assert_eq!(KeyBytes::of(ChildScreens::press(KeyCode::Delete), screen), b"\x1b[3~");
+        assert_eq!(KeyBytes::of(ChildScreens::press(KeyCode::PageUp), screen), b"\x1b[5~");
+        assert_eq!(KeyBytes::of(ChildScreens::press(KeyCode::PageDown), screen), b"\x1b[6~");
+    }
+
+    #[test]
+    fn home_and_end_follow_the_cursor_mode_the_child_asked_for() {
+        let plain = ChildScreens::plain();
+        let application = ChildScreens::with_application_cursor();
+
+        assert_eq!(
+            KeyBytes::of(ChildScreens::press(KeyCode::Home), plain.screen()),
+            b"\x1b[H"
+        );
+        assert_eq!(
+            KeyBytes::of(ChildScreens::press(KeyCode::End), plain.screen()),
+            b"\x1b[F"
+        );
+        assert_eq!(
+            KeyBytes::of(ChildScreens::press(KeyCode::Home), application.screen()),
+            b"\x1bOH"
+        );
+        assert_eq!(
+            KeyBytes::of(ChildScreens::press(KeyCode::End), application.screen()),
+            b"\x1bOF"
+        );
+    }
+
+    #[test]
+    fn the_function_keys_are_their_xterm_sequences() {
+        let parser = ChildScreens::plain();
+        let screen = parser.screen();
+
+        assert_eq!(KeyBytes::of(ChildScreens::press(KeyCode::F(1)), screen), b"\x1bOP");
+        assert_eq!(KeyBytes::of(ChildScreens::press(KeyCode::F(4)), screen), b"\x1bOS");
+        assert_eq!(KeyBytes::of(ChildScreens::press(KeyCode::F(5)), screen), b"\x1b[15~");
+        assert_eq!(KeyBytes::of(ChildScreens::press(KeyCode::F(12)), screen), b"\x1b[24~");
+    }
+
+    #[test]
+    fn alt_prefixes_the_bytes_of_the_key_with_escape() {
+        let parser = ChildScreens::plain();
+        let screen = parser.screen();
+
+        assert_eq!(
+            KeyBytes::of(ChildScreens::press_with_alt(KeyCode::Char('b')), screen),
+            b"\x1bb"
+        );
+        assert_eq!(
+            KeyBytes::of(ChildScreens::press_with_alt(KeyCode::Enter), screen),
+            b"\x1b\r"
+        );
+    }
+
+    #[test]
+    fn a_key_with_no_translation_gives_no_bytes_even_with_alt() {
+        let parser = ChildScreens::plain();
+        let screen = parser.screen();
+
+        assert!(KeyBytes::of(ChildScreens::press(KeyCode::F(13)), screen).is_empty());
+        assert!(KeyBytes::of(ChildScreens::press_with_alt(KeyCode::CapsLock), screen).is_empty());
     }
 }
 

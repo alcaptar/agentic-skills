@@ -7,8 +7,18 @@ impl KeyBytes {
     const PASTE_START: &'static [u8] = b"\x1b[200~";
     const PASTE_END: &'static [u8] = b"\x1b[201~";
     const CONTROL_MASK: u8 = 0x1f;
+    const ESCAPE: &'static [u8] = b"\x1b";
 
     pub fn of(key: KeyEvent, screen: &Screen) -> Vec<u8> {
+        let bytes = Self::unmodified(key, screen);
+        if key.modifiers.contains(KeyModifiers::ALT) && !bytes.is_empty() {
+            return [Self::ESCAPE, bytes.as_slice()].concat();
+        }
+
+        bytes
+    }
+
+    fn unmodified(key: KeyEvent, screen: &Screen) -> Vec<u8> {
         match key.code {
             KeyCode::Esc => b"\x1b".to_vec(),
             KeyCode::Enter => b"\r".to_vec(),
@@ -18,16 +28,16 @@ impl KeyBytes {
             KeyCode::Down => Self::arrow(b'B', screen),
             KeyCode::Right => Self::arrow(b'C', screen),
             KeyCode::Left => Self::arrow(b'D', screen),
+            KeyCode::Home => Self::arrow(b'H', screen),
+            KeyCode::End => Self::arrow(b'F', screen),
+            KeyCode::BackTab => b"\x1b[Z".to_vec(),
+            KeyCode::Insert => b"\x1b[2~".to_vec(),
+            KeyCode::Delete => b"\x1b[3~".to_vec(),
+            KeyCode::PageUp => b"\x1b[5~".to_vec(),
+            KeyCode::PageDown => b"\x1b[6~".to_vec(),
+            KeyCode::F(number) => Self::function(number),
             KeyCode::Char(character) => Self::character(character, key.modifiers),
-            KeyCode::BackTab
-            | KeyCode::Home
-            | KeyCode::End
-            | KeyCode::PageUp
-            | KeyCode::PageDown
-            | KeyCode::Delete
-            | KeyCode::Insert
-            | KeyCode::F(_)
-            | KeyCode::Null
+            KeyCode::Null
             | KeyCode::CapsLock
             | KeyCode::ScrollLock
             | KeyCode::NumLock
@@ -52,6 +62,26 @@ impl KeyBytes {
         let introducer = if screen.application_cursor() { b'O' } else { b'[' };
 
         vec![0x1b, introducer, letter]
+    }
+
+    fn function(number: u8) -> Vec<u8> {
+        let sequence: &[u8] = match number {
+            1 => b"\x1bOP",
+            2 => b"\x1bOQ",
+            3 => b"\x1bOR",
+            4 => b"\x1bOS",
+            5 => b"\x1b[15~",
+            6 => b"\x1b[17~",
+            7 => b"\x1b[18~",
+            8 => b"\x1b[19~",
+            9 => b"\x1b[20~",
+            10 => b"\x1b[21~",
+            11 => b"\x1b[23~",
+            12 => b"\x1b[24~",
+            _ => b"",
+        };
+
+        sequence.to_vec()
     }
 
     fn character(character: char, modifiers: KeyModifiers) -> Vec<u8> {
