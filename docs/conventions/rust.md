@@ -13,7 +13,7 @@ obliga a desviarse. Una regla que no aparezca aquí se aplica tal como la escrib
 | Ninguna función suelta | Toda función es método o función asociada de un `impl` de un `struct`, un `enum` o un `trait`. |
 | Sin imports relativos | `use crate::...`, nunca `super::` ni `self::`. Un `use` al principio del fichero, agrupados: `std`, terceros, `crate`. |
 | Formato | `rustfmt`, con el ancho de línea de `tui/rustfmt.toml`. |
-| Value object | `struct` sin campos `pub`, construido por una función asociada que valida, con `#[derive(Debug, Clone, PartialEq, Eq)]`. |
+| Value object | `struct` sin campos `pub`, construido por una función asociada que valida, con `#[derive(Debug, Clone, PartialEq)]`, y `Eq` cuando todos sus campos lo admiten: un `f64` no. |
 | Vocabulario cerrado | `enum`. Todo `match` sobre él es exhaustivo y sin `_`: lo mide `wildcard_enum_match_arm`. |
 | Puerto | `trait`. Vive en `domain/` salvo que solo lo consuma la infraestructura, como en Python. |
 | Excepciones del dominio | Un `enum` de error en el `errors.rs` de `domain/`, devuelto en un `Result`. |
