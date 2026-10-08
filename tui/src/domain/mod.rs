@@ -3,4 +3,7 @@ pub mod follow_line;
 pub mod follow_source;
 pub mod parent;
 pub mod slice_board;
+pub mod slice_key;
 pub mod slice_row;
+pub mod understanding;
+pub mod understanding_source;

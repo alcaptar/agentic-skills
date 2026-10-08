@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 
 use crate::domain::follow_line::FollowLine;
 use crate::domain::parent::Parent;
+use crate::domain::slice_key::SliceKey;
 use crate::domain::slice_row::SliceRow;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -42,6 +43,37 @@ impl SliceBoard {
         }
 
         self
+    }
+
+    pub fn row(&self, key: &SliceKey) -> Option<&SliceRow> {
+        self.rows.iter().find(|row| row.key() == key)
+    }
+
+    pub fn after(&self, current: Option<&SliceKey>) -> Option<SliceKey> {
+        let keys = self.keys_in_painted_order();
+        match Self::position_of(&keys, current) {
+            Some(index) => keys.get(index + 1).or_else(|| keys.get(index)).cloned(),
+            None => keys.first().cloned(),
+        }
+    }
+
+    pub fn before(&self, current: Option<&SliceKey>) -> Option<SliceKey> {
+        let keys = self.keys_in_painted_order();
+        match Self::position_of(&keys, current) {
+            Some(index) => keys.get(index.saturating_sub(1)).cloned(),
+            None => keys.first().cloned(),
+        }
+    }
+
+    fn keys_in_painted_order(&self) -> Vec<SliceKey> {
+        self.groups()
+            .iter()
+            .flat_map(|group| group.rows().iter().map(|row| row.key().clone()).collect::<Vec<_>>())
+            .collect()
+    }
+
+    fn position_of(keys: &[SliceKey], current: Option<&SliceKey>) -> Option<usize> {
+        current.and_then(|current| keys.iter().position(|key| key == current))
     }
 
     pub fn groups(&self) -> Vec<FeatureGroup> {
