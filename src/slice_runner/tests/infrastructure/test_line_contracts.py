@@ -75,9 +75,20 @@ class TestTheFollowLineAgainstItsExamples(TheLineAgainstItsExamples):
             EventMother.advancing(),
             EventMother.closed(),
             EventMother.advancing_before_the_feature_was_recorded(),
+            EventMother.pending(),
         )
 
         return [EventFollowLinePayload.from_domain(event).to_contract() for event in events]
+
+    def test_the_line_of_a_pending_event_equals_its_example_value_by_value_except_the_instant(self) -> None:
+        examples = self._declared()["examples"]
+        assert isinstance(examples, list)
+        example = next(example for example in examples if example["status"] == "pending")
+        line = EventFollowLinePayload.from_domain(EventMother.pending()).to_contract()
+
+        assert {key: value for key, value in line.items() if key != "ts"} == {
+            key: value for key, value in example.items() if key != "ts"
+        }
 
 
 class TestTheStatusLineAgainstItsExamples(TheLineAgainstItsExamples):

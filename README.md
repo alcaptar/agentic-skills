@@ -209,6 +209,7 @@ Vale igual para el `--slice` de `verify`, `read` y `spend`.
 | `doctor` | Comprueba si el entorno esta listo para conducir una slice -`git`, `gh` autenticado, `claude` y las skills `slice-spec`/`deploy-watch` instaladas- y lo emite legible por salida estandar, un chequeo por linea con el comando que lo arregla cuando falta. No arregla nada el mismo. `--repo` comprueba ademas que ese repo se puede leer, y `--worktree` junto con `--base` compara la base local contra su remoto y avisa si esta por detras -un aviso no cambia el codigo de salida-. Los tres son opcionales. | `uv run slice-runner doctor --repo alcaptar/agentic-skills --worktree . --base master` |
 | `metrics` | Relee `metrics.jsonl`, `calls.jsonl` y `spend.jsonl` -sin escribir ningun estado nuevo-, emite una linea de JSON por slice cerrada dentro de la ventana pedida -ya con su identidad, su configuracion, su tamano, su gasto y su resultado unidos- y cierra con una linea de resumen: las cinco tasas (veto del verificador, bloqueo por controles, slices al primer intento, media de reintentos de implementar, integracion continua roja) cada una con su numero de muestras, las medias de gasto del harness, el reparto de descartes del juez por causa, y los mismos agregados por modelo y por variante. `--repo` acota a un repo (por defecto todos) y `--since`/`--until` acotan por fecha (`YYYY-MM-DD`, por defecto desde el principio hasta ahora). `--out` -obligatorio- es la ruta donde se escribe una vista HTML autocontenida (coste frente a tamano, gasto por papel, vueltas en el tiempo, las mismas tasas), generada de esos mismos datos y que declara lo que no puede decir. | `uv run slice-runner metrics --repo alcaptar/agentic-skills --since 2026-01-01 --out /tmp/metrics.html` |
 | `reset` | Borra el estado de ejecucion persistido de una subissue y deja su etiqueta en `estado:pendiente`, sin tocar la intencion, los criterios ni la senal de la spec. Deja un comentario diciendo cuando se reseteo y que la rama y el arbol de trabajo no se han tocado -esa limpieza la decide una persona-. Si la subissue no trae spec reconocible, o su cuerpo no se puede leer, no escribe nada. | `uv run slice-runner reset 38 --repo alcaptar/agentic-skills` |
+| `register` | Escribe en el registro local de eventos una fila `pending` por cada subissue abierta del issue padre que todavia no tiene ningun evento, con la misma clave con la que `run` escribira los suyos, para que el panel de la interfaz muestre la feature antes del primer run. Lee las subissues con la interfaz de subissues de GitHub y no con el buscador, que tarda en indexar las recien creadas. Si el registro local es ilegible sale con el mismo codigo que `follow` y no escribe nada. No lanza ningun run ni invoca al modelo. | `uv run slice-runner register 523 --repo alcaptar/agentic-skills` |
 
 ```bash
 uv run slice-runner run 38 --repo alcaptar/agentic-skills --base master
@@ -247,6 +248,11 @@ que hasta ahora solo salia por la salida de error de `run` -y sigue saliendo, pa
 marcha-, pero ahora tambien dura: reconstruir cuanto tardo o cuanto espero una slice deja de depender de
 tener la terminal abierta cuando corrio. Lo que no anexa esta fila es el turno del arnes -numero, herramienta
 y objetivo-, porque eso ya lo escribe `tool-uses.jsonl` al terminar cada llamada.
+
+Una fila con estado `pending` no es una transicion: la escribe `register`, sin que haya run, con gasto cero y
+el paso `mount-worktree` por convencion, para que el panel de la interfaz muestre una feature recien
+creada. **No marca el inicio de nada**: el instante de una fila `pending` es el de `register`, asi que no
+sirve para medir cuanto tardo una slice.
 
 Y **lo que el implementador declara dejar fuera** anexa su linea a `~/.claude/slice-runner/runs/debt.jsonl`
 en la misma llamada en que llega -con el repo y el issue del run, la slice y la lista de huecos declarados,

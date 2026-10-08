@@ -23,6 +23,7 @@ from slice_runner.application.actions.implement_slice import ImplementSlice
 from slice_runner.application.actions.mount_worktree import MountWorktree
 from slice_runner.application.actions.record_closure import RecordClosure
 from slice_runner.application.actions.record_step import RecordStep
+from slice_runner.application.actions.register_pending_slices import RegisterPendingSlices, RegisterPendingSlicesParams
 from slice_runner.application.actions.reopen_slice import ReopenSlice, ReopenSliceParams
 from slice_runner.application.actions.rescue_staged_work import RescueStagedWork
 from slice_runner.application.actions.reset_slice import ResetSlice, ResetSliceParams
@@ -100,6 +101,7 @@ from slice_runner.infrastructure.exit_code import ExitCode
 from slice_runner.infrastructure.feature_status_json_report import FeatureStatusJsonReport
 from slice_runner.infrastructure.feature_status_report import FeatureStatusReport
 from slice_runner.infrastructure.gh_call import GhCall
+from slice_runner.infrastructure.gh_child_issues import GhChildIssues
 from slice_runner.infrastructure.gh_ci import GhCi
 from slice_runner.infrastructure.gh_forum import GhForum
 from slice_runner.infrastructure.gh_run_repository import GhCommandFailedError, GhRunRepository
@@ -152,6 +154,7 @@ if TYPE_CHECKING:
     from slice_runner.domain.clock import Clock
     from slice_runner.domain.corpus import Corpus
     from slice_runner.domain.event import Event
+    from slice_runner.domain.event_log import EventLog
     from slice_runner.domain.event_reader import EventReader
     from slice_runner.infrastructure.process import Process
     from slice_runner.infrastructure.process_replacement import ProcessReplacement
@@ -242,6 +245,14 @@ class Cli:
                 )
             case Subcommand.FOLLOW | Subcommand.UNDERSTANDING | Subcommand.TUI:
                 result = cls._dispatched_for_the_interface(arguments, budgets=budgets)
+            case Subcommand.REGISTER:
+                result = cls(process=LocalProcess(budgets=budgets), budgets=budgets).register(
+                    repo=arguments.repo,
+                    issue=arguments.issue,
+                    reader=LocalEventReader(),
+                    log=LocalEventLog(),
+                    clock=SystemClock(),
+                )
 
         return result
 
@@ -458,6 +469,13 @@ class Cli:
         follow.add_argument("--repo", help="keep only the events of this repo, as `<org>/<repo>`")
         follow.add_argument("--once", action="store_true", help="print the snapshot and exit")
         follow.add_argument("--json", action="store_true", help="print each event as a JSON object")
+
+        register = subcommands.add_parser(
+            Subcommand.REGISTER,
+            help="write a pending event for each open subissue of an issue that has none yet, for the interface",
+        )
+        register.add_argument("issue", type=int, help="number of the parent issue whose subissues are registered")
+        register.add_argument("--repo", required=True, help="repo of the issue, as `<org>/<repo>`")
 
         understanding = subcommands.add_parser(
             Subcommand.UNDERSTANDING,
@@ -826,6 +844,18 @@ class Cli:
             return ExitCode.OK
         except UnreadableEventLogError as error:
             return self._reported(f"the events could not be followed: {error}", ExitCode.USAGE_ERROR)
+
+        return ExitCode.OK
+
+    def register(self, *, repo: str, issue: int, reader: EventReader, log: EventLog, clock: Clock) -> int:
+        try:
+            RegisterPendingSlices(
+                children=GhChildIssues(call=self._gh_call(clock=clock)), reader=reader, log=log, clock=clock
+            ).execute(RegisterPendingSlicesParams(repo=repo, parent=issue))
+        except (UnreadableEventLogError, UnreadableIssueError) as error:
+            return self._reported(f"the pending slices could not be registered: {error}", ExitCode.USAGE_ERROR)
+        except GhCommandFailedError as error:
+            return self._reported(f"the pending slices could not be registered: {error}", ExitCode.RUN_INTERRUPTED)
 
         return ExitCode.OK
 

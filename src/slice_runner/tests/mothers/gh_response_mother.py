@@ -42,3 +42,11 @@ class GhResponseMother:
             raise TypeError("the recorded comments payload does not carry an array of comments")
 
         return comments
+
+    @classmethod
+    def sub_issues_of_parent(cls) -> list[dict[str, object]]:
+        data = json.loads((cls._DIRECTORY / "sub-issues-of-parent.json").read_text(encoding="utf-8"))
+        if not isinstance(data, list):
+            raise TypeError("the recorded sub_issues payload is not an array")
+
+        return data

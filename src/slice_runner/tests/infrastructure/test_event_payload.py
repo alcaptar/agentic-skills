@@ -96,3 +96,9 @@ class TestWhatTheProgramReads:
 
         assert "parent" not in row
         assert "name" not in row
+
+    def test_a_row_with_the_pending_status_reads_as_a_pending_event(self) -> None:
+        row = EventPayload.from_domain(EventMother.pending()).to_contract()
+
+        assert row["status"] == "pending"
+        assert EventPayload.from_dict(row).to_domain().status is EventStatus.PENDING

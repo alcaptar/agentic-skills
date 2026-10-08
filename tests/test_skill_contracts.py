@@ -681,6 +681,22 @@ def test_every_command_slice_spec_teaches_parses_and_leaves_the_worktree_to_the_
         )
 
 
+_REGISTER_COMMAND = re.compile(r"slice-runner register ([^`\n]+)`")
+
+
+def test_slice_spec_registers_the_pending_slices_after_the_last_subissue_with_a_parseable_command() -> None:
+    authoring = _spec_prose(_AUTHORING_STEPS)
+    creation = authoring[authoring.index("5. **") : authoring.index("6. **Cierra**")]
+    registered = _REGISTER_COMMAND.findall(creation)
+
+    assert len(registered) == 1, f"step 5 of {_rel(_SPEC)} has to teach `slice-runner register` exactly once"
+    assert creation.index("slice-runner register") > creation.index("--label estado:pendiente")
+    argv = ["register", *_PLACEHOLDER.sub(lambda m: "1" if m.group() == "<N>" else "x", registered[0]).split()]
+    parsed = Cli.parser().parse_args(argv)
+    assert (parsed.command, parsed.issue, parsed.repo) == ("register", 1, "x/x")
+    assert "no se deshace nada ni se repite la creacion" in " ".join(creation.split())
+
+
 _WORKTREE_SECTION = "## El worktree de una slice"
 _MOUNTS_A_WORKTREE = re.compile(r"git worktree add")
 _NEXT_STEP = re.compile(r"\n\d+[a-z]?\. \*\*|\n## ")

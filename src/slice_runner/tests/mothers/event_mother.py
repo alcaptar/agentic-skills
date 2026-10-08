@@ -6,6 +6,7 @@ from typing import ClassVar
 
 from slice_runner.domain.event import Event
 from slice_runner.domain.event_status import EventStatus
+from slice_runner.domain.harness_spend import HarnessSpend
 from slice_runner.domain.run_state import RunState
 from slice_runner.domain.step import Step
 from slice_runner.tests.mothers.feature_slice_mother import FeatureSliceMother
@@ -29,6 +30,12 @@ class EventMother:
             status=EventStatus.ADVANCING,
             state=RunState.OPEN,
             feature_slice=FeatureSliceMother.of_the_feature(),
+        )
+
+    @classmethod
+    def pending(cls) -> Event:
+        return replace(
+            cls.advancing(), step=Step.MOUNT_WORKTREE, spend=HarnessSpend.nothing(), status=EventStatus.PENDING
         )
 
     @classmethod
