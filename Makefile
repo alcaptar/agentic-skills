@@ -4,7 +4,7 @@
 # El toolchain lo gestiona uv (`[dependency-groups] dev` en pyproject.toml); `uv run` lo
 # instala solo la primera vez.
 
-.PHONY: install install-program install-skills install-panel test check-types check-style check-format linting fix-linting check
+.PHONY: install install-program install-skills install-panel test check-types check-style check-format linting fix-linting check require-cargo tui-lint tui-format tui-test
 
 # El entregable son dos mitades que se instalan distinto: el programa es una rueda de
 # Python y las skills son ficheros que Claude Code lee de su directorio de configuracion.
@@ -102,3 +102,17 @@ fix-linting:
 # Todo lo que debe estar verde antes de dar un cambio por terminado.
 check: linting check-types test
 	@echo "CHECK OK: linting, check-types y test en verde"
+
+TUI_MANIFEST := --manifest-path tui/Cargo.toml
+
+require-cargo:
+	@command -v cargo >/dev/null 2>&1 || { echo "cargo no esta en el PATH: instala Rust con rustup (https://www.rust-lang.org/tools/install)"; exit 1; }
+
+tui-lint: require-cargo
+	cargo clippy $(TUI_MANIFEST) --all-targets -- -D warnings
+
+tui-format: require-cargo
+	cargo fmt $(TUI_MANIFEST) --check
+
+tui-test: require-cargo
+	cargo test $(TUI_MANIFEST)

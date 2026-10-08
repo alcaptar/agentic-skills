@@ -18,3 +18,6 @@ jobs:
       - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5
       # El `uv run` de cada target del Makefile instala el grupo `dev` la primera vez.
       - run: make check
+      - run: rustup toolchain install
+        working-directory: tui
+      - run: make tui-lint tui-format tui-test
