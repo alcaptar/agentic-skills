@@ -62,3 +62,22 @@ impl fmt::Display for SessionNotLaunched {
         write!(formatter, "could not launch the claude session: {}", self.reason)
     }
 }
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum IssuesUnread {
+    TimedOut { budget: Duration },
+    CommandFailed { reason: String },
+    NotJson { output: String },
+    WrongValue { key: String, reason: String },
+}
+
+impl fmt::Display for IssuesUnread {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::TimedOut { budget } => write!(formatter, "gh did not finish within {budget:?}"),
+            Self::CommandFailed { reason } => write!(formatter, "gh failed: {reason}"),
+            Self::NotJson { output } => write!(formatter, "gh did not answer with JSON: {output}"),
+            Self::WrongValue { key, reason } => write!(formatter, "wrong value for `{key}` from gh: {reason}"),
+        }
+    }
+}

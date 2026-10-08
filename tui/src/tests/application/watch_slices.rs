@@ -128,3 +128,73 @@ mod a_rejected_line {
         assert_eq!(watched.rejection(), None);
     }
 }
+
+mod the_board_shown_for_a_workspace {
+    use crate::tests::application::watching::Watching;
+    use crate::tests::mothers::follow_line_mother::FollowLineMother;
+    use crate::tests::mothers::workspace_mother::WorkspaceMother;
+
+    #[test]
+    fn shows_nothing_while_the_workspace_has_no_parent_even_if_follow_emits_lines() {
+        let watched = Watching::one_tick(Watching::lines(vec![
+            FollowLineMother::child_of(140, 150),
+            FollowLineMother::orphan(170),
+        ]));
+
+        let shown = watched.shown_for(&WorkspaceMother::unbound());
+
+        assert!(shown.board().groups().is_empty());
+    }
+
+    #[test]
+    fn bound_to_a_parent_shows_only_its_slices_in_the_repo_of_the_workspace() {
+        let watched = Watching::one_tick(Watching::lines(vec![
+            FollowLineMother::child_of(140, 150),
+            FollowLineMother::child_of(141, 160),
+            FollowLineMother::child_of_in_repo("alcaptar/other", 140, 170),
+            FollowLineMother::orphan(180),
+        ]));
+
+        let shown = watched.shown_for(&WorkspaceMother::bound_to(140));
+
+        let issues: Vec<u64> = shown
+            .board()
+            .groups()
+            .iter()
+            .flat_map(|group| group.rows().iter().map(|row| row.key().issue()))
+            .collect();
+        assert_eq!(issues, vec![150]);
+        assert_eq!(shown.board().groups()[0].repo(), FollowLineMother::REPO);
+    }
+
+    #[test]
+    fn keeps_the_rejection_and_leaves_the_accumulated_board_whole_for_the_next_tick() {
+        let watched = Watching::one_tick(vec![
+            Ok(FollowLineMother::child_of(140, 150)),
+            Ok(FollowLineMother::orphan(180)),
+            Err(Watching::wrong_issue()),
+        ]);
+
+        let shown = watched.shown_for(&WorkspaceMother::unbound());
+
+        assert_eq!(shown.rejection(), Some(&Watching::wrong_issue()));
+        let accumulated = watched.into_board();
+        assert_eq!(accumulated.groups().len(), 2);
+    }
+
+    #[test]
+    fn lines_that_arrived_before_the_binding_show_up_as_soon_as_it_happens() {
+        let watched = Watching::one_tick(Watching::lines(vec![FollowLineMother::child_of(140, 150)]));
+        assert!(
+            watched
+                .shown_for(&WorkspaceMother::unbound())
+                .board()
+                .groups()
+                .is_empty()
+        );
+
+        let shown = watched.shown_for(&WorkspaceMother::bound_to(140));
+
+        assert_eq!(shown.board().groups().len(), 1);
+    }
+}

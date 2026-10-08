@@ -1,13 +1,17 @@
 mod board_view;
+mod bounded_gh_process;
 mod bounded_understanding_process;
 mod claude_pane;
-mod contract;
+pub mod contract;
 mod detail_view;
 mod endless_follow_process;
 mod endless_pty_session;
 mod follow_line_payload;
+mod gh_payloads;
 mod key_bytes;
 mod key_routing;
 mod random_workspace_ids;
 mod split_screen;
+mod threaded_workspace_binding;
 mod understanding_line_payload;
+mod workspace_header;

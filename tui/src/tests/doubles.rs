@@ -1,15 +1,22 @@
 use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::rc::Rc;
+use std::sync::mpsc::{self, Receiver, Sender};
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
-use crate::domain::errors::{FollowLineRejected, UnderstandingUnread};
+use crate::domain::clock::Clock;
+use crate::domain::errors::{FollowLineRejected, IssuesUnread, UnderstandingUnread};
 use crate::domain::follow_line::FollowLine;
 use crate::domain::follow_source::FollowSource;
+use crate::domain::issue_source::IssueSource;
+use crate::domain::open_issue::OpenIssue;
 use crate::domain::slice_key::SliceKey;
 use crate::domain::understanding::Understanding;
 use crate::domain::understanding_source::UnderstandingSource;
 use crate::domain::workspace_id::WorkspaceId;
 use crate::domain::workspace_ids::WorkspaceIds;
+use crate::tests::mothers::workspace_mother::WorkspaceMother;
 
 pub type Delivery = Result<FollowLine, FollowLineRejected>;
 
@@ -75,5 +82,113 @@ impl FixedWorkspaceIds {
 impl WorkspaceIds for FixedWorkspaceIds {
     fn next(&mut self) -> WorkspaceId {
         self.id.clone()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Call {
+    RepoView,
+    IssueList { repo: String, limit: usize },
+}
+
+pub type Calls = Arc<Mutex<Vec<Call>>>;
+
+pub struct ScriptedIssueSource {
+    repos: VecDeque<Result<String, IssuesUnread>>,
+    lists: VecDeque<Result<Vec<OpenIssue>, IssuesUnread>>,
+    calls: Calls,
+}
+
+impl ScriptedIssueSource {
+    pub fn answering(
+        repos: Vec<Result<String, IssuesUnread>>,
+        lists: Vec<Result<Vec<OpenIssue>, IssuesUnread>>,
+    ) -> (Self, Calls) {
+        let calls = Calls::default();
+
+        (
+            Self {
+                repos: repos.into(),
+                lists: lists.into(),
+                calls: Arc::clone(&calls),
+            },
+            calls,
+        )
+    }
+
+    fn unscripted(what: &str) -> IssuesUnread {
+        IssuesUnread::CommandFailed {
+            reason: format!("nobody scripted an answer for {what}"),
+        }
+    }
+}
+
+impl IssueSource for ScriptedIssueSource {
+    fn repo_of_directory(&mut self) -> Result<String, IssuesUnread> {
+        self.calls.lock().unwrap().push(Call::RepoView);
+
+        self.repos
+            .pop_front()
+            .unwrap_or_else(|| Err(Self::unscripted("repo view")))
+    }
+
+    fn latest_open(&mut self, repo: &str, limit: usize) -> Result<Vec<OpenIssue>, IssuesUnread> {
+        self.calls.lock().unwrap().push(Call::IssueList {
+            repo: repo.to_string(),
+            limit,
+        });
+
+        self.lists
+            .pop_front()
+            .unwrap_or_else(|| Err(Self::unscripted("issue list")))
+    }
+}
+
+#[derive(Clone)]
+pub struct SteppedClock {
+    start: Instant,
+    elapsed: Arc<Mutex<Duration>>,
+}
+
+impl SteppedClock {
+    pub fn standing_still() -> Self {
+        Self {
+            start: Instant::now(),
+            elapsed: Arc::default(),
+        }
+    }
+
+    pub fn advance(&self, by: Duration) {
+        *self.elapsed.lock().unwrap() += by;
+    }
+}
+
+impl Clock for SteppedClock {
+    fn now(&self) -> Instant {
+        self.start + *self.elapsed.lock().unwrap()
+    }
+}
+
+pub struct GatedIssueSource {
+    gate: Receiver<()>,
+}
+
+impl GatedIssueSource {
+    pub fn closed() -> (Self, Sender<()>) {
+        let (release, gate) = mpsc::channel();
+
+        (Self { gate }, release)
+    }
+}
+
+impl IssueSource for GatedIssueSource {
+    fn repo_of_directory(&mut self) -> Result<String, IssuesUnread> {
+        Ok(WorkspaceMother::REPO.to_string())
+    }
+
+    fn latest_open(&mut self, _repo: &str, _limit: usize) -> Result<Vec<OpenIssue>, IssuesUnread> {
+        self.gate.recv().ok();
+
+        Ok(vec![WorkspaceMother::parent_of_this_workspace(9)])
     }
 }
