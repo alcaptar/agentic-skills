@@ -6,6 +6,7 @@ use std::time::{Duration, Instant};
 use crate::domain::errors::IssuesUnread;
 use crate::domain::issue_source::IssueSource;
 use crate::domain::open_issue::OpenIssue;
+use crate::infrastructure::issue_body_payload::IssueBodyPayload;
 use crate::infrastructure::open_issues_payload::OpenIssuesPayload;
 use crate::infrastructure::repo_view_payload::RepoViewPayload;
 
@@ -118,5 +119,19 @@ impl IssueSource for BoundedGhProcess {
         ])?;
 
         OpenIssuesPayload::parsed(&answer)
+    }
+
+    fn body_of(&mut self, repo: &str, number: u64) -> Result<String, IssuesUnread> {
+        let answer = self.answer_of(&[
+            "issue",
+            "view",
+            &number.to_string(),
+            "--repo",
+            repo,
+            "--json",
+            IssueBodyPayload::KEY,
+        ])?;
+
+        IssueBodyPayload::parsed(&answer)
     }
 }

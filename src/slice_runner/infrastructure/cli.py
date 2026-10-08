@@ -261,7 +261,7 @@ class Cli:
                     repo=arguments.repo, issue=arguments.issue, as_json=arguments.json
                 )
             case Subcommand.TUI:
-                result = cls.tui(replacement=OsProcessReplacement())
+                result = cls.tui(replacement=OsProcessReplacement(), issue=arguments.issue)
             case _:
                 raise ValueError(f"`{arguments.command}` is not a subcommand of the interface")
 
@@ -403,7 +403,12 @@ class Cli:
         reset.add_argument("issue", type=int, help="number of the subissue to reset")
         reset.add_argument("--repo", required=True, help="repo of the issue the subissue belongs to")
 
-        subcommands.add_parser(Subcommand.TUI, help="open the interface that shows the slices, replacing this process")
+        interface = subcommands.add_parser(
+            Subcommand.TUI, help="open the interface that shows the slices, replacing this process"
+        )
+        interface.add_argument(
+            "issue", type=int, nargs="?", default=None, help="number of the parent whose workspace is reopened"
+        )
 
         cls._add_the_orders(subcommands)
 
@@ -463,9 +468,10 @@ class Cli:
         understanding.add_argument("--json", action="store_true", help="print the understanding as a JSON object")
 
     @classmethod
-    def tui(cls, *, replacement: ProcessReplacement) -> int:
+    def tui(cls, *, replacement: ProcessReplacement, issue: int | None) -> int:
+        argv = [cls.TUI_EXECUTABLE] if issue is None else [cls.TUI_EXECUTABLE, str(issue)]
         try:
-            replacement.replaced_by([cls.TUI_EXECUTABLE])
+            replacement.replaced_by(argv)
         except ExecutableNotFoundError:
             return cls._reported(
                 f"`{cls.TUI_EXECUTABLE}` is not on the PATH: run `make install-tui` to install it",

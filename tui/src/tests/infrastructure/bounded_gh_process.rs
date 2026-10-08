@@ -56,6 +56,37 @@ mod integration {
     }
 
     #[test]
+    fn an_issue_view_that_never_ends_is_killed_at_the_budget() {
+        let child = SleepingChild::announcing_in("bounded-gh-issue-view");
+        let budget = Duration::from_millis(100);
+        let mut process = BoundedGhProcess::new(child.argv(), budget);
+
+        let outcome = process.body_of("alcaptar/agentic-skills", 516);
+
+        assert_eq!(outcome, Err(IssuesUnread::TimedOut { budget }));
+        assert!(!SleepingChild::is_alive(child.pid()));
+    }
+
+    #[test]
+    fn asks_gh_for_the_body_of_the_issue_in_the_repo() {
+        let mut process = Shell::running(r#"echo "$0 $@" >&2; exit 1"#, GENEROUS);
+
+        assert_eq!(
+            process.body_of("alcaptar/agentic-skills", 516),
+            Err(IssuesUnread::CommandFailed {
+                reason: "issue view 516 --repo alcaptar/agentic-skills --json body".to_string()
+            })
+        );
+    }
+
+    #[test]
+    fn a_zero_exit_with_the_literal_answer_of_gh_is_the_body() {
+        let mut process = Shell::running(r#"printf '%s\n' '{"body":"hola"}'"#, GENEROUS);
+
+        assert_eq!(process.body_of("alcaptar/agentic-skills", 516), Ok("hola".to_string()));
+    }
+
+    #[test]
     fn asks_gh_for_the_open_issues_of_the_repo_with_the_limit_and_the_fields_of_the_contract() {
         let mut process = Shell::running(r#"echo "$0 $@" >&2; exit 1"#, GENEROUS);
 

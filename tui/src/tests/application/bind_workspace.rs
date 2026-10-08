@@ -294,3 +294,27 @@ mod the_state_before_any_read {
         assert_eq!(state.id(), &WorkspaceMother::id());
     }
 }
+
+mod a_workspace_born_bound {
+    use crate::application::queries::bind_workspace::{BindWorkspace, WorkspaceState};
+    use crate::domain::workspace_binding::WorkspaceBinding;
+    use crate::tests::doubles::{ScriptedIssueSource, SteppedClock};
+    use crate::tests::mothers::workspace_mother::WorkspaceMother;
+
+    #[test]
+    fn stays_bound_to_its_parent_without_asking_gh_anything() {
+        let (source, calls) = ScriptedIssueSource::answering(vec![], vec![]);
+        let state = WorkspaceState::bound(WorkspaceMother::REPO.to_string(), WorkspaceMother::id(), 516);
+        let mut bind = BindWorkspace::from_state(
+            source,
+            SteppedClock::standing_still(),
+            WorkspaceMother::cadence(),
+            state,
+        );
+
+        let current = bind.execute();
+
+        assert_eq!(current.binding(), WorkspaceBinding::Bound(516));
+        assert!(calls.lock().unwrap().is_empty());
+    }
+}

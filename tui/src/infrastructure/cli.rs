@@ -1,22 +1,27 @@
 use std::io;
+use std::path::PathBuf;
 use std::process::ExitCode;
 use std::time::Duration;
 
 use crossterm::event::{self, Event, KeyEvent};
 use ratatui::layout::{Constraint, Layout, Rect};
 
+use crate::application::actions::reopen_workspace::{ReopenWorkspace, ReopenWorkspaceParams};
 use crate::application::actions::start_claude_session::{StartClaudeSession, StartClaudeSessionParams};
-use crate::application::queries::bind_workspace::BindWorkspace;
+use crate::application::queries::bind_workspace::{BindWorkspace, WorkspaceState};
 use crate::application::queries::read_slice_detail::{ReadSliceDetail, SliceDetail};
 use crate::application::queries::watch_slices::WatchSlices;
 use crate::domain::binding_cadence::BindingCadence;
 use crate::domain::pane_size::PaneSize;
+use crate::domain::session_launch::SessionLaunch;
 use crate::domain::slice_board::SliceBoard;
 use crate::domain::slice_key::SliceKey;
 use crate::infrastructure::board_view::BoardView;
 use crate::infrastructure::bounded_gh_process::BoundedGhProcess;
 use crate::infrastructure::bounded_understanding_process::BoundedUnderstandingProcess;
+use crate::infrastructure::claude_config_root::ClaudeConfigRoot;
 use crate::infrastructure::claude_pane::ClaudePane;
+use crate::infrastructure::config_dir_session_transcripts::ConfigDirSessionTranscripts;
 use crate::infrastructure::endless_follow_process::EndlessFollowProcess;
 use crate::infrastructure::endless_pty_session::EndlessPtySession;
 use crate::infrastructure::key_bytes::KeyBytes;
@@ -35,6 +40,12 @@ enum Input {
     Nothing,
 }
 
+#[derive(Clone, Copy)]
+enum Invocation {
+    Fresh,
+    Reopen(u64),
+}
+
 pub struct Cli;
 
 impl Cli {
@@ -48,7 +59,8 @@ impl Cli {
     const BINDING_LIMIT: usize = 20;
 
     pub fn main() -> ExitCode {
-        match Self::run() {
+        let outcome = Self::invocation().and_then(Self::run);
+        match outcome {
             Ok(()) => ExitCode::SUCCESS,
             Err(error) => {
                 eprintln!("slice-runner-tui: {error}");
@@ -57,25 +69,59 @@ impl Cli {
         }
     }
 
-    fn run() -> Result<(), String> {
+    fn invocation() -> Result<Invocation, String> {
+        let arguments: Vec<String> = std::env::args().skip(1).collect();
+        match arguments.as_slice() {
+            [] => Ok(Invocation::Fresh),
+            [number] => number
+                .parse::<u64>()
+                .map(Invocation::Reopen)
+                .map_err(|_| format!("usage: slice-runner-tui [<parent number>], got `{number}`")),
+            _ => Err("usage: slice-runner-tui [<parent number>]".to_string()),
+        }
+    }
+
+    fn reopened(parent: u64, directory: PathBuf) -> Result<(SessionLaunch, WorkspaceState), String> {
+        let config =
+            ClaudeConfigRoot::resolved().ok_or_else(|| "neither CLAUDE_CONFIG_DIR nor HOME is set".to_string())?;
+        let reopened = ReopenWorkspace::new(
+            BoundedGhProcess::new(vec![Self::GH_PROGRAM.to_string()], Self::GH_BUDGET),
+            ConfigDirSessionTranscripts::new(config),
+        )
+        .execute(ReopenWorkspaceParams::new(directory, parent))
+        .map_err(|rejected| rejected.to_string())?;
+
+        Ok((reopened.launch().clone(), reopened.into_state()))
+    }
+
+    fn run(invocation: Invocation) -> Result<(), String> {
+        let directory = std::env::current_dir().map_err(|error| error.to_string())?;
+        let (launch, state) = match invocation {
+            Invocation::Fresh => {
+                let launch = StartClaudeSession::new(RandomWorkspaceIds)
+                    .execute(StartClaudeSessionParams::in_directory(directory));
+
+                (launch, None)
+            }
+            Invocation::Reopen(parent) => {
+                let (launch, state) = Self::reopened(parent, directory)?;
+
+                (launch, Some(state))
+            }
+        };
         let source = EndlessFollowProcess::spawn(&Self::FOLLOW_ARGV).map_err(|rejected| rejected.to_string())?;
         let mut watch = WatchSlices::new(source);
         let mut session = TerminalSession::open().map_err(|error| error.to_string())?;
         let window = session.terminal().size().map_err(|error| error.to_string())?;
-        let directory = std::env::current_dir().map_err(|error| error.to_string())?;
-        let launch =
-            StartClaudeSession::new(RandomWorkspaceIds).execute(StartClaudeSessionParams::in_directory(directory));
         let mut claude = EndlessPtySession::spawn(&launch, SplitScreen::pane_size(Rect::from(window)))
             .map_err(|rejected| rejected.to_string())?;
-        let mut binding = ThreadedWorkspaceBinding::start(
-            BindWorkspace::new(
-                BoundedGhProcess::new(vec![Self::GH_PROGRAM.to_string()], Self::GH_BUDGET),
-                SystemClock,
-                BindingCadence::new(Self::BINDING_INTERVAL, Self::BINDING_LIMIT),
-                launch.workspace().clone(),
-            ),
-            Self::BINDING_INTERVAL,
-        );
+        let gh = BoundedGhProcess::new(vec![Self::GH_PROGRAM.to_string()], Self::GH_BUDGET);
+        let cadence = BindingCadence::new(Self::BINDING_INTERVAL, Self::BINDING_LIMIT);
+        let bind = match state {
+            Some(state) => BindWorkspace::from_state(gh, SystemClock, cadence, state),
+            None => BindWorkspace::new(gh, SystemClock, cadence, launch.workspace().clone()),
+        };
+        let mut binding = ThreadedWorkspaceBinding::start(bind, Self::BINDING_INTERVAL);
         let mut read = ReadSliceDetail::new(BoundedUnderstandingProcess::new(
             vec![Self::PROGRAM.to_string()],
             Self::UNDERSTANDING_BUDGET,

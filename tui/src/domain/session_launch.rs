@@ -11,6 +11,14 @@ pub struct SessionLaunch {
 }
 
 impl SessionLaunch {
+    const WORKSPACE_VARIABLE: &'static str = "SLICE_RUNNER_WORKSPACE";
+
+    pub fn for_workspace(workspace: WorkspaceId, argv: Vec<String>, directory: PathBuf) -> Self {
+        let environment = vec![(Self::WORKSPACE_VARIABLE.to_string(), workspace.as_str().to_string())];
+
+        Self::new(workspace, argv, directory, environment)
+    }
+
     pub fn new(
         workspace: WorkspaceId,
         argv: Vec<String>,

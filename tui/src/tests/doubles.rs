@@ -1,5 +1,6 @@
 use std::cell::RefCell;
 use std::collections::VecDeque;
+use std::path::Path;
 use std::rc::Rc;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Mutex};
@@ -11,6 +12,7 @@ use crate::domain::follow_line::FollowLine;
 use crate::domain::follow_source::FollowSource;
 use crate::domain::issue_source::IssueSource;
 use crate::domain::open_issue::OpenIssue;
+use crate::domain::session_transcripts::SessionTranscripts;
 use crate::domain::slice_key::SliceKey;
 use crate::domain::understanding::Understanding;
 use crate::domain::understanding_source::UnderstandingSource;
@@ -89,6 +91,7 @@ impl WorkspaceIds for FixedWorkspaceIds {
 pub enum Call {
     RepoView,
     IssueList { repo: String, limit: usize },
+    IssueView { repo: String, number: u64 },
 }
 
 pub type Calls = Arc<Mutex<Vec<Call>>>;
@@ -96,6 +99,7 @@ pub type Calls = Arc<Mutex<Vec<Call>>>;
 pub struct ScriptedIssueSource {
     repos: VecDeque<Result<String, IssuesUnread>>,
     lists: VecDeque<Result<Vec<OpenIssue>, IssuesUnread>>,
+    bodies: VecDeque<Result<String, IssuesUnread>>,
     calls: Calls,
 }
 
@@ -110,10 +114,17 @@ impl ScriptedIssueSource {
             Self {
                 repos: repos.into(),
                 lists: lists.into(),
+                bodies: VecDeque::new(),
                 calls: Arc::clone(&calls),
             },
             calls,
         )
+    }
+
+    pub fn with_bodies(mut self, bodies: Vec<Result<String, IssuesUnread>>) -> Self {
+        self.bodies = bodies.into();
+
+        self
     }
 
     fn unscripted(what: &str) -> IssuesUnread {
@@ -141,6 +152,37 @@ impl IssueSource for ScriptedIssueSource {
         self.lists
             .pop_front()
             .unwrap_or_else(|| Err(Self::unscripted("issue list")))
+    }
+
+    fn body_of(&mut self, repo: &str, number: u64) -> Result<String, IssuesUnread> {
+        self.calls.lock().unwrap().push(Call::IssueView {
+            repo: repo.to_string(),
+            number,
+        });
+
+        self.bodies
+            .pop_front()
+            .unwrap_or_else(|| Err(Self::unscripted("issue view")))
+    }
+}
+
+pub struct ScriptedTranscripts {
+    existing: bool,
+}
+
+impl ScriptedTranscripts {
+    pub fn present() -> Self {
+        Self { existing: true }
+    }
+
+    pub fn absent() -> Self {
+        Self { existing: false }
+    }
+}
+
+impl SessionTranscripts for ScriptedTranscripts {
+    fn exists(&self, _directory: &Path, _id: &WorkspaceId) -> bool {
+        self.existing
     }
 }
 
@@ -190,5 +232,11 @@ impl IssueSource for GatedIssueSource {
         self.gate.recv().ok();
 
         Ok(vec![WorkspaceMother::parent_of_this_workspace(9)])
+    }
+
+    fn body_of(&mut self, _repo: &str, _number: u64) -> Result<String, IssuesUnread> {
+        Err(IssuesUnread::CommandFailed {
+            reason: "nobody scripted an answer for issue view".to_string(),
+        })
     }
 }

@@ -27,6 +27,15 @@ impl WorkspaceState {
         }
     }
 
+    pub fn bound(repo: String, id: WorkspaceId, parent: u64) -> Self {
+        Self {
+            repo: WorkspaceRepo::Known(repo),
+            id,
+            binding: WorkspaceBinding::Bound(parent),
+            warning: None,
+        }
+    }
+
     pub fn repo(&self) -> &WorkspaceRepo {
         &self.repo
     }
@@ -59,6 +68,16 @@ impl<S: IssueSource, C: Clock> BindWorkspace<S, C> {
             clock,
             cadence,
             state: WorkspaceState::unresolved(id),
+            last_query: None,
+        }
+    }
+
+    pub fn from_state(source: S, clock: C, cadence: BindingCadence, state: WorkspaceState) -> Self {
+        Self {
+            source,
+            clock,
+            cadence,
+            state,
             last_query: None,
         }
     }
