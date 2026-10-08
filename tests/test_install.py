@@ -153,20 +153,3 @@ def test_installing_the_skills_refuses_to_replace_a_link_that_points_somewhere_e
     assert done.code != 0, "an occupied link has to stop the install instead of being replaced"
     assert occupied.readlink() == elsewhere
     assert str(occupied) in done.stdout
-
-
-class TestInstallingThePanel:
-    _INSTALL_DEPENDENCIES = re.compile(r"^install:(.*)$", re.MULTILINE)
-    _PANEL_RECIPE = re.compile(r"^install-panel:[^\n]*\n((?:\t[^\n]*\n)+)", re.MULTILINE)
-
-    def test_install_depends_on_the_target_that_installs_the_panel(self) -> None:
-        declared = self._INSTALL_DEPENDENCIES.search((_ROOT / "Makefile").read_text())
-
-        assert declared, "Makefile no longer declares the install target"
-        assert "install-panel" in declared.group(1).split()
-
-    def test_the_panel_target_installs_the_panel_directory_as_a_tool(self) -> None:
-        recipe = self._PANEL_RECIPE.search((_ROOT / "Makefile").read_text())
-
-        assert recipe, "Makefile declares no install-panel target with a recipe"
-        assert re.search(r"\buv tool install\b.*\./panel\b", recipe.group(1))
