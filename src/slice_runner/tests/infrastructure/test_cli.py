@@ -3373,16 +3373,24 @@ class TestOpeningTheInterface:
         replacement = RecordedReplacement()
 
         with pytest.raises(ReplacementRequestedError):
-            Cli.tui(replacement=replacement)
+            Cli.tui(replacement=replacement, issue=None)
 
         assert replacement.argvs == [["slice-runner-tui"]]
+
+    def test_the_issue_number_travels_as_the_interface_argument(self) -> None:
+        replacement = RecordedReplacement()
+
+        with pytest.raises(ReplacementRequestedError):
+            Cli.tui(replacement=replacement, issue=516)
+
+        assert replacement.argvs == [["slice-runner-tui", "516"]]
 
 
 class TestOpeningTheInterfaceWhenItIsNotInstalled(ReadingWhatWasReported):
     def test_it_exits_with_its_own_code_and_names_the_target_that_installs_it(
         self, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        code = Cli.tui(replacement=MissingExecutableReplacement())
+        code = Cli.tui(replacement=MissingExecutableReplacement(), issue=None)
 
         assert code == ExitCode.TUI_NOT_INSTALLED
         reported = self._reported(capsys)

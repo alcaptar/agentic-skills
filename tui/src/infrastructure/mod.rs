@@ -1,12 +1,15 @@
 pub mod board_view;
 pub mod bounded_gh_process;
 pub mod bounded_understanding_process;
+pub mod claude_config_root;
 pub mod claude_pane;
 pub mod cli;
+pub mod config_dir_session_transcripts;
 pub mod detail_view;
 pub mod endless_follow_process;
 pub mod endless_pty_session;
 pub mod follow_line_payload;
+pub mod issue_body_payload;
 pub mod key_bytes;
 pub mod key_routing;
 pub mod open_issues_payload;

@@ -18,8 +18,6 @@ pub struct StartClaudeSession<I: WorkspaceIds> {
 }
 
 impl<I: WorkspaceIds> StartClaudeSession<I> {
-    const WORKSPACE_VARIABLE: &'static str = "SLICE_RUNNER_WORKSPACE";
-
     pub fn new(ids: I) -> Self {
         Self { ids }
     }
@@ -30,8 +28,6 @@ impl<I: WorkspaceIds> StartClaudeSession<I> {
             .map(str::to_string)
             .to_vec();
 
-        let environment = vec![(Self::WORKSPACE_VARIABLE.to_string(), id.as_str().to_string())];
-
-        SessionLaunch::new(id, argv, params.directory, environment)
+        SessionLaunch::for_workspace(id, argv, params.directory)
     }
 }

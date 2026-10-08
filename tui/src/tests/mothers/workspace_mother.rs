@@ -43,6 +43,14 @@ impl WorkspaceMother {
         WorkspaceState::unresolved(Self::id())
     }
 
+    pub fn body_marked_with(uuid: &str) -> String {
+        format!("## Intencion\n\nalgo\n\n{}\n", Self::marker_of(uuid))
+    }
+
+    pub fn body_without_marker() -> String {
+        "## Intencion\n\nalgo\n".to_string()
+    }
+
     pub fn bound_to(parent: u64) -> WorkspaceState {
         let (source, _) = ScriptedIssueSource::answering(
             vec![Ok(Self::REPO.to_string())],

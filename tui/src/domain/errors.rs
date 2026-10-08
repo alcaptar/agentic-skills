@@ -81,3 +81,24 @@ impl fmt::Display for IssuesUnread {
         }
     }
 }
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum WorkspaceNotReopened {
+    Unmarked { parent: u64 },
+    Unread(IssuesUnread),
+}
+
+impl fmt::Display for WorkspaceNotReopened {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Unmarked { parent } => write!(formatter, "parent #{parent} was not designed in a workspace"),
+            Self::Unread(unread) => write!(formatter, "could not read the parent: {unread}"),
+        }
+    }
+}
+
+impl From<IssuesUnread> for WorkspaceNotReopened {
+    fn from(unread: IssuesUnread) -> Self {
+        Self::Unread(unread)
+    }
+}

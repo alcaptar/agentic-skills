@@ -8,6 +8,7 @@ pub mod open_issue;
 pub mod pane_size;
 pub mod parent;
 pub mod session_launch;
+pub mod session_transcripts;
 pub mod slice_board;
 pub mod slice_key;
 pub mod slice_row;
