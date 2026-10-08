@@ -4,7 +4,7 @@
 # El toolchain lo gestiona uv (`[dependency-groups] dev` en pyproject.toml); `uv run` lo
 # instala solo la primera vez.
 
-.PHONY: install install-program install-skills install-panel test check-types check-style check-format linting fix-linting check require-cargo tui-lint tui-format tui-test
+.PHONY: install install-program install-skills install-panel install-tui test check-types check-style check-format linting fix-linting check require-cargo tui-lint tui-format tui-test
 
 # El entregable son dos mitades que se instalan distinto: el programa es una rueda de
 # Python y las skills son ficheros que Claude Code lee de su directorio de configuracion.
@@ -29,7 +29,7 @@ LINKED := slice-spec deploy-watch slice-runner
 # en un `CLAUDE_HOME` de usar y tirar (`make install-skills CLAUDE_HOME=<ruta>`) y lo cubre
 # `tests/test_install.py`; `install-program` escribe en el entorno de la maquina y eso no cabe
 # en la suite, asi que queda declarado sin test en vez de fingido con uno.
-install: install-program install-skills install-panel
+install: install-program install-skills install-panel install-tui
 
 # `--reinstall` no es redundante con `--force`: `--force` pisa el ejecutable que ya hubiera, pero
 # la rueda se reutiliza de cache mientras la version no cambie, y `version` es `0.0.0` fija. Sin el,
@@ -107,6 +107,9 @@ TUI_MANIFEST := --manifest-path tui/Cargo.toml
 
 require-cargo:
 	@command -v cargo >/dev/null 2>&1 || { echo "cargo no esta en el PATH: instala Rust con rustup (https://www.rust-lang.org/tools/install)"; exit 1; }
+
+install-tui: require-cargo
+	cargo install --path tui --force
 
 tui-lint: require-cargo
 	cargo clippy $(TUI_MANIFEST) --all-targets -- -D warnings
