@@ -3388,3 +3388,13 @@ class TestOpeningTheInterfaceWhenItIsNotInstalled(ReadingWhatWasReported):
         reported = self._reported(capsys)
         assert "slice-runner-tui" in reported
         assert "make install-tui" in reported
+
+    def test_the_subcommand_reaches_the_real_replacement_and_exits_with_the_code_when_the_path_has_no_executable(
+        self, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        monkeypatch.setenv("PATH", str(tmp_path))
+
+        code = Cli.main(["tui"])
+
+        assert code == ExitCode.TUI_NOT_INSTALLED
+        assert "make install-tui" in self._reported(capsys)
