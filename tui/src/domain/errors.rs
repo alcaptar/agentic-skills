@@ -40,3 +40,25 @@ impl fmt::Display for UnderstandingUnread {
         }
     }
 }
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WorkspaceIdRejected {
+    pub text: String,
+}
+
+impl fmt::Display for WorkspaceIdRejected {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(formatter, "workspace id is not a uuid: {}", self.text)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SessionNotLaunched {
+    pub reason: String,
+}
+
+impl fmt::Display for SessionNotLaunched {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(formatter, "could not launch the claude session: {}", self.reason)
+    }
+}

@@ -8,6 +8,8 @@ use crate::domain::follow_source::FollowSource;
 use crate::domain::slice_key::SliceKey;
 use crate::domain::understanding::Understanding;
 use crate::domain::understanding_source::UnderstandingSource;
+use crate::domain::workspace_id::WorkspaceId;
+use crate::domain::workspace_ids::WorkspaceIds;
 
 pub type Delivery = Result<FollowLine, FollowLineRejected>;
 
@@ -55,5 +57,23 @@ impl UnderstandingSource for ScriptedUnderstandingSource {
         self.asked.borrow_mut().push(key.clone());
 
         self.answer.clone()
+    }
+}
+
+pub struct FixedWorkspaceIds {
+    id: WorkspaceId,
+}
+
+impl FixedWorkspaceIds {
+    pub fn always(text: &str) -> Self {
+        Self {
+            id: WorkspaceId::parse(text).unwrap(),
+        }
+    }
+}
+
+impl WorkspaceIds for FixedWorkspaceIds {
+    fn next(&mut self) -> WorkspaceId {
+        self.id.clone()
     }
 }

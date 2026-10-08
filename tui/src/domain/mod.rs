@@ -1,9 +1,13 @@
 pub mod errors;
 pub mod follow_line;
 pub mod follow_source;
+pub mod pane_size;
 pub mod parent;
+pub mod session_launch;
 pub mod slice_board;
 pub mod slice_key;
 pub mod slice_row;
 pub mod understanding;
 pub mod understanding_source;
+pub mod workspace_id;
+pub mod workspace_ids;

@@ -1,5 +1,5 @@
 use ratatui::Frame;
-use ratatui::layout::{Constraint, Layout};
+use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::{Color, Style};
 use ratatui::text::Line;
 use ratatui::widgets::{Block, Paragraph};
@@ -16,6 +16,7 @@ pub struct BoardView;
 impl BoardView {
     pub fn render(
         frame: &mut Frame,
+        area: Rect,
         watched: &WatchedBoard,
         selected: Option<&SliceKey>,
         detail: Option<&SliceDetail>,
@@ -24,11 +25,11 @@ impl BoardView {
         let board_area = match opened {
             Some((row, detail)) => {
                 let [board_area, detail_area] =
-                    Layout::vertical([Constraint::Min(0), Constraint::Percentage(50)]).areas(frame.area());
+                    Layout::vertical([Constraint::Min(0), Constraint::Percentage(50)]).areas(area);
                 DetailView::render(frame, detail_area, row, detail);
                 board_area
             }
-            None => frame.area(),
+            None => area,
         };
         let groups = watched.board().groups();
         let mut constraints: Vec<Constraint> = groups
