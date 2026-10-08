@@ -66,4 +66,16 @@ impl FollowLineMother {
             None,
         )
     }
+
+    pub fn moved_to(earlier: &FollowLine, step: &str) -> FollowLine {
+        FollowLine::new(
+            earlier.repo(),
+            earlier.issue(),
+            earlier.slice_id(),
+            step,
+            "advancing",
+            earlier.parent(),
+            earlier.name(),
+        )
+    }
 }
