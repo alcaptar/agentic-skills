@@ -150,6 +150,8 @@ ajuste negativo entra sin que nadie lo frene y deja el stock en negativo hasta q
 
 ### tu-org/infra-alertas
 - ninguno: la integracion continua de ese repo no valida en PR
+
+<!-- slice-runner:workspace 3f2b8c1e-5a7d-4e90-9b6a-1c2d3e4f5a6b -->
 ```
 
 ### Una subissue por slice
@@ -583,7 +585,9 @@ un run anterior no se reutiliza ni se pisa: la invocacion siguiente cierra en
 
    - El padre: `gh issue create --repo <org>/<repo> --title "<feature>" --body-file -`, con el cuerpo
      del paso 2a/2c/3/3b. Si declaro `## Historia de usuario`, su titulo abre con la clave
-     (`AS-255 <feature>`) y la llamada anade `--label origen:AS-255`.
+     (`AS-255 <feature>`) y la llamada anade `--label origen:AS-255`. Si la variable de entorno
+     `SLICE_RUNNER_WORKSPACE` esta definida, la ultima linea del cuerpo, despues de `## Controles`, es la
+     marca con ese uuid, en la forma de `contract/workspace-marker.json`; si no lo esta, no se escribe nada.
    - Cada slice, en orden de `slice-NN`, como hija suya:
      `gh issue create --repo <org>/<repo> --title "slice-NN (name): <titulo>" --body-file - --parent <N> --label estado:pendiente`,
      donde `<N>` es el numero del padre. El `--parent` es lo que la hace slice de esa feature y la
