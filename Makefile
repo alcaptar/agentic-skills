@@ -103,19 +103,17 @@ fix-linting:
 check: linting check-types test
 	@echo "CHECK OK: linting, check-types y test en verde"
 
-TUI_MANIFEST := --manifest-path tui/Cargo.toml
-
 require-cargo:
 	@command -v cargo >/dev/null 2>&1 || { echo "cargo no esta en el PATH: instala Rust con rustup (https://www.rust-lang.org/tools/install)"; exit 1; }
 
 install-tui: require-cargo
-	cargo install --path tui --force
+	cd tui && cargo install --path . --force
 
 tui-lint: require-cargo
-	cargo clippy $(TUI_MANIFEST) --all-targets -- -D warnings
+	cd tui && cargo clippy --all-targets -- -D warnings
 
 tui-format: require-cargo
-	cargo fmt $(TUI_MANIFEST) --check
+	cd tui && cargo fmt --check
 
 tui-test: require-cargo
-	cargo test $(TUI_MANIFEST)
+	cd tui && cargo test
