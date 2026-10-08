@@ -51,8 +51,11 @@ from slice_runner.tests.doubles import (
     AnsweringByArgv,
     AnsweringByArgvWithADiffThatMoves,
     GhCallDoubles,
+    MissingExecutableReplacement,
     ProcessDoubles,
     RealExceptTheJudge,
+    RecordedReplacement,
+    ReplacementRequestedError,
     ScriptedEventReader,
     TimingOutProcess,
     UnrunnableJudge,
@@ -3363,3 +3366,35 @@ class TestARunBlockWrittenByAnEarlierVersionIsStillRead:
 
         assert code == ExitCode.AWAITING_ALIGNMENT
         assert "understanding_pending" not in capsys.readouterr().err
+
+
+class TestOpeningTheInterface:
+    def test_the_process_is_replaced_by_the_interface_executable_without_any_argument(self) -> None:
+        replacement = RecordedReplacement()
+
+        with pytest.raises(ReplacementRequestedError):
+            Cli.tui(replacement=replacement)
+
+        assert replacement.argvs == [["slice-runner-tui"]]
+
+
+class TestOpeningTheInterfaceWhenItIsNotInstalled(ReadingWhatWasReported):
+    def test_it_exits_with_its_own_code_and_names_the_target_that_installs_it(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        code = Cli.tui(replacement=MissingExecutableReplacement())
+
+        assert code == ExitCode.TUI_NOT_INSTALLED
+        reported = self._reported(capsys)
+        assert "slice-runner-tui" in reported
+        assert "make install-tui" in reported
+
+    def test_the_subcommand_reaches_the_real_replacement_and_exits_with_the_code_when_the_path_has_no_executable(
+        self, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        monkeypatch.setenv("PATH", str(tmp_path))
+
+        code = Cli.main(["tui"])
+
+        assert code == ExitCode.TUI_NOT_INSTALLED
+        assert "make install-tui" in self._reported(capsys)

@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, ClassVar, NoReturn
 from unittest.mock import Mock, create_autospec
 
 from slice_runner.domain.budgets import Budgets
@@ -27,6 +27,7 @@ from slice_runner.infrastructure.process import (
     ProcessOutput,
     ProcessTimedOutError,
 )
+from slice_runner.infrastructure.process_replacement import ExecutableNotFoundError, ProcessReplacement
 from slice_runner.infrastructure.tool_use_recorder import ToolUseRecorder
 from slice_runner.infrastructure.turn_log import TurnLog
 from slice_runner.tests.real_process import Real
@@ -506,3 +507,22 @@ class ScriptedEventReader(EventReader):
         self.cursors.append(cursor)
 
         return self._batches.pop(0)
+
+
+class ReplacementRequestedError(Exception):
+    pass
+
+
+class RecordedReplacement(ProcessReplacement):
+    def __init__(self) -> None:
+        self.argvs: list[list[str]] = []
+
+    def replaced_by(self, argv: list[str]) -> NoReturn:
+        self.argvs.append(list(argv))
+
+        raise ReplacementRequestedError
+
+
+class MissingExecutableReplacement(ProcessReplacement):
+    def replaced_by(self, argv: list[str]) -> NoReturn:
+        raise ExecutableNotFoundError(f"{argv[0]} was scripted as missing for this test")

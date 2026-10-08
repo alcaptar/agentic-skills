@@ -129,7 +129,9 @@ from slice_runner.infrastructure.local_skill_library import LocalSkillLibrary
 from slice_runner.infrastructure.local_tool_use_log import LocalToolUseLog
 from slice_runner.infrastructure.local_toolbox import LocalToolbox
 from slice_runner.infrastructure.muted_deploy_watch import MutedDeployWatch
+from slice_runner.infrastructure.os_process_replacement import OsProcessReplacement
 from slice_runner.infrastructure.process import ProcessNotRunnableError, ProcessTimedOutError
+from slice_runner.infrastructure.process_replacement import ExecutableNotFoundError
 from slice_runner.infrastructure.process_source_reader import ProcessSourceReader
 from slice_runner.infrastructure.readiness_report import ReadinessReport
 from slice_runner.infrastructure.slice_pull_request import SlicePullRequest
@@ -152,10 +154,12 @@ if TYPE_CHECKING:
     from slice_runner.domain.event import Event
     from slice_runner.domain.event_reader import EventReader
     from slice_runner.infrastructure.process import Process
+    from slice_runner.infrastructure.process_replacement import ProcessReplacement
 
 
 class Cli:
     PROGRAM: ClassVar[str] = "slice-runner"
+    TUI_EXECUTABLE: ClassVar[str] = "slice-runner-tui"
     STOPS: ClassVar[tuple[type[Exception], ...]] = (
         NoSliceLeftError,
         UnresolvableRepoOrBaseError,
@@ -236,6 +240,14 @@ class Cli:
                 result = cls(process=LocalProcess(budgets=budgets), budgets=budgets).status(
                     repo=arguments.repo, issue=arguments.issue, as_json=arguments.json
                 )
+            case Subcommand.FOLLOW | Subcommand.UNDERSTANDING | Subcommand.TUI:
+                result = cls._dispatched_for_the_interface(arguments, budgets=budgets)
+
+        return result
+
+    @classmethod
+    def _dispatched_for_the_interface(cls, arguments: argparse.Namespace, *, budgets: Budgets) -> int:
+        match Subcommand(arguments.command):
             case Subcommand.FOLLOW:
                 result = cls(process=LocalProcess(budgets=budgets), budgets=budgets).follow(
                     repo=arguments.repo,
@@ -248,6 +260,10 @@ class Cli:
                 result = cls(process=LocalProcess(budgets=budgets), budgets=budgets).understanding(
                     repo=arguments.repo, issue=arguments.issue, as_json=arguments.json
                 )
+            case Subcommand.TUI:
+                result = cls.tui(replacement=OsProcessReplacement())
+            case _:
+                raise ValueError(f"`{arguments.command}` is not a subcommand of the interface")
 
         return result
 
@@ -387,6 +403,8 @@ class Cli:
         reset.add_argument("issue", type=int, help="number of the subissue to reset")
         reset.add_argument("--repo", required=True, help="repo of the issue the subissue belongs to")
 
+        subcommands.add_parser(Subcommand.TUI, help="open the interface that shows the slices, replacing this process")
+
         cls._add_the_orders(subcommands)
 
         cls._add_the_readers(subcommands)
@@ -443,6 +461,16 @@ class Cli:
         understanding.add_argument("issue", type=int, help="number of the subissue whose understanding is shown")
         understanding.add_argument("--repo", required=True, help="repo of the subissue, as `<org>/<repo>`")
         understanding.add_argument("--json", action="store_true", help="print the understanding as a JSON object")
+
+    @classmethod
+    def tui(cls, *, replacement: ProcessReplacement) -> int:
+        try:
+            replacement.replaced_by([cls.TUI_EXECUTABLE])
+        except ExecutableNotFoundError:
+            return cls._reported(
+                f"`{cls.TUI_EXECUTABLE}` is not on the PATH: run `make install-tui` to install it",
+                ExitCode.TUI_NOT_INSTALLED,
+            )
 
     @classmethod
     def explain(cls, *, request: str, budgets: Budgets) -> int:

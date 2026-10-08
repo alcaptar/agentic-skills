@@ -337,6 +337,7 @@ El codigo de salida es el contrato con quien lo invoca:
 | `16` | `understanding`: la subissue no tiene ningun entendimiento publicado, asi que no hay nada que ensenar todavia. La invocacion esta bien escrita y la subissue existe: quien invoca espera y vuelve a preguntar, no corrige nada. Distinto de `4`, donde la invocacion o la subissue estan mal |
 | `17` | `run`: la slice espera una orden tuya -`go` o `review`- tras publicar su entendimiento. La invocacion **termina** en vez de sondear el issue: da la orden y vuelve a lanzar `run`. Reinvocar sin dar ninguna orden termina igual y no vuelve a publicar nada |
 | `18` | `go`, `review` o `retry`: la slice no esta en el estado que esa orden necesita -`go` y `review` fuera de la pausa de alineacion, `retry` sin bloqueo ni aborto-. El motivo sale por `stderr` y no se escribe nada en el issue. Distinto de `4`: la invocacion estaba bien escrita y la subissue se leyo, lo que no cuadra es el estado de la slice |
+| `19` | `tui`: `slice-runner-tui` no esta en el `PATH`, asi que no hay interfaz que abrir. Ejecuta `make install-tui`. Distinto de `4`: la invocacion estaba bien escrita, lo que falta es el ejecutable |
 
 `1` es un veredicto y `2` no lo es: esa es la distincion que hace el codigo de salida y que un booleano
 perderia. Del `5` en adelante la pregunta es otra -¿que hace quien invoca ahora?-, y por eso hay un codigo
