@@ -26,6 +26,7 @@ class ExitCode(IntEnum):
     NO_UNDERSTANDING = 16
     AWAITING_ALIGNMENT = 17
     ORDER_REFUSED = 18
+    TUI_NOT_INSTALLED = 19
 
     @classmethod
     def of(cls, ruling: Ruling) -> ExitCode:

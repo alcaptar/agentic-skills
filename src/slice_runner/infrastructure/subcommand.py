@@ -18,3 +18,4 @@ class Subcommand(StrEnum):
     GO = "go"
     REVIEW = "review"
     RETRY = "retry"
+    TUI = "tui"
