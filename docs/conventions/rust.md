@@ -5,6 +5,10 @@ Rige para todo `.rs` de `tui/`. **No es una vara aparte**: `code-style.md`, `arc
 este fichero solo dice **como se escribe cada regla en Rust** y declara, con su motivo, donde el lenguaje
 obliga a desviarse. Una regla que no aparezca aquí se aplica tal como la escriben esos ficheros.
 
+Lo que miden el compilador y `clippy` falla en `make tui-lint`. Lo que ninguno de los dos ve -los
+comentarios, las rutas relativas en los `use`, una dependencia externa en `domain/` y un proceso lanzado
+que nadie puede matar- lo mide `tests/test_tui_invariants.py` dentro de `make check`.
+
 ## Traducción de las reglas
 
 | Regla | En Rust |
