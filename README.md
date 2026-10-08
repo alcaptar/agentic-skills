@@ -137,7 +137,7 @@ sola al mergear.
   transicion; en el flujo que conduce hoy una slice, el programa etiqueta la subissue en cada
   transicion (ver el diagrama de "El flujo de un cambio"). `deploy-watch` comenta el veredicto en los
   dos flujos. No hay estado local ni ledger: nada que se desincronice o que haya que
-  descartar. El panel de `panel/` tampoco guarda estado: solo lee la salida de `slice-runner follow --json`
+  descartar. La interfaz de `tui/` tampoco guarda estado: solo lee la salida de `slice-runner follow --json`
   y se rehace de cero en cada arranque.
 - **El issue tambien declara la vara.** Sus secciones `## Fuentes de convencion` y `## Controles`
   (descubiertas por los helpers, **confirmadas por una persona**) son lo que fija con que se mide este

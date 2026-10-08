@@ -1,2 +1,0 @@
-status: not running
-socket: /Users/acapdev/.config/herdr/herdr.sock
