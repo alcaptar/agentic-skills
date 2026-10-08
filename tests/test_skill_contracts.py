@@ -192,6 +192,60 @@ def test_the_parent_issue_slice_spec_documents_is_one_the_program_reads_whole() 
     assert parsed.controls.commands, "the documented parent carries no control command the program can read"
 
 
+_WORKSPACE_MARKER_CONTRACT = _ROOT / "contract" / "workspace-marker.json"
+_UUID_PATTERN = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+
+
+def _workspace_marker_contract() -> dict[str, object]:
+    contract: dict[str, object] = json.loads(_read(_WORKSPACE_MARKER_CONTRACT))
+
+    return contract
+
+
+def _workspace_marker_shape() -> re.Pattern[str]:
+    template = _workspace_marker_contract()["marker"]
+    assert isinstance(template, str)
+    assert template.count("<uuid>") == 1, f"the marker template carries no single `<uuid>`: {template}"
+
+    return re.compile("^" + re.escape(template).replace(re.escape("<uuid>"), _UUID_PATTERN) + "$")
+
+
+def _parent_example_without_the_marker() -> str:
+    lines = _spec_example(_PARENT_EXAMPLE).rstrip("\n").split("\n")
+    assert _workspace_marker_shape().match(lines[-1]), "the documented parent does not end with the marker"
+
+    return "\n".join(lines[:-1]) + "\n"
+
+
+def test_every_example_of_the_workspace_marker_contract_has_the_shape_of_its_template() -> None:
+    examples = _workspace_marker_contract()["examples"]
+    assert isinstance(examples, list)
+    assert examples, "the workspace marker contract carries no example"
+
+    shape = _workspace_marker_shape()
+    misfits = [example for example in examples if not (isinstance(example, str) and shape.match(example))]
+
+    assert misfits == [], f"examples that are not the marker the template declares: {misfits}"
+
+
+def test_the_parent_example_slice_spec_documents_ends_with_a_workspace_marker_of_the_contract_shape() -> None:
+    last_line = _spec_example(_PARENT_EXAMPLE).rstrip("\n").split("\n")[-1]
+
+    assert _workspace_marker_shape().match(last_line), f"the documented parent ends with `{last_line}`, not a marker"
+
+
+@pytest.mark.parametrize("repo", [None, "tu-org/infra-alertas"])
+def test_the_workspace_marker_does_not_change_what_the_program_reads_from_the_documented_parent(
+    repo: str | None,
+) -> None:
+    with_marker = ParentBody.parse(_spec_example(_PARENT_EXAMPLE), repo=repo)
+    without_marker = ParentBody.parse(_parent_example_without_the_marker(), repo=repo)
+
+    assert with_marker.intention == without_marker.intention
+    assert with_marker.sources == without_marker.sources
+    assert with_marker.controls == without_marker.controls
+
+
 def test_the_exemption_line_slice_spec_documents_is_read_as_an_exemption_and_never_as_a_command() -> None:
     """`- ninguno: <motivo>` declares that a repo has no controls; it is not a control called `ninguno`.
 
