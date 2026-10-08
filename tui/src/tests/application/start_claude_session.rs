@@ -22,4 +22,13 @@ mod starting_the_claude_session {
             [("SLICE_RUNNER_WORKSPACE".to_string(), UUID.to_string())]
         );
     }
+
+    #[test]
+    fn hands_the_generated_workspace_id_to_the_caller_without_going_through_the_environment() {
+        let mut start = StartClaudeSession::new(FixedWorkspaceIds::always(UUID));
+
+        let launch = start.execute(StartClaudeSessionParams::in_directory(PathBuf::from("/work/repo")));
+
+        assert_eq!(launch.workspace().as_str(), UUID);
+    }
 }

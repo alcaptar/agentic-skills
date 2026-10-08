@@ -30,10 +30,8 @@ impl<I: WorkspaceIds> StartClaudeSession<I> {
             .map(str::to_string)
             .to_vec();
 
-        SessionLaunch::new(
-            argv,
-            params.directory,
-            vec![(Self::WORKSPACE_VARIABLE.to_string(), id.as_str().to_string())],
-        )
+        let environment = vec![(Self::WORKSPACE_VARIABLE.to_string(), id.as_str().to_string())];
+
+        SessionLaunch::new(id, argv, params.directory, environment)
     }
 }

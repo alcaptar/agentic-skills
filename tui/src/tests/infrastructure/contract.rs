@@ -36,6 +36,39 @@ impl LineContract {
     }
 }
 
+pub struct MarkerContract {
+    pub template: String,
+    pub examples: Vec<String>,
+}
+
+impl MarkerContract {
+    pub fn on_disk() -> Self {
+        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("..")
+            .join("contract")
+            .join("workspace-marker.json");
+        let document: Value = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+        let examples = document["examples"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|example| example.as_str().unwrap().to_string())
+            .collect();
+
+        Self {
+            template: document["marker"].as_str().unwrap().to_string(),
+            examples,
+        }
+    }
+
+    pub fn workspace_of(&self, example: &str) -> crate::domain::workspace_id::WorkspaceId {
+        let (opening, closing) = self.template.split_once("<uuid>").unwrap();
+        let uuid = example.strip_prefix(opening).unwrap().strip_suffix(closing).unwrap();
+
+        crate::domain::workspace_id::WorkspaceId::parse(uuid).unwrap()
+    }
+}
+
 mod the_follow_line_contract {
     use crate::infrastructure::follow_line_payload::FollowLinePayload;
     use crate::tests::infrastructure::contract::LineContract;

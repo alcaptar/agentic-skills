@@ -4,6 +4,7 @@ use crate::domain::follow_line::FollowLine;
 use crate::domain::parent::Parent;
 use crate::domain::slice_key::SliceKey;
 use crate::domain::slice_row::SliceRow;
+use crate::domain::workspace_binding::WorkspaceBinding;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FeatureGroup {
@@ -43,6 +44,17 @@ impl SliceBoard {
         }
 
         self
+    }
+
+    pub fn shown_for(&self, repo: &str, binding: WorkspaceBinding) -> Self {
+        Self {
+            rows: self
+                .rows
+                .iter()
+                .filter(|row| binding.admits(row, repo))
+                .cloned()
+                .collect(),
+        }
     }
 
     pub fn row(&self, key: &SliceKey) -> Option<&SliceRow> {

@@ -2,13 +2,14 @@ use std::path::PathBuf;
 
 use crate::domain::pane_size::PaneSize;
 use crate::domain::session_launch::SessionLaunch;
+use crate::domain::workspace_id::WorkspaceId;
 use crate::infrastructure::endless_pty_session::EndlessPtySession;
 
 pub struct Launches;
 
 impl Launches {
     pub fn of(argv: Vec<String>) -> SessionLaunch {
-        SessionLaunch::new(argv, std::env::temp_dir(), Vec::new())
+        SessionLaunch::new(Self::workspace(), argv, std::env::temp_dir(), Vec::new())
     }
 
     pub fn shell(script: &str) -> SessionLaunch {
@@ -17,10 +18,15 @@ impl Launches {
 
     pub fn shell_in(script: &str, directory: PathBuf, environment: Vec<(String, String)>) -> SessionLaunch {
         SessionLaunch::new(
+            Self::workspace(),
             vec!["sh".to_string(), "-c".to_string(), script.to_string()],
             directory,
             environment,
         )
+    }
+
+    fn workspace() -> WorkspaceId {
+        WorkspaceId::parse("0b9a6f0e-6f3c-4a54-9d0e-3b1f6f0c2a11").unwrap()
     }
 
     pub fn size() -> PaneSize {

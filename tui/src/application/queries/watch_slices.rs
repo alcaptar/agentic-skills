@@ -1,6 +1,8 @@
+use crate::application::queries::bind_workspace::WorkspaceState;
 use crate::domain::errors::FollowLineRejected;
 use crate::domain::follow_source::FollowSource;
 use crate::domain::slice_board::SliceBoard;
+use crate::domain::workspace_repo::WorkspaceRepo;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WatchedBoard {
@@ -15,6 +17,18 @@ impl WatchedBoard {
 
     pub fn rejection(&self) -> Option<&FollowLineRejected> {
         self.rejection.as_ref()
+    }
+
+    pub fn shown_for(&self, state: &WorkspaceState) -> Self {
+        let board = match state.repo() {
+            WorkspaceRepo::Known(repo) => self.board.shown_for(repo, state.binding()),
+            WorkspaceRepo::Unknown => SliceBoard::empty(),
+        };
+
+        Self {
+            board,
+            rejection: self.rejection.clone(),
+        }
     }
 
     pub fn into_board(self) -> SliceBoard {
