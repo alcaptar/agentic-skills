@@ -23,6 +23,18 @@
       "step": "run-controls",
       "status": "advancing",
       "cost_usd": 0.3433209
+    },
+    {
+      "version": 1,
+      "ts": "2024-01-01T12:30:00+00:00",
+      "repo": "alcaptar/agentic-skills",
+      "issue": 150,
+      "slice_id": "slice-05",
+      "step": "mount-worktree",
+      "status": "pending",
+      "cost_usd": 0.0,
+      "parent": 140,
+      "name": "follow-speaks-json"
     }
   ]
 }

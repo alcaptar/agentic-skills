@@ -24,3 +24,7 @@ class Event:
     status: EventStatus
     state: RunState
     feature_slice: FeatureSlice | None
+
+    @property
+    def slice_key(self) -> tuple[str, int, str]:
+        return self.repo, self.issue, self.slice_id

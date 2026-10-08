@@ -29,20 +29,16 @@ class FollowEvents:
 
     def execute(self, params: FollowEventsParams) -> FollowEventsResult:
         batch = self._reader.read_since(params.cursor)
-        latest = {self._slice_of(event): event for event in params.snapshot}
+        latest = {event.slice_key: event for event in params.snapshot}
         changes: list[Event] = []
         for event in batch.events:
             if params.repo is not None and event.repo != params.repo:
                 continue
-            if self._differs_from(latest.get(self._slice_of(event)), event):
+            if self._differs_from(latest.get(event.slice_key), event):
                 changes.append(event)
-            latest[self._slice_of(event)] = event
+            latest[event.slice_key] = event
 
         return FollowEventsResult(snapshot=tuple(latest.values()), changes=tuple(changes), cursor=batch.cursor)
-
-    @staticmethod
-    def _slice_of(event: Event) -> tuple[str, int, str]:
-        return event.repo, event.issue, event.slice_id
 
     @staticmethod
     def _differs_from(previous: Event | None, event: Event) -> bool:

@@ -19,3 +19,4 @@ class Subcommand(StrEnum):
     REVIEW = "review"
     RETRY = "retry"
     TUI = "tui"
+    REGISTER = "register"

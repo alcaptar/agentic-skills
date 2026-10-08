@@ -600,6 +600,10 @@ un run anterior no se reutiliza ni se pisa: la invocacion siguiente cierra en
      llamada, junto a `--label estado:pendiente`. Si `gh` responde que esa etiqueta tampoco existe, se
      crea igual que la de estado (`gh label create origen:AS-255 --repo <org>/<repo>`) y se
      reintenta.
+   - Despues de crear la ultima subissue, `slice-runner register <N> --repo <org>/<repo>`: deja en el
+     registro local una fila `pending` por cada subissue abierta, para que el panel de la interfaz
+     muestre la feature antes del primer run. Si falla no se deshace nada ni se repite la creacion: el
+     panel solo queda vacio hasta el primer run.
 6. **Cierra** diciendo el numero/URL del padre, las subissues creadas con su numero, y que se ejecuta
    con `slice-runner run <N> --repo <org>/<repo> --base master`, una invocacion por slice.
 
