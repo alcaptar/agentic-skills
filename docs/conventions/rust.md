@@ -33,7 +33,7 @@ que nadie puede matar- lo mide `tests/test_tui_invariants.py` dentro de `make ch
   decide quien sabe que hacer con el. Lo miden los lints de `tui/Cargo.toml`, y `tui/clippy.toml` los
   permite en tests, donde un pánico **es** el fallo del test.
 - **Nada de `unsafe`.** `unsafe_code = "forbid"` en `tui/Cargo.toml`.
-- **El dominio no depende de `ratatui`, `crossterm` ni `serde`.** Es la traducción de que `domain/` no
+- **El dominio no depende de `ratatui`, `crossterm`, `serde`, `portable_pty`, `vt100` ni `tui_term`.** Es la traducción de que `domain/` no
   conoce a nadie: en Rust las dependencias se ven en el `use`, y un `use ratatui` en `domain/` es el
   mismo fallo que un import de infraestructura en Python.
 
@@ -43,10 +43,12 @@ El tope por llamada de `infrastructure.md` se aplica igual, y `std::process::Com
 adaptador recibe el presupuesto como `Duration` por constructor, sin `Default`, espera con plazo y al
 agotarlo **mata al hijo y descarta lo que hubiera escrito**.
 
-**Un proceso cuya salida no termina por diseño** -un flujo que se sigue mientras la interfaz este
-abierta- es la única excepción, y se declara: se lanza desde un adaptador que lo dice en su nombre, y el
-hijo muere cuando el adaptador se suelta, en su `impl Drop`, también si la interfaz cae por un pánico.
-Lo que no vale es un proceso sin tope lanzado desde cualquier otro sitio.
+**Un proceso sin tope por diseño** es la única excepción, y hay dos, cada una con su motivo: un flujo que
+se sigue mientras la interfaz esta abierta, y una sesión interactiva de `claude` en un pseudoterminal que
+vive mientras la interfaz esta abierta. Se lanza desde un adaptador que lo dice en su nombre, y el hijo
+muere cuando el adaptador se suelta, en su `impl Drop`, también si la interfaz cae por un pánico. El
+lanzamiento con `CommandBuilder::new` exige `.kill()` en el mismo fichero igual que `Command::new`. Lo que
+no vale es un proceso sin tope lanzado desde cualquier otro sitio.
 
 ## Estructura
 
@@ -82,7 +84,7 @@ otro.
 
 - Un `unwrap()`, `expect()` o `panic!` fuera de un test.
 - Un `_` en un `match` sobre un `enum`.
-- `serde`, `ratatui` o `crossterm` en `domain/`.
-- Un `Command` lanzado sin tope fuera del adaptador que declara un flujo que no termina.
+- `serde`, `ratatui`, `crossterm`, `portable_pty`, `vt100` o `tui_term` en `domain/`.
+- Un `Command` o `CommandBuilder` lanzado sin tope fuera de un adaptador que declara un proceso sin tope.
 - Un ejemplo de contrato copiado dentro de `tui/` en vez de leído de `contract/`.
 - Un comentario o un doc comment.

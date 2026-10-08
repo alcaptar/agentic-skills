@@ -17,8 +17,10 @@ class TuiScan:
     )
     COMMENT: ClassVar[re.Pattern[str]] = re.compile(r"//|/\*")
     RELATIVE_PATH: ClassVar[re.Pattern[str]] = re.compile(r"(?<![\w:])(?:super|self)::")
-    OUTER_CRATE: ClassVar[re.Pattern[str]] = re.compile(r"\b(?:ratatui|crossterm|serde\w*)::")
-    LAUNCH: ClassVar[re.Pattern[str]] = re.compile(r"\bCommand::new\b")
+    OUTER_CRATE: ClassVar[re.Pattern[str]] = re.compile(
+        r"\b(?:ratatui|crossterm|serde\w*|portable_pty|vt100|tui_term)::"
+    )
+    LAUNCH: ClassVar[re.Pattern[str]] = re.compile(r"\b(?:Command|CommandBuilder)::new\b")
     KILL: ClassVar[re.Pattern[str]] = re.compile(r"\.kill\(\)")
 
     @classmethod
@@ -106,6 +108,11 @@ class TestTheDomainKnowsNoOuterCrate:
         assert TuiScan.reaches_an_outer_crate("use serde::Deserialize;")
         assert TuiScan.reaches_an_outer_crate("let line = serde_json::from_str(raw);")
 
+    def test_the_pseudoterminal_the_screen_emulator_and_its_widget_trip_the_scan(self) -> None:
+        assert TuiScan.reaches_an_outer_crate("use portable_pty::native_pty_system;")
+        assert TuiScan.reaches_an_outer_crate("use vt100::Parser;")
+        assert TuiScan.reaches_an_outer_crate("use tui_term::widget::PseudoTerminal;")
+
     def test_the_standard_library_and_the_crate_itself_do_not_trip_it(self) -> None:
         assert not TuiScan.reaches_an_outer_crate("use std::collections::BTreeMap;\nuse crate::domain::slice::Slice;")
 
@@ -116,6 +123,12 @@ class TestTheDomainKnowsNoOuterCrate:
 class TestEveryLaunchedProcessCanBeKilled:
     def test_a_launch_with_no_kill_in_the_same_file_trips_the_scan(self) -> None:
         assert TuiScan.launches_without_killing('let out = Command::new("slice-runner").output();')
+
+    def test_a_pseudoterminal_launch_with_no_kill_in_the_same_file_trips_the_scan(self) -> None:
+        assert TuiScan.launches_without_killing('let command = CommandBuilder::new("claude");')
+
+    def test_a_pseudoterminal_launch_whose_file_kills_the_child_does_not_trip_it(self) -> None:
+        assert not TuiScan.launches_without_killing('let command = CommandBuilder::new("claude");\nchild.kill();')
 
     def test_a_launch_whose_file_kills_the_child_does_not_trip_it(self) -> None:
         assert not TuiScan.launches_without_killing('let child = Command::new("slice-runner").spawn();\nchild.kill();')

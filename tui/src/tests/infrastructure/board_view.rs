@@ -20,7 +20,7 @@ impl Screen {
     fn painted(watched: &WatchedBoard, selected: Option<&SliceKey>, detail: Option<&SliceDetail>) -> String {
         let mut terminal = Terminal::new(TestBackend::new(100, 24)).unwrap();
         terminal
-            .draw(|frame| BoardView::render(frame, watched, selected, detail))
+            .draw(|frame| BoardView::render(frame, frame.area(), watched, selected, detail))
             .unwrap();
 
         terminal

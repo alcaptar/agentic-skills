@@ -2,24 +2,30 @@ use std::io;
 use std::process::ExitCode;
 use std::time::Duration;
 
-use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
+use crossterm::event::{self, Event, KeyEvent};
+use ratatui::layout::Rect;
 
+use crate::application::actions::start_claude_session::{StartClaudeSession, StartClaudeSessionParams};
 use crate::application::queries::read_slice_detail::{ReadSliceDetail, SliceDetail};
 use crate::application::queries::watch_slices::WatchSlices;
+use crate::domain::pane_size::PaneSize;
 use crate::domain::slice_board::SliceBoard;
 use crate::domain::slice_key::SliceKey;
 use crate::infrastructure::board_view::BoardView;
 use crate::infrastructure::bounded_understanding_process::BoundedUnderstandingProcess;
+use crate::infrastructure::claude_pane::ClaudePane;
 use crate::infrastructure::endless_follow_process::EndlessFollowProcess;
+use crate::infrastructure::endless_pty_session::EndlessPtySession;
+use crate::infrastructure::key_bytes::KeyBytes;
+use crate::infrastructure::key_routing::{Focus, KeyRouting, Order, Routed};
+use crate::infrastructure::random_workspace_ids::RandomWorkspaceIds;
+use crate::infrastructure::split_screen::SplitScreen;
 use crate::infrastructure::terminal_session::TerminalSession;
 
-#[derive(Clone, Copy)]
-enum Order {
-    Quit,
-    Previous,
-    Next,
-    Open,
-    Close,
+enum Input {
+    Key(KeyEvent),
+    Paste(String),
+    Resized(PaneSize),
     Nothing,
 }
 
@@ -30,15 +36,6 @@ impl Cli {
     const FOLLOW_ARGV: [&'static str; 3] = [Self::PROGRAM, "follow", "--json"];
     const TICK: Duration = Duration::from_millis(100);
     const UNDERSTANDING_BUDGET: Duration = Duration::from_secs(10);
-    const BINDINGS: [(KeyCode, Order); 7] = [
-        (KeyCode::Char('q'), Order::Quit),
-        (KeyCode::Up, Order::Previous),
-        (KeyCode::Char('k'), Order::Previous),
-        (KeyCode::Down, Order::Next),
-        (KeyCode::Char('j'), Order::Next),
-        (KeyCode::Enter, Order::Open),
-        (KeyCode::Esc, Order::Close),
-    ];
 
     pub fn main() -> ExitCode {
         match Self::run() {
@@ -54,10 +51,17 @@ impl Cli {
         let source = EndlessFollowProcess::spawn(&Self::FOLLOW_ARGV).map_err(|rejected| rejected.to_string())?;
         let mut watch = WatchSlices::new(source);
         let mut session = TerminalSession::open().map_err(|error| error.to_string())?;
+        let window = session.terminal().size().map_err(|error| error.to_string())?;
+        let directory = std::env::current_dir().map_err(|error| error.to_string())?;
+        let launch =
+            StartClaudeSession::new(RandomWorkspaceIds).execute(StartClaudeSessionParams::in_directory(directory));
+        let mut claude = EndlessPtySession::spawn(&launch, SplitScreen::pane_size(Rect::from(window)))
+            .map_err(|rejected| rejected.to_string())?;
         let mut read = ReadSliceDetail::new(BoundedUnderstandingProcess::new(
             vec![Self::PROGRAM.to_string()],
             Self::UNDERSTANDING_BUDGET,
         ));
+        let mut focus = Focus::Claude;
         let mut board = SliceBoard::empty();
         let mut selected: Option<SliceKey> = None;
         let mut detail: Option<SliceDetail> = None;
@@ -65,25 +69,40 @@ impl Cli {
             let watched = watch.execute(board);
             session
                 .terminal()
-                .draw(|frame| BoardView::render(frame, &watched, selected.as_ref(), detail.as_ref()))
+                .draw(|frame| {
+                    let (claude_area, board_area) = SplitScreen::areas(frame.area());
+                    ClaudePane::render(frame, claude_area, &mut claude, focus == Focus::Claude);
+                    BoardView::render(frame, board_area, &watched, selected.as_ref(), detail.as_ref());
+                })
                 .map_err(|error| error.to_string())?;
-            match Self::next_order().map_err(|error| error.to_string())? {
-                Order::Quit => return Ok(()),
-                Order::Previous => {
-                    let target = watched.board().before(selected.as_ref());
-                    Self::moved(&mut selected, target, &mut detail);
-                }
-                Order::Next => {
-                    let target = watched.board().after(selected.as_ref());
-                    Self::moved(&mut selected, target, &mut detail);
-                }
-                Order::Open => {
-                    if let Some(key) = selected.clone() {
-                        detail = Some(read.execute(key));
+            match Self::next_input().map_err(|error| error.to_string())? {
+                Input::Resized(size) => claude.resize(size),
+                Input::Paste(text) => {
+                    if focus == Focus::Claude {
+                        claude.write(&claude.with_screen(|screen| KeyBytes::of_paste(&text, screen)));
                     }
                 }
-                Order::Close => detail = None,
-                Order::Nothing => {}
+                Input::Key(key) => match claude.with_screen(|screen| KeyRouting::route(focus, key, screen)) {
+                    Routed::ToClaude(bytes) => claude.write(&bytes),
+                    Routed::ToggleFocus => focus = focus.toggled(),
+                    Routed::Board(Order::Quit) => return Ok(()),
+                    Routed::Board(Order::Previous) => {
+                        let target = watched.board().before(selected.as_ref());
+                        Self::moved(&mut selected, target, &mut detail);
+                    }
+                    Routed::Board(Order::Next) => {
+                        let target = watched.board().after(selected.as_ref());
+                        Self::moved(&mut selected, target, &mut detail);
+                    }
+                    Routed::Board(Order::Open) => {
+                        if let Some(key) = selected.clone() {
+                            detail = Some(read.execute(key));
+                        }
+                    }
+                    Routed::Board(Order::Close) => detail = None,
+                    Routed::Ignored | Routed::Board(Order::Nothing) => {}
+                },
+                Input::Nothing => {}
             }
             board = watched.into_board();
         }
@@ -96,30 +115,16 @@ impl Cli {
         }
     }
 
-    fn next_order() -> io::Result<Order> {
+    fn next_input() -> io::Result<Input> {
         if !event::poll(Self::TICK)? {
-            return Ok(Order::Nothing);
+            return Ok(Input::Nothing);
         }
 
         Ok(match event::read()? {
-            Event::Key(key) => Self::order_of(key),
-            Event::FocusGained | Event::FocusLost | Event::Mouse(_) | Event::Paste(_) | Event::Resize(_, _) => {
-                Order::Nothing
-            }
+            Event::Key(key) => Input::Key(key),
+            Event::Paste(text) => Input::Paste(text),
+            Event::Resize(columns, rows) => Input::Resized(SplitScreen::pane_size(Rect::new(0, 0, columns, rows))),
+            Event::FocusGained | Event::FocusLost | Event::Mouse(_) => Input::Nothing,
         })
-    }
-
-    fn order_of(key: KeyEvent) -> Order {
-        if key.kind != KeyEventKind::Press {
-            return Order::Nothing;
-        }
-        if key.code == KeyCode::Char('c') && key.modifiers.contains(KeyModifiers::CONTROL) {
-            return Order::Quit;
-        }
-
-        Self::BINDINGS
-            .iter()
-            .find(|(code, _)| *code == key.code)
-            .map_or(Order::Nothing, |(_, order)| *order)
     }
 }
