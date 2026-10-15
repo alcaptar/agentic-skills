@@ -93,6 +93,8 @@ class JudgeInvocation(HarnessInvocation):
                     ),
                 ),
                 *CountedLines.of("lo que el implementador declaro dejar fuera", review.debt),
+                *CountedLines.of("decisiones de diseno", review.decisions),
+                *CountedLines.of("decisiones de diseno que el implementador declaro no seguir", review.deviations),
             ]
         )
 

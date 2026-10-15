@@ -35,12 +35,20 @@ class SlicePullRequest(PullRequestWriter):
     def _conventional_title(cls, subissue: SubIssue) -> str:
         return f"{cls.COMMIT_TYPE}({subissue.slice_id.name}): {subissue.summary}"
 
-    def body(self, subissue: SubIssue, *, debt: tuple[str, ...], findings: tuple[Finding, ...]) -> str:
+    def body(
+        self,
+        subissue: SubIssue,
+        *,
+        debt: tuple[str, ...],
+        findings: tuple[Finding, ...],
+        deviations: tuple[str, ...],
+    ) -> str:
         return PullRequestBody(
             intention=subissue.intention,
             criteria=self._criteria_confirmation(subissue),
             debt=debt,
             findings=findings,
+            deviations=deviations,
             signal=subissue.signal,
             subissue=subissue.number,
         ).rendered()

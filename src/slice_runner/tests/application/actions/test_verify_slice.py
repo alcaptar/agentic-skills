@@ -180,6 +180,24 @@ class TestVerifySlice:
 
         assert self._reviewed(verifier).debt == debt
 
+    def test_the_design_decisions_travel_to_the_judge_too(self, action: VerifySlice, verifier: Mock) -> None:
+        decisions = SliceUnderReviewMother.one_decision_of_the_parent_and_one_of_the_subissue()
+        params = replace(_PARAMS, decisions=decisions)
+
+        action.execute(params)
+
+        assert self._reviewed(verifier).decisions == decisions
+
+    def test_the_deviations_the_implementer_declared_travel_to_the_judge_too(
+        self, action: VerifySlice, verifier: Mock
+    ) -> None:
+        deviations = SliceUnderReviewMother.two_declared_deviations()
+        params = replace(_PARAMS, deviations=deviations)
+
+        action.execute(params)
+
+        assert self._reviewed(verifier).deviations == deviations
+
     def test_the_verification_comes_back_without_being_reinterpreted(self, action: VerifySlice, verifier: Mock) -> None:
         expected = VerificationMother.failing_after_a_denied_read()
         verifier.verify.return_value = expected

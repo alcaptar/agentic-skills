@@ -63,6 +63,8 @@ class VerifySliceParamsMother:
             checklist=SliceUnderReviewMother.checklist(),
             prior_findings=(),
             debt=(),
+            decisions=(),
+            deviations=(),
             compares_with_the_last_verification=False,
         )
 
@@ -86,6 +88,8 @@ class SliceUnderReviewMother:
         replaces: str | None = None,
         prior_findings: tuple[Finding, ...] | None = None,
         debt: tuple[str, ...] | None = None,
+        decisions: tuple[str, ...] | None = None,
+        deviations: tuple[str, ...] | None = None,
     ) -> SliceUnderReview:
         return SliceUnderReview(
             slice_id=slice_id or cls.SLICE_ID,
@@ -102,6 +106,8 @@ class SliceUnderReviewMother:
             checklist=cls.checklist(),
             prior_findings=prior_findings if prior_findings is not None else (),
             debt=debt if debt is not None else (),
+            decisions=decisions if decisions is not None else (),
+            deviations=deviations if deviations is not None else (),
         )
 
     @staticmethod
@@ -131,6 +137,20 @@ class SliceUnderReviewMother:
     @staticmethod
     def two_declared_gaps() -> tuple[str, ...]:
         return ("el cableado del subcomando queda para otra slice", "la migracion de datos historicos")
+
+    @staticmethod
+    def one_decision_of_the_parent_and_one_of_the_subissue() -> tuple[str, ...]:
+        return (
+            "el padre decide el reparto de responsabilidades entre las capas",
+            "la subissue decide que el campo se llama deviations",
+        )
+
+    @staticmethod
+    def two_declared_deviations() -> tuple[str, ...]:
+        return (
+            "el puerto no admite la firma decidida porque ya la consume otro adaptador",
+            "la excepcion hereda de OSError y no de ValueError porque el subproceso la lanza",
+        )
 
 
 class JudgeMother:

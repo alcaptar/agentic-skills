@@ -16,4 +16,11 @@ class PullRequestWriter(ABC):
     def commit_message(self, subissue: SubIssue, *, round: int) -> str: ...
 
     @abstractmethod
-    def body(self, subissue: SubIssue, *, debt: tuple[str, ...], findings: tuple[Finding, ...]) -> str: ...
+    def body(
+        self,
+        subissue: SubIssue,
+        *,
+        debt: tuple[str, ...],
+        findings: tuple[Finding, ...],
+        deviations: tuple[str, ...],
+    ) -> str: ...

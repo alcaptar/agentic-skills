@@ -39,6 +39,8 @@ class VerifySliceParams:
     checklist: tuple[ChecklistEntry, ...]
     prior_findings: tuple[Finding, ...]
     debt: tuple[str, ...]
+    decisions: tuple[str, ...]
+    deviations: tuple[str, ...]
     compares_with_the_last_verification: bool
 
 
@@ -77,6 +79,8 @@ class VerifySlice:
                 checklist=params.checklist,
                 prior_findings=params.prior_findings,
                 debt=params.debt,
+                decisions=params.decisions,
+                deviations=params.deviations,
             ),
         )
         self._corpus.record(

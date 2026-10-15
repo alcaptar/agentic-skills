@@ -19,6 +19,7 @@ class TestPullRequestBody:
             criteria=_CRITERIA,
             debt=("el cableado del subcomando queda para la slice-09",),
             findings=(),
+            deviations=(),
             signal=_SIGNAL,
             subissue=46,
         )
@@ -26,7 +27,7 @@ class TestPullRequestBody:
     @staticmethod
     def _without_debt() -> PullRequestBody:
         return PullRequestBody(
-            intention=_INTENTION, criteria=_CRITERIA, debt=(), findings=(), signal=_SIGNAL, subissue=46
+            intention=_INTENTION, criteria=_CRITERIA, debt=(), findings=(), deviations=(), signal=_SIGNAL, subissue=46
         )
 
     def test_the_body_a_person_reads_carries_the_why_the_criteria_the_debt_and_the_signal(self) -> None:
@@ -75,6 +76,7 @@ class TestPullRequestBody:
             criteria=_CRITERIA,
             debt=(),
             findings=(accepted,),
+            deviations=(),
             signal=_SIGNAL,
             subissue=46,
         ).rendered()
@@ -90,6 +92,7 @@ class TestPullRequestBody:
             criteria=_CRITERIA,
             debt=("el cableado del subcomando queda para la slice-09",),
             findings=(accepted,),
+            deviations=(),
             signal=_SIGNAL,
             subissue=46,
         ).rendered()
@@ -109,7 +112,51 @@ class TestPullRequestBody:
     ) -> None:
         accepted = FindingMother.low_severity()
         body = PullRequestBody(
-            intention=_INTENTION, criteria=_CRITERIA, debt=(), findings=(accepted,), signal=_SIGNAL, subissue=46
+            intention=_INTENTION,
+            criteria=_CRITERIA,
+            debt=(),
+            findings=(accepted,),
+            deviations=(),
+            signal=_SIGNAL,
+            subissue=46,
         ).rendered()
 
         assert "## Deuda aceptada" in body
+
+    @staticmethod
+    def _with_deviations(deviations: tuple[str, ...], *, debt: tuple[str, ...] = ()) -> PullRequestBody:
+        return PullRequestBody(
+            intention=_INTENTION,
+            criteria=_CRITERIA,
+            debt=debt,
+            findings=(),
+            deviations=deviations,
+            signal=_SIGNAL,
+            subissue=46,
+        )
+
+    def test_two_declared_deviations_fill_their_own_section_one_bullet_each_before_the_signal(self) -> None:
+        body = self._with_deviations(
+            (
+                "el puerto no admite la firma decidida porque ya la consume otro adaptador",
+                "la excepcion hereda de OSError y no de ValueError porque el subproceso la lanza",
+            )
+        ).rendered()
+
+        assert (
+            "## Decisiones de diseno no seguidas\n"
+            "- el puerto no admite la firma decidida porque ya la consume otro adaptador\n"
+            "- la excepcion hereda de OSError y no de ValueError porque el subproceso la lanza\n"
+            "\n"
+            "## Senal a comprobar tras el despliegue"
+        ) in body
+
+    def test_the_deviations_section_comes_after_the_accepted_debt_section(self) -> None:
+        body = self._with_deviations(
+            ("la excepcion hereda de OSError",), debt=("el cableado del subcomando queda para la slice-09",)
+        ).rendered()
+
+        assert body.index("## Deuda aceptada") < body.index("## Decisiones de diseno no seguidas")
+
+    def test_a_slice_that_deviated_from_nothing_leaves_the_section_out_instead_of_writing_none(self) -> None:
+        assert "## Decisiones de diseno no seguidas" not in self._with_deviations(()).rendered()

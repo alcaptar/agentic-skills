@@ -12,4 +12,5 @@ if TYPE_CHECKING:
 class Implementation:
     paths: tuple[ReportedPath, ...]
     left_out: tuple[str, ...]
+    deviations: tuple[str, ...]
     spend: HarnessSpend

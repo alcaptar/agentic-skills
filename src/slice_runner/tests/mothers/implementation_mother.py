@@ -11,6 +11,7 @@ class ImplementationMother:
         return Implementation(
             paths=(ReportedPathMother.production_file(), ReportedPathMother.test_file()),
             left_out=(),
+            deviations=(),
             spend=HarnessSpendMother.of_the_implementer_call(),
         )
 
@@ -19,5 +20,18 @@ class ImplementationMother:
         return Implementation(
             paths=(ReportedPathMother.production_file(), ReportedPathMother.test_file()),
             left_out=("el cableado del subcomando queda para otra slice",),
+            deviations=(),
+            spend=HarnessSpendMother.of_the_implementer_call(),
+        )
+
+    @staticmethod
+    def with_two_deviations() -> Implementation:
+        return Implementation(
+            paths=(ReportedPathMother.production_file(), ReportedPathMother.test_file()),
+            left_out=(),
+            deviations=(
+                "el puerto no admite la firma decidida porque ya la consume otro adaptador",
+                "la excepcion hereda de OSError y no de ValueError porque el subproceso la lanza",
+            ),
             spend=HarnessSpendMother.of_the_implementer_call(),
         )

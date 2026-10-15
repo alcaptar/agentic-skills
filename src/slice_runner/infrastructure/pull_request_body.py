@@ -10,6 +10,7 @@ _INTENTION_HEADING = "## Intencion"
 _INFERRED_INTENTION_HEADING = "## Intencion (inferida del issue, no declarada)"
 _CRITERIA_HEADING = "## Criterios de aceptacion cumplidos"
 _DEBT_HEADING = "## Deuda aceptada"
+_DEVIATIONS_HEADING = "## Decisiones de diseno no seguidas"
 _PARDONED_FINDINGS_LABEL = "Hallazgos que el juez dejo pasar sin corregir:"
 _SIGNAL_HEADING = "## Senal a comprobar tras el despliegue"
 
@@ -20,6 +21,7 @@ class PullRequestBody:
     criteria: tuple[str, ...]
     debt: tuple[str, ...]
     findings: tuple[Finding, ...]
+    deviations: tuple[str, ...]
     signal: str
     subissue: int
 
@@ -28,6 +30,7 @@ class PullRequestBody:
             self._section(self._intention_heading, self.intention),
             self._section(_CRITERIA_HEADING, self._bullets(self.criteria)),
             *([self._section(_DEBT_HEADING, self._debt_section_body())] if self.debt or self.findings else []),
+            *([self._section(_DEVIATIONS_HEADING, self._bullets(self.deviations))] if self.deviations else []),
             self._section(_SIGNAL_HEADING, self.signal),
             f"Closes #{self.subissue}",
         ]

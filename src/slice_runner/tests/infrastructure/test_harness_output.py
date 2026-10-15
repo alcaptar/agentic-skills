@@ -247,7 +247,11 @@ class TestAStreamedEnvelope:
     def test_the_structured_output_is_the_one_carried_by_the_final_line_and_not_a_turn_in_between(self) -> None:
         envelope = HarnessOutput.from_process(self._streamed())
 
-        assert envelope.structured_output == {"paths": [{"path": "hello.py", "kind": "production"}], "left_out": []}
+        assert envelope.structured_output == {
+            "paths": [{"path": "hello.py", "kind": "production"}],
+            "left_out": [],
+            "deviations": [],
+        }
 
     def test_a_denial_with_a_key_we_do_not_know_is_read_because_it_travels_in_the_same_foreign_envelope(
         self,

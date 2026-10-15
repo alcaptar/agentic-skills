@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from slice_runner.domain.issue_label import IssueLabel
     from slice_runner.domain.issue_state import IssueState
+    from slice_runner.domain.parent_issue import ParentIssue
     from slice_runner.domain.run import Run
     from slice_runner.domain.slice_identity import SliceIdentity
 
@@ -30,6 +31,9 @@ class SubIssue:
     @property
     def branch(self) -> str:
         return self.slice_id.branch
+
+    def decisions_under(self, parent: ParentIssue) -> tuple[str, ...]:
+        return (*parent.decisions, *self.decisions)
 
     @property
     def signal_is_exempt(self) -> bool:

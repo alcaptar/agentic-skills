@@ -40,7 +40,12 @@ class ClaudeImplementer(Implementer):
             self._reject_denials(envelope)
             report = ImplementationReportPayload.from_dict(envelope.structured())
 
-        return Implementation(paths=report.to_domain(), left_out=tuple(report.left_out), spend=envelope.to_domain())
+        return Implementation(
+            paths=report.to_domain(),
+            left_out=tuple(report.left_out),
+            deviations=tuple(report.deviations),
+            spend=envelope.to_domain(),
+        )
 
     @staticmethod
     def _reject_denials(envelope: HarnessOutput) -> None:

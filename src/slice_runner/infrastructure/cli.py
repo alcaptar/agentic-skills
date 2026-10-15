@@ -1033,6 +1033,8 @@ class Cli:
             checklist=(),
             prior_findings=(),
             debt=(),
+            decisions=(),
+            deviations=(),
             compares_with_the_last_verification=False,
         )
 

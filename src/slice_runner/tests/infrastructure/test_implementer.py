@@ -115,8 +115,9 @@ class TestHowTheImplementerIsInvoked:
                     "type": "array",
                 },
                 "left_out": {"items": {"type": "string"}, "type": "array"},
+                "deviations": {"items": {"type": "string"}, "type": "array"},
             },
-            "required": ["paths", "left_out"],
+            "required": ["paths", "left_out", "deviations"],
             "type": "object",
         }
 
@@ -387,6 +388,11 @@ class TestWhatTheBriefSaysAboutDesignDecisions:
         assert "Son **vinculantes**" in self._said()
         assert "no se reabre por tu cuenta" in self._said()
 
+    def test_it_tells_the_implementer_to_decide_and_declare_in_deviations_when_the_real_code_prevents_a_decision(
+        self,
+    ) -> None:
+        assert "si el codigo real impide cumplir una decision, decides tu y lo declaras en `deviations`" in self._said()
+
     def test_it_no_longer_talks_about_the_agreed_understanding(self) -> None:
         assert "Entendimiento acordado" not in self._said()
 
@@ -456,6 +462,7 @@ class TestTheReportOfARecordedCall:
                 "el cableado del subcomando de metrics queda para otra slice",
                 "no se anadio retry al cliente de gh",
             ],
+            "deviations": [],
         }
         process = RecordedProcess(HarnessEnvelopeMother.carrying(left_out, recorded=_RECORDED))
 
@@ -464,6 +471,31 @@ class TestTheReportOfARecordedCall:
         assert report.left_out == (
             "el cableado del subcomando de metrics queda para otra slice",
             "no se anadio retry al cliente de gh",
+        )
+
+    def test_a_report_with_no_deviations_carries_an_empty_tuple(self) -> None:
+        process = RecordedProcess(HarnessEnvelopeMother.recorded(_RECORDED))
+
+        report = OneRound.implemented(process)
+
+        assert report.deviations == ()
+
+    def test_the_deviations_travel_whole_one_entry_per_decision_not_followed(self) -> None:
+        deviating: dict[str, object] = {
+            "paths": [{"path": "hello.py", "kind": "production"}, {"path": "test_hello.py", "kind": "test"}],
+            "left_out": [],
+            "deviations": [
+                "el puerto no admite la firma decidida porque ya la consume otro adaptador",
+                "la excepcion hereda de OSError y no de ValueError porque el subproceso la lanza",
+            ],
+        }
+        process = RecordedProcess(HarnessEnvelopeMother.carrying(deviating, recorded=_RECORDED))
+
+        report = OneRound.implemented(process)
+
+        assert report.deviations == (
+            "el puerto no admite la firma decidida porque ya la consume otro adaptador",
+            "la excepcion hereda de OSError y no de ValueError porque el subproceso la lanza",
         )
 
     def test_what_the_harness_spent_on_the_call_travels_with_the_report(self) -> None:
@@ -512,6 +544,16 @@ class TestWhatTheImplementerIsAllowedToReturn:
         with pytest.raises(InvalidImplementationReportError, match="left_out"):
             OneRound.implemented(process)
 
+    def test_a_report_without_deviations_is_rejected_instead_of_read_as_having_none(self) -> None:
+        without_deviations: dict[str, object] = {
+            "paths": [{"path": "hello.py", "kind": "production"}],
+            "left_out": [],
+        }
+        process = RecordedProcess(HarnessEnvelopeMother.carrying(without_deviations, recorded=_RECORDED))
+
+        with pytest.raises(InvalidImplementationReportError, match="deviations"):
+            OneRound.implemented(process)
+
     def test_a_rejected_report_still_reports_what_the_call_spent(self) -> None:
         incomplete: dict[str, object] = {"paths": [{"path": "hello.py", "kind": "production"}]}
         process = RecordedProcess(HarnessEnvelopeMother.carrying(incomplete, recorded=_RECORDED))
@@ -539,6 +581,7 @@ class TestWhatTheImplementerIsAllowedToReturn:
         invented_kind: dict[str, object] = {
             "paths": [{"path": "hello.py", "kind": "documentation"}],
             "left_out": [],
+            "deviations": [],
         }
         process = RecordedProcess(HarnessEnvelopeMother.carrying(invented_kind, recorded=_RECORDED))
 
