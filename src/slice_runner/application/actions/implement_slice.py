@@ -29,7 +29,6 @@ class ImplementSliceParams:
     findings: tuple[Finding, ...] = ()
     control_logs: tuple[Path, ...] = ()
     hygiene_refusal: str = ""
-    understanding: str = ""
     retry_instruction: str = ""
     requested_changes: tuple[RequestedChange, ...] = ()
     previous_call_died: bool = False
@@ -70,7 +69,7 @@ class ImplementSlice:
             findings=params.findings,
             control_logs=params.control_logs,
             hygiene_refusal=params.hygiene_refusal,
-            understanding=params.understanding,
+            decisions=(*params.parent.decisions, *params.subissue.decisions),
             retry_instruction=params.retry_instruction,
             requested_changes=params.requested_changes,
             dirty_worktree_files=self._dirty_worktree_files(params),

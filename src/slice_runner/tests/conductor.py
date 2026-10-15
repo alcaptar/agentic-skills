@@ -123,7 +123,6 @@ class Conductor:
         self.deliver = self._doubling(DeliverSlice, execute=self.PULL_REQUEST)
         self.close = self._doubling(CloseParent, execute=None)
         self.repository: Mock = create_autospec(RunRepository, spec_set=True, instance=True)
-        self.repository.read_understanding.return_value = self.UNDERSTANDING
         self.branches: Mock = create_autospec(Branches, spec_set=True, instance=True)
         self.branches.catch_up.return_value = BranchCatchUpMother.caught_up()
         self.controls: Mock = create_autospec(ControlRunner, spec_set=True, instance=True)

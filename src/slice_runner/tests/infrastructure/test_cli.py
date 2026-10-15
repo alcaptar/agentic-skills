@@ -75,7 +75,6 @@ from slice_runner.tests.mothers.judge_output_mother import HarnessEnvelopeMother
 from slice_runner.tests.mothers.repo_mother import RepoMother
 from slice_runner.tests.mothers.run_mother import RunMother
 from slice_runner.tests.mothers.transition_request_mother import TransitionRequestMother
-from slice_runner.tests.mothers.understanding_report_mother import UnderstandingReportMother
 from slice_runner.tests.run_invocation import RunInvocation
 
 if TYPE_CHECKING:
@@ -88,7 +87,7 @@ _SLICE = "slice-01"
 _IMPLEMENTER_PAYLOAD = "implementer-two-paths"
 
 _TABLE: list[tuple[Step, Outcome, dict[str, int], tuple[Step, RunState, int]]] = [
-    (Step.MOUNT_WORKTREE, Outcome.DONE, {}, (Step.UNDERSTAND, RunState.OPEN, 0)),
+    (Step.MOUNT_WORKTREE, Outcome.DONE, {}, (Step.IMPLEMENT, RunState.OPEN, 0)),
     (Step.MOUNT_WORKTREE, Outcome.OVER_BUDGET, {}, (Step.MOUNT_WORKTREE, RunState.ABORTED_BUDGET, 0)),
     (Step.MOUNT_WORKTREE, Outcome.CONFLICTING, {}, (Step.MOUNT_WORKTREE, RunState.BLOCKED_CI_CONFLICT, 0)),
     (Step.MOUNT_WORKTREE, Outcome.WORKTREE_TAKEN, {}, (Step.MOUNT_WORKTREE, RunState.BLOCKED_WORKTREE, 0)),
@@ -2031,23 +2030,16 @@ class TestWhenTheRunStaysOpen:
                 Answer(to=("git", "fetch", "origin")),
                 Answer(to=("git", "rev-list", "--count"), stdout="0\n"),
                 Answer(to=("gh", "pr", "list"), stdout=GhConversationMother.no_open_pull_request()),
-                Answer(
-                    to=(UnderstandingInvocation.MODEL, "stream-json"),
-                    stdout=json.dumps(
-                        HarnessEnvelopeMother.carrying(UnderstandingReportMother.valid(), recorded=_IMPLEMENTER_PAYLOAD)
-                    ),
-                ),
-                Answer(to=("gh", "issue", "view", "--json", "comments"), stdout=json.dumps({"comments": []})),
+                Answer(to=(ImplementerInvocation.EXECUTABLE, "bypassPermissions"), stdout="not an envelope"),
             ),
         )
 
     def test_the_branch_and_the_worktree_of_the_slice_are_cut_from_the_base_the_invocation_named(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+        self, tmp_path: Path
     ) -> None:
-        monkeypatch.setattr("time.sleep", lambda seconds: None)
         invocation = self._never_run()
 
-        invocation.conduct(logs=tmp_path / "logs", budgets=Budgets(person_wait_seconds=0))
+        invocation.conduct(logs=tmp_path / "logs")
 
         assert invocation.process.ran(
             "git",
@@ -2061,22 +2053,15 @@ class TestWhenTheRunStaysOpen:
             f"origin/{GhConversationMother.BASE}",
         )
 
-    def test_a_slice_that_was_never_run_publishes_its_understanding_and_ends_the_invocation_without_polling(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    def test_a_slice_that_was_never_run_goes_from_mounting_to_the_implementer_without_asking_for_an_understanding(
+        self, tmp_path: Path
     ) -> None:
-        slept: list[int] = []
-        monkeypatch.setattr("time.sleep", slept.append)
         invocation = self._never_run()
 
-        code = invocation.conduct(logs=tmp_path / "logs")
+        invocation.conduct(logs=tmp_path / "logs")
 
-        assert code == ExitCode.AWAITING_ALIGNMENT
-        assert slept == []
-        assert json.loads(capsys.readouterr().out) == {
-            "halt": "awaiting-alignment",
-            "state": "open",
-            "step": "understand",
-        }
+        assert invocation.process.invoked(ImplementerInvocation.EXECUTABLE, "bypassPermissions")
+        assert not invocation.process.invoked(UnderstandingInvocation.MODEL, "stream-json")
 
     def test_a_precheck_that_is_not_clear_exits_with_its_own_code_and_names_which_one_stopped_it(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]

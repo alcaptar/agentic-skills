@@ -29,11 +29,9 @@ declaralo en `left_out` en vez de construirlo por tu cuenta.
 que patron: aplicalo tal como lo declara la linea. Si crees que hace falta otro patron, no lo
 cambies por tu cuenta: implementa el que la linea pide y declaralo en `left_out`.
 
-Si la slice paso por una alineacion, cierra el prompt **"## Entendimiento acordado"**: el plan que
-una persona reviso y aprobo antes de que empezaras, con sus correcciones ya dentro. No es un guion
-que transcribir ni te releva de pensar, pero **lo que decidio una persona ahi no se reabre por tu
-cuenta**: si crees que se equivoca, hazlo como pide y dilo en `left_out`. Donde contradiga a las
-convenciones del repo o a los criterios de aceptacion, ganan ellos.
+Si la spec fijo decisiones de diseno, el prompt lleva la seccion **"## Decisiones de diseno"**: el diseno
+que decidio una persona, primero las del issue padre y despues las de la subissue. Son **vinculantes**:
+lo que decidio una persona ahi no se reabre por tu cuenta.
 
 Si la slice se reabrio tras un bloqueo o un aborto por presupuesto, el prompt cierra con **"## Instruccion
 de reintento"**: lo que una persona escribio para autorizar el reintento, y gana a lo que hicieras antes

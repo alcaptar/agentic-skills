@@ -167,19 +167,15 @@ class TestImplementSlice:
 
         assert self._assigned(implementer).hygiene_refusal == "src/leftover.py (not-declared)"
 
-    def test_what_the_person_agreed_to_in_the_alignment_is_assigned_so_the_round_is_ruled_by_it(
+    def test_the_decisions_of_the_parent_come_before_those_of_the_subissue_in_the_assignment(
         self, action: ImplementSlice, implementer: Mock
     ) -> None:
-        action.execute(replace(self._params(), understanding="el contador vive en Run, no en el conductor"))
+        parent = replace(ParentIssueMother.with_sources_and_controls(), decisions=("padre uno", "padre dos"))
+        subissue = replace(SubIssueMother.pending(), decisions=("subissue uno", "subissue dos"))
 
-        assert self._assigned(implementer).understanding == "el contador vive en Run, no en el conductor"
+        action.execute(replace(self._params(subissue=subissue), parent=parent))
 
-    def test_a_slice_conducted_without_an_alignment_assigns_no_understanding_at_all(
-        self, action: ImplementSlice, implementer: Mock
-    ) -> None:
-        action.execute(self._params())
-
-        assert self._assigned(implementer).understanding == ""
+        assert self._assigned(implementer).decisions == ("padre uno", "padre dos", "subissue uno", "subissue dos")
 
     def test_a_previous_call_that_died_asks_the_reader_and_assigns_the_files_it_found_dirty(
         self, action: ImplementSlice, implementer: Mock, reader: Mock

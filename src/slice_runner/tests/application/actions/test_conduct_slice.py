@@ -48,7 +48,6 @@ from slice_runner.tests.mothers.rejection_mother import RejectionMother
 from slice_runner.tests.mothers.run_mother import RunMother
 from slice_runner.tests.mothers.select_slice_result_mother import SelectSliceResultMother
 from slice_runner.tests.mothers.sub_issue_mother import SubIssueMother
-from slice_runner.tests.mothers.understanding_mother import UnderstandingMother
 from slice_runner.tests.mothers.verdict_mother import FindingMother, VerdictMother
 from slice_runner.tests.mothers.verification_mother import SliceDiffMother, VerificationMother
 
@@ -68,151 +67,31 @@ class TestConductSliceStartingANewRun:
     def _conductor() -> Conductor:
         return Conductor(chosen=SelectSliceResultMother.about_to_start())
 
-    def test_a_call_that_leaves_no_usable_understanding_is_discarded_and_retried_within_budget(self) -> None:
-        conductor = self._conductor()
-        conductor.understanding.write.side_effect = [
-            RejectionMother.invalid_understanding_report(),
-            UnderstandingMother.of_the_chosen_slice(),
-        ]
-        conductor.seed_spend(
-            session=HarnessCallMother.SESSION_OF_THE_DISCARDED_UNDERSTANDING,
-            spend=HarnessSpendMother.of_a_call_that_cost_nothing(),
-        )
-        conductor.seed_spend(
-            session=HarnessCallMother.SESSION_OF_THE_IMPLEMENTER, spend=HarnessSpendMother.of_the_implementer_call()
-        )
-        conductor.seed_spend(
-            session=HarnessCallMother.SESSION_OF_THE_JUDGE, spend=HarnessSpendMother.of_the_judge_call()
-        )
-
-        conductor.conduct_after_the_person_agrees()
-
-        assert conductor.understanding.write.call_count == 2
-        assert conductor.repository.pause_for_alignment.call_count == 1
-        recorded = conductor.closed
-        assert recorded.run.understand_discards == 1
-        assert recorded.spend == HarnessSpend.summing(
-            (
-                HarnessSpendMother.of_a_call_that_cost_nothing(),
-                HarnessSpendMother.of_the_implementer_call(),
-                HarnessSpendMother.of_the_judge_call(),
-            )
-        )
-
-    def test_a_discard_of_the_understanding_in_the_invocation_that_paused_appears_in_the_row_of_the_one_that_closes(
+    def test_a_new_run_goes_from_mounting_the_worktree_to_implementing_without_asking_for_an_understanding(
         self,
     ) -> None:
         conductor = self._conductor()
-        conductor.understanding.write.side_effect = [
-            RejectionMother.invalid_understanding_report(),
-            UnderstandingMother.of_the_chosen_slice(),
-        ]
-
-        conductor.conduct_after_the_person_agrees()
-
-        paused = conductor.repository.write_run.call_args_list[-1].kwargs["run"]
-        assert paused.discarded_call is not None
-        assert paused.discarded_call.step is Step.UNDERSTAND
-        assert paused.discarded_call.cause is DiscardCause.FAILED_CALL
-        recorded = conductor.closed
-        assert recorded.run.discarded_call == paused.discarded_call
-
-    def test_a_call_whose_envelope_has_no_structured_output_is_discarded_and_retried_within_budget(self) -> None:
-        conductor = self._conductor()
-        conductor.understanding.write.side_effect = [
-            RejectionMother.envelope_without_structured_output(),
-            UnderstandingMother.of_the_chosen_slice(),
-        ]
-        conductor.seed_spend(
-            session=HarnessCallMother.SESSION_OF_THE_DISCARDED_UNDERSTANDING,
-            spend=HarnessSpendMother.of_the_understanding_call(),
-        )
-        conductor.seed_spend(
-            session=HarnessCallMother.SESSION_OF_THE_IMPLEMENTER, spend=HarnessSpendMother.of_the_implementer_call()
-        )
-        conductor.seed_spend(
-            session=HarnessCallMother.SESSION_OF_THE_JUDGE, spend=HarnessSpendMother.of_the_judge_call()
-        )
-
-        conductor.conduct_after_the_person_agrees()
-
-        assert conductor.understanding.write.call_count == 2
-        recorded = conductor.closed
-        assert recorded.run.understand_discards == 1
-        assert recorded.spend == HarnessSpend.summing(
-            (
-                HarnessSpendMother.of_the_understanding_call(),
-                HarnessSpendMother.of_the_implementer_call(),
-                HarnessSpendMother.of_the_judge_call(),
-            )
-        )
-
-    def test_a_discard_whose_message_is_longer_than_the_reason_limit_is_recorded_with_it_truncated(self) -> None:
-        conductor = Conductor(chosen=SelectSliceResultMother.about_to_start(), budgets=Budgets(slice_cost_usd=0.03))
-        conductor.understanding.write.side_effect = [
-            RejectionMother.invalid_understanding_report_with_an_overlong_message(),
-            RejectionMother.invalid_understanding_report_with_an_overlong_message(),
-        ]
 
         conductor.conduct()
 
-        assert conductor.closed.run.discarded_call is not None
-        assert conductor.closed.run.discarded_call.reason == "a" * 200
-
-    def test_a_call_whose_envelope_has_no_structured_output_twice_over_closes_the_run_naming_that_cause(self) -> None:
-        conductor = Conductor(chosen=SelectSliceResultMother.about_to_start(), budgets=Budgets(slice_cost_usd=0.03))
-        conductor.understanding.write.side_effect = [
-            RejectionMother.envelope_without_structured_output(),
-            RejectionMother.envelope_without_structured_output(),
-        ]
-
-        conductor.conduct()
-
-        recorded = conductor.closed
-        assert recorded.run.discarded_call is not None
-        assert recorded.run.discarded_call.step is Step.UNDERSTAND
-        assert recorded.run.discarded_call.cause is DiscardCause.NO_STRUCTURED_OUTPUT
-
-    def test_discard_after_discard_of_the_understanding_closes_the_run_and_writes_its_label(self) -> None:
-        conductor = Conductor(chosen=SelectSliceResultMother.about_to_start(), budgets=Budgets(slice_cost_usd=0.03))
-        conductor.understanding.write.side_effect = [
-            RejectionMother.invalid_understanding_report(),
-            RejectionMother.invalid_understanding_report(),
-        ]
-
-        result = conductor.conduct()
-
-        assert conductor.understanding.write.call_count == 2
-        assert result.state is RunState.ABORTED_BUDGET
-        conductor.repository.write_label.assert_any_call(
-            repo=Conductor.REPO, issue=_SUBISSUE, remove=IssueLabel.AWAITING_ALIGNMENT, add=IssueLabel.ABORTED_BUDGET
-        )
-        recorded = conductor.metrics.record.call_args.args[0]
-        assert recorded.state is RunState.ABORTED_BUDGET
-        assert recorded.run.discarded_call is not None
-        assert recorded.run.discarded_call.step is Step.UNDERSTAND
-        assert recorded.run.discarded_call.cause is DiscardCause.FAILED_CALL
+        assert conductor.understanding.write.call_count == 0
+        assert conductor.repository.write_understanding.call_count == 0
         assert conductor.repository.pause_for_alignment.call_count == 0
+        assert IssueLabel.AWAITING_ALIGNMENT not in [
+            call.kwargs.get("add") for call in conductor.repository.write_label.call_args_list
+        ]
+        assert conductor.implement.execute.call_count == 1
+        assert conductor.worktrees.add_new_branch.called
+        persisted_steps = [call.kwargs["run"].step for call in conductor.repository.write_run.call_args_list]
+        assert Step.UNDERSTAND not in persisted_steps
 
-    def test_the_invocation_that_asks_for_alignment_ends_instead_of_writing_any_code(self) -> None:
+    def test_a_new_run_does_not_wait_for_a_person_before_implementing(self) -> None:
         conductor = self._conductor()
 
         result = conductor.conduct()
 
-        assert conductor.implement.execute.call_count == 0
-        assert result.halt is Halt.AWAITING_ALIGNMENT
+        assert result.halt is not Halt.AWAITING_ALIGNMENT
         assert conductor.clock.sleep.call_count == 0
-
-    def test_the_run_pauses_on_the_in_progress_label_it_wrote_when_selected_not_the_one_the_subissue_carried(
-        self,
-    ) -> None:
-        conductor = self._conductor()
-
-        conductor.conduct()
-
-        conductor.repository.pause_for_alignment.assert_called_once_with(
-            repo=Conductor.REPO, issue=_SUBISSUE, remove=IssueLabel.IN_PROGRESS
-        )
 
     def test_a_subissue_with_no_label_yet_is_marked_in_progress_without_asking_gh_to_remove_one_that_is_not_there(
         self,
@@ -224,19 +103,16 @@ class TestConductSliceStartingANewRun:
         conductor.repository.write_label.assert_any_call(
             repo=Conductor.REPO, issue=_SUBISSUE, remove=None, add=IssueLabel.IN_PROGRESS
         )
-        conductor.repository.pause_for_alignment.assert_called_once_with(
-            repo=Conductor.REPO, issue=_SUBISSUE, remove=IssueLabel.IN_PROGRESS
-        )
 
-    def test_selecting_a_slice_marks_the_subissue_in_progress_before_the_understanding_call(self) -> None:
+    def test_selecting_a_slice_marks_the_subissue_in_progress_before_the_implementer_is_asked_to_start(self) -> None:
         conductor = self._conductor()
         manager = Mock()
         manager.attach_mock(conductor.repository.write_label, "write_label")
-        manager.attach_mock(conductor.understanding.write, "understand")
+        manager.attach_mock(conductor.implement.execute, "implement")
 
         conductor.conduct()
 
-        assert [call[0] for call in manager.mock_calls][:2] == ["write_label", "understand"]
+        assert [call[0] for call in manager.mock_calls][:2] == ["write_label", "implement"]
         conductor.repository.write_label.assert_any_call(
             repo=Conductor.REPO, issue=_SUBISSUE, remove=IssueLabel.PENDING, add=IssueLabel.IN_PROGRESS
         )
@@ -248,8 +124,10 @@ class TestConductSliceStartingANewRun:
 
         conductor.conduct()
 
-        assert conductor.repository.write_label.call_count == 0
-        assert conductor.understanding.write.call_count == 1
+        assert IssueLabel.IN_PROGRESS not in [
+            call.kwargs.get("add") for call in conductor.repository.write_label.call_args_list
+        ]
+        assert conductor.implement.execute.call_count == 1
 
     def test_the_precheck_is_asked_about_the_declared_base_before_anything_is_mounted(self) -> None:
         conductor = self._conductor()
@@ -258,46 +136,6 @@ class TestConductSliceStartingANewRun:
 
         asked = conductor.prechecks.execute.call_args.args[0]
         assert asked.base == Conductor.BASE
-
-    def test_publishing_the_understanding_persists_only_the_spend_because_the_response_is_what_decides_to_start(
-        self,
-    ) -> None:
-        conductor = self._conductor()
-
-        conductor.conduct()
-
-        conductor.repository.write_run.assert_called_once_with(
-            repo=Conductor.REPO,
-            issue=_SUBISSUE,
-            run=Run(step=Step.UNDERSTAND, spend=HarnessSpendMother.of_the_understanding_call()),
-        )
-
-    def test_a_pause_that_never_lands_still_persists_the_spend_already_paid(self) -> None:
-        conductor = self._conductor()
-        conductor.repository.pause_for_alignment.side_effect = OSError("gh: rate limited")
-
-        with pytest.raises(OSError, match="rate limited"):
-            conductor.conduct()
-
-        conductor.repository.write_run.assert_called_once_with(
-            repo=Conductor.REPO,
-            issue=_SUBISSUE,
-            run=Run(step=Step.UNDERSTAND, spend=HarnessSpendMother.of_the_understanding_call()),
-        )
-
-    def test_an_understanding_whose_comment_never_lands_still_persists_the_spend_already_paid(self) -> None:
-        conductor = self._conductor()
-        conductor.repository.write_understanding.side_effect = OSError("gh: rate limited")
-
-        with pytest.raises(OSError, match="rate limited"):
-            conductor.conduct()
-
-        conductor.repository.write_run.assert_called_once_with(
-            repo=Conductor.REPO,
-            issue=_SUBISSUE,
-            run=Run(step=Step.UNDERSTAND, spend=HarnessSpendMother.of_the_understanding_call()),
-        )
-        assert conductor.repository.pause_for_alignment.call_count == 0
 
     def test_a_precheck_that_is_not_clear_ends_the_invocation_without_mounting_or_writing_anything(self) -> None:
         conductor = self._conductor()
@@ -440,13 +278,15 @@ class TestConductSliceWithTheUnderstandingAgreed:
         assert conductor.implement.execute.call_count == 1
         assert conductor.clock.sleep.call_count == 0
 
-    def test_the_implementer_receives_the_understanding_that_was_agreed_in_the_issue(self) -> None:
+    def test_the_implementer_of_a_resumed_run_receives_the_decisions_of_the_parent_and_the_subissue(self) -> None:
         conductor = self._conductor()
 
         conductor.conduct()
 
-        conductor.repository.read_understanding.assert_called_once_with(repo=Conductor.REPO, issue=_SUBISSUE)
-        assert conductor.implement.execute.call_args.args[0].understanding == Conductor.UNDERSTANDING
+        implemented = conductor.implement.execute.call_args.args[0]
+        assert implemented.parent.decisions + implemented.subissue.decisions == (
+            ParentIssueMother.with_sources_and_controls().decisions + SubIssueMother.pending().decisions
+        )
 
     def test_the_run_persisted_when_it_starts_implementing_keeps_the_agreement(self) -> None:
         conductor = self._conductor()
@@ -561,7 +401,12 @@ class TestConductSliceRedraftingAfterACorrection:
 class TestConductSliceClosingAMergeMissedBetweenInvocations:
     @staticmethod
     def _conductor(*, dangling: tuple[SubIssue, ...], models: RoleModels | None = None) -> Conductor:
-        return Conductor(chosen=SelectSliceResultMother.about_to_start(dangling=dangling), models=models)
+        conductor = Conductor(chosen=SelectSliceResultMother.about_to_start(dangling=dangling), models=models)
+        conductor.check_sources.execute.return_value = PrecheckResult(
+            outcome=PrecheckOutcome.UNREADABLE_SOURCE, reason="stops the run once the dangling slices are reconciled"
+        )
+
+        return conductor
 
     def test_a_dangling_subissue_whose_pull_request_merged_writes_its_durable_row_as_merged(self) -> None:
         dangling = SubIssueMother.dangling()
@@ -2981,7 +2826,7 @@ class TestConductSliceResumingMountsTheWorktreeFirst:
         )
         assert conductor.implement.execute.call_count == 0
 
-    def test_a_run_closed_on_the_worktree_before_it_ever_started_resumes_by_reading_the_sources_and_understanding(
+    def test_a_run_closed_on_the_worktree_before_it_ever_started_resumes_by_reading_the_sources_and_implementing(
         self,
     ) -> None:
         conductor = Conductor(chosen=SelectSliceResultMother.resumed_at(Run(step=Step.MOUNT_WORKTREE)))
@@ -2989,4 +2834,5 @@ class TestConductSliceResumingMountsTheWorktreeFirst:
         conductor.conduct()
 
         assert conductor.check_sources.execute.call_count == 1
-        assert conductor.understanding.write.call_count == 1
+        assert conductor.understanding.write.call_count == 0
+        assert conductor.implement.execute.call_count == 1

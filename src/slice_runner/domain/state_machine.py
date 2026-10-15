@@ -129,7 +129,7 @@ class StateMachine:
 
     def _after_mounting_the_worktree(self, run: Run, outcome: Outcome) -> Transition:
         if outcome is Outcome.DONE:
-            return self._moving_to(run, Step.UNDERSTAND)
+            return self._moving_to(run, Step.IMPLEMENT)
 
         self._impossible(run, outcome)
 
