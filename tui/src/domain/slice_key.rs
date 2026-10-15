@@ -17,12 +17,4 @@ impl SliceKey {
     pub fn of(line: &FollowLine) -> Self {
         Self::new(line.repo(), line.issue())
     }
-
-    pub fn repo(&self) -> &str {
-        &self.repo
-    }
-
-    pub fn issue(&self) -> u64 {
-        self.issue
-    }
 }

@@ -18,7 +18,6 @@ use crate::domain::slice_board::SliceBoard;
 use crate::domain::slice_key::SliceKey;
 use crate::infrastructure::board_view::BoardView;
 use crate::infrastructure::bounded_gh_process::BoundedGhProcess;
-use crate::infrastructure::bounded_understanding_process::BoundedUnderstandingProcess;
 use crate::infrastructure::claude_config_root::ClaudeConfigRoot;
 use crate::infrastructure::claude_pane::ClaudePane;
 use crate::infrastructure::config_dir_session_transcripts::ConfigDirSessionTranscripts;
@@ -52,7 +51,6 @@ impl Cli {
     const PROGRAM: &'static str = "slice-runner";
     const FOLLOW_ARGV: [&'static str; 3] = [Self::PROGRAM, "follow", "--json"];
     const TICK: Duration = Duration::from_millis(100);
-    const UNDERSTANDING_BUDGET: Duration = Duration::from_secs(10);
     const GH_PROGRAM: &'static str = "gh";
     const GH_BUDGET: Duration = Duration::from_secs(10);
     const BINDING_INTERVAL: Duration = Duration::from_secs(5);
@@ -122,10 +120,6 @@ impl Cli {
             None => BindWorkspace::new(gh, SystemClock, cadence, launch.workspace().clone()),
         };
         let mut binding = ThreadedWorkspaceBinding::start(bind, Self::BINDING_INTERVAL);
-        let mut read = ReadSliceDetail::new(BoundedUnderstandingProcess::new(
-            vec![Self::PROGRAM.to_string()],
-            Self::UNDERSTANDING_BUDGET,
-        ));
         let mut focus = Focus::Claude;
         let mut board = SliceBoard::empty();
         let mut selected: Option<SliceKey> = None;
@@ -167,7 +161,7 @@ impl Cli {
                     }
                     Routed::Board(Order::Open) => {
                         if let Some(key) = selected.clone() {
-                            detail = Some(read.execute(key));
+                            detail = Some(ReadSliceDetail::execute(key));
                         }
                     }
                     Routed::Board(Order::Close) => detail = None,

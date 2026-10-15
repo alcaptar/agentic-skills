@@ -21,12 +21,12 @@ impl BoardView {
         selected: Option<&SliceKey>,
         detail: Option<&SliceDetail>,
     ) {
-        let opened = detail.and_then(|detail| watched.board().row(detail.key()).map(|row| (row, detail)));
+        let opened = detail.and_then(|detail| watched.board().row(detail.key()));
         let board_area = match opened {
-            Some((row, detail)) => {
+            Some(row) => {
                 let [board_area, detail_area] =
                     Layout::vertical([Constraint::Min(0), Constraint::Percentage(50)]).areas(area);
-                DetailView::render(frame, detail_area, row, detail);
+                DetailView::render(frame, detail_area, row);
                 board_area
             }
             None => area,

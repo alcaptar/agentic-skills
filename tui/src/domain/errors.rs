@@ -21,27 +21,6 @@ impl fmt::Display for FollowLineRejected {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum UnderstandingUnread {
-    TimedOut { budget: Duration },
-    CommandFailed { reason: String },
-    NotJson { output: String },
-    WrongValue { key: String, reason: String },
-}
-
-impl fmt::Display for UnderstandingUnread {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::TimedOut { budget } => {
-                write!(formatter, "slice-runner understanding did not finish within {budget:?}")
-            }
-            Self::CommandFailed { reason } => write!(formatter, "slice-runner understanding failed: {reason}"),
-            Self::NotJson { output } => write!(formatter, "understanding is not a JSON object: {output}"),
-            Self::WrongValue { key, reason } => write!(formatter, "wrong value for `{key}`: {reason}"),
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WorkspaceIdRejected {
     pub text: String,
 }

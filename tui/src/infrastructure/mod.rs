@@ -1,6 +1,5 @@
 pub mod board_view;
 pub mod bounded_gh_process;
-pub mod bounded_understanding_process;
 pub mod claude_config_root;
 pub mod claude_pane;
 pub mod cli;
@@ -19,5 +18,4 @@ pub mod split_screen;
 pub mod system_clock;
 pub mod terminal_session;
 pub mod threaded_workspace_binding;
-pub mod understanding_line_payload;
 pub mod workspace_header;
