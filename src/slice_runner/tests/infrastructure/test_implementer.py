@@ -375,6 +375,22 @@ class TestWhatTheBriefSaysAboutReplaces:
         assert "no lo cambies por tu cuenta: implementa el que la linea pide y declaralo en `left_out`" in self._said()
 
 
+class TestWhatTheBriefSaysAboutDesignDecisions:
+    @staticmethod
+    def _said() -> str:
+        return " ".join(SliceImplementerBrief.TEXT.split())
+
+    def test_it_names_the_section_that_carries_the_decisions(self) -> None:
+        assert '**"## Decisiones de diseno"**' in self._said()
+
+    def test_it_says_the_decisions_are_binding_and_are_not_reopened_on_the_implementers_own(self) -> None:
+        assert "Son **vinculantes**" in self._said()
+        assert "no se reabre por tu cuenta" in self._said()
+
+    def test_it_no_longer_talks_about_the_agreed_understanding(self) -> None:
+        assert "Entendimiento acordado" not in self._said()
+
+
 class TestThePendingReviewsThatTravelWithTheBrief(Calling):
     @classmethod
     def _sent(cls, assignment: Assignment) -> str:
