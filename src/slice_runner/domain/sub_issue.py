@@ -20,6 +20,7 @@ class SubIssue:
     repo: str | None
     intention: str
     criteria: tuple[str, ...]
+    decisions: tuple[str, ...]
     signal: str
     excludes: str
     replaces: str

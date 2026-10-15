@@ -34,7 +34,7 @@ class Prechecks:
         if not base_resolves_on_remote:
             return PrecheckOutcome.BASE_NOT_ON_REMOTE
 
-        return cls._of_the_ground(parent=parent, ground=ground)
+        return cls._of_the_ground(subissue=subissue, parent=parent, ground=ground)
 
     @staticmethod
     def of_the_subissue(subissue: SubIssue) -> PrecheckOutcome:
@@ -46,13 +46,15 @@ class Prechecks:
         return PrecheckOutcome.CLEAR
 
     @staticmethod
-    def _of_the_ground(*, parent: ParentIssue, ground: GroundSignals) -> PrecheckOutcome:
+    def _of_the_ground(*, subissue: SubIssue, parent: ParentIssue, ground: GroundSignals) -> PrecheckOutcome:
         if ground.open_pull_request is not None:
             return PrecheckOutcome.PULL_REQUEST_ALREADY_OPEN
         if not parent.sources:
             return PrecheckOutcome.MISSING_SOURCES
         if not parent.controls.declared:
             return PrecheckOutcome.MISSING_CONTROLS
+        if not subissue.decisions or not parent.decisions:
+            return PrecheckOutcome.MISSING_DECISIONS
 
         return PrecheckOutcome.CLEAR
 

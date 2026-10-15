@@ -16,6 +16,8 @@ _CONTROLS_EXEMPTION = "ninguno"
 _INTENTION_HEADING = re.compile(r"^\s*##\s+intenci[oó]n\s*$", re.IGNORECASE)
 _PRIOR_ART_HEADING = re.compile(r"^\s*##\s+lo\s+que\s+ya\s+existe\s*$", re.IGNORECASE)
 _SOURCES_HEADING = re.compile(r"^\s*##\s+fuentes\s+de\s+convenci[oó]n\s*$", re.IGNORECASE)
+_DECISIONS_HEADING = re.compile(r"^\s*##\s+decisiones\s*$", re.IGNORECASE)
+_DECISION_ITEM = re.compile(r"^\s*-\s*(.+?)\s*$")
 _CONTROLS_HEADING = re.compile(r"^\s*##\s+controles\s*$", re.IGNORECASE)
 _H2 = re.compile(r"^\s*##\s+")
 _SUBHEADING = re.compile(r"^\s*###\s+(.+?)\s*$")
@@ -27,6 +29,7 @@ _CONTROL_LINE = re.compile(r"^\s*-\s*([\w-]+)\s*:\s*(.+?)\s*$")
 class ParsedParentBody:
     intention: str
     prior_art: str
+    decisions: tuple[str, ...]
     sources: tuple[Source, ...]
     controls: Controls
 
@@ -37,6 +40,7 @@ class ParentBody:
         return ParsedParentBody(
             intention=cls._section_text(body, _INTENTION_HEADING),
             prior_art=cls._section_text(body, _PRIOR_ART_HEADING),
+            decisions=cls._decisions(body),
             sources=cls._sources(body, repo),
             controls=cls._controls(body, repo),
         )
@@ -55,6 +59,12 @@ class ParentBody:
                 collected.append(line)
 
         return "\n".join(collected).strip()
+
+    @classmethod
+    def _decisions(cls, body: str) -> tuple[str, ...]:
+        items = (_DECISION_ITEM.match(line) for line in cls._section_text(body, _DECISIONS_HEADING).splitlines())
+
+        return tuple(item.group(1) for item in items if item)
 
     @classmethod
     def _sources(cls, body: str, repo: str | None) -> tuple[Source, ...]:

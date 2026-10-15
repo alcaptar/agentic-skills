@@ -133,7 +133,7 @@ parent and twelve subissues, a deviation without its location is one the person 
 Nothing else in the tree states it, so the anchors travel with the sentence.
 """
 
-_SUBISSUE_LINES = frozenset({"REPO", "INTENCION", "ACEPTACION", "SENAL", "EXCLUYE", "SUSTITUYE"})
+_SUBISSUE_LINES = frozenset({"REPO", "INTENCION", "DECISION", "ACEPTACION", "SENAL", "EXCLUYE", "SUSTITUYE"})
 """The six labelled lines a subissue body carries, written down instead of derived from the example.
 
 `REPO:`, `SENAL:`, `EXCLUYE:` and `SUSTITUYE:` all have a consumer in the program now, read by
@@ -190,6 +190,7 @@ def test_the_parent_issue_slice_spec_documents_is_one_the_program_reads_whole() 
     assert parsed.intention, "the documented parent carries no `## Intencion` the program can read"
     assert parsed.sources, "the documented parent carries no source the program can read"
     assert parsed.controls.commands, "the documented parent carries no control command the program can read"
+    assert parsed.decisions, "the documented parent carries no `## Decisiones` line the program can read"
 
 
 _WORKSPACE_MARKER_CONTRACT = _ROOT / "contract" / "workspace-marker.json"
@@ -244,6 +245,7 @@ def test_the_workspace_marker_does_not_change_what_the_program_reads_from_the_do
     assert with_marker.intention == without_marker.intention
     assert with_marker.sources == without_marker.sources
     assert with_marker.controls == without_marker.controls
+    assert with_marker.decisions == without_marker.decisions
 
 
 def test_the_exemption_line_slice_spec_documents_is_read_as_an_exemption_and_never_as_a_command() -> None:
@@ -313,6 +315,7 @@ def test_the_subissue_slice_spec_documents_is_read_by_the_program_as_the_slice_i
     assert children[0].repo, "the documented subissue carries no target repo the program can read"
     assert children[0].intention, "the documented subissue carries no `INTENCION:` the program can read"
     assert children[0].criteria, "the documented subissue carries no `ACEPTACION:` the program can read"
+    assert children[0].decisions, "the documented subissue carries no `DECISION:` the program can read"
     assert children[0].signal, "the documented subissue carries no `SENAL:` the program can read"
     assert children[0].excludes, "the documented subissue carries no `EXCLUYE:` the program can read"
     assert children[0].replaces, "the documented subissue carries no `SUSTITUYE:` the program can read"
