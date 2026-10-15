@@ -1065,6 +1065,39 @@ class TestConductSliceOnTheHappyPath:
 
         assert conductor.verify.execute.call_args.args[0].debt == ImplementationMother.with_debt().left_out
 
+    def test_the_pull_request_body_is_asked_for_with_the_deviations_the_implementer_declared(self) -> None:
+        conductor = self._conductor()
+        conductor.implement.execute.return_value = ImplementationMother.with_two_deviations()
+
+        conductor.conduct()
+
+        assert (
+            conductor.pull_request.body.call_args.kwargs["deviations"]
+            == ImplementationMother.with_two_deviations().deviations
+        )
+
+    def test_the_judge_gets_the_deviations_the_implementer_declared_this_invocation(self) -> None:
+        conductor = self._conductor()
+        conductor.implement.execute.return_value = ImplementationMother.with_two_deviations()
+
+        conductor.conduct()
+
+        assert (
+            conductor.verify.execute.call_args.args[0].deviations
+            == ImplementationMother.with_two_deviations().deviations
+        )
+
+    def test_the_judge_gets_the_decisions_of_the_parent_followed_by_those_of_the_subissue(self) -> None:
+        conductor = self._conductor()
+
+        conductor.conduct()
+
+        asked = conductor.verify.execute.call_args.args[0]
+        assert asked.decisions == (
+            *ParentIssueMother.with_sources_and_controls().decisions,
+            *SubIssueMother.pending().decisions,
+        )
+
     def test_the_pull_request_it_just_opened_is_the_one_it_asks_the_ci_and_the_merge_about(self) -> None:
         conductor = self._conductor()
 

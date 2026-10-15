@@ -26,3 +26,5 @@ class SliceUnderReview:
     checklist: tuple[ChecklistEntry, ...]
     prior_findings: tuple[Finding, ...]
     debt: tuple[str, ...]
+    decisions: tuple[str, ...]
+    deviations: tuple[str, ...]

@@ -69,7 +69,7 @@ class ImplementSlice:
             findings=params.findings,
             control_logs=params.control_logs,
             hygiene_refusal=params.hygiene_refusal,
-            decisions=(*params.parent.decisions, *params.subissue.decisions),
+            decisions=params.subissue.decisions_under(params.parent),
             retry_instruction=params.retry_instruction,
             requested_changes=params.requested_changes,
             dirty_worktree_files=self._dirty_worktree_files(params),

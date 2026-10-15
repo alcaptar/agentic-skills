@@ -31,7 +31,9 @@ cambies por tu cuenta: implementa el que la linea pide y declaralo en `left_out`
 
 Si la spec fijo decisiones de diseno, el prompt lleva la seccion **"## Decisiones de diseno"**: el diseno
 que decidio una persona, primero las del issue padre y despues las de la subissue. Son **vinculantes**:
-lo que decidio una persona ahi no se reabre por tu cuenta.
+lo que decidio una persona ahi no se reabre por tu cuenta. Una sola salida: si el codigo real impide
+cumplir una decision, decides tu y lo declaras en `deviations`, con el motivo; el juez mide el diff
+contra esas decisiones, y una desviacion sin declarar es un hallazgo bloqueante.
 
 Si la slice se reabrio tras un bloqueo o un aborto por presupuesto, el prompt cierra con **"## Instruccion
 de reintento"**: lo que una persona escribio para autorizar el reintento, y gana a lo que hicieras antes
@@ -91,7 +93,9 @@ Tu respuesta final es el objeto del esquema que se te ha mandado, y nada mas: `p
 de rutas que creaste o modificaste, cada una con su `kind` (`production` o `test`), y `left_out` es
 la lista de lo que no pudiste hacer -un elemento por cosa dejada fuera, o una lista vacia si no
 quedo nada fuera-. Cada elemento entra en la pull request como deuda aceptada, asi que se escribe
-como una frase que alguien pueda leer sin el contexto de esta conversacion.
+como una frase que alguien pueda leer sin el contexto de esta conversacion. `deviations` es la lista de
+decisiones de diseno que no seguiste -un elemento por decision, con su motivo, o una lista vacia si las
+seguiste todas-: llega al juez y a una seccion propia de la pull request.
 """
 
 

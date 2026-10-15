@@ -223,6 +223,44 @@ class TestWhatTravelsOnStandardInput:
 
         assert "- lo que el implementador declaro dejar fuera (0):\n" in text
 
+    def test_a_decision_of_the_parent_and_one_of_the_subissue_both_reach_the_judge_in_that_order(self) -> None:
+        review = SliceUnderReviewMother.of_the_slice(
+            decisions=SliceUnderReviewMother.one_decision_of_the_parent_and_one_of_the_subissue()
+        )
+
+        text = JudgeInvocation(judge=_JUDGE, review=review, reader=_READER).text
+
+        assert (
+            "- decisiones de diseno (2):\n"
+            "  - el padre decide el reparto de responsabilidades entre las capas\n"
+            "  - la subissue decide que el campo se llama deviations\n"
+        ) in text
+
+    def test_no_decisions_is_distinguishable_from_a_missing_input_by_the_zero_count(self) -> None:
+        review = SliceUnderReviewMother.of_the_slice(decisions=())
+
+        text = JudgeInvocation(judge=_JUDGE, review=review, reader=_READER).text
+
+        assert "- decisiones de diseno (0):\n" in text
+
+    def test_two_declared_deviations_are_distinguishable_entries_in_the_prompt(self) -> None:
+        review = SliceUnderReviewMother.of_the_slice(deviations=SliceUnderReviewMother.two_declared_deviations())
+
+        text = JudgeInvocation(judge=_JUDGE, review=review, reader=_READER).text
+
+        assert (
+            "- decisiones de diseno que el implementador declaro no seguir (2):\n"
+            "  - el puerto no admite la firma decidida porque ya la consume otro adaptador\n"
+            "  - la excepcion hereda de OSError y no de ValueError porque el subproceso la lanza\n"
+        ) in text
+
+    def test_no_declared_deviations_is_distinguishable_from_a_missing_input_by_the_zero_count(self) -> None:
+        review = SliceUnderReviewMother.of_the_slice(deviations=())
+
+        text = JudgeInvocation(judge=_JUDGE, review=review, reader=_READER).text
+
+        assert "- decisiones de diseno que el implementador declaro no seguir (0):\n" in text
+
     def test_the_prompt_does_not_also_travel_in_the_argv(self) -> None:
         invocation = JudgeInvocation(
             judge=JudgeMother.reading_the_repo_and_its_yardstick(),

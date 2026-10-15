@@ -80,6 +80,15 @@ El programa te pasa, en el prompt de invocacion:
   de una omision sin explicar -las dos llegan igual, como algo que falta en el diff-. Declararlo **no**
   convierte el hueco en conforme ni exime a la slice de ningun criterio de aceptacion, la misma polaridad
   que ya fija el `EXCLUYE` con "prohibicion, no permiso".
+- **Las decisiones de diseno** que una persona fijo antes de trocear la feature, primero las del issue
+  padre y despues las de la subissue, en "Datos del run". Son la vara del item 10: lo que decidio una
+  persona ahi no lo reabre el implementador por su cuenta.
+- **Las desviaciones que el implementador declaro** (`deviations` en su informe): las decisiones de
+  diseno que no siguio porque el codigo real se lo impedia, cada una con su motivo. Viajan siempre en
+  "Datos del run" y pueden llegar como una lista con `(0)` entradas: igual que lo que dejo fuera, vacio
+  no dice que no declarase ninguna, porque una verificacion que arranca sin haber pasado por una
+  implementacion de esta invocacion -una slice reanudada que va directa a verificar, o una verificacion
+  sin issue- las deja vacias aunque el implementador las declarase en una invocacion anterior.
 
 **La lista de hallazgos de la ronda anterior vacia no es lo mismo que un insumo que no llego.** A
 diferencia de los siete campos del parrafo siguiente, aqui el vacio significa lo contrario: no hay nada
@@ -253,6 +262,24 @@ Recorrela **entera** y reporta item a item. No la amplies con criterios propios 
    `detail`: la regla "un defecto, un hallazgo" manda, porque el recuento por severidad alimenta las
    metricas del loop.
 
+10. **Decisiones de diseno: el diff se mide contra lo que decidio la persona.** Contrasta el diff con
+    cada decision de "Datos del run". Un diff que se aparta de una decision de diseno sin que el
+    implementador la haya declarado en `deviations` es un hallazgo de **severity high**: la regla se
+    reporta como `decisiones`, citando la decision y el cambio que se aparta de ella.
+
+    Una desviacion declarada **no bloquea**. Quien implementa tiene que poder decir que el codigo real le
+    impedia cumplir una decision, y ese aviso llega a la pull request para que lo lea quien decide el
+    merge. No la reportes como hallazgo por el solo hecho de existir. Si lo que declaro como desviacion no
+    es lo que el diff hace, o el motivo no se sostiene leyendo el codigo, eso si es un hallazgo.
+
+    **Una lista de decisiones vacia no deja este item en conforme**: se reporta como sin veredicto por
+    falta de dato, igual que cualquier insumo que no ha llegado.
+
+    **Una lista de desviaciones vacia no prueba que no se declarase ninguna.** Si el diff se aparta de
+    una decision y `deviations` llega vacio en una verificacion que no pasa por una implementacion de esta
+    invocacion, no lo reportes como apartamiento no declarado: reporta ese item como sin veredicto por
+    falta de dato, y di que la desviacion pudo declararse en una invocacion anterior.
+
 ## Hallazgos de la ronda anterior
 
 Si la lista que recibiste no esta vacia, pronunciate sobre **cada uno** de sus hallazgos antes de
@@ -319,7 +346,7 @@ bloque de codigo que lo envuelva. El orquestador lo consume como dato.
 
 `rule` es el nombre corto del item de la rubrica que se incumple (`convenciones`, `rollout`,
 `boundaries`, `cobertura-capa`, `conformidad-ac`, `manipulacion-tests`, `fixture-theater`,
-`test-desiderata`, `observabilidad`). Con `ruling: PASS` y ningun hallazgo, `findings` es una lista
+`test-desiderata`, `observabilidad`, `decisiones`). Con `ruling: PASS` y ningun hallazgo, `findings` es una lista
 vacia. `prior_rulings` es una lista vacia cuando "hallazgos de la ronda anterior" tambien lo es.
 """
 

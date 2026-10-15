@@ -218,6 +218,16 @@ class TestImplementSlice:
             subissue.slice_id.canonical_id,
         )
 
+    def test_the_deviations_the_implementer_declares_never_reach_the_ledger(
+        self, action: ImplementSlice, implementer: Mock, debt_ledger: Mock
+    ) -> None:
+        implementer.implement.return_value = ImplementationMother.with_two_deviations()
+
+        action.execute(self._params())
+
+        recorded = debt_ledger.record.call_args.args[0]
+        assert recorded.left_out == ()
+
     def test_an_empty_left_out_list_is_still_written_instead_of_staying_silent(
         self, action: ImplementSlice, debt_ledger: Mock
     ) -> None:

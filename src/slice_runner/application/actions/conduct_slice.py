@@ -120,6 +120,7 @@ class ConductSliceProgress:
     label: IssueLabel | None
     paths: tuple[ReportedPath, ...] = field(default=())
     debt: tuple[str, ...] = field(default=())
+    deviations: tuple[str, ...] = field(default=())
     verdicts: tuple[Verdict, ...] = field(default=())
     spends: tuple[HarnessSpend, ...] = field(default=())
     control_logs: tuple[Path, ...] = field(default=())
@@ -563,6 +564,7 @@ class ConductSlice:
             progress,
             paths=implementation.paths,
             debt=implementation.left_out,
+            deviations=implementation.deviations,
             spends=(*progress.spends, implementation.spend),
         )
 
@@ -630,6 +632,8 @@ class ConductSlice:
                     checklist=progress.chosen.checklist,
                     prior_findings=progress.findings_of_the_last_round,
                     debt=progress.debt,
+                    decisions=progress.subissue.decisions_under(progress.parent),
+                    deviations=progress.deviations,
                     compares_with_the_last_verification=progress.judged_in_this_invocation,
                 )
             )
@@ -679,7 +683,10 @@ class ConductSlice:
                 base=progress.params.base,
                 title=self._pull_request.title(progress.subissue),
                 body=self._pull_request.body(
-                    progress.subissue, debt=progress.debt, findings=progress.findings_of_the_last_round
+                    progress.subissue,
+                    debt=progress.debt,
+                    findings=progress.findings_of_the_last_round,
+                    deviations=progress.deviations,
                 ),
             )
         )

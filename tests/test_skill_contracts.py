@@ -893,6 +893,18 @@ def test_the_rubric_lists_excludes_among_the_inputs_that_can_arrive_empty() -> N
     )
 
 
+def test_the_rubric_does_not_read_empty_deviations_as_nothing_declared() -> None:
+    rubric = _program_rubric()
+    assert "eso es un dato y no un insumo que falte" not in rubric, (
+        "the rubric promises `deviations` always arrives filled, but a resumed slice or `verify` without "
+        "an issue leaves it empty"
+    )
+    assert "Una lista de desviaciones vacia no prueba que no se declarase ninguna" in rubric, (
+        "the rubric no longer tells the judge that empty `deviations` can hide a declaration made in an "
+        "earlier invocation, so item 10 would turn it into a high-severity finding"
+    )
+
+
 def test_the_rubric_demands_what_the_slice_declared_when_it_replaces_something() -> None:
     """`SUSTITUYE: si` names what it owes; item 2 has to fail a diff that does not bring it.
 
