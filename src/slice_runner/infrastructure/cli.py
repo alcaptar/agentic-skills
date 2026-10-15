@@ -20,6 +20,7 @@ from slice_runner.application.actions.deliver_slice import DeliverSlice
 from slice_runner.application.actions.implement_slice import ImplementSlice
 from slice_runner.application.actions.mount_worktree import MountWorktree
 from slice_runner.application.actions.record_closure import RecordClosure
+from slice_runner.application.actions.record_start import RecordStart
 from slice_runner.application.actions.record_step import RecordStep
 from slice_runner.application.actions.register_pending_slices import RegisterPendingSlices, RegisterPendingSlicesParams
 from slice_runner.application.actions.reopen_slice import ReopenSlice, ReopenSliceParams
@@ -861,6 +862,7 @@ class Cli:
                     corpus=corpus,
                     debt_ledger=debt_ledger,
                 ),
+                record_start=RecordStart(events=LocalEventLog(), clock=clock),
                 read_ci=ReadCiStatus(ci=GhCi(call=gh_call), forum=forum),
                 read_pull_request=ReadPullRequestStatus(forum=forum),
                 catch_up=CatchUpBranch(branches=BranchesWithoutCatchUp(branches=branches)),

@@ -18,6 +18,7 @@ from slice_runner.application.actions.deliver_slice import DeliverSlice
 from slice_runner.application.actions.implement_slice import ImplementSlice
 from slice_runner.application.actions.mount_worktree import MountWorktree
 from slice_runner.application.actions.record_closure import RecordClosure
+from slice_runner.application.actions.record_start import RecordStart
 from slice_runner.application.actions.record_step import RecordStep
 from slice_runner.application.actions.rescue_staged_work import RescueStagedWork
 from slice_runner.application.actions.retire_worktree import RetireWorktree
@@ -214,6 +215,7 @@ class Conductor:
                     corpus=self.corpus,
                     debt_ledger=self.debt_ledger,
                 ),
+                record_start=RecordStart(events=self.events, clock=self.clock),
                 read_ci=ReadCiStatus(ci=self.ci, forum=self.forum),
                 read_pull_request=ReadPullRequestStatus(forum=self.forum),
                 catch_up=CatchUpBranch(branches=self.branches),

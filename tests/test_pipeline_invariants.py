@@ -251,6 +251,7 @@ _KNOWN_NOT_HARNESS_WRITING = {
     ("_read_ci", "execute"),
     ("_read_pull_request", "execute"),
     ("_record_closure", "execute"),
+    ("_record_start", "execute"),
     ("_record_step", "execute"),
     ("_reopen", "execute"),
     ("_repository", "clear_run"),
