@@ -281,7 +281,7 @@ class ConductSlice:
             return self._reading_the_sources(progress)
         if self._staged_work_waits_at(progress.run.step):
             self._rescuing_staged_work(progress)
-        if self._already_delivered(progress.run.step):
+        if progress.run.step.is_after_delivery():
             return self._conducting(progress)
 
         return self._caught_up_before_conducting(progress)
@@ -336,10 +336,6 @@ class ConductSlice:
                 ),
             )
         )
-
-    @staticmethod
-    def _already_delivered(step: Step) -> bool:
-        return step is Step.AWAIT_CI or step is Step.AWAIT_MERGE
 
     def _caught_up_before_conducting(self, progress: ConductSliceProgress) -> ConductSliceResult:
         caught_up = self._catch_up.execute(

@@ -6,7 +6,6 @@ from typing import TYPE_CHECKING
 from slice_runner.domain.event import Event
 from slice_runner.domain.event_status import EventStatus
 from slice_runner.domain.run_state import RunState
-from slice_runner.domain.step import Step
 
 if TYPE_CHECKING:
     from slice_runner.domain.clock import Clock
@@ -32,7 +31,7 @@ class RecordStart:
         self._clock = clock
 
     def execute(self, params: RecordStartParams) -> None:
-        if params.run.step is Step.AWAIT_CI or params.run.step is Step.AWAIT_MERGE:
+        if params.run.step.is_after_delivery():
             return
 
         self._events.emit(
