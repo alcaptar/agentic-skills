@@ -10,6 +10,7 @@ from slice_runner.application.actions.deliver_slice import DeliverSliceParams
 from slice_runner.application.actions.implement_slice import ImplementSliceParams
 from slice_runner.application.actions.mount_worktree import MountWorktreeParams
 from slice_runner.application.actions.record_closure import RecordClosureParams
+from slice_runner.application.actions.record_start import RecordStartParams
 from slice_runner.application.actions.record_step import RecordStepParams
 from slice_runner.application.actions.rescue_staged_work import RescueStagedWorkParams
 from slice_runner.application.actions.retire_worktree import RetireWorktreeParams
@@ -59,6 +60,7 @@ if TYPE_CHECKING:
     from slice_runner.application.actions.implement_slice import ImplementSlice
     from slice_runner.application.actions.mount_worktree import MountWorktree
     from slice_runner.application.actions.record_closure import RecordClosure
+    from slice_runner.application.actions.record_start import RecordStart
     from slice_runner.application.actions.record_step import RecordStep
     from slice_runner.application.actions.rescue_staged_work import RescueStagedWork
     from slice_runner.application.actions.retire_worktree import RetireWorktree
@@ -181,6 +183,7 @@ class ConductSliceUseCases:
     close: CloseParent
     record_step: RecordStep
     record_closure: RecordClosure
+    record_start: RecordStart
     read_ci: ReadCiStatus
     read_pull_request: ReadPullRequestStatus
     catch_up: CatchUpBranch
@@ -220,6 +223,7 @@ class ConductSlice:
         self._close = use_cases.close
         self._record_step = use_cases.record_step
         self._record_closure = use_cases.record_closure
+        self._record_start = use_cases.record_start
         self._read_ci = use_cases.read_ci
         self._read_pull_request = use_cases.read_pull_request
         self._catch_up = use_cases.catch_up
@@ -277,7 +281,7 @@ class ConductSlice:
             return self._reading_the_sources(progress)
         if self._staged_work_waits_at(progress.run.step):
             self._rescuing_staged_work(progress)
-        if self._already_delivered(progress.run.step):
+        if progress.run.step.is_after_delivery():
             return self._conducting(progress)
 
         return self._caught_up_before_conducting(progress)
@@ -332,10 +336,6 @@ class ConductSlice:
                 ),
             )
         )
-
-    @staticmethod
-    def _already_delivered(step: Step) -> bool:
-        return step is Step.AWAIT_CI or step is Step.AWAIT_MERGE
 
     def _caught_up_before_conducting(self, progress: ConductSliceProgress) -> ConductSliceResult:
         caught_up = self._catch_up.execute(
@@ -404,6 +404,16 @@ class ConductSlice:
         return replace(progress, label=IssueLabel.IN_PROGRESS)
 
     def _conducting(self, progress: ConductSliceProgress) -> ConductSliceResult:
+        self._record_start.execute(
+            RecordStartParams(
+                repo=progress.params.repo,
+                issue=progress.subissue.number,
+                slice_id=progress.subissue.slice_id.canonical,
+                run=progress.run,
+                spend=progress.spend,
+                feature_slice=self._feature_slice_of(params=progress.params, subissue=progress.subissue),
+            )
+        )
         while True:
             stepped = self._stepping(progress)
             if isinstance(stepped, HaltedSlice):

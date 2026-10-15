@@ -13,3 +13,18 @@ class Step(StrEnum):
     AWAIT_CI = "await-ci"
     CATCH_UP = "catch-up"
     AWAIT_MERGE = "await-merge"
+
+    def is_after_delivery(self) -> bool:
+        match self:
+            case Step.AWAIT_CI | Step.AWAIT_MERGE:
+                return True
+            case (
+                Step.MOUNT_WORKTREE
+                | Step.UNDERSTAND
+                | Step.IMPLEMENT
+                | Step.RUN_CONTROLS
+                | Step.VERIFY
+                | Step.OPEN_PULL_REQUEST
+                | Step.CATCH_UP
+            ):
+                return False

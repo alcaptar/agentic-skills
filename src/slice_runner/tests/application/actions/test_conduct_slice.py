@@ -55,6 +55,7 @@ _RETRY_INSTRUCTION = "el control ya esta arreglado a mano"
 
 if TYPE_CHECKING:
     from slice_runner.domain.closed_slice import ClosedSlice
+    from slice_runner.domain.implementation import Implementation
     from slice_runner.domain.pull_request_review import PullRequestReview
     from slice_runner.domain.sub_issue import SubIssue
 
@@ -1050,6 +1051,7 @@ class TestConductSliceReportingEvents:
         )
         emitted = conductor.emitted_events
         assert [(e.slice_id, e.step, e.at, e.spend) for e in emitted] == [
+            ("slice-05", Step.IMPLEMENT, Conductor.NOW, HarnessSpend.nothing()),
             ("slice-05", Step.RUN_CONTROLS, Conductor.NOW, after_the_implementer),
             ("slice-05", Step.VERIFY, Conductor.NOW, after_the_implementer),
             ("slice-05", Step.OPEN_PULL_REQUEST, Conductor.NOW, after_the_judge),
@@ -1074,7 +1076,7 @@ class TestConductSliceReportingEvents:
         conductor.conduct()
 
         emitted = conductor.emitted_events
-        assert [e.status for e in emitted] == [EventStatus.ADVANCING] * 5 + [EventStatus.CLOSED]
+        assert [e.status for e in emitted] == [EventStatus.ADVANCING] * 6 + [EventStatus.CLOSED]
 
     def test_a_pending_merge_reports_awaiting_a_person_because_the_merge_is_a_human_decision(self) -> None:
         conductor = self._conductor(budgets=Budgets(person_wait_seconds=30))
@@ -2604,3 +2606,83 @@ class TestConductSliceResumingMountsTheWorktreeFirst:
 
         assert conductor.check_sources.execute.call_count == 1
         assert conductor.implement.execute.call_count == 1
+
+
+class TestConductSliceLeavingAnEventWhenItStarts:
+    @staticmethod
+    def _starting() -> Conductor:
+        return Conductor(chosen=SelectSliceResultMother.about_to_start())
+
+    def test_a_new_run_reports_implement_advancing_with_no_spend_before_the_implementer_is_asked(self) -> None:
+        conductor = self._starting()
+        emitted_when_asked: list[int] = []
+
+        def implementing(params: object) -> Implementation:
+            emitted_when_asked.append(len(conductor.emitted_events))
+
+            return ImplementationMother.of_two_paths()
+
+        conductor.implement.execute.side_effect = implementing
+
+        conductor.conduct()
+
+        first = conductor.emitted_events[0]
+        assert (first.step, first.status, first.state, first.spend) == (
+            Step.IMPLEMENT,
+            EventStatus.ADVANCING,
+            RunState.OPEN,
+            HarnessSpend.nothing(),
+        )
+        assert emitted_when_asked == [1]
+
+    def test_the_start_event_names_the_parent_issue_of_the_feature_and_the_name_of_the_slice(self) -> None:
+        conductor = self._starting()
+
+        conductor.conduct()
+
+        expected = FeatureSlice(parent=Conductor.ISSUE, name=SubIssueMother.pending().slice_id.name)
+        assert conductor.emitted_events[0].feature_slice == expected
+
+    def test_a_run_resumed_awaiting_the_merge_leaves_its_first_transition_as_the_first_event(self) -> None:
+        conductor = Conductor(chosen=SelectSliceResultMother.resumed_at(RunMother.awaiting_merge()))
+
+        conductor.conduct()
+
+        assert [e.status for e in conductor.emitted_events] == [EventStatus.CLOSED]
+
+    def test_a_run_resumed_awaiting_the_ci_leaves_its_first_transition_as_the_first_event(self) -> None:
+        conductor = Conductor(chosen=SelectSliceResultMother.resumed_at(RunMother.awaiting_ci()))
+
+        conductor.conduct()
+
+        assert conductor.emitted_events[0].step is Step.AWAIT_MERGE
+
+    def test_an_invocation_stopped_by_the_precheck_leaves_no_start_event(self) -> None:
+        conductor = self._starting()
+        conductor.prechecks.execute.return_value = PrecheckResult(outcome=PrecheckOutcome.PULL_REQUEST_ALREADY_OPEN)
+
+        conductor.conduct()
+
+        assert conductor.emitted_events == []
+
+    def test_an_invocation_stopped_by_an_unreadable_source_leaves_no_start_event(self) -> None:
+        conductor = self._starting()
+        conductor.check_sources.execute.return_value = PrecheckResult(
+            outcome=PrecheckOutcome.UNREADABLE_SOURCE, reason="CLAUDE.md does not exist under the worktree"
+        )
+
+        conductor.conduct()
+
+        assert conductor.emitted_events == []
+
+    def test_an_invocation_closed_by_a_busy_worktree_leaves_no_start_event(self) -> None:
+        conductor = self._starting()
+        conductor.worktrees.branch_exists.return_value = True
+        conductor.worktrees.listed.return_value = (
+            ListedWorktreeMother.main_clone(),
+            ListedWorktreeMother.mounted(path="/repos/manual-worktree", branch=_BRANCH),
+        )
+
+        conductor.conduct()
+
+        assert [e.status for e in conductor.emitted_events] == [EventStatus.CLOSED]
