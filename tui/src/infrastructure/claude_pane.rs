@@ -13,9 +13,9 @@ impl ClaudePane {
 
     pub fn render(frame: &mut Frame, area: Rect, session: &mut EndlessPtySession, focused: bool) {
         let title = if session.has_ended() {
-            "claude session ended"
+            "claude session ended · ctrl+q focus"
         } else {
-            "claude"
+            "claude · ctrl+q focus"
         };
         let border = if focused {
             Style::new().fg(Self::FOCUSED_BORDER)

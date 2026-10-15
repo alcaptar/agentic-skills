@@ -40,6 +40,7 @@ pub struct KeyRouting;
 
 impl KeyRouting {
     const CONTROL_BACKSLASH: KeyCode = KeyCode::Char('4');
+    const TOGGLE_FOCUS: KeyCode = KeyCode::Char('q');
     const BINDINGS: [(KeyCode, Order); 7] = [
         (KeyCode::Char('q'), Order::Quit),
         (KeyCode::Up, Order::Previous),
@@ -54,8 +55,12 @@ impl KeyRouting {
         if key.kind != KeyEventKind::Press {
             return Routed::Ignored;
         }
-        if key.code == Self::CONTROL_BACKSLASH && key.modifiers.contains(KeyModifiers::CONTROL) {
+        let control = key.modifiers.contains(KeyModifiers::CONTROL);
+        if control && key.code == Self::TOGGLE_FOCUS {
             return Routed::ToggleFocus;
+        }
+        if control && key.code == Self::CONTROL_BACKSLASH {
+            return Routed::Ignored;
         }
 
         match focus {
