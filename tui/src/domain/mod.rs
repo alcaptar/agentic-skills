@@ -12,8 +12,6 @@ pub mod session_transcripts;
 pub mod slice_board;
 pub mod slice_key;
 pub mod slice_row;
-pub mod understanding;
-pub mod understanding_source;
 pub mod workspace_binding;
 pub mod workspace_id;
 pub mod workspace_ids;

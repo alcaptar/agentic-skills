@@ -1,6 +1,5 @@
 mod board_view;
 mod bounded_gh_process;
-mod bounded_understanding_process;
 mod claude_pane;
 mod config_dir_session_transcripts;
 pub mod contract;
@@ -15,5 +14,4 @@ mod key_routing;
 mod random_workspace_ids;
 mod split_screen;
 mod threaded_workspace_binding;
-mod understanding_line_payload;
 mod workspace_header;

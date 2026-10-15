@@ -53,41 +53,12 @@ mod moving_the_selection {
 
 mod reading_the_detail {
     use crate::application::queries::read_slice_detail::ReadSliceDetail;
-    use crate::domain::errors::UnderstandingUnread;
     use crate::tests::application::watching::Watching;
-    use crate::tests::doubles::ScriptedUnderstandingSource;
-    use crate::tests::mothers::understanding_mother::UnderstandingMother;
 
     #[test]
-    fn asks_the_source_for_the_slice_it_was_given_and_carries_the_understanding() {
-        let (source, asked) = ScriptedUnderstandingSource::answering(Ok(UnderstandingMother::published()));
-        let mut read = ReadSliceDetail::new(source);
+    fn composes_the_detail_of_the_slice_it_was_given_without_calling_the_program() {
+        let detail = ReadSliceDetail::execute(Watching::key(150));
 
-        let detail = read.execute(Watching::key(150));
-
-        assert_eq!(*asked.borrow(), vec![Watching::key(150)]);
         assert_eq!(detail.key(), &Watching::key(150));
-        assert_eq!(detail.understanding(), &Ok(UnderstandingMother::published()));
-    }
-
-    #[test]
-    fn keeps_a_slice_without_a_published_understanding_as_a_value_and_not_as_a_failure() {
-        let (source, _) = ScriptedUnderstandingSource::answering(Ok(UnderstandingMother::not_published()));
-
-        let detail = ReadSliceDetail::new(source).execute(Watching::key(150));
-
-        assert_eq!(detail.understanding(), &Ok(UnderstandingMother::not_published()));
-    }
-
-    #[test]
-    fn carries_a_failed_read_inside_the_detail_instead_of_propagating_it() {
-        let unread = UnderstandingUnread::CommandFailed {
-            reason: "gh is not authenticated".to_string(),
-        };
-        let (source, _) = ScriptedUnderstandingSource::answering(Err(unread.clone()));
-
-        let detail = ReadSliceDetail::new(source).execute(Watching::key(150));
-
-        assert_eq!(detail.understanding(), &Err(unread));
     }
 }

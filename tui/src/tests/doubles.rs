@@ -1,21 +1,16 @@
-use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::path::Path;
-use std::rc::Rc;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use crate::domain::clock::Clock;
-use crate::domain::errors::{FollowLineRejected, IssuesUnread, UnderstandingUnread};
+use crate::domain::errors::{FollowLineRejected, IssuesUnread};
 use crate::domain::follow_line::FollowLine;
 use crate::domain::follow_source::FollowSource;
 use crate::domain::issue_source::IssueSource;
 use crate::domain::open_issue::OpenIssue;
 use crate::domain::session_transcripts::SessionTranscripts;
-use crate::domain::slice_key::SliceKey;
-use crate::domain::understanding::Understanding;
-use crate::domain::understanding_source::UnderstandingSource;
 use crate::domain::workspace_id::WorkspaceId;
 use crate::domain::workspace_ids::WorkspaceIds;
 use crate::tests::mothers::workspace_mother::WorkspaceMother;
@@ -37,35 +32,6 @@ impl ScriptedFollowSource {
 impl FollowSource for ScriptedFollowSource {
     fn pending(&mut self) -> Vec<Delivery> {
         self.batches.pop_front().unwrap_or_default()
-    }
-}
-
-pub type Asked = Rc<RefCell<Vec<SliceKey>>>;
-
-pub struct ScriptedUnderstandingSource {
-    answer: Result<Understanding, UnderstandingUnread>,
-    asked: Asked,
-}
-
-impl ScriptedUnderstandingSource {
-    pub fn answering(answer: Result<Understanding, UnderstandingUnread>) -> (Self, Asked) {
-        let asked = Asked::default();
-
-        (
-            Self {
-                answer,
-                asked: Rc::clone(&asked),
-            },
-            asked,
-        )
-    }
-}
-
-impl UnderstandingSource for ScriptedUnderstandingSource {
-    fn understanding_of(&mut self, key: &SliceKey) -> Result<Understanding, UnderstandingUnread> {
-        self.asked.borrow_mut().push(key.clone());
-
-        self.answer.clone()
     }
 }
 

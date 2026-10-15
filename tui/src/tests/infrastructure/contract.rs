@@ -112,39 +112,3 @@ mod the_follow_line_contract {
         }
     }
 }
-
-mod the_understanding_line_contract {
-    use crate::domain::errors::UnderstandingUnread;
-    use crate::infrastructure::understanding_line_payload::UnderstandingLinePayload;
-    use crate::tests::infrastructure::contract::LineContract;
-
-    #[test]
-    fn has_examples_and_every_one_parses() {
-        let contract = LineContract::on_disk("understanding-line.json");
-
-        assert!(!contract.examples.is_empty());
-        for example in &contract.examples {
-            let parsed = UnderstandingLinePayload::parsed(&LineContract::raw(example));
-            assert!(parsed.is_ok(), "{example:?}: {parsed:?}");
-        }
-    }
-
-    #[test]
-    fn stops_parsing_when_a_key_is_taken_out_of_an_example() {
-        let contract = LineContract::on_disk("understanding-line.json");
-
-        for example in &contract.examples {
-            for key in example.keys() {
-                let mut without = example.clone();
-                without.remove(key);
-
-                let parsed = UnderstandingLinePayload::parsed(&LineContract::raw(&without));
-
-                assert!(
-                    matches!(parsed, Err(UnderstandingUnread::WrongValue { .. })),
-                    "taking {key} out of an example still parses"
-                );
-            }
-        }
-    }
-}

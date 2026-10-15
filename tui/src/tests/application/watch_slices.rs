@@ -130,6 +130,7 @@ mod a_rejected_line {
 }
 
 mod the_board_shown_for_a_workspace {
+    use crate::domain::slice_key::SliceKey;
     use crate::tests::application::watching::Watching;
     use crate::tests::mothers::follow_line_mother::FollowLineMother;
     use crate::tests::mothers::workspace_mother::WorkspaceMother;
@@ -157,13 +158,13 @@ mod the_board_shown_for_a_workspace {
 
         let shown = watched.shown_for(&WorkspaceMother::bound_to(140));
 
-        let issues: Vec<u64> = shown
+        let keys: Vec<SliceKey> = shown
             .board()
             .groups()
             .iter()
-            .flat_map(|group| group.rows().iter().map(|row| row.key().issue()))
+            .flat_map(|group| group.rows().iter().map(|row| row.key().clone()))
             .collect();
-        assert_eq!(issues, vec![150]);
+        assert_eq!(keys, vec![Watching::key(150)]);
         assert_eq!(shown.board().groups()[0].repo(), FollowLineMother::REPO);
     }
 
