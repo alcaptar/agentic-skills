@@ -32,8 +32,8 @@ Dos modos:
 - **No implementa.** No escribe codigo ni tests; produce la spec. El estado terminal es una spec
   valida, no un plan de `writing-plans` ni una PR.
 - **El diseno se interroga, no se aprueba.** Un diseno que se aprueba deja decisiones sin tomar, y
-  cada una reaparece en la pausa de alineacion de una slice, donde cuesta una ronda o la toma el
-  implementador sin que nadie la vea. Por eso se trabaja por rondas sobre un arbol de decisiones, con
+  cada una la toma el implementador sin que nadie la vea, o reaparece como un hallazgo del juez con la
+  vuelta ya pagada. Por eso se trabaja por rondas sobre un arbol de decisiones, con
   enfoques alternativos en cada decision de diseno, los hechos buscados por subagentes y no preguntados,
   y una refutacion del borrador por alguien que no lo diseno (`references/diseno.md`). No hay
   `writing-plans`: la spec ES el plan que consume slice-runner.
@@ -240,7 +240,7 @@ SUSTITUYE: no
 - **El parentesis lleva el `name` y nada mas.** Nada de un type de conventional commit delante: el
   programa se lleva el parentesis entero como nombre, asi que un `(refactor: extraer-repo)` le pide a
   git una rama llamada `slice/03-refactor: extraer-repo`, que no es un nombre de rama valido, y el run
-  muere **despues** de haber publicado el entendimiento y pagado la llamada. El type del commit lo
+  muere **despues** de haber marcado la subissue en curso y pagado la llamada. El type del commit lo
   elige el agente al redactarlo -sabe conventional commits-, y su unico control determinista es la
   higiene del diff que aplica el programa al stagear, asi que declararlo aqui no alimentaba nada.
 - **El estado macro es una etiqueta, nunca una marca en el texto.** Toda subissue nace con
@@ -292,14 +292,11 @@ SUSTITUYE: no
   `ACEPTACION: el flujo funciona correctamente` no lo es (nada lo puede refutar). Un criterio no
   falsable deja al verificador de slice-runner sin nada contra lo que mapear el test, asi que no cumple
   el contrato.
-- **Un criterio puede fijar donde vive una pieza, y cuando la slice introduce una tiene que hacerlo.**
-  "Se ejecuta desde su propio caso de uso" o "la proyeccion vive en el vocabulario de destino" son tan
-  falsables como cualquier criterio de comportamiento -borras la pieza de su sitio y el criterio cae-, y
-  son lo unico que le da al verificador algo que exigir sobre la **forma**. Sin ellos, la arquitectura
-  queda huerfana entre dos varas: los criterios solo hablan de lo que el codigo hace, y las convenciones
-  del repo solo cubren lo que alguien se acordo de escribir en ellas. Un criterio de forma no sustituye a
-  la convencion -si la regla vale para todo el repo, su casa es `docs/conventions/`-, pero es lo que
-  impide que **esta** slice nazca en el sitio equivocado mientras la convencion se escribe.
+- **Donde vive una pieza es una decision, no un criterio.** Capa, puerto, modulo o fichero de una pieza
+  nueva se deciden con la persona en las rondas del paso 1 y se escriben como `DECISION:` de la slice
+  que la introduce, o en `## Decisiones` del padre si afectan a varias. Los criterios de aceptacion
+  hablan de lo que el codigo hace; la forma la mide el verificador contra esas decisiones y contra las
+  fuentes de convencion del repo.
 - **Y cada criterio se le pide a quien puede cumplirlo, y se escribe contra lo que el verificador
   recibe.** Son dos filtros y hay que pasar los dos.
 
@@ -444,9 +441,19 @@ un run anterior no se reutiliza ni se pisa: la invocacion siguiente cierra en
 
 ## Steps — modo autoria (por defecto)
 
+0. **Descubre las fuentes de convencion y los controles del repo del padre, antes de la primera
+   ronda (`offload-deterministic`).** Corre los dos helpers deterministas sobre el repo del padre
+   (`python3 ~/.claude/skills/slice-runner/scripts/discover_conventions.py <repo>` y
+   `python3 ~/.claude/skills/slice-runner/scripts/discover_controles.py <repo>`) y lleva lo que listan a
+   la primera ronda para que la persona lo confirme: el diseno pregunta nombres de ficheros y clases y
+   estrategia de tests solo si esas fuentes no los cubren, y no se sabe cuales cubren hasta haberlas
+   visto. Los pasos 3 y 3b describen como se juzga y se confirma cada uno.
 1. **Disena por rondas (`check-alignment` + `cast-wide`).** Carga `references/diseno.md` y trabaja
    el arbol de decisiones de la feature por rondas: toda la frontera numerada, enfoques alternativos en
-   cada decision de diseno, cada recomendacion con su base, y las ramas que siempre se visitan. Los
+   cada decision de diseno, cada recomendacion con su base, y las ramas que siempre se visitan. **En cuanto
+   una ronda decide que hay trabajo en otro repo**, corre el descubrimiento de ese repo (pasos 3 y 3b) y
+   llevalo a la ronda siguiente, antes de decidir sus contratos: sin su vara no se sabe que decisiones le
+   quedan a la persona. Los
    hechos los busca un subagente mientras preguntas (paso 1b); no se los pidas a la persona. Sigue
    hasta que la frontera este vacia, y cierra con el paso 1c.
 1b. **Investiga el repo antes de cortar, con subagentes mientras corren las rondas
@@ -483,34 +490,36 @@ un run anterior no se reutiliza ni se pisa: la invocacion siguiente cierra en
    **Si no hay nada, dilo con esa seccion vacia y su motivo**, no la omitas: ausencia declarada y
    ausencia silenciosa no son lo mismo, igual que en `SENAL:` y en los controles.
 
-1c. **Cierra el diseno: publica lo entendido del codigo y los criterios propuestos, y espera
-   confirmacion de los dos antes de cortar (`check-alignment`).** Es la ronda que cierra el paso 1, con
-   la frontera ya vacia. El paso 1b confirma punteros -rutas, numeros de issue,
-   sitios de acople-; lo que no confirma nadie es que se entendio **que hace** el codigo que el corte
-   va a tocar, ni **que se va a considerar hecho**. Hoy el primer momento en que un malentendido del
-   flujo, o un criterio que no era ese, se puede ver es leyendo las subissues ya creadas, o la pull
-   request de la primera slice con el run ya pagado.
+1c. **Cierra el diseno: publica lo entendido del codigo, los criterios propuestos y las decisiones, y
+   espera confirmacion de los tres antes de cortar (`check-alignment`).** Es la ronda que cierra el
+   paso 1, con la frontera ya vacia. El paso 1b confirma punteros -rutas, numeros de issue, sitios de
+   acople-; lo que no confirma nadie es que se entendio **que hace** el codigo que el corte va a tocar,
+   **que se va a considerar hecho**, ni **que se decidio**. Hoy el primer momento en que un malentendido
+   del flujo, un criterio que no era ese o una decision tomada a medias se puede ver es leyendo las
+   subissues ya creadas, o la pull request de la primera slice con el run ya pagado.
 
-   Publica dos mitades y **espera confirmacion de las dos**:
+   Publica tres mitades y **espera confirmacion de las tres**:
 
    - **Lo que entiendes del codigo**, con forma exigible: por cada pieza que el corte va a tocar, su
      ruta y **que hace hoy**. **Una linea que solo dice que el fichero existe no cumple**: eso ya lo
-     dio el paso 1b, y esta pausa completa esa linea con el comportamiento antes de que el paso 2 la
+     dio el paso 1b, y esta ronda completa esa linea con el comportamiento antes de que el paso 2 la
      escriba en el padre.
    - **Los criterios de aceptacion de la feature entera**, con la misma **vara de falsabilidad** que
      gobierna los criterios de cada slice -nombra el cambio de produccion que lo haria fallar-, y
      **declara que esa vara se aplico**.
+   - **Las decisiones de diseno**, una linea por decision: lo que la persona decidio en las rondas
+     -conceptos de dominio, arquitectura, contratos con sus firmas- y que el implementador no tiene que
+     adivinar.
 
-   **Y que quepa de un vistazo**: una linea por pieza y una por criterio, **no un informe**. Es la
-   misma vara con la que el paso 1b acota su busqueda, y aqui pesa mas, porque lo que no se puede
-   escanear se aprueba a ojo -y un gate que se aprueba a ojo no caza nada, que es justo lo que este
-   paso existe para evitar-. Si no cabe, la senal no es escribir mas pequeno: es que el corte abarca
-   demasiado y hay que volver al diseno.
+   **Y que quepa de un vistazo**: una linea por pieza, una por criterio y una por decision,
+   **no un informe**. Es la misma vara con la que el paso 1b acota su busqueda, y aqui pesa mas, porque lo que no
+   se puede escanear se aprueba a ojo -y un gate que se aprueba a ojo no caza nada-. Si no cabe, la senal
+   no es escribir mas pequeno: es que el corte abarca demasiado y hay que volver al diseno.
 
-   Estos criterios de feature **no se escriben en el issue padre**: seria un tercer sitio diciendo lo
+   Los criterios de feature **no se escriben en el issue padre**: seria un tercer sitio diciendo lo
    mismo que ya dicen las subissues, y derivaria en cuanto una slice cambie -el mismo motivo por el
    que **"el padre no repite las slices"**-. Viven en esta conversacion, y de aqui los reparte el paso
-   siguiente.
+   siguiente. Las decisiones si tienen sitio propio, y el paso 2 las reparte.
 
 2. **Trocea en slices verticales (guia activa), repartiendo lo confirmado en el paso 1c.** Carga
    `references/slicing.md` y aplica su procedimiento sobre el diseno aprobado: identifica el **walking
@@ -523,6 +532,10 @@ un run anterior no se reutiliza ni se pisa: la invocacion siguiente cierra en
    **test de despriorizacion** e **igualdad de tamano**. Elige el `name` kebab-case de cada slice. Las
    lineas `ACEPTACION:` de cada slice salen de **repartir** los criterios de feature confirmados en el
    paso 1c, no de inventarlos aqui.
+
+   **Reparte tambien las decisiones confirmadas en el paso 1c.** Una decision que afecta a una sola
+   slice va a su linea `DECISION:`; una que afecta a varias se queda en `## Decisiones` del padre, una
+   sola vez; y una slice que no recibe ninguna lleva `DECISION: ninguna - <motivo>`.
 
 2a. **Escribe la intencion, la de la feature y la de cada slice.** El diseno del paso 1 ya
    entendio el problema: la seccion `## Intencion` es su destilado, no trabajo nuevo. Redactala con
@@ -549,8 +562,9 @@ un run anterior no se reutiliza ni se pisa: la invocacion siguiente cierra en
    antepone al titulo de cada subissue en el paso 5 y viaja a su etiqueta `origen:<clave>`. Si la
    persona dice que la feature no tiene historia asociada, no se escribe nada: sin esta pregunta el
    padre nunca tendria la seccion, porque ningun otro paso la deriva de lo que ya se ha discutido.
-3. **Descubre y confirma las fuentes de convencion (`offload-deterministic` + `check-alignment`).**
-   Corre el helper determinista para no asumir rutas ni inventarlas:
+3. **Confirma las fuentes de convencion (`offload-deterministic` + `check-alignment`).** El paso 0 ya
+   corrio el helper del repo del padre y las rondas los de cada repo destino; aqui se juzga lo que listaron
+   y se escribe la seccion. El helper, para no asumir rutas ni inventarlas:
    `python3 ~/.claude/skills/slice-runner/scripts/discover_conventions.py <repo>`. Lista candidatos
    (docs y skills de proyecto) sin decidir. Juzga cuales son la vara de medir real, **proponselos a
    la persona y espera su confirmacion** (puede anadir o quitar). Si el helper no devuelve nada
@@ -558,12 +572,13 @@ un run anterior no se reutiliza ni se pisa: la invocacion siguiente cierra en
    la spec con la seccion vacia. Con lo confirmado, redacta la seccion `## Fuentes de convencion`
    (punteros, no contenido: las convenciones siguen viviendo en el repo).
 
-   **Una vez por repo destino.** Si alguna slice lleva `REPO:`, corre el mismo helper **sobre ese
-   repo** (`discover_conventions.py <ruta-del-repo-destino>`), confirma con la persona, y escribe sus
+   **Una vez por repo destino.** Si alguna slice lleva `REPO:`, el mismo helper se corrio **sobre ese
+   repo** (`discover_conventions.py <ruta-del-repo-destino>`) en cuanto una ronda decidio que habia
+   trabajo en el; confirmalo con la persona, y escribe sus
    punteros en la subseccion `### <org>/<repo>`. Cada repo tiene su propia vara: la del repo de
    manifiestos (templating, escaping, politica de labels de alerta) no se parece a la de la app, y
    heredar la equivocada es la desviacion silenciosa que esta seccion existe para evitar.
-3b. **Descubre y confirma los controles del repo (mismo baile de tres pasos).** Si las fuentes son la
+3b. **Confirma los controles del repo (mismo baile de tres pasos).** Si las fuentes son la
    vara, los controles son **los comandos con los que se mide**, y se declaran aqui por la misma razon:
    `slice-runner` no puede deducirlos en cada slice sin meter el `Makefile` en el contexto que tiene
    que durar todo el run, y dejarselo al implementador seria peor -el juzgado eligiendo su propia
@@ -672,8 +687,8 @@ un run anterior no se reutiliza ni se pisa: la invocacion siguiente cierra en
    cuando el otro extremo no es un terminal, asi que matar el run se lleva lo que aun no habia salido.
    Si solo te interesa el final, **recorta al leer, no al escribir**.
 
-   Y avisa de lo que viene despues, porque es lo que sorprende: **cada run se para en su pausa de
-   alineacion**, asi que N runs en paralelo son N entendimientos que revisar y N `slice-runner go` que dar, no uno.
+   Y avisa de lo que viene despues: **cada run para en la comprobacion previa si a su slice le faltan
+   decisiones**, asi que N runs en paralelo son N comprobaciones que pueden cortar, no una.
 
 ## Steps — modo `validate`
 

@@ -1490,3 +1490,86 @@ def test_every_slice_title_slice_spec_documents_yields_a_name_git_accepts_as_a_b
         "slice-spec documents no title carrying a user story key, so the shape this guard was widened "
         "for is going unmeasured while the rest of the titles keep it green"
     )
+
+
+class TestSliceSpecDesignDecidedInRounds:
+    _REFERENCES = _SPEC.parent / "references"
+
+    @classmethod
+    def _skill_and_references(cls) -> dict[str, str]:
+        paths = [_SPEC, *sorted(cls._REFERENCES.glob("*.md"))]
+        return {str(path.relative_to(_ROOT)): _read(path) for path in paths}
+
+    @staticmethod
+    def _flat(text: str) -> str:
+        return " ".join(text.split())
+
+    @staticmethod
+    def _step(text: str, opening: str) -> str:
+        start = text.index(opening)
+        following = re.search(r"\n\d+[a-z]?\. \*\*", text[start + len(opening) :])
+        end = start + len(opening) + following.start() if following else len(text)
+        return text[start:end]
+
+    def test_no_document_of_the_skill_mentions_the_alignment_pause_or_the_commands_that_lift_it(self) -> None:
+        forbidden = re.compile(r"alineaci|slice-runner go|slice-runner review", re.IGNORECASE)
+
+        documents = self._skill_and_references()
+        offenders = {name: forbidden.findall(text) for name, text in documents.items() if forbidden.search(text)}
+
+        assert not offenders, f"the alignment pause is retired but still mentioned: {offenders}"
+
+    def test_the_design_reference_always_visits_domain_concepts_architecture_and_contracts_with_signatures(
+        self,
+    ) -> None:
+        branches = _read(self._REFERENCES / "diseno.md").split("## Ramas que siempre se visitan")[1]
+
+        for branch in ("conceptos de dominio", "arquitectura", "contratos"):
+            assert branch in branches, f"the always-visited branches do not name `{branch}`"
+        assert "firmas" in branches
+
+    def test_the_design_reference_asks_file_class_and_test_strategy_only_when_the_target_conventions_do_not_cover_them(
+        self,
+    ) -> None:
+        design = self._flat(_read(self._REFERENCES / "diseno.md"))
+
+        assert re.search(r"nombres de ficheros y clases", design, re.IGNORECASE)
+        assert re.search(r"estrategia de tests", design)
+        assert re.search(r"solo se preguntan si las fuentes de convencion del repo destino no los cubren", design)
+
+    def test_the_parent_repo_discovery_runs_before_the_first_round(self) -> None:
+        skill = _read(_SPEC)
+
+        discovery = skill.index("discover_conventions.py <repo>")
+        first_round = skill.index("**Disena por rondas")
+
+        assert discovery < first_round
+
+    def test_a_target_repo_is_discovered_as_soon_as_a_round_decides_there_is_work_in_it_and_before_its_contracts(
+        self,
+    ) -> None:
+        skill = self._flat(_read(_SPEC))
+
+        assert re.search(
+            r"en cuanto una ronda decide que hay trabajo en (otro|ese) repo.{0,400}antes de decidir sus contratos",
+            skill,
+            re.DOTALL | re.IGNORECASE,
+        )
+
+    def test_the_closing_step_of_the_design_publishes_the_decisions_with_the_code_and_the_criteria(self) -> None:
+        step = self._step(_read(_SPEC), "1c. **")
+
+        assert "decisiones" in step.lower()
+
+    def test_the_slicing_step_routes_each_decision_to_its_slice_to_the_parent_or_to_the_exemption(self) -> None:
+        step = self._step(_read(_SPEC), "2. **Trocea")
+
+        assert "`DECISION:`" in step
+        assert "`## Decisiones`" in step
+        assert "DECISION: ninguna - <motivo>" in step
+
+    def test_a_criterion_is_no_longer_allowed_to_fix_where_a_piece_lives(self) -> None:
+        skill = self._flat(_read(_SPEC))
+
+        assert "Un criterio puede fijar donde vive una pieza" not in skill
+        assert re.search(r"donde vive una pieza es una decision", skill, re.IGNORECASE)

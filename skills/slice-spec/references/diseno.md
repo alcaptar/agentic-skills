@@ -6,8 +6,8 @@ Reference-doc de `slice-spec`. Se carga en el paso 1 del modo autoria (`referenc
 ## Para que existe
 
 Un diseno que se aprueba pregunta poco y decide mucho: lo que nadie pregunto lo resuelve el agente en
-silencio (`silent-misalignment`), y la decision reaparece mas tarde en la pausa de alineacion de una
-slice, donde cuesta una ronda de `slice-runner review` o la toma el implementador sin que nadie la vea. Este proceso
+silencio (`silent-misalignment`), y la decision reaparece mas tarde, cuando la toma el implementador sin
+que nadie la vea o la cuestiona el juez con la vuelta ya pagada. Este proceso
 no termina cuando la persona dice que si: termina cuando **no queda ninguna decision sin tomar**.
 
 Mezcla dos cosas. Del interrogatorio toma el arbol de decisiones y las rondas; de la exploracion de
@@ -74,19 +74,27 @@ no se salta.
   valores por omision. Cambiar un default rompe a quien no lo pasaba.
 - **Si alguna regla que ya existe decide esto mismo.** Escribirla otra vez deja dos sitios que acaban
   diciendo cosas distintas; el diseno decide cual se queda.
-- **Donde vive cada pieza nueva**: que capa, que puerto, que modulo. Si el diseno no lo decide, lo
-  decide el implementador.
+- **Los conceptos de dominio**: que aggregates y value objects hay, que vocabulario cerrado, y que
+  nombra cada uno.
+- **La arquitectura**: donde vive cada pieza nueva -que capa, que puerto, que modulo-, el flujo de
+  dependencias y las fronteras. Si el diseno no lo decide, lo decide el implementador.
+- **Los contratos con sus firmas**: lo que cruza una frontera -puerto, modelo compartido entre capas,
+  endpoint, evento- con la firma exacta de cada uno. Es lo que deja construir sus dos lados a la vez.
+
 - **Que numero o tope se elige, y con que motivo.** Un numero sin medicion es una preferencia, y se dice.
 - **Si algun criterio pide algo que la propia slice excluye o sustituye.** Un criterio que la slice hace
   imposible no lo puede cumplir nadie, y se descubre con el presupuesto gastado.
 - **Si algun criterio lo puede cumplir el implementador y lo puede medir el juez.** El implementador no
   toca git ni compone la pull request; el juez no recibe el informe.
 
+Nombres de ficheros y clases y estrategia de tests: solo se preguntan si las fuentes de convencion del repo destino no los cubren.
+Si las cubren, se cita la fuente y no se pregunta.
+
 ## Cuando se acaba
 
 Cuando la frontera esta vacia: todas las ramas visitadas, nada supuesto en silencio. Entonces se cierra
-con el paso 1c de `slice-spec`, que publica lo entendido y los criterios de la feature y espera
-confirmacion. No se corta nada antes.
+con el paso 1c de `slice-spec`, que publica lo entendido, los criterios de la feature y las decisiones, y
+espera confirmacion. No se corta nada antes.
 
 ## La refutacion
 
