@@ -10,7 +10,7 @@ from slice_runner.tests.mothers.run_mother import RunMother
 if TYPE_CHECKING:
     from slice_runner.domain.run import Run
 
-_PARENT_BODY = (
+_PARENT_BODY_WITHOUT_DECISIONS = (
     "## Intencion\n"
     "hoy conducir una slice todavia exige una sesion de chat.\n"
     "\n"
@@ -21,14 +21,19 @@ _PARENT_BODY = (
     "- lint: make linting\n"
 )
 
-_SUBISSUE_PROSE = (
+_PARENT_BODY = f"{_PARENT_BODY_WITHOUT_DECISIONS}\n## Decisiones\n- el conductor no compone telemetria\n"
+
+_SUBISSUE_PROSE_WITHOUT_DECISIONS = (
     "INTENCION: hoy nada evita reimplementar una slice ya entregada\n"
     "ACEPTACION: el run retoma por el paso que dice el estado persistido\n"
     "SENAL: exenta - este repo no despliega\n"
 )
 
+_SUBISSUE_PROSE = f"DECISION: el estado persistido manda sobre la rama\n{_SUBISSUE_PROSE_WITHOUT_DECISIONS}"
+
 _SUBISSUE_PROSE_WITH_A_SIGNAL = (
     "INTENCION: hoy nada evita reimplementar una slice ya entregada\n"
+    "DECISION: el estado persistido manda sobre la rama\n"
     "ACEPTACION: el run retoma por el paso que dice el estado persistido\n"
     "SENAL: prometheus rate(application_slice_conducida_total[5m]) > 0 en 10m post-deploy; critical\n"
 )
@@ -58,6 +63,16 @@ class GhConversationMother:
         return json.dumps(
             {
                 "body": _PARENT_BODY,
+                "subIssuesSummary": {"completed": 0, "percentCompleted": 0, "total": 1},
+                "state": IssueState.OPEN.value,
+            }
+        )
+
+    @classmethod
+    def parent_of_one_slice_without_decisions(cls) -> str:
+        return json.dumps(
+            {
+                "body": _PARENT_BODY_WITHOUT_DECISIONS,
                 "subIssuesSummary": {"completed": 0, "percentCompleted": 0, "total": 1},
                 "state": IssueState.OPEN.value,
             }
@@ -111,6 +126,10 @@ class GhConversationMother:
     @classmethod
     def the_slice_never_run(cls) -> str:
         return cls._children(body=_SUBISSUE_PROSE, label=IssueLabel.PENDING, state=IssueState.OPEN)
+
+    @classmethod
+    def the_slice_never_run_without_decisions(cls) -> str:
+        return cls._children(body=_SUBISSUE_PROSE_WITHOUT_DECISIONS, label=IssueLabel.PENDING, state=IssueState.OPEN)
 
     @classmethod
     def the_slice_aborted_before_touching_code(cls) -> str:

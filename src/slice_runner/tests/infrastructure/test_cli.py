@@ -2096,6 +2096,45 @@ class TestWhenTheRunStaysOpen:
         assert code == ExitCode.PRECHECKS_BLOCKED
         assert json.loads(capsys.readouterr().out)["precheck"] == "pull-request-already-open"
 
+    def test_a_parent_without_decisions_stops_the_run_before_any_worktree_is_mounted(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        invocation = RunInvocation(
+            children=GhConversationMother.the_slice_never_run(),
+            parent=GhConversationMother.parent_of_one_slice_without_decisions(),
+            mounted=False,
+            answers=self._clear_ground(),
+        )
+
+        code = invocation.conduct(logs=tmp_path / "logs")
+
+        assert code == ExitCode.PRECHECKS_BLOCKED
+        assert json.loads(capsys.readouterr().out)["precheck"] == "missing-decisions"
+        assert not invocation.process.invoked("git", "worktree", "add")
+
+    def test_a_subissue_without_decisions_stops_the_run_before_any_worktree_is_mounted(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        invocation = RunInvocation(
+            children=GhConversationMother.the_slice_never_run_without_decisions(),
+            mounted=False,
+            answers=self._clear_ground(),
+        )
+
+        code = invocation.conduct(logs=tmp_path / "logs")
+
+        assert code == ExitCode.PRECHECKS_BLOCKED
+        assert json.loads(capsys.readouterr().out)["precheck"] == "missing-decisions"
+        assert not invocation.process.invoked("git", "worktree", "add")
+
+    @staticmethod
+    def _clear_ground() -> tuple[Answer, ...]:
+        return (
+            Answer(to=("git", "fetch", "origin")),
+            Answer(to=("git", "rev-list", "--count"), stdout="0\n"),
+            Answer(to=("gh", "pr", "list"), stdout=GhConversationMother.no_open_pull_request()),
+        )
+
     def test_a_base_that_does_not_resolve_against_its_remote_exits_with_its_own_precheck_and_writes_nothing(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:

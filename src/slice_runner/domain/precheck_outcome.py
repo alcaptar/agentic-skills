@@ -13,3 +13,4 @@ class PrecheckOutcome(StrEnum):
     SOURCES_OVER_BUDGET = "sources-over-budget"
     MISSING_CONTROLS = "missing-controls"
     BASE_NOT_ON_REMOTE = "base-not-on-remote"
+    MISSING_DECISIONS = "missing-decisions"

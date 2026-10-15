@@ -116,9 +116,9 @@ Una feature = **un issue padre** + **una subissue por slice**. Un solo formato, 
 
 | Donde | Que lleva |
 |---|---|
-| Issue padre | `## Intencion`, `## Lo que ya existe`, `## Fuentes de convencion` y `## Controles`, los dos ultimos por repo, mas `## Historia de usuario` si la feature tiene una -y entonces tambien la clave delante de su titulo y la etiqueta `origen:<clave>`-. Las slices son sus subissues, y la barra de progreso la calcula GitHub |
+| Issue padre | `## Intencion`, `## Lo que ya existe`, `## Decisiones`, `## Fuentes de convencion` y `## Controles`, los dos ultimos por repo, mas `## Historia de usuario` si la feature tiene una -y entonces tambien la clave delante de su titulo y la etiqueta `origen:<clave>`-. Las slices son sus subissues, y la barra de progreso la calcula GitHub |
 | Titulo de la subissue | `slice-NN (name): titulo`, con la clave de la historia de usuario delante si el padre la declara; de ahi sale el orden de ejecucion, y de `name` sale la rama (con la clave delante del numero cuando la hay: `slice/AS-255-NN-name`) y el scope del commit |
-| Cuerpo de la subissue | Las lineas de la slice: `REPO:`, `INTENCION:`, `ACEPTACION:`, `SENAL:`, `EXCLUYE:`, `SUSTITUYE:` |
+| Cuerpo de la subissue | Las lineas de la slice: `REPO:`, `INTENCION:`, `DECISION:`, `ACEPTACION:`, `SENAL:`, `EXCLUYE:`, `SUSTITUYE:` |
 | Etiqueta de la subissue | El estado macro, que arranca en `estado:pendiente`, mas `origen:<clave>` si el padre declara historia de usuario |
 
 ### El issue padre
@@ -135,6 +135,10 @@ ajuste negativo entra sin que nadie lo frene y deja el stock en negativo hasta q
   lectura para decidir si el ajuste deja el stock en negativo, no introduce otro puerto
 - precedente: #88 - se intento con un job nocturno y se revirtio porque no daba trazabilidad del quien
 - acopla: `AjustarStock` ya emite el evento; el ajuste manual se engancha ahi, no en el endpoint
+
+## Decisiones
+- el ajuste se registra en una tabla propia y no en el log de auditoria, porque soporte necesita consultarlo por sku
+- la cantidad negativa se rechaza en el caso de uso y no en el endpoint, para que valga tambien desde el evento
 
 ## Fuentes de convencion
 - doc: CLAUDE.md
@@ -174,6 +178,7 @@ del padre no lleva primera linea.
 ```markdown
 REPO: tu-org/infra-alertas
 INTENCION: hoy el stock se queda en negativo y nadie se entera hasta que una tienda llama a soporte
+DECISION: la alerta mira el minimo en ventana de 10m y no el valor instantaneo, para no avisar por un negativo aislado
 ACEPTACION: la alerta dispara con stock negativo sostenido 10m y no con un negativo aislado
 ACEPTACION: la alerta sale con severidad critical y apunta al runbook de stock
 SENAL: prometheus min_over_time(application_stock_actual[10m]) < 0 dispara la alerta en 15m post-deploy; critical
@@ -186,6 +191,11 @@ SUSTITUYE: no
 - El padre abre con `## Intencion`: el problema de la feature entera, que esta mal hoy y como se nota.
   Es lo primero que lee una persona al abrirlo, y lo que `slice-runner` reutiliza en el cuerpo de cada
   pull request. Sin ella la spec no esta terminada.
+- El padre lleva `## Decisiones` con lineas `- <decision>`: **lo que la persona decidio de diseno al
+  disenar la feature y que el implementador no tiene que adivinar** -que se elige entre dos caminos
+  razonables y por que-. Es la decision, no un criterio de aceptacion disfrazado ni un detalle del
+  codigo. Si de verdad no hay ninguna, la seccion lleva una sola linea `- ninguna: <motivo>`; **vacia
+  no vale**, y un padre sin ninguna linea para el run en la comprobacion previa con `missing-decisions`.
 - El padre lleva `## Lo que ya existe` con lineas `- pieza: <ruta> - <que hace hoy>`,
   `- precedente: #<numero> - <que le paso>` o `- acopla: <sitio> - <como>`. **Cada linea cita una ruta
   o un numero**: un hallazgo que no se puede ir a comprobar es una impresion y no entra. **Y una linea
@@ -337,6 +347,10 @@ SUSTITUYE: no
   escribe, lo que cruza invocaciones-, esa mitad se queda fijada donde estaba. `ACEPTACION: se retira de
   A lo que solo ejercita <lo trasladado>, y lo que ademas fijaba una transicion se queda` cumple la
   vara; `ACEPTACION: se retiran los tests duplicados` no, porque no dice quien decide que es duplicado.
+- El cuerpo lleva al menos una linea `DECISION:` con **una decision de diseno que afecta a esta slice y
+  que el implementador no tiene que adivinar**. Si de verdad no hay ninguna, se declara con
+  `DECISION: ninguna - <motivo>`, igual que `EXCLUYE: nada - <motivo>`; **un cuerpo sin ninguna linea
+  para el run en la comprobacion previa con `missing-decisions`**.
 - El cuerpo lleva una linea `SENAL:` con **como se comprueba viva en produccion** (formato:
   `<fuente> <serie/expresion>; <assert vivo con ventana>; critical|advisory`), o
   `SENAL: exenta - <motivo>`. Es obligatoria cuando la slice cambia comportamiento observable en prod.
@@ -707,6 +721,14 @@ trabajo. Ofrece corregirlas. Checklist:
   es lo que el diff ya cuenta, y ocupa el sitio de lo que no cuenta.
 - Ninguna slice sin criterios de aceptacion en su cuerpo (sin ellos no hay control de verificacion en
   slice-runner).
+- **Ninguna slice sin al menos una linea `DECISION:`, y ninguna `DECISION: ninguna` sin motivo
+  escrito.** Si falta (p. ej. un issue anterior a este mecanismo), **es la desviacion a corregir**:
+  pregunta a la persona que decidio de diseno al cortar esta slice y anade las lineas, reportandola
+  como `slice-NN (#numero)`, en el cuerpo; sin ellas `slice-runner` para con `missing-decisions`.
+- **El padre tiene seccion `## Decisiones` con al menos una linea.** Si falta (p. ej. un issue anterior
+  a este mecanismo), **es la desviacion a corregir**: pregunta a la persona que decidio de diseno al
+  disenar la feature y anadela al cuerpo del padre; una feature sin decisiones se declara con
+  `- ninguna: <motivo>`, nunca vacia.
 - **Ninguna slice que cambie comportamiento en prod sin `SENAL:`**, y ninguna `SENAL: exenta` sin
   motivo escrito. Si falta (p. ej. un issue anterior a este mecanismo), **es la desviacion a corregir**:
   aplica la escalera de `references/observabilidad.md` con la persona y anade la linea. La `SENAL` debe

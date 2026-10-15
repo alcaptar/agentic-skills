@@ -32,6 +32,7 @@ class SubIssueMother:
                 "antes de tocar codigo comprueba que la subissue no este ya cerrada",
                 "cada precheck falla con un motivo distinguible, no con un booleano",
             ),
+            decisions=("el padre decide el reparto de responsabilidades entre las capas",),
             signal="exenta - este repo no despliega",
             excludes="",
             replaces="",
@@ -101,6 +102,14 @@ class SubIssueMother:
     @staticmethod
     def understanding_published_but_relabelled_by_hand() -> SubIssue:
         return replace(SubIssueMother.pending(), run=Run(step=Step.UNDERSTAND))
+
+    @staticmethod
+    def without_decisions() -> SubIssue:
+        return replace(SubIssueMother.pending(), decisions=())
+
+    @staticmethod
+    def exempt_from_decisions() -> SubIssue:
+        return replace(SubIssueMother.pending(), decisions=("ninguna - la slice no decide nada de diseno",))
 
     @staticmethod
     def without_a_declared_intention() -> SubIssue:

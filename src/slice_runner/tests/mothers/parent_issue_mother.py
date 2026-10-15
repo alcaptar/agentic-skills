@@ -15,6 +15,7 @@ class ParentIssueMother:
         return ParentIssue(
             intention="hoy nada evita reimplementar una slice ya entregada",
             prior_art="",
+            decisions=("las decisiones de diseno viajan en la spec",),
             sources=(Source(kind=SourceKind.DOC, path="CLAUDE.md"),),
             controls=Controls(commands=(ControlCommandMother.lint(),), exemption_reason=None),
             subissue_count=1,
@@ -54,6 +55,16 @@ class ParentIssueMother:
     def without_controls() -> ParentIssue:
         return replace(
             ParentIssueMother.with_sources_and_controls(), controls=Controls(commands=(), exemption_reason=None)
+        )
+
+    @staticmethod
+    def without_decisions() -> ParentIssue:
+        return replace(ParentIssueMother.with_sources_and_controls(), decisions=())
+
+    @staticmethod
+    def exempt_from_decisions() -> ParentIssue:
+        return replace(
+            ParentIssueMother.with_sources_and_controls(), decisions=("ninguna: la feature no decide nada de diseno",)
         )
 
     @staticmethod

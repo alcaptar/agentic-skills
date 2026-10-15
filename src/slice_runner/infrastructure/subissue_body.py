@@ -14,6 +14,7 @@ if TYPE_CHECKING:
 _REPO_LINE = re.compile(r"^REPO\s*:\s*(.+?)\s*$", re.IGNORECASE | re.MULTILINE)
 _INTENTION_LINE = re.compile(r"^INTENCION\s*:\s*(.+?)\s*$", re.IGNORECASE | re.MULTILINE)
 _CRITERION_LINE = re.compile(r"^ACEPTACION\s*:\s*(.+?)\s*$", re.IGNORECASE | re.MULTILINE)
+_DECISION_LINE = re.compile(r"^DECISION\s*:\s*(.+?)\s*$", re.IGNORECASE | re.MULTILINE)
 _SIGNAL_LINE = re.compile(r"^SENAL\s*:\s*(.+?)\s*$", re.IGNORECASE | re.MULTILINE)
 _EXCLUDES_LINE = re.compile(r"^EXCLUYE\s*:\s*(.+?)\s*$", re.IGNORECASE | re.MULTILINE)
 _REPLACES_LINE = re.compile(r"^SUSTITUYE\s*:\s*(.+?)\s*$", re.IGNORECASE | re.MULTILINE)
@@ -25,6 +26,7 @@ class ParsedSubissueBody:
     repo: str | None
     intention: str
     criteria: tuple[str, ...]
+    decisions: tuple[str, ...]
     signal: str
     excludes: str
     replaces: str
@@ -38,6 +40,7 @@ class SubissueBody:
             repo=cls._first(_REPO_LINE, body),
             intention=cls._first(_INTENTION_LINE, body) or "",
             criteria=tuple(_CRITERION_LINE.findall(body)),
+            decisions=tuple(_DECISION_LINE.findall(body)),
             signal=cls._first(_SIGNAL_LINE, body) or "",
             excludes=cls._first(_EXCLUDES_LINE, body) or "",
             replaces=cls._first(_REPLACES_LINE, body) or "",

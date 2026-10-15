@@ -90,6 +90,30 @@ class TestRunPrechecks:
 
         assert query.execute(params).outcome is PrecheckOutcome.MISSING_CONTROLS
 
+    def test_a_subissue_with_no_decision_line_is_missing_decisions(self, query: RunPrechecks) -> None:
+        params = self._params(
+            subissue=SubIssueMother.without_decisions(), parent=ParentIssueMother.with_sources_and_controls()
+        )
+
+        assert query.execute(params).outcome is PrecheckOutcome.MISSING_DECISIONS
+
+    def test_a_parent_with_no_line_under_its_decisions_is_missing_decisions(self, query: RunPrechecks) -> None:
+        params = self._params(subissue=SubIssueMother.pending(), parent=ParentIssueMother.without_decisions())
+
+        assert query.execute(params).outcome is PrecheckOutcome.MISSING_DECISIONS
+
+    def test_a_subissue_whose_only_decision_is_its_exemption_is_clear(self, query: RunPrechecks) -> None:
+        params = self._params(
+            subissue=SubIssueMother.exempt_from_decisions(), parent=ParentIssueMother.with_sources_and_controls()
+        )
+
+        assert query.execute(params).outcome is PrecheckOutcome.CLEAR
+
+    def test_a_parent_whose_only_decision_is_its_exemption_is_clear(self, query: RunPrechecks) -> None:
+        params = self._params(subissue=SubIssueMother.pending(), parent=ParentIssueMother.exempt_from_decisions())
+
+        assert query.execute(params).outcome is PrecheckOutcome.CLEAR
+
     def test_everything_in_its_place_is_clear(self, query: RunPrechecks) -> None:
         params = self._params(subissue=SubIssueMother.pending(), parent=ParentIssueMother.with_sources_and_controls())
 

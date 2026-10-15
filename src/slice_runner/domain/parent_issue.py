@@ -13,6 +13,7 @@ if TYPE_CHECKING:
 class ParentIssue:
     intention: str
     prior_art: str
+    decisions: tuple[str, ...]
     sources: tuple[Source, ...]
     controls: Controls
     subissue_count: int

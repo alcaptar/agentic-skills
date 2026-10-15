@@ -92,6 +92,31 @@ class TestReadingTheParent:
         assert argv.value_of("--repo") == _REPO
         assert argv.value_of("--json") == "body,subIssuesSummary,state"
 
+    def test_every_line_under_the_decisions_heading_arrives_in_order_without_its_leading_dash(self) -> None:
+        body = "## Intencion\nx\n\n## Decisiones\n- la primera decision\n- la segunda decision\n\n## Controles\n"
+
+        parent = GhRunRepository(call=GhCallDoubles.wired(self._process_with_body(body))).read_parent(
+            repo=_REPO, issue=43, slice_repo=None
+        )
+
+        assert parent.decisions == ("la primera decision", "la segunda decision")
+
+    def test_a_parent_without_the_decisions_section_reads_as_no_decisions(self) -> None:
+        parent = GhRunRepository(call=GhCallDoubles.wired(self._process())).read_parent(
+            repo=_REPO, issue=43, slice_repo=None
+        )
+
+        assert parent.decisions == ()
+
+    def test_the_decisions_of_a_parent_do_not_depend_on_which_repo_the_slice_belongs_to(self) -> None:
+        body = "## Decisiones\n- una decision de la feature\n"
+
+        parent = GhRunRepository(call=GhCallDoubles.wired(self._process_with_body(body))).read_parent(
+            repo=_REPO, issue=43, slice_repo=_OTHER_REPO
+        )
+
+        assert parent.decisions == ("una decision de la feature",)
+
     def test_the_state_of_the_issue_becomes_the_state_of_the_parent(self) -> None:
         parent = GhRunRepository(call=GhCallDoubles.wired(self._process())).read_parent(
             repo=_REPO, issue=43, slice_repo=None
@@ -275,6 +300,23 @@ class TestReadingTheChildren:
             "el cuerpo se lee entero; los criterios llegan como lineas",
             "el bloque de estado se puede reescribir sin tocar lo de arriba",
         )
+
+    def test_every_decision_line_of_the_body_arrives_in_order_without_its_prefix(self) -> None:
+        body = "INTENCION: x\nDECISION: la primera decision\nACEPTACION: y\nDECISION: la segunda decision\n"
+        entry = {**GhResponseMother.children_of_parent()[0], "body": body}
+
+        children = GhRunRepository(call=GhCallDoubles.wired(self._process(children=[entry]))).read_children(
+            repo=_REPO, parent=43, expected=1
+        )
+
+        assert children[0].decisions == ("la primera decision", "la segunda decision")
+
+    def test_a_body_without_any_decision_line_reads_as_no_decisions(self) -> None:
+        children = GhRunRepository(call=GhCallDoubles.wired(self._process())).read_children(
+            repo=_REPO, parent=43, expected=2
+        )
+
+        assert all(child.decisions == () for child in children)
 
     def test_the_intention_and_the_signal_of_the_slice_arrive_as_the_lines_that_declare_them(self) -> None:
         children = GhRunRepository(call=GhCallDoubles.wired(self._process())).read_children(
