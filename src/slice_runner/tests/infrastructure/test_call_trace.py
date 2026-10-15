@@ -330,6 +330,14 @@ class TestReadingBackWhatWasWritten:
         assert read_back == written
 
 
+class TestARowOfTheRetiredUnderstandStep:
+    def test_a_row_written_when_the_run_still_understood_is_read_back_as_the_understand_step(self) -> None:
+        written = HarnessCallPayload.from_call(HarnessCallMother.of_the_implementer(), ts=_STAMP.isoformat())
+        row = {**written.to_contract(), "step": "understand"}
+
+        assert HarnessCallPayload.from_dict(row).step is Step.UNDERSTAND
+
+
 class TestWhereTheTraceLives:
     def test_the_directory_is_created_when_it_is_not_there_so_the_first_call_is_not_lost(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch

@@ -27,10 +27,6 @@ class InvalidImplementationReportError(MeasuredCallError):
     pass
 
 
-class InvalidUnderstandingReportError(MeasuredCallError):
-    pass
-
-
 class PermissionDeniedError(MeasuredCallError):
     pass
 
@@ -84,10 +80,6 @@ class BranchMismatchError(ValueError):
 
 
 class UnreadableIssueError(ValueError):
-    pass
-
-
-class NoUnderstandingPublishedError(LookupError):
     pass
 
 

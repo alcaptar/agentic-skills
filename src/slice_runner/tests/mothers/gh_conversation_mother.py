@@ -97,13 +97,9 @@ class GhConversationMother:
         return cls._children(body=f"{_SUBISSUE_PROSE}\n{cls._state_block(run)}\n", label=label, state=IssueState.OPEN)
 
     @classmethod
-    def the_subissue_viewed(
-        cls, *, label: IssueLabel, run: Run | None = None, stale: bool = False
-    ) -> dict[str, object]:
+    def the_subissue_viewed(cls, *, label: IssueLabel, run: Run | None = None) -> dict[str, object]:
         block = cls._state_block(run) if run is not None else ""
         body = f"{_SUBISSUE_PROSE}\n{block}\n"
-        if stale:
-            body = body.replace('"alignment": "awaiting"', '"understanding_pending": false')
 
         return cls._entry(
             number=cls.SUBISSUE,
@@ -255,8 +251,6 @@ class GhConversationMother:
     def _state_block(run: Run) -> str:
         state = {
             "step": run.step.value,
-            "corrected": run.corrected,
-            "alignment": run.alignment.value,
             "retry_instruction": run.retry_instruction,
             "control_retries": run.control_retries,
             "hygiene_retries": run.hygiene_retries,

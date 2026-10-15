@@ -7,7 +7,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
-from slice_runner.application.actions.agree_understanding import AgreeUnderstanding, AgreeUnderstandingParams
 from slice_runner.application.actions.catch_up_branch import CatchUpBranch
 from slice_runner.application.actions.close_parent import CloseParent
 from slice_runner.application.actions.commit_round import CommitRound
@@ -17,7 +16,6 @@ from slice_runner.application.actions.conduct_slice import (
     ConductSlicePorts,
     ConductSliceUseCases,
 )
-from slice_runner.application.actions.correct_understanding import CorrectUnderstanding, CorrectUnderstandingParams
 from slice_runner.application.actions.deliver_slice import DeliverSlice
 from slice_runner.application.actions.implement_slice import ImplementSlice
 from slice_runner.application.actions.mount_worktree import MountWorktree
@@ -29,7 +27,6 @@ from slice_runner.application.actions.rescue_staged_work import RescueStagedWork
 from slice_runner.application.actions.reset_slice import ResetSlice, ResetSliceParams
 from slice_runner.application.actions.retire_worktree import RetireWorktree
 from slice_runner.application.actions.run_controls import RunControls
-from slice_runner.application.actions.seek_alignment import SeekAlignment
 from slice_runner.application.actions.stage_slice import StageSlice
 from slice_runner.application.actions.verify_slice import VerifySlice, VerifySliceParams
 from slice_runner.application.queries.check_readiness import CheckReadiness, CheckReadinessParams, CheckReadinessPorts
@@ -39,7 +36,6 @@ from slice_runner.application.queries.list_closed_slices import ListClosedSlices
 from slice_runner.application.queries.read_ci_status import ReadCiStatus
 from slice_runner.application.queries.read_conversation import ReadConversation, ReadConversationParams
 from slice_runner.application.queries.read_pull_request_status import ReadPullRequestStatus
-from slice_runner.application.queries.read_understanding import ReadUnderstanding, ReadUnderstandingParams
 from slice_runner.application.queries.run_prechecks import RunPrechecks
 from slice_runner.application.queries.select_slice import SelectSlice
 from slice_runner.application.queries.show_feature_status import ShowFeatureStatus, ShowFeatureStatusParams
@@ -62,7 +58,6 @@ from slice_runner.domain.exceptions import (
     NoPullRequestError,
     NoRecognizableSpecError,
     NoSliceLeftError,
-    NoUnderstandingPublishedError,
     OrderRefusedError,
     ProtectedBranchError,
     RunNotClosedError,
@@ -85,7 +80,6 @@ from slice_runner.domain.state_machine import StateMachine
 from slice_runner.domain.step import Step
 from slice_runner.infrastructure.branches_without_catch_up import BranchesWithoutCatchUp
 from slice_runner.infrastructure.claude_implementer import ClaudeImplementer
-from slice_runner.infrastructure.claude_understanding import ClaudeUnderstanding
 from slice_runner.infrastructure.claude_verifier import ClaudeVerifier
 from slice_runner.infrastructure.closed_slice_metrics_payload import ClosedSliceMetricsPayload
 from slice_runner.infrastructure.closed_slice_metrics_view import ClosedSliceMetricsView
@@ -144,8 +138,6 @@ from slice_runner.infrastructure.subcommand import Subcommand
 from slice_runner.infrastructure.system_clock import SystemClock
 from slice_runner.infrastructure.transition_payload import TransitionPayload
 from slice_runner.infrastructure.transition_request_payload import TransitionRequestPayload
-from slice_runner.infrastructure.understanding_invocation import UnderstandingInvocation
-from slice_runner.infrastructure.understanding_line_payload import UnderstandingLinePayload
 from slice_runner.infrastructure.uv_program_origin import UvProgramOrigin
 from slice_runner.infrastructure.verdict_payload import VerdictPayload
 
@@ -237,13 +229,13 @@ class Cli:
                 result = cls(process=LocalProcess(budgets=budgets), budgets=budgets).doctor(
                     repo=arguments.repo, worktree=arguments.worktree, base=arguments.base
                 )
-            case Subcommand.RESET | Subcommand.GO | Subcommand.REVIEW | Subcommand.RETRY:
+            case Subcommand.RESET | Subcommand.RETRY:
                 result = cls._dispatched_over_a_subissue(arguments, budgets=budgets)
             case Subcommand.STATUS:
                 result = cls(process=LocalProcess(budgets=budgets), budgets=budgets).status(
                     repo=arguments.repo, issue=arguments.issue, as_json=arguments.json
                 )
-            case Subcommand.FOLLOW | Subcommand.UNDERSTANDING | Subcommand.TUI:
+            case Subcommand.FOLLOW | Subcommand.TUI:
                 result = cls._dispatched_for_the_interface(arguments, budgets=budgets)
             case Subcommand.REGISTER:
                 result = cls(process=LocalProcess(budgets=budgets), budgets=budgets).register(
@@ -267,10 +259,6 @@ class Cli:
                     reader=LocalEventReader(),
                     clock=SystemClock(),
                 )
-            case Subcommand.UNDERSTANDING:
-                result = cls(process=LocalProcess(budgets=budgets), budgets=budgets).understanding(
-                    repo=arguments.repo, issue=arguments.issue, as_json=arguments.json
-                )
             case Subcommand.TUI:
                 result = cls.tui(replacement=OsProcessReplacement(), issue=arguments.issue)
             case _:
@@ -285,10 +273,6 @@ class Cli:
         match Subcommand(arguments.command):
             case Subcommand.RESET:
                 result = cli.reset(repo=arguments.repo, issue=arguments.issue)
-            case Subcommand.GO:
-                result = cli.go(repo=arguments.repo, issue=arguments.issue)
-            case Subcommand.REVIEW:
-                result = cli.review(repo=arguments.repo, issue=arguments.issue, correction=" ".join(arguments.text))
             case Subcommand.RETRY:
                 result = cli.retry(repo=arguments.repo, issue=arguments.issue, instruction=" ".join(arguments.text))
             case _:
@@ -429,21 +413,6 @@ class Cli:
 
     @staticmethod
     def _add_the_orders(subcommands: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
-        go = subcommands.add_parser(
-            Subcommand.GO,
-            help="agree the understanding a slice published, so the next run implements it, without launching the run",
-        )
-        go.add_argument("issue", type=int, help="number of the subissue whose understanding is agreed")
-        go.add_argument("--repo", required=True, help="repo of the subissue, as `<org>/<repo>`")
-
-        review = subcommands.add_parser(
-            Subcommand.REVIEW,
-            help="ask for the understanding of a slice to be redone with a correction, without launching the run",
-        )
-        review.add_argument("issue", type=int, help="number of the subissue whose understanding is corrected")
-        review.add_argument("--repo", required=True, help="repo of the subissue, as `<org>/<repo>`")
-        review.add_argument("text", nargs="+", help="the correction the understanding is redone with")
-
         retry = subcommands.add_parser(
             Subcommand.RETRY,
             help="reopen a blocked or aborted slice with an instruction for the implementer, without launching the run",
@@ -476,14 +445,6 @@ class Cli:
         )
         register.add_argument("issue", type=int, help="number of the parent issue whose subissues are registered")
         register.add_argument("--repo", required=True, help="repo of the issue, as `<org>/<repo>`")
-
-        understanding = subcommands.add_parser(
-            Subcommand.UNDERSTANDING,
-            help="print the last understanding published in a subissue, answered or not, reading only",
-        )
-        understanding.add_argument("issue", type=int, help="number of the subissue whose understanding is shown")
-        understanding.add_argument("--repo", required=True, help="repo of the subissue, as `<org>/<repo>`")
-        understanding.add_argument("--json", action="store_true", help="print the understanding as a JSON object")
 
     @classmethod
     def tui(cls, *, replacement: ProcessReplacement, issue: int | None) -> int:
@@ -726,35 +687,6 @@ class Cli:
 
         return ExitCode.OK
 
-    def go(self, *, repo: str, issue: int) -> int:
-        repository = GhRunRepository(call=self._gh_call(clock=SystemClock()))
-        try:
-            subissue = repository.read_subissue(repo=repo, issue=issue)
-            AgreeUnderstanding(repository=repository).execute(AgreeUnderstandingParams(repo=repo, subissue=subissue))
-        except self.ORDER_STOPS as error:
-            return self._why_the_order_stopped(error)
-
-        print(f"the understanding of subissue #{issue} is agreed: the next `run` implements it")
-
-        return ExitCode.OK
-
-    def review(self, *, repo: str, issue: int, correction: str) -> int:
-        if not correction.strip():
-            return self._reported("a review needs the correction as text", ExitCode.USAGE_ERROR)
-
-        repository = GhRunRepository(call=self._gh_call(clock=SystemClock()))
-        try:
-            subissue = repository.read_subissue(repo=repo, issue=issue)
-            CorrectUnderstanding(repository=repository).execute(
-                CorrectUnderstandingParams(repo=repo, subissue=subissue, correction=correction)
-            )
-        except self.ORDER_STOPS as error:
-            return self._why_the_order_stopped(error)
-
-        print(f"the correction of subissue #{issue} is saved: the next `run` redoes the understanding with it")
-
-        return ExitCode.OK
-
     def retry(self, *, repo: str, issue: int, instruction: str) -> int:
         if not instruction.strip():
             return self._reported("a retry needs the instruction as text", ExitCode.USAGE_ERROR)
@@ -806,26 +738,6 @@ class Cli:
                 print(line)
         else:
             print(FeatureStatusReport(statuses=statuses).rendered())
-
-        return ExitCode.OK
-
-    def understanding(self, *, repo: str, issue: int, as_json: bool) -> int:
-        try:
-            text = ReadUnderstanding(repository=GhRunRepository(call=self._gh_call(clock=SystemClock()))).execute(
-                ReadUnderstandingParams(repo=repo, issue=issue)
-            )
-        except NoUnderstandingPublishedError as error:
-            return self._reported(str(error), ExitCode.NO_UNDERSTANDING)
-        except UnreadableIssueError as error:
-            return self._reported(f"the understanding could not be read: {error}", ExitCode.USAGE_ERROR)
-        except GhCommandFailedError as error:
-            return self._reported(f"the understanding could not be read: {error}", ExitCode.RUN_INTERRUPTED)
-
-        print(
-            json.dumps(UnderstandingLinePayload.from_domain(text).to_contract(), ensure_ascii=False)
-            if as_json
-            else text
-        )
 
         return ExitCode.OK
 
@@ -951,10 +863,6 @@ class Cli:
                 ),
                 read_ci=ReadCiStatus(ci=GhCi(call=gh_call), forum=forum),
                 read_pull_request=ReadPullRequestStatus(forum=forum),
-                seek_alignment=SeekAlignment(
-                    understanding=ClaudeUnderstanding(calls=calls, reader=reader),
-                    repository=repository,
-                ),
                 catch_up=CatchUpBranch(branches=BranchesWithoutCatchUp(branches=branches)),
             ),
             ports=ConductSlicePorts(
@@ -967,7 +875,6 @@ class Cli:
             machine=machine,
             budgets=self._budgets,
             models=RoleModels(
-                understand=UnderstandingInvocation.MODEL,
                 implement=ImplementerInvocation.MODEL,
                 verify=JudgeInvocation.MODEL,
             ),

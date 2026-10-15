@@ -4,12 +4,10 @@ import json
 from dataclasses import replace
 from typing import TYPE_CHECKING
 
-from slice_runner.domain.alignment import Alignment
 from slice_runner.domain.canonical_slice_id import CanonicalSliceId
 from slice_runner.domain.slice_coordinates import SliceCoordinates
 from slice_runner.domain.step import Step
 from slice_runner.infrastructure.claude_implementer import ClaudeImplementer
-from slice_runner.infrastructure.claude_understanding import ClaudeUnderstanding
 from slice_runner.infrastructure.claude_verifier import ClaudeVerifier
 from slice_runner.infrastructure.conversation_tool_use_recorder import ConversationToolUseRecorder
 from slice_runner.infrastructure.harness_invocation_runner import HarnessCallSubject, HarnessInvocationRunner
@@ -27,9 +25,6 @@ from slice_runner.tests.durable_store_home import WithTheDurableStoresOutOfTheRe
 from slice_runner.tests.mothers.assignment_mother import AssignmentMother
 from slice_runner.tests.mothers.conversation_transcript_mother import ConversationTranscriptMother
 from slice_runner.tests.mothers.judge_output_mother import HarnessEnvelopeMother, JudgeVerdictMother
-from slice_runner.tests.mothers.parent_issue_mother import ParentIssueMother
-from slice_runner.tests.mothers.sub_issue_mother import SubIssueMother
-from slice_runner.tests.mothers.understanding_report_mother import UnderstandingReportMother
 from slice_runner.tests.mothers.verification_mother import JudgeMother, SliceUnderReviewMother
 
 if TYPE_CHECKING:
@@ -201,7 +196,7 @@ class TestATranscriptThatCannotBeRead(WithTheDurableStoresOutOfTheRealHome):
         ]
 
 
-class TestARunThatCallsAllThreeStepsOfTheHarness(WithTheDurableStoresOutOfTheRealHome):
+class TestARunThatCallsBothStepsOfTheHarness(WithTheDurableStoresOutOfTheRealHome):
     _WORKTREE = ConversationTranscriptMother.WORKTREE
     _SESSION = ConversationTranscriptMother.SESSION
 
@@ -216,7 +211,7 @@ class TestARunThatCallsAllThreeStepsOfTheHarness(WithTheDurableStoresOutOfTheRea
         return HarnessInvocationRunner(process=process, telemetry=telemetry)
 
     @classmethod
-    def _run_all_three(cls, tmp_path: Path) -> None:
+    def _run_both(cls, tmp_path: Path) -> None:
         ConversationTranscriptMother.written_under(tmp_path)
         tool_uses = ConversationToolUseRecorder(
             conversations=LocalConversationLog(),
@@ -227,16 +222,6 @@ class TestARunThatCallsAllThreeStepsOfTheHarness(WithTheDurableStoresOutOfTheRea
         )
         reader = RecordedSourceReader()
 
-        ClaudeUnderstanding(
-            calls=cls._calls(RecordedProcess(cls._envelope(UnderstandingReportMother.valid())), telemetry=telemetry),
-            reader=reader,
-        ).write(
-            subissue=SubIssueMother.pending(),
-            parent=ParentIssueMother.with_sources_and_controls(),
-            repo=AssignmentMother.REPO,
-            worktree=cls._WORKTREE,
-            alignment=Alignment(),
-        )
         ClaudeImplementer(
             calls=cls._calls(
                 RecordedProcess(HarnessEnvelopeMother.recorded("implementer-two-paths") | {"session_id": cls._SESSION}),
@@ -249,16 +234,15 @@ class TestARunThatCallsAllThreeStepsOfTheHarness(WithTheDurableStoresOutOfTheRea
             reader=reader,
         ).verify(JudgeMother.adversarial(), replace(SliceUnderReviewMother.of_the_slice(), worktree=cls._WORKTREE))
 
-    def test_the_three_calls_each_leave_their_own_row_in_the_tool_use_ledger(self, tmp_path: Path) -> None:
-        self._run_all_three(tmp_path)
+    def test_the_two_calls_each_leave_their_own_row_in_the_tool_use_ledger(self, tmp_path: Path) -> None:
+        self._run_both(tmp_path)
 
         assert [(row["step"], row["session"]) for row in WrittenToolUses.records_under(tmp_path)] == [
-            ("understand", self._SESSION),
             ("implement", self._SESSION),
             ("verify", self._SESSION),
         ]
 
-    def test_none_of_the_three_calls_falls_back_to_the_unrecorded_ledger(self, tmp_path: Path) -> None:
-        self._run_all_three(tmp_path)
+    def test_none_of_the_two_calls_falls_back_to_the_unrecorded_ledger(self, tmp_path: Path) -> None:
+        self._run_both(tmp_path)
 
         assert WrittenUnrecordedToolUses.records_under(tmp_path) == []

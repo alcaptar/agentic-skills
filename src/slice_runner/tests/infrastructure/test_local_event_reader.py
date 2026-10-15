@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from slice_runner.domain.event_cursor import EventCursor
 from slice_runner.domain.exceptions import UnreadableEventLogError
+from slice_runner.domain.step import Step
 from slice_runner.infrastructure.durable_ledger import DurableLedger
 from slice_runner.infrastructure.event_payload import EventPayload
 from slice_runner.infrastructure.local_event_log import LocalEventLog
@@ -95,3 +98,15 @@ class TestARowThisGenerationDidNotWrite(WithTheDurableStoresOutOfTheRealHome):
 
         with pytest.raises(UnreadableEventLogError, match="not one this program wrote in this generation"):
             LocalEventReader().read_since(EventCursor.start())
+
+
+class TestARowOfTheRetiredUnderstandStep(WithTheDurableStoresOutOfTheRealHome):
+    def test_a_row_written_when_the_run_still_understood_is_read_back_as_the_understand_step(self) -> None:
+        row = {**EventPayload.from_domain(EventMother.advancing()).to_contract(), "step": "understand"}
+        ledger = DurableLedger(name=LocalEventLog.LEDGER, row=EventPayload).path()
+        ledger.parent.mkdir(parents=True, exist_ok=True)
+        ledger.write_text(json.dumps(row) + "\n", encoding="utf-8")
+
+        batch = LocalEventReader().read_since(EventCursor.start())
+
+        assert [event.step for event in batch.events] == [Step.UNDERSTAND]

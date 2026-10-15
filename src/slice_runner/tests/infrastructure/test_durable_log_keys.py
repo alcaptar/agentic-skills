@@ -119,7 +119,6 @@ class TestNoDurableStoreWritesAKeyInSpanish(ReadingTheLedger):
             "ci_retries",
             "verify_retries",
             "verify_discards",
-            "understand_discards",
             "implement_discards",
             "harness",
             "harness.cost_usd",
@@ -162,7 +161,6 @@ class TestNoDurableStoreWritesAKeyInSpanish(ReadingTheLedger):
             "budgets.seconds_between_gh_retries",
             "budgets.sources_max_chars",
             "models_by_role",
-            "models_by_role.understand",
             "models_by_role.implement",
             "models_by_role.verify",
         }

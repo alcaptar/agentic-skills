@@ -75,6 +75,21 @@ class TestWhatIsWrittenDownOfACall(WithTheDurableStoresOutOfTheRealHome):
         assert CallToolUsePayload.model_validate(row).uses[1].command is None
 
 
+class TestARowOfTheRetiredUnderstandStep:
+    def test_a_row_written_when_the_run_still_understood_is_read_back_as_the_understand_step(self) -> None:
+        row = {
+            "ts": _STAMP.isoformat(),
+            "repo": HarnessCallToolUseMother.REPO,
+            "issue": HarnessCallToolUseMother.ISSUE,
+            "slice_id": HarnessCallToolUseMother.SLICE_ID,
+            "step": "understand",
+            "session": HarnessCallToolUseMother.SESSION,
+            "uses": [{"turn": 1, "tool": "Read", "path": "src/x.py"}],
+        }
+
+        assert CallToolUsePayload.model_validate(row).step is Step.UNDERSTAND
+
+
 class TestTheLogOnlyGrows(WithTheDurableStoresOutOfTheRealHome):
     def test_a_second_call_is_appended_instead_of_overwriting_the_first(self, tmp_path: Path) -> None:
         log = LocalToolUseLog(clock=self.frozen_at())

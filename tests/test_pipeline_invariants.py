@@ -255,8 +255,6 @@ _KNOWN_NOT_HARNESS_WRITING = {
     ("_reopen", "execute"),
     ("_repository", "clear_run"),
     ("_repository", "flag_unmerged_pull_request"),
-    ("_repository", "pause_for_alignment"),
-    ("_repository", "read_understanding"),
     ("_repository", "remove_label"),
     ("_repository", "write_label"),
     ("_repository", "write_malformed_response"),
@@ -330,7 +328,7 @@ def _harness_writing_calls(source: str) -> tuple[int, list[int]]:
 
 
 def test_no_call_that_writes_with_the_harness_in_conduct_slice_escapes_the_discard_and_retry_treatment() -> None:
-    """Understanding a call is discarded the same way implementing and verifying already are.
+    """A call to the harness is discarded the same way implementing and verifying already are.
 
     A rejection nobody catches does not stop at one call: it kills the whole run before anything is
     written or branched, which is the bug the slice-02 worktree-recovery mechanism exists to undo. The
@@ -343,9 +341,9 @@ def test_no_call_that_writes_with_the_harness_in_conduct_slice_escapes_the_disca
         f"{_CONDUCT_SLICE} calls the harness at line(s) {', '.join(str(line) for line in unguarded)} "
         f"without discarding and retrying a MeasuredCallError, unlike every other harness-writing call"
     )
-    assert total == 3, (
-        f"{_CONDUCT_SLICE} calls the harness {total} time(s) to write with it, expected exactly 3 "
-        f"(understand, implement, verify): a call added or removed here changes what this pins"
+    assert total == 2, (
+        f"{_CONDUCT_SLICE} calls the harness {total} time(s) to write with it, expected exactly 2 "
+        f"(implement, verify): a call added or removed here changes what this pins"
     )
 
 

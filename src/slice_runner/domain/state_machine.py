@@ -122,7 +122,9 @@ class StateMachine:
         match run.step:
             case Step.MOUNT_WORKTREE:
                 return self._after_mounting_the_worktree(run, outcome)
-            case Step.UNDERSTAND | Step.IMPLEMENT | Step.RUN_CONTROLS | Step.VERIFY:
+            case Step.UNDERSTAND:
+                self._impossible(run, outcome)
+            case Step.IMPLEMENT | Step.RUN_CONTROLS | Step.VERIFY:
                 return self._after_producing(run, outcome, run.step, call_died=call_died)
             case Step.OPEN_PULL_REQUEST | Step.AWAIT_CI | Step.CATCH_UP | Step.AWAIT_MERGE:
                 return self._after_delivering(run, outcome, run.step)
@@ -137,13 +139,11 @@ class StateMachine:
         self,
         run: Run,
         outcome: Outcome,
-        step: Literal[Step.UNDERSTAND, Step.IMPLEMENT, Step.RUN_CONTROLS, Step.VERIFY],
+        step: Literal[Step.IMPLEMENT, Step.RUN_CONTROLS, Step.VERIFY],
         *,
         call_died: bool,
     ) -> Transition:
         match step:
-            case Step.UNDERSTAND:
-                return self._after_the_alignment_pause(run, outcome, call_died=call_died)
             case Step.IMPLEMENT:
                 return self._after_implementing(run, outcome, call_died=call_died)
             case Step.RUN_CONTROLS:
@@ -172,21 +172,6 @@ class StateMachine:
             return self._moving_to(replace(run, catching_up_the_branch=True), Step.RUN_CONTROLS)
 
         self._impossible(run, outcome)
-
-    def _after_the_alignment_pause(self, run: Run, outcome: Outcome, *, call_died: bool) -> Transition:
-        match outcome:
-            case Outcome.DONE:
-                return self._moving_to(run, Step.IMPLEMENT)
-            case Outcome.PENDING:
-                return Transition(run=run, awaits_a_person=True)
-            case Outcome.CHANGES_REQUESTED:
-                return self._moving_to(run, Step.UNDERSTAND)
-            case Outcome.DISCARDED:
-                return self._moving_to(replace(run, understand_discards=run.understand_discards + 1), Step.UNDERSTAND)
-            case Outcome.CALL_NOT_MEASURED:
-                return self._closed(self._marking_a_dead_call(run, call_died), RunState.ABORTED_UNMEASURED_CALL)
-            case _:
-                self._impossible(run, outcome)
 
     def _after_implementing(self, run: Run, outcome: Outcome, *, call_died: bool) -> Transition:
         match outcome:

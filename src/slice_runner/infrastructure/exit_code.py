@@ -23,8 +23,6 @@ class ExitCode(IntEnum):
     ENVIRONMENT_NOT_READY = 13
     SOURCES_BUDGET_EXCEEDED = 14
     UNCHANGED_DIFF = 15
-    NO_UNDERSTANDING = 16
-    AWAITING_ALIGNMENT = 17
     ORDER_REFUSED = 18
     TUI_NOT_INSTALLED = 19
 
@@ -47,8 +45,6 @@ class ExitCode(IntEnum):
                 return cls.WAIT_EXHAUSTED
             case Halt.PULL_REQUEST_CLOSED:
                 return cls.PULL_REQUEST_CLOSED
-            case Halt.AWAITING_ALIGNMENT:
-                return cls.AWAITING_ALIGNMENT
 
     @classmethod
     def _of_the_closing(cls, state: RunState) -> ExitCode:

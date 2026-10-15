@@ -3,7 +3,6 @@ from __future__ import annotations
 from slice_runner.domain.exceptions import (
     InvalidHarnessOutputError,
     InvalidImplementationReportError,
-    InvalidUnderstandingReportError,
     InvalidVerdictError,
     MissingStructuredOutputError,
     PermissionDeniedError,
@@ -29,20 +28,6 @@ class RejectionMother:
     @staticmethod
     def envelope_nobody_could_parse() -> InvalidHarnessOutputError:
         return InvalidHarnessOutputError("the harness returned no JSON (code 1): claude: command not found")
-
-    @staticmethod
-    def invalid_understanding_report() -> InvalidUnderstandingReportError:
-        rejection = InvalidUnderstandingReportError("the harness returned only blank text as its understanding")
-        rejection.spend = HarnessSpendMother.of_the_understanding_call()
-
-        return rejection
-
-    @staticmethod
-    def invalid_understanding_report_with_an_overlong_message() -> InvalidUnderstandingReportError:
-        rejection = InvalidUnderstandingReportError("a" * 250)
-        rejection.spend = HarnessSpendMother.of_the_understanding_call()
-
-        return rejection
 
     @staticmethod
     def invalid_implementation_report() -> InvalidImplementationReportError:

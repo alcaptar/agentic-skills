@@ -55,16 +55,13 @@ flowchart TD
 
     subgraph runner_phase["2 - Conducir una slice (programa)"]
         runner["<b>slice-runner run</b><br/>programa"]
-        align{{"<b>ALINEAR</b><br/>entendimiento + respuesta<br/>de la persona: go / review / not-yet"}}
         impl["claude -p<br/><b>implementador</b><br/>TDD por capa"]
         ctrl{{"controles deterministas<br/>lint / tipos / tests"}}
         verif["claude -p<br/><b>juez</b><br/>adversarial, sin Bash"]
         pr["Pull Request<br/><i>Closes #&lt;subissue&gt;</i>"]
         ci{{"integracion continua"}}
 
-        runner --> align
-        align -->|"review: corrige y vuelve a mostrar"| align
-        align -->|go| impl --> ctrl
+        runner --> impl --> ctrl
         ctrl -->|rojo| impl
         ctrl -->|verde| verif
         verif -->|FALLA| impl
@@ -91,7 +88,6 @@ flowchart TD
     core -.->|"comenta el veredicto"| issue
 
     style issue fill:#fff3cd,stroke:#856404,stroke-width:3px
-    style align fill:#ffe8cc,stroke:#b35c00,stroke-width:2px
     style gate1 fill:#f8d7da,stroke:#721c24,stroke-width:3px
     style gate2 fill:#f8d7da,stroke:#721c24,stroke-width:3px
     style verif fill:#d1ecf1,stroke:#0c5460
@@ -102,9 +98,8 @@ flowchart TD
 Lo que hay que leer del diagrama: **el issue padre y su subissue son el bus** entre el programa y quien
 lo invoca (no se pasan ficheros ni memoria de sesion), los rombos son **decisiones deterministas** (los
 controles, el veredicto del juez, el estado de la integracion continua), las cajas azules son **llamadas
-sin estado al harness** (`claude -p`, no un subagente que viva en tu sesion), la naranja es la **pausa de
-alineacion** -el programa espera tu `go`, un `review` con una correccion, o nada todavia- y las dos rojas
-son los **unicos puntos donde para y decides tu**: mergear, y si el despliegue sale mal, el rollback.
+sin estado al harness** (`claude -p`, no un subagente que viva en tu sesion) y las dos rojas son los
+**unicos puntos donde para y decides tu**: mergear, y si el despliegue sale mal, el rollback.
 
 Este es el flujo que conduce hoy `uv run slice-runner run` (detalle en "El paso que ya es un programa"),
 siempre contra el formato **padre mas una subissue por slice** que crea `slice-spec`. Hubo un flujo
@@ -184,7 +179,7 @@ lo que arranca un ciclo hoy.
 ### El paso que ya es un programa
 
 Conducir una slice ya no lo orquesta la skill: lo ejecuta un programa instalable, que se puede lanzar
-solo. `run` conduce la siguiente slice ejecutable del issue de punta a punta -alinear, implementar,
+solo. `run` conduce la siguiente slice ejecutable del issue de punta a punta -implementar,
 controlar, verificar, abrir la pull request, esperar a la integracion continua- y para donde diga el
 estado; el estado vive en la subissue, asi que una invocacion interrumpida se retoma reinvocando. Con
 `--slice` se nombra la slice concreta a conducir en vez de dejar que el programa elija la siguiente,
@@ -198,10 +193,8 @@ Vale igual para el `--slice` de `verify`, `read` y `spend`.
 
 | Subcomando | Para que sirve | Ejemplo |
 |---|---|---|
-| `run` | Monta el worktree de la slice bajo `<raiz-del-clon>/.worktrees/` -`--repo-root`, el directorio actual por omision; `--worktree` solo para un arbol montado a mano- y conduce la siguiente slice ejecutable del issue de punta a punta -alinear, implementar, controlar, verificar, abrir la pull request, esperar la integracion continua- y para donde diga el estado. `--slice` nombra una slice concreta en vez de dejar que el programa elija. | `uv run slice-runner run 38 --repo alcaptar/agentic-skills --base master` |
+| `run` | Monta el worktree de la slice bajo `<raiz-del-clon>/.worktrees/` -`--repo-root`, el directorio actual por omision; `--worktree` solo para un arbol montado a mano- y conduce la siguiente slice ejecutable del issue de punta a punta -implementar, controlar, verificar, abrir la pull request, esperar la integracion continua- y para donde diga el estado. `--slice` nombra una slice concreta en vez de dejar que el programa elija. | `uv run slice-runner run 38 --repo alcaptar/agentic-skills --base master` |
 | `verify` | Juzga lo ya comiteado en la rama mas lo que hay staged, contra el branch-point de la base, y emite el veredicto por salida estandar (o el motivo de no tenerlo, por salida de error). | `uv run slice-runner verify --repo . --base master --slice slice-01` |
-| `go` | Acuerda el entendimiento que una slice publico y espera tu decision: guarda en el estado del run que esta acordado y deja en la subissue un comentario que dice que orden se dio. El siguiente `run` implementa sin volver a publicarlo. No lanza el run ni invoca al modelo, y rechaza -por `18`- una slice que no espera alineacion. | `uv run slice-runner go 45 --repo alcaptar/agentic-skills` |
-| `review` | Pide rehacer el entendimiento con una correccion: la guarda en el estado del run y deja el texto en un comentario. El siguiente `run` lo rehace con ella, lo publica y vuelve a parar; dos `review` seguidos dejan solo la segunda correccion. No lanza el run ni invoca al modelo, y rechaza -por `18`- una slice que no espera alineacion. | `uv run slice-runner review 45 --repo alcaptar/agentic-skills falta cubrir la slice ya cerrada` |
 | `retry` | Reabre una slice bloqueada o abortada por su etiqueta, reinicia el contador que la bloqueo y guarda la instruccion en el estado del run, de modo que el implementador la recibe aunque el proceso muera antes de llegar a el. Deja la instruccion en un comentario. No lanza el run ni invoca al modelo, y rechaza -por `18`- una slice sin bloqueo ni aborto. | `uv run slice-runner retry 45 --repo alcaptar/agentic-skills el control ya esta arreglado a mano` |
 | `explain` | Contesta que paso viene despues de un resultado, y cuando se agota un presupuesto, sin montar un run: es una funcion pura sobre el estado que le llega por entrada estandar. | `echo '{"run": {"step": "run-controls", "control_retries": 2}, "outcome": "failed"}' \| uv run slice-runner explain` |
 | `read` | Abre la conversacion grabada de una llamada concreta del rastro y la emite legible por salida estandar, para que la lea una persona. `--repo` e `--issue` identifican el run -son los mismos que fija `run`-, y `--worktree` es la ruta donde corrio la llamada: `<raiz-del-clon>/.worktrees/<NN-nombre>`, no el directorio del clon. | `uv run slice-runner read --repo alcaptar/agentic-skills --issue 38 --worktree .worktrees/04-nombre-de-la-slice --slice slice-04 --step implement` |
@@ -340,9 +333,7 @@ El codigo de salida es el contrato con quien lo invoca:
 | `13` | `doctor`: el entorno no esta listo para conducir una slice -falta `git`, `gh` no esta autenticado, falta `claude`, falta alguna de las skills `slice-spec`/`deploy-watch`, o el binario instalado y las skills enlazadas vienen de arboles distintos-. Distinto de `4`: la invocacion estaba bien escrita, lo que falta es el entorno |
 | `14` | Las fuentes de convencion declaradas, ya leidas, se pasan del tope de tamano del presupuesto: no se mando ningun prompt. Distinto de `8`: eso para antes de leer nada, esto se descubre sumando contenido ya leido, y reinvocar sin reducir lo declarado repite el mismo cierre |
 | `15` | `run`: el juez ya habia dictaminado sobre este mismo diff en esta invocacion y el implementador no lo movio en la vuelta siguiente, asi que no se le volvio a invocar (el veredicto sobre el mismo diff no puede cambiar). La subissue queda `bloqueada:sin-cambios` y un comentario junta lo que el juez sigue exigiendo con lo que el implementador declaro haber dejado fuera. Distinto de `5`: reinvocar a ciegas repite el cierre, hay que resolver el desacuerdo -o cambiar criterios y reabrir con `slice-runner retry`, que si vuelve a juzgar- |
-| `16` | `understanding`: la subissue no tiene ningun entendimiento publicado, asi que no hay nada que ensenar todavia. La invocacion esta bien escrita y la subissue existe: quien invoca espera y vuelve a preguntar, no corrige nada. Distinto de `4`, donde la invocacion o la subissue estan mal |
-| `17` | `run`: la slice espera una orden tuya -`go` o `review`- tras publicar su entendimiento. La invocacion **termina** en vez de sondear el issue: da la orden y vuelve a lanzar `run`. Reinvocar sin dar ninguna orden termina igual y no vuelve a publicar nada |
-| `18` | `go`, `review` o `retry`: la slice no esta en el estado que esa orden necesita -`go` y `review` fuera de la pausa de alineacion, `retry` sin bloqueo ni aborto-. El motivo sale por `stderr` y no se escribe nada en el issue. Distinto de `4`: la invocacion estaba bien escrita y la subissue se leyo, lo que no cuadra es el estado de la slice |
+| `18` | `retry`: la slice no esta en el estado que esa orden necesita -sin bloqueo ni aborto-. El motivo sale por `stderr` y no se escribe nada en el issue. Distinto de `4`: la invocacion estaba bien escrita y la subissue se leyo, lo que no cuadra es el estado de la slice |
 | `19` | `tui`: `slice-runner-tui` no esta en el `PATH`, asi que no hay interfaz que abrir. Ejecuta `make install-tui`. Distinto de `4`: la invocacion estaba bien escrita, lo que falta es el ejecutable |
 
 `1` es un veredicto y `2` no lo es: esa es la distincion que hace el codigo de salida y que un booleano
@@ -363,10 +354,10 @@ echo '{"run": {"step": "run-controls", "control_retries": 2}, "outcome": "failed
 ```
 
 ```json
-{"run": {"step": "run-controls", "corrected": "", "alignment": "awaiting",
+{"run": {"step": "run-controls",
  "retry_instruction": "", "tree_unexpected": false, "previous_call_died": false, "catching_up_the_branch": false, "control_retries": 2,
  "hygiene_retries": 0, "verify_retries": 0, "ci_retries": 0, "catch_up_retries": 0,
- "indeterminate_ticks": 0, "verify_discards": 0, "understand_discards": 0, "implement_discards": 0,
+ "indeterminate_ticks": 0, "verify_discards": 0, "implement_discards": 0,
  "control_rounds_logged": 1, "verify_rounds_logged": 0, "last_reviewed_id": 0, "requested_changes": []},
  "state": "blocked-controls",
  "wait_seconds": 0,
@@ -383,8 +374,8 @@ backstop del unico bucle sin cierre propio -el descarte de un veredicto incohere
 porque no se toco el codigo-, y **la espera**, que termina la invocacion dejando el run abierto donde
 estaba. La espera son **dos** topes, no uno, porque esperar a una maquina no es esperar a una persona:
 **30 minutos para la integracion continua** -que no tarda mas salvo que este colgada- y **8 horas para
-las esperas humanas**, la alineacion y el merge. Y **cada paso estrena su cuenta**: lo que tardes en dar
-el `go` no sale del rato que el programa aguantara luego a que mergees. El motivo de los numeros esta en
+las esperas humanas**, o sea el merge. Y **cada paso estrena su cuenta**: lo que tardes en revisar la pull
+request no sale del rato que el programa aguantara luego a que mergees. El motivo de los numeros esta en
 `docs/conventions/domain.md`. Un par (paso, resultado) que la secuencia no describe **no cae en una rama
 generica**: sale por `4`.
 
@@ -451,7 +442,7 @@ uv run slice-runner run 42 --repo <org>/<repo> --base master
 ```
 
 Y hace, sin intervencion: lee el issue padre y elige la subissue `#43` -> la etiqueta
-`estado:en-curso` -> **te muestra su entendimiento y espera tu go/no-go** -> implementa con TDD -> deja
+`estado:en-curso` -> implementa con TDD -> deja
 los controles verdes -> **commit de esa vuelta** -> juzga el diff con `claude -p` -> abre la pull request
 `feat(cantidad-value-object): ...` con `Closes #43` -> tickea en background hasta integracion continua
 verde -> etiqueta la subissue `estado:esperando-merge` y **para**.

@@ -75,7 +75,6 @@ class TestResettingASlice:
         assert result.subissue.intention == subissue.intention
         assert result.subissue.criteria == subissue.criteria
         assert result.subissue.signal == subissue.signal
-        recorder.repository.write_understanding.assert_not_called()
 
     def test_a_subissue_carrying_neither_intention_nor_criteria_is_rejected_before_writing_anything(self) -> None:
         recorder = _Recorder()

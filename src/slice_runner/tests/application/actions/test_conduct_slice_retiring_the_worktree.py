@@ -227,42 +227,6 @@ class TestConductSliceTheEndingsThatKeepTheWorktree(_Merging):
         assert not conductor.worktrees.delete_branch.called
         self.published(conductor, WorktreeRetirement.KEPT_FOR_RESUMING)
 
-    def test_a_run_aborted_before_touching_code_leaves_no_worktree_and_no_branch(self) -> None:
-        conductor = Conductor(
-            chosen=SelectSliceResultMother.resumed_at(RunMother.about_to_publish_the_understanding()),
-            budgets=Budgets(slice_cost_usd=0.03),
-        )
-        conductor.listing_the_tree_once_mounted()
-        conductor.understanding.write.side_effect = [
-            RejectionMother.invalid_understanding_report(),
-            RejectionMother.invalid_understanding_report(),
-        ]
-
-        result = conductor.conduct()
-
-        assert result.state is RunState.ABORTED_BUDGET
-        conductor.worktrees.remove.assert_called_once_with(root=Conductor.ROOT, path=Conductor.WORKTREE)
-        conductor.worktrees.delete_branch.assert_called_once_with(root=Conductor.ROOT, branch=_BRANCH)
-        conductor.repository.publish_kept_worktree.assert_not_called()
-
-    def test_a_run_aborted_before_touching_code_still_keeps_a_tree_that_holds_uncommitted_work(self) -> None:
-        conductor = Conductor(
-            chosen=SelectSliceResultMother.resumed_at(RunMother.about_to_publish_the_understanding()),
-            budgets=Budgets(slice_cost_usd=0.03),
-        )
-        conductor.listing_the_tree_once_mounted()
-        conductor.worktrees.has_uncommitted_work.return_value = True
-        conductor.understanding.write.side_effect = [
-            RejectionMother.invalid_understanding_report(),
-            RejectionMother.invalid_understanding_report(),
-        ]
-
-        result = conductor.conduct()
-
-        assert result.state is RunState.ABORTED_BUDGET
-        assert not conductor.worktrees.remove.called
-        self.published(conductor, WorktreeRetirement.KEPT_UNCOMMITTED_WORK)
-
 
 class TestConductSliceWhenATreeIsFoundThatNobodyExpected(_Merging):
     @staticmethod
@@ -311,7 +275,6 @@ class TestConductSliceWhenATreeIsFoundThatNobodyExpected(_Merging):
         assert not conductor.worktrees.add_on_branch.called
         assert not conductor.worktrees.prune.called
         assert conductor.check_sources.execute.call_count == 0
-        assert conductor.understanding.write.call_count == 0
 
     def test_the_blocked_slice_is_labelled_so_it_is_not_picked_up_again_on_its_own(self) -> None:
         conductor = self._after_an_abort_that_left_its_tree()

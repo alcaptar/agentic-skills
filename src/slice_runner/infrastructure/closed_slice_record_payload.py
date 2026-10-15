@@ -58,7 +58,6 @@ class ClosedSliceRecordPayload(ContractModel):
     ci_retries: int
     verify_retries: int
     verify_discards: int
-    understand_discards: int
     implement_discards: int
     discarded_call: DiscardedCallPayload | None = None
     ci_indeterminate_cause: CiIndeterminateCause | None = None
@@ -87,7 +86,6 @@ class ClosedSliceRecordPayload(ContractModel):
                 "ci_retries": record.ci_retries,
                 "verify_retries": record.verify_retries,
                 "verify_discards": record.verify_discards,
-                "understand_discards": record.understand_discards,
                 "implement_discards": record.implement_discards,
                 "discarded_call": DiscardedCallPayload.from_domain(record.discarded_call)
                 if record.discarded_call is not None
