@@ -76,8 +76,7 @@ Nunca: mergear ni hacer rollback.
 | Síntoma | Que es |
 |---|---|
 | Código de salida 7 | Se agoto la espera (30 min). Reinvoca: retoma donde estaba |
-| Código de salida 17 | Espera tu orden: `go` o `review`. Reinvocar sin darla termina igual |
-| Parece parado | Espera tu `go`, la integración continua o el merge. Mira la etiqueta de la subissue |
+| Parece parado | Espera la integración continua o el merge. Mira la etiqueta de la subissue |
 | La pull request no se mergea sola | Correcto: el merge lo decides tu |
 | Otro código de salida | Tabla en `README.md`, apartado "El paso que ya es un programa" |
 
