@@ -360,8 +360,7 @@ echo '{"run": {"step": "run-controls", "control_retries": 2}, "outcome": "failed
  "indeterminate_ticks": 0, "verify_discards": 0, "implement_discards": 0,
  "control_rounds_logged": 1, "verify_rounds_logged": 0, "last_reviewed_id": 0, "requested_changes": []},
  "state": "blocked-controls",
- "wait_seconds": 0,
- "awaits_a_person": false}
+ "wait_seconds": 0}
 ```
 
 La respuesta trae **el run entero** (con los contadores ya gastados), el estado en el que queda -`open`

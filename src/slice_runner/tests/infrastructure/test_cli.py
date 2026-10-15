@@ -1153,16 +1153,7 @@ class TestTheTransitionOfEveryPair:
             },
             "state": "open",
             "wait_seconds": 0,
-            "awaits_a_person": False,
         }
-
-    @pytest.mark.parametrize("step", [Step.AWAIT_MERGE, Step.AWAIT_CI])
-    def test_a_pending_wait_ticks_instead_of_handing_the_slice_to_a_person_by_a_pause(
-        self, step: Step, capsys: pytest.CaptureFixture[str]
-    ) -> None:
-        Cli.explain(request=TransitionRequestMother.asking(step, Outcome.PENDING), budgets=Budgets())
-
-        assert json.loads(capsys.readouterr().out)["awaits_a_person"] is False
 
 
 class TestWhatEachBudgetPays:
