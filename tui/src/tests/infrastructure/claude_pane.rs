@@ -40,6 +40,7 @@ mod integration {
         let text = PaneScreen::text_of(&PaneScreen::painted(&mut session, true));
 
         assert!(text.contains("claude session ended"), "{text}");
+        assert!(text.contains("ctrl+q focus"), "{text}");
         assert!(text.contains("farewell"), "{text}");
     }
 
@@ -52,6 +53,7 @@ mod integration {
 
         assert!(text.contains("hello"), "{text}");
         assert!(!text.contains("claude session ended"), "{text}");
+        assert!(text.contains("ctrl+q focus"), "{text}");
     }
 
     #[test]

@@ -11,6 +11,10 @@ impl Keys {
         KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL)
     }
 
+    pub fn control_q() -> KeyEvent {
+        KeyEvent::new(KeyCode::Char('q'), KeyModifiers::CONTROL)
+    }
+
     pub fn control_backslash() -> KeyEvent {
         KeyEvent::new(KeyCode::Char('4'), KeyModifiers::CONTROL)
     }
@@ -47,12 +51,22 @@ mod with_the_focus_on_claude {
     }
 
     #[test]
-    fn control_backslash_toggles_the_focus_and_is_never_forwarded() {
+    fn control_q_toggles_the_focus_and_is_never_forwarded() {
+        let parser = Parser::new(24, 80, 0);
+
+        assert_eq!(
+            KeyRouting::route(Focus::Claude, Keys::control_q(), parser.screen()),
+            Routed::ToggleFocus
+        );
+    }
+
+    #[test]
+    fn control_backslash_is_ignored_instead_of_toggling_or_reaching_claude() {
         let parser = Parser::new(24, 80, 0);
 
         assert_eq!(
             KeyRouting::route(Focus::Claude, Keys::control_backslash(), parser.screen()),
-            Routed::ToggleFocus
+            Routed::Ignored
         );
     }
 
@@ -113,12 +127,27 @@ mod with_the_focus_on_the_board {
     }
 
     #[test]
-    fn control_backslash_toggles_the_focus_back() {
+    fn control_q_toggles_the_focus_back_while_a_plain_q_still_quits() {
+        let parser = Parser::new(24, 80, 0);
+        let screen = parser.screen();
+
+        assert_eq!(
+            KeyRouting::route(Focus::Board, Keys::control_q(), screen),
+            Routed::ToggleFocus
+        );
+        assert_eq!(
+            KeyRouting::route(Focus::Board, Keys::press(KeyCode::Char('q')), screen),
+            Routed::Board(Order::Quit)
+        );
+    }
+
+    #[test]
+    fn control_backslash_is_ignored() {
         let parser = Parser::new(24, 80, 0);
 
         assert_eq!(
             KeyRouting::route(Focus::Board, Keys::control_backslash(), parser.screen()),
-            Routed::ToggleFocus
+            Routed::Ignored
         );
     }
 }
