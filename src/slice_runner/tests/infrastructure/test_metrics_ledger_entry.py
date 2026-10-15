@@ -34,6 +34,19 @@ class ReadingARow:
         return MetricsLedgerEntry.of(MetricsEntryPayload.from_dict(row))
 
 
+class TestTheRetiredUnderstandDiscards(ReadingARow):
+    def test_a_row_carrying_the_understand_discards_is_read_without_error(self) -> None:
+        row = MetricsEntryPayload.from_domain(ClosedSliceMother.merged(), ts=_STAMP.isoformat()).to_contract()
+        row["understand_discards"] = 2
+
+        assert self._read(row).slice_id == ClosedSliceMother.SLICE_ID
+
+    def test_a_row_written_now_does_not_carry_them(self) -> None:
+        row = MetricsEntryPayload.from_domain(ClosedSliceMother.merged(), ts=_STAMP.isoformat()).to_contract()
+
+        assert "understand_discards" not in row
+
+
 class TestReadingBackARowThisProgramWrote(ReadingARow):
     def test_the_identity_of_the_slice_is_read_back_whole(self) -> None:
         row = MetricsEntryPayload.from_domain(ClosedSliceMother.merged(), ts=_STAMP.isoformat()).to_contract()

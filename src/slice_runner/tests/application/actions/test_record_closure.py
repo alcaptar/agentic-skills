@@ -66,7 +66,7 @@ class _Closer:
             "state": RunState.MERGED,
             "run": RunMother.awaiting_merge(),
             "budgets": Budgets(),
-            "models": RoleModels(understand="sonnet", implement="sonnet", verify="sonnet"),
+            "models": RoleModels(implement="sonnet", verify="sonnet"),
             **overrides,
         }
         self.action.execute(RecordClosureParams(**params))  # type: ignore[arg-type]
@@ -141,7 +141,7 @@ class TestTheRowItWrites:
 
     def test_the_model_assigned_to_each_role_reaches_the_row(self) -> None:
         closer = _Closer()
-        models = RoleModels(understand="haiku", implement="opus", verify="haiku")
+        models = RoleModels(implement="opus", verify="haiku")
 
         written = closer.close(models=models)
 

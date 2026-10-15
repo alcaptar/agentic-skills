@@ -3,12 +3,11 @@ from __future__ import annotations
 from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING
-from unittest.mock import Mock, call
+from unittest.mock import Mock
 
 import pytest
 
 from slice_runner.application.actions.close_parent import CloseParentParams
-from slice_runner.domain.alignment_stage import AlignmentStage
 from slice_runner.domain.budgets import Budgets
 from slice_runner.domain.ci_indeterminate_cause import CiIndeterminateCause
 from slice_runner.domain.ci_status import CiStatus
@@ -17,6 +16,7 @@ from slice_runner.domain.event_status import EventStatus
 from slice_runner.domain.exceptions import (
     CiCommandFailedError,
     DirtyIndexError,
+    ImpossibleTransitionError,
     NoPullRequestError,
     NoSliceLeftError,
     UnchangedDiffError,
@@ -74,24 +74,10 @@ class TestConductSliceStartingANewRun:
 
         conductor.conduct()
 
-        assert conductor.understanding.write.call_count == 0
-        assert conductor.repository.write_understanding.call_count == 0
-        assert conductor.repository.pause_for_alignment.call_count == 0
-        assert IssueLabel.AWAITING_ALIGNMENT not in [
-            call.kwargs.get("add") for call in conductor.repository.write_label.call_args_list
-        ]
         assert conductor.implement.execute.call_count == 1
         assert conductor.worktrees.add_new_branch.called
         persisted_steps = [call.kwargs["run"].step for call in conductor.repository.write_run.call_args_list]
         assert Step.UNDERSTAND not in persisted_steps
-
-    def test_a_new_run_does_not_wait_for_a_person_before_implementing(self) -> None:
-        conductor = self._conductor()
-
-        result = conductor.conduct()
-
-        assert result.halt is not Halt.AWAITING_ALIGNMENT
-        assert conductor.clock.sleep.call_count == 0
 
     def test_a_subissue_with_no_label_yet_is_marked_in_progress_without_asking_gh_to_remove_one_that_is_not_there(
         self,
@@ -148,7 +134,6 @@ class TestConductSliceStartingANewRun:
             PrecheckResult(outcome=PrecheckOutcome.PULL_REQUEST_ALREADY_OPEN),
         )
         assert not conductor.worktrees.add_new_branch.called
-        assert conductor.repository.write_understanding.call_count == 0
         assert conductor.repository.write_run.call_count == 0
 
     def test_a_precheck_with_no_reason_writes_nothing_to_the_subissue_beyond_the_halt_itself(self) -> None:
@@ -177,109 +162,9 @@ class TestConductSliceStartingANewRun:
         )
 
 
-class TestConductSliceWhileTheUnderstandingAwaitsAPerson:
-    @staticmethod
-    def _conductor(run: Run | None = None) -> Conductor:
-        return Conductor(
-            chosen=SelectSliceResultMother.resumed_at(
-                run or RunMother.awaiting_alignment(), label=IssueLabel.AWAITING_ALIGNMENT
-            )
-        )
-
-    def test_the_invocation_ends_with_its_own_halt_instead_of_ticking_until_the_wait_is_spent(self) -> None:
-        conductor = self._conductor()
-
-        result = conductor.conduct()
-
-        assert result.halt is Halt.AWAITING_ALIGNMENT
-        assert result.state is RunState.OPEN
-        assert result.step is Step.UNDERSTAND
-        assert conductor.clock.sleep.call_count == 0
-
-    def test_the_understanding_step_is_not_executed_again_while_waiting(self) -> None:
-        conductor = self._conductor()
-
-        conductor.conduct()
-        conductor.conduct()
-
-        assert conductor.understanding.write.call_count == 0
-        assert conductor.repository.write_understanding.call_count == 0
-        assert conductor.implement.execute.call_count == 0
-
-    def test_waiting_writes_nothing_to_the_issue(self) -> None:
-        conductor = self._conductor()
-
-        conductor.conduct()
-
-        assert conductor.repository.write_run.call_count == 0
-        assert conductor.repository.write_label.call_count == 0
-        assert conductor.repository.pause_for_alignment.call_count == 0
-
-    def test_a_correction_already_published_is_waited_for_without_publishing_it_again(self) -> None:
-        conductor = self._conductor(RunMother.awaiting_alignment_after_a_published_correction("falta la senal"))
-
-        result = conductor.conduct()
-
-        assert result.halt is Halt.AWAITING_ALIGNMENT
-        assert conductor.understanding.write.call_count == 0
-
-    def test_a_label_moved_by_hand_is_repaired_without_publishing_the_understanding_again(self) -> None:
-        conductor = Conductor(
-            chosen=SelectSliceResultMother.resumed_at(RunMother.awaiting_alignment(), label=IssueLabel.PENDING)
-        )
-
-        result = conductor.conduct()
-
-        assert result.halt is Halt.AWAITING_ALIGNMENT
-        assert conductor.understanding.write.call_count == 0
-        assert conductor.repository.pause_for_alignment.call_count == 0
-        conductor.repository.write_label.assert_called_once_with(
-            repo=Conductor.REPO, issue=_SUBISSUE, remove=IssueLabel.PENDING, add=IssueLabel.AWAITING_ALIGNMENT
-        )
-
-
-class TestConductSliceWhileTheAlignmentWaitsForAnOrder:
-    @staticmethod
-    def _conductor() -> Conductor:
-        return Conductor(
-            chosen=SelectSliceResultMother.resumed_at(
-                RunMother.awaiting_alignment(), label=IssueLabel.AWAITING_ALIGNMENT
-            )
-        )
-
-    def test_a_run_awaiting_the_person_ends_the_invocation_without_touching_the_forum_or_the_harness(self) -> None:
-        conductor = self._conductor()
-
-        result = conductor.conduct()
-
-        assert result.halt is Halt.AWAITING_ALIGNMENT
-        assert conductor.repository.write_understanding.call_count == 0
-        assert conductor.understanding.write.call_count == 0
-        assert conductor.implement.execute.call_count == 0
-        assert conductor.clock.sleep.call_count == 0
-
-
-class TestConductSliceWithTheUnderstandingAgreed:
-    @staticmethod
-    def _conductor(run: Run | None = None) -> Conductor:
-        return Conductor(
-            chosen=SelectSliceResultMother.resumed_at(
-                run or RunMother.with_the_understanding_agreed(), label=IssueLabel.AWAITING_ALIGNMENT
-            )
-        )
-
-    def test_the_slice_implements_without_publishing_the_understanding_again_or_waiting(self) -> None:
-        conductor = self._conductor()
-
-        conductor.conduct()
-
-        assert conductor.understanding.write.call_count == 0
-        assert conductor.repository.write_understanding.call_count == 0
-        assert conductor.implement.execute.call_count == 1
-        assert conductor.clock.sleep.call_count == 0
-
+class TestConductSliceHandingTheDecisionsToTheImplementer:
     def test_the_implementer_of_a_resumed_run_receives_the_decisions_of_the_parent_and_the_subissue(self) -> None:
-        conductor = self._conductor()
+        conductor = Conductor(chosen=SelectSliceResultMother.resumed_at(RunMother.implementing()))
 
         conductor.conduct()
 
@@ -288,114 +173,15 @@ class TestConductSliceWithTheUnderstandingAgreed:
             ParentIssueMother.with_sources_and_controls().decisions + SubIssueMother.pending().decisions
         )
 
-    def test_the_run_persisted_when_it_starts_implementing_keeps_the_agreement(self) -> None:
-        conductor = self._conductor()
 
-        conductor.conduct()
+class TestConductSliceResumingARunLeftAtTheRetiredUnderstandStep:
+    def test_the_run_is_refused_instead_of_being_driven_through_a_step_this_program_no_longer_runs(self) -> None:
+        conductor = Conductor(chosen=SelectSliceResultMother.resumed_at(Run(step=Step.UNDERSTAND)))
 
-        conductor.repository.write_run.assert_any_call(
-            repo=Conductor.REPO,
-            issue=_SUBISSUE,
-            run=Run(step=Step.IMPLEMENT, alignment=AlignmentStage.AGREED),
-        )
+        with pytest.raises(ImpossibleTransitionError):
+            conductor.conduct()
 
-    def test_the_label_moves_to_in_progress_before_the_implementer_is_asked_to_start(self) -> None:
-        conductor = self._conductor()
-        manager = Mock()
-        manager.attach_mock(conductor.repository.write_label, "write_label")
-        manager.attach_mock(conductor.implement.execute, "implement")
-
-        conductor.conduct()
-
-        assert [call[0] for call in manager.mock_calls][:2] == ["write_label", "implement"]
-        conductor.repository.write_label.assert_any_call(
-            repo=Conductor.REPO, issue=_SUBISSUE, remove=IssueLabel.AWAITING_ALIGNMENT, add=IssueLabel.IN_PROGRESS
-        )
-
-    def test_whatever_was_spent_while_asking_for_alignment_is_carried_forward(self) -> None:
-        spend = HarnessSpendMother.of_the_understanding_call()
-        conductor = self._conductor(replace(RunMother.with_the_understanding_agreed(), spend=spend))
-
-        conductor.conduct()
-
-        conductor.repository.write_run.assert_any_call(
-            repo=Conductor.REPO,
-            issue=_SUBISSUE,
-            run=Run(step=Step.IMPLEMENT, alignment=AlignmentStage.AGREED, spend=spend),
-        )
-
-
-class TestConductSliceRedraftingAfterACorrection:
-    @staticmethod
-    def _conductor() -> Conductor:
-        return Conductor(
-            chosen=SelectSliceResultMother.resumed_at(
-                RunMother.about_to_redraft_after_a_correction("la senal no esta exenta"),
-                label=IssueLabel.AWAITING_ALIGNMENT,
-            )
-        )
-
-    def test_the_redraft_is_published_once_and_the_invocation_ends_waiting_for_the_person(self) -> None:
-        conductor = self._conductor()
-
-        result = conductor.conduct()
-
-        conductor.repository.write_understanding.assert_called_once_with(
-            repo=Conductor.REPO, issue=_SUBISSUE, understanding=Conductor.UNDERSTANDING
-        )
-        assert conductor.understanding.write.call_count == 1
-        assert result.halt is Halt.AWAITING_ALIGNMENT
-
-    def test_the_run_persisted_is_awaiting_again_and_keeps_the_correction(self) -> None:
-        conductor = self._conductor()
-
-        conductor.conduct()
-
-        assert conductor.repository.write_run.call_args_list == [
-            call(
-                repo=Conductor.REPO,
-                issue=_SUBISSUE,
-                run=Run(
-                    step=Step.UNDERSTAND,
-                    corrected="la senal no esta exenta",
-                    spend=HarnessSpendMother.of_the_understanding_call(),
-                ),
-            )
-        ]
-
-    def test_the_slice_is_marked_in_progress_before_the_harness_redrafts(self) -> None:
-        conductor = self._conductor()
-        manager = Mock()
-        manager.attach_mock(conductor.repository.write_label, "write_label")
-        manager.attach_mock(conductor.understanding.write, "understand")
-
-        conductor.conduct()
-
-        assert [call[0] for call in manager.mock_calls][:2] == ["write_label", "understand"]
-        conductor.repository.write_label.assert_called_once_with(
-            repo=Conductor.REPO, issue=_SUBISSUE, remove=IssueLabel.AWAITING_ALIGNMENT, add=IssueLabel.IN_PROGRESS
-        )
-
-    def test_the_label_returns_to_awaiting_alignment_only_after_the_redraft_is_published(self) -> None:
-        conductor = self._conductor()
-        manager = Mock()
-        manager.attach_mock(conductor.understanding.write, "understand")
-        manager.attach_mock(conductor.repository.pause_for_alignment, "pause_for_alignment")
-
-        conductor.conduct()
-
-        assert [call[0] for call in manager.mock_calls] == ["understand", "pause_for_alignment"]
-        conductor.repository.pause_for_alignment.assert_called_once_with(
-            repo=Conductor.REPO, issue=_SUBISSUE, remove=IssueLabel.IN_PROGRESS
-        )
-
-    def test_a_redraft_that_the_person_then_agrees_on_the_next_run_starts_implementing(self) -> None:
-        conductor = self._conductor()
-
-        conductor.conduct_after_the_person_agrees()
-
-        assert conductor.understanding.write.call_count == 1
-        assert conductor.implement.execute.call_count == 1
+        assert conductor.implement.execute.call_count == 0
 
 
 class TestConductSliceClosingAMergeMissedBetweenInvocations:
@@ -440,7 +226,7 @@ class TestConductSliceClosingAMergeMissedBetweenInvocations:
         self,
     ) -> None:
         dangling = SubIssueMother.dangling()
-        models = RoleModels(understand="opus", implement="opus", verify="opus")
+        models = RoleModels(implement="opus", verify="opus")
         conductor = self._conductor(dangling=(dangling,), models=models)
 
         conductor.conduct()
@@ -746,7 +532,6 @@ class TestConductSliceResumingAnInterruptedRun:
         conductor.conduct()
 
         assert conductor.prechecks.execute.call_count == 0
-        assert conductor.repository.pause_for_alignment.call_count == 0
 
     def test_a_persisted_run_whose_subissue_declares_another_repo_is_stopped_at_this_gate_too(self) -> None:
         conductor = Conductor(
@@ -761,29 +546,6 @@ class TestConductSliceResumingAnInterruptedRun:
         )
         assert conductor.verify.execute.call_count == 0
         assert conductor.repository.write_precheck_reason.call_count == 0
-
-    def test_a_run_whose_understanding_was_already_published_waits_without_asking_the_harness_again(self) -> None:
-        conductor = Conductor(
-            chosen=SelectSliceResultMother.resumed_at(
-                RunMother.understanding_after_a_discard(HarnessSpendMother.of_the_understanding_call())
-            )
-        )
-
-        result = conductor.conduct()
-
-        assert conductor.prechecks.execute.call_count == 0
-        assert conductor.understanding.write.call_count == 0
-        assert result.halt is Halt.AWAITING_ALIGNMENT
-
-    def test_a_run_whose_understanding_is_still_to_be_drafted_publishes_it_when_resumed_and_waits(self) -> None:
-        conductor = Conductor(chosen=SelectSliceResultMother.resumed_at(RunMother.about_to_publish_the_understanding()))
-
-        result = conductor.conduct()
-
-        assert conductor.prechecks.execute.call_count == 0
-        assert conductor.understanding.write.call_count == 1
-        assert conductor.implement.execute.call_count == 0
-        assert result.halt is Halt.AWAITING_ALIGNMENT
 
 
 class TestConductSliceResumingCatchesUpTheBranch:
@@ -1202,7 +964,7 @@ class TestConductSliceOnTheHappyPath:
         )
 
     def test_the_durable_row_carries_the_budgets_and_the_models_this_invocation_ran_with(self) -> None:
-        models = RoleModels(understand="opus", implement="opus", verify="opus")
+        models = RoleModels(implement="opus", verify="opus")
         conductor = Conductor(
             chosen=SelectSliceResultMother.resumed_at(RunMother.implementing()),
             budgets=Budgets(slice_cost_usd=99.0),
@@ -1322,20 +1084,6 @@ class TestConductSliceReportingEvents:
 
         emitted = conductor.emitted_events
         assert (emitted[-1].step, emitted[-1].status) == (Step.AWAIT_MERGE, EventStatus.AWAITING_PERSON)
-
-    def test_an_alignment_with_no_response_yet_reports_awaiting_a_person_because_the_go_is_a_human_decision(
-        self,
-    ) -> None:
-        conductor = Conductor(
-            chosen=SelectSliceResultMother.resumed_at(
-                RunMother.awaiting_alignment(), label=IssueLabel.AWAITING_ALIGNMENT
-            )
-        )
-
-        conductor.conduct()
-
-        emitted = conductor.emitted_events
-        assert (emitted[-1].step, emitted[-1].status) == (Step.UNDERSTAND, EventStatus.AWAITING_PERSON)
 
     def test_a_pending_ci_reports_waiting_because_no_person_is_deciding_anything_yet(self) -> None:
         conductor = Conductor(
@@ -2704,7 +2452,6 @@ class TestConductSliceMountingTheWorktreeBeforeUnderstanding:
             repo=Conductor.REPO, issue=_SUBISSUE, remove=IssueLabel.PENDING, add=IssueLabel.BLOCKED_WORKTREE
         )
         assert conductor.check_sources.execute.call_count == 0
-        assert conductor.understanding.write.call_count == 0
 
     def test_a_run_closed_before_it_started_persists_the_step_it_stands_on_so_that_a_retry_can_reopen_it(self) -> None:
         conductor = self._conductor()
@@ -2795,17 +2542,6 @@ class TestConductSliceMountingTheWorktreeBeforeUnderstanding:
 
         assert (result.state, result.conflicting_path) == (RunState.BLOCKED_WORKTREE, self._MANUAL)
 
-    def test_a_subissue_that_awaits_its_alignment_without_a_run_also_mounts_first(self) -> None:
-        conductor = Conductor(
-            chosen=SelectSliceResultMother.about_to_start(
-                subissue=SubIssueMother.carrying(IssueLabel.AWAITING_ALIGNMENT)
-            )
-        )
-
-        conductor.conduct()
-
-        conductor.worktrees.exclude.assert_called_once_with(root=Conductor.ROOT, rule="/.worktrees/")
-
 
 class TestConductSliceResumingMountsTheWorktreeFirst:
     @staticmethod
@@ -2867,5 +2603,4 @@ class TestConductSliceResumingMountsTheWorktreeFirst:
         conductor.conduct()
 
         assert conductor.check_sources.execute.call_count == 1
-        assert conductor.understanding.write.call_count == 0
         assert conductor.implement.execute.call_count == 1

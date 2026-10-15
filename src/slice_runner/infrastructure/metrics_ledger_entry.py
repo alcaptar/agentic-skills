@@ -37,7 +37,6 @@ class MetricsLedgerEntry:
             ci_retries=payload.ci_retries,
             verify_retries=payload.verify_retries,
             verify_discards=payload.verify_discards,
-            understand_discards=payload.understand_discards,
             implement_discards=payload.implement_discards,
             discarded_call=cls._discarded_call(payload),
             ci_indeterminate_cause=cls._ci_indeterminate_cause(payload.ci_indeterminate_cause),

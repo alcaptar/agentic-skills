@@ -3,7 +3,6 @@ from __future__ import annotations
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
-from slice_runner.domain.alignment_stage import AlignmentStage
 from slice_runner.domain.branch_catch_up_outcome import BranchCatchUpOutcome
 from slice_runner.domain.ci_status import CiStatus
 from slice_runner.domain.control_status import ControlStatus
@@ -29,16 +28,6 @@ class Outcome(StrEnum):
     UNCHANGED = "unchanged"
     WORKTREE_TAKEN = "worktree-taken"
     WORKTREE_LEFT_BEHIND = "worktree-left-behind"
-
-    @classmethod
-    def of_the_alignment(cls, stage: AlignmentStage) -> Outcome:
-        match stage:
-            case AlignmentStage.AGREED:
-                return cls.DONE
-            case AlignmentStage.AWAITING:
-                return cls.PENDING
-            case AlignmentStage.DRAFT:
-                return cls.CHANGES_REQUESTED
 
     @classmethod
     def of_the_ci(cls, status: CiStatus) -> Outcome:

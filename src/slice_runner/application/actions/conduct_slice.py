@@ -14,7 +14,6 @@ from slice_runner.application.actions.record_step import RecordStepParams
 from slice_runner.application.actions.rescue_staged_work import RescueStagedWorkParams
 from slice_runner.application.actions.retire_worktree import RetireWorktreeParams
 from slice_runner.application.actions.run_controls import RunControlsParams
-from slice_runner.application.actions.seek_alignment import SeekAlignmentParams
 from slice_runner.application.actions.stage_slice import StageSliceParams
 from slice_runner.application.actions.verify_slice import VerifySliceParams
 from slice_runner.application.queries.check_sources import CheckSourcesParams
@@ -64,7 +63,6 @@ if TYPE_CHECKING:
     from slice_runner.application.actions.rescue_staged_work import RescueStagedWork
     from slice_runner.application.actions.retire_worktree import RetireWorktree
     from slice_runner.application.actions.run_controls import RunControls
-    from slice_runner.application.actions.seek_alignment import SeekAlignment
     from slice_runner.application.actions.stage_slice import StageSlice
     from slice_runner.application.actions.verify_slice import VerifySlice
     from slice_runner.application.queries.check_sources import CheckSources
@@ -125,7 +123,6 @@ class ConductSliceProgress:
     spends: tuple[HarnessSpend, ...] = field(default=())
     control_logs: tuple[Path, ...] = field(default=())
     hygiene_refusal: str = ""
-    understanding: str = ""
     pull_request: int | None = None
     waited_seconds: int = 0
     ci_indeterminate_cause: CiIndeterminateCause | None = None
@@ -186,7 +183,6 @@ class ConductSliceUseCases:
     record_closure: RecordClosure
     read_ci: ReadCiStatus
     read_pull_request: ReadPullRequestStatus
-    seek_alignment: SeekAlignment
     catch_up: CatchUpBranch
 
 
@@ -226,7 +222,6 @@ class ConductSlice:
         self._record_closure = use_cases.record_closure
         self._read_ci = use_cases.read_ci
         self._read_pull_request = use_cases.read_pull_request
-        self._seek_alignment = use_cases.seek_alignment
         self._catch_up = use_cases.catch_up
         self._repository = ports.repository
         self._forum = ports.forum
@@ -266,12 +261,7 @@ class ConductSlice:
             return self._ending(progress, Halt.PRECHECKS_BLOCKED, precheck=PrecheckResult(outcome=of_the_subissue))
         if chosen.subissue.run is not None:
             return self._resuming(progress)
-        if chosen.subissue.label is IssueLabel.AWAITING_ALIGNMENT:
-            return self._mounting(
-                replace(progress, run=replace(progress.run, step=Step.UNDERSTAND)), then=self._conducting
-            )
-
-        return self._aligning(progress)
+        return self._prechecking(progress)
 
     @staticmethod
     def _expects_a_tree(params: ConductSliceParams, chosen: SelectSliceResult) -> bool:
@@ -364,7 +354,7 @@ class ConductSlice:
 
         return self._closing(closed, transition.state)
 
-    def _aligning(self, progress: ConductSliceProgress) -> ConductSliceResult:
+    def _prechecking(self, progress: ConductSliceProgress) -> ConductSliceResult:
         precheck = self._prechecks.execute(
             RunPrechecksParams(
                 repo=progress.params.repo,
@@ -413,46 +403,6 @@ class ConductSlice:
 
         return replace(progress, label=IssueLabel.IN_PROGRESS)
 
-    def _awaiting_alignment(self, progress: ConductSliceProgress) -> SteppedSlice:
-        if progress.run.redrafting_after_a_correction:
-            progress = self._marked_in_progress(progress)
-
-        try:
-            sought = self._seek_alignment.execute(
-                SeekAlignmentParams(
-                    repo=progress.params.repo,
-                    worktree=progress.worktree,
-                    subissue=progress.subissue,
-                    parent=progress.parent,
-                    run=progress.run,
-                    understanding=progress.understanding,
-                )
-            )
-        except MeasuredCallError as rejection:
-            discarded = self._discarding(progress, rejection)
-
-            return self._within_budget(
-                SteppedSlice(progress=discarded, outcome=Outcome.DISCARDED), call=rejection.spend
-            )
-
-        updated = replace(
-            progress,
-            run=sought.run,
-            understanding=sought.understanding,
-            spends=(*progress.spends, sought.spend) if sought.spend is not None else progress.spends,
-        )
-        if sought.published:
-            updated = self._paused_for_alignment(updated)
-
-        return SteppedSlice(progress=updated, outcome=Outcome.of_the_alignment(sought.response))
-
-    def _paused_for_alignment(self, progress: ConductSliceProgress) -> ConductSliceProgress:
-        self._repository.pause_for_alignment(
-            repo=progress.params.repo, issue=progress.subissue.number, remove=progress.label
-        )
-
-        return replace(progress, label=IssueLabel.AWAITING_ALIGNMENT)
-
     def _conducting(self, progress: ConductSliceProgress) -> ConductSliceResult:
         while True:
             stepped = self._stepping(progress)
@@ -467,8 +417,6 @@ class ConductSlice:
             progress = self._recorded(stepped.progress, transition)
             if transition.state is not RunState.OPEN:
                 return self._closing(progress, transition.state)
-            if transition.awaits_a_person:
-                return self._ending(progress, Halt.AWAITING_ALIGNMENT)
             if transition.wait_seconds > 0:
                 progress = self._waiting(progress, transition.wait_seconds)
                 if self._budgets.wait_exhausted(progress.waited_seconds, step=progress.run.step):
@@ -488,7 +436,11 @@ class ConductSlice:
                 raise ImpossibleTransitionError(
                     f"the run of {progress.subissue.slice_id.canonical} reached the loop before mounting its worktree"
                 )
-            case Step.UNDERSTAND | Step.IMPLEMENT | Step.RUN_CONTROLS | Step.VERIFY:
+            case Step.UNDERSTAND:
+                raise ImpossibleTransitionError(
+                    f"the run of {progress.subissue.slice_id.canonical} is at a step this program no longer runs"
+                )
+            case Step.IMPLEMENT | Step.RUN_CONTROLS | Step.VERIFY:
                 return self._stepping_while_producing(progress, progress.run.step)
             case Step.OPEN_PULL_REQUEST | Step.AWAIT_CI | Step.CATCH_UP | Step.AWAIT_MERGE:
                 return self._stepping_while_delivering(progress, progress.run.step)
@@ -496,11 +448,9 @@ class ConductSlice:
     def _stepping_while_producing(
         self,
         progress: ConductSliceProgress,
-        step: Literal[Step.UNDERSTAND, Step.IMPLEMENT, Step.RUN_CONTROLS, Step.VERIFY],
+        step: Literal[Step.IMPLEMENT, Step.RUN_CONTROLS, Step.VERIFY],
     ) -> SteppedSlice:
         match step:
-            case Step.UNDERSTAND:
-                return self._awaiting_alignment(progress)
             case Step.IMPLEMENT:
                 return self._implementing(progress)
             case Step.RUN_CONTROLS:

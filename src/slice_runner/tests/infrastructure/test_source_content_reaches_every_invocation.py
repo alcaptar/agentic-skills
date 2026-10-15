@@ -5,16 +5,12 @@ from pathlib import Path
 
 import pytest
 
-from slice_runner.domain.alignment import Alignment
 from slice_runner.domain.budgets import Budgets
 from slice_runner.infrastructure.implementer_invocation import ImplementerInvocation
 from slice_runner.infrastructure.judge_invocation import JudgeInvocation
 from slice_runner.infrastructure.process_source_reader import ProcessSourceReader
-from slice_runner.infrastructure.understanding_invocation import UnderstandingInvocation
 from slice_runner.tests.doubles import RecordedSourceReader
 from slice_runner.tests.mothers.assignment_mother import AssignmentMother
-from slice_runner.tests.mothers.parent_issue_mother import ParentIssueMother
-from slice_runner.tests.mothers.sub_issue_mother import SubIssueMother
 from slice_runner.tests.mothers.verification_mother import JudgeMother, SliceUnderReviewMother
 from slice_runner.tests.real_process import Real
 
@@ -42,20 +38,8 @@ class TestEachInvocationCarriesTheLiteralContentOfItsDeclaredSource:
 
         assert _LITERAL_LINE_OF_CLAUDE_MD in text
 
-    def test_the_understanding_writer_carries_a_literal_line_of_the_declared_source(self) -> None:
-        invocation = UnderstandingInvocation(
-            subissue=SubIssueMother.pending(),
-            parent=ParentIssueMother.with_sources_and_controls(),
-            repo=AssignmentMother.REPO,
-            worktree=str(_ROOT),
-            alignment=Alignment(),
-            reader=self._real_reader(),
-        )
 
-        assert _LITERAL_LINE_OF_CLAUDE_MD in invocation.text
-
-
-class TestTheThreeInvocationsAgreeOnTheSameSourcesTextForTheSameSources:
+class TestTheTwoInvocationsAgreeOnTheSameSourcesTextForTheSameSources:
     @staticmethod
     def _fuentes_section(text: str) -> str:
         lines = text.splitlines()
@@ -66,32 +50,20 @@ class TestTheThreeInvocationsAgreeOnTheSameSourcesTextForTheSameSources:
 
         return "\n".join(lines[start:end])
 
-    def test_the_fuentes_section_is_character_for_character_identical_across_the_three(self) -> None:
+    def test_the_fuentes_section_is_character_for_character_identical_across_the_two(self) -> None:
         reader = RecordedSourceReader(contents={"CLAUDE.md": "linea unica de la convencion"})
 
         implementer_text = ImplementerInvocation(assignment=AssignmentMother.of_the_first_round(), reader=reader).text
         judge_text = JudgeInvocation(
             judge=JudgeMother.adversarial(), review=SliceUnderReviewMother.of_the_slice(), reader=reader
         ).text
-        understanding_text = UnderstandingInvocation(
-            subissue=SubIssueMother.pending(),
-            parent=ParentIssueMother.with_sources_and_controls(),
-            repo=AssignmentMother.REPO,
-            worktree=AssignmentMother.WORKTREE,
-            alignment=Alignment(),
-            reader=reader,
-        ).text
 
-        sections = {
-            self._fuentes_section(implementer_text),
-            self._fuentes_section(judge_text),
-            self._fuentes_section(understanding_text),
-        }
+        sections = {self._fuentes_section(implementer_text), self._fuentes_section(judge_text)}
         assert len(sections) == 1
 
 
-class TestTheThreeInvocationsAgreeOnTheSameWorkingDirectory:
-    def test_the_three_invocations_agree_that_the_cwd_is_the_worktree_and_not_the_repo_slug(self) -> None:
+class TestTheTwoInvocationsAgreeOnTheSameWorkingDirectory:
+    def test_the_two_invocations_agree_that_the_cwd_is_the_worktree_and_not_the_repo_slug(self) -> None:
         worktree = AssignmentMother.WORKTREE
         reader = RecordedSourceReader()
 
@@ -101,13 +73,5 @@ class TestTheThreeInvocationsAgreeOnTheSameWorkingDirectory:
             review=replace(SliceUnderReviewMother.of_the_slice(), worktree=worktree),
             reader=reader,
         )
-        understanding = UnderstandingInvocation(
-            subissue=SubIssueMother.pending(),
-            parent=ParentIssueMother.with_sources_and_controls(),
-            repo=AssignmentMother.REPO,
-            worktree=worktree,
-            alignment=Alignment(),
-            reader=reader,
-        )
 
-        assert implementer.cwd == judge.cwd == understanding.cwd == worktree
+        assert implementer.cwd == judge.cwd == worktree

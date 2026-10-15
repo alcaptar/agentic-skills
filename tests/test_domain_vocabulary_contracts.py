@@ -37,10 +37,7 @@ def test_no_label_in_the_vocabulary_lacks_a_source_in_the_translator_or_a_manual
     """A manual-source label is not "a person writes it": it is any label that something other
     than `IssueLabel.of` writes, because it happens outside the `(RunState, Step)` pair the
     translator knows about. `PENDING` is the only one: a person writes it by hand when they
-    create a subissue (`CLAUDE.md`'s slice). `AWAITING_ALIGNMENT` projects from
-    `(RunState.OPEN, Step.UNDERSTAND)` like any other label -- `GhRunRepository.pause_for_alignment`
-    still writes it the very first time, before any `Run` exists to project from, but the value it
-    writes is the same one the translator already knows for that step. Every other member has to
+    create a subissue (`CLAUDE.md`'s slice). Every other member has to
     come out of some `(RunState, Step)` pair the translator projects, or it is dead vocabulary
     nobody ever writes.
     """

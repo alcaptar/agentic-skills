@@ -30,7 +30,6 @@ class ClosedSliceRecord:
     ci_retries: int
     verify_retries: int
     verify_discards: int
-    understand_discards: int
     implement_discards: int
     discarded_call: DiscardedCall | None
     ci_indeterminate_cause: CiIndeterminateCause | None

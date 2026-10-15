@@ -21,7 +21,6 @@ from slice_runner.infrastructure.order_comment import OrderComment
 from slice_runner.infrastructure.parent_body import ParentBody
 from slice_runner.infrastructure.reset_comment import ResetComment
 from slice_runner.infrastructure.subissue_body import SubissueBody
-from slice_runner.infrastructure.understanding_comment import UnderstandingComment
 from slice_runner.infrastructure.veto_findings_comment import VetoFindingsComment
 
 if TYPE_CHECKING:
@@ -136,24 +135,6 @@ class GhRunRepository(RunRepository):
             safe_to_repeat=True,
         )
 
-    def write_understanding(self, *, repo: str, issue: int, understanding: str) -> None:
-        self._run(
-            ["gh", "issue", "comment", str(issue), "--repo", repo, "--body-file", "-"],
-            stdin=UnderstandingComment.rendered(understanding),
-            safe_to_repeat=False,
-        )
-
-    def read_understanding(self, *, repo: str, issue: int) -> str:
-        published = [
-            body
-            for body in self._comment_bodies(repo=repo, issue=issue)
-            if UnderstandingComment.is_the_understanding(body)
-        ]
-        if not published:
-            return ""
-
-        return UnderstandingComment.written_in(published[-1])
-
     def mark_order(self, *, repo: str, issue: int, order: Order, text: str) -> None:
         self._run(
             ["gh", "issue", "comment", str(issue), "--repo", repo, "--body-file", "-"],
@@ -184,14 +165,6 @@ class GhRunRepository(RunRepository):
         self._run(
             ["gh", "issue", "edit", str(issue), "--repo", repo, "--remove-label", remove.value], safe_to_repeat=True
         )
-
-    def pause_for_alignment(self, *, repo: str, issue: int, remove: IssueLabel | None) -> None:
-        argv = [
-            *self._edit_of(repo=repo, issue=issue, add=IssueLabel.AWAITING_ALIGNMENT, remove=remove),
-            "--add-assignee",
-            "@me",
-        ]
-        self._edit_with_label_fallback(argv, repo=repo, issue=issue, add=IssueLabel.AWAITING_ALIGNMENT)
 
     def flag_unmerged_pull_request(self, *, repo: str, issue: int, pull_request: int) -> None:
         self._run(

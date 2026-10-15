@@ -30,7 +30,6 @@ from slice_runner.infrastructure.deploy_watch_invocation import DeployWatchInvoc
 from slice_runner.infrastructure.durable_ledger import DurableLedger
 from slice_runner.infrastructure.event_payload import EventPayload
 from slice_runner.infrastructure.exit_code import ExitCode
-from slice_runner.infrastructure.gh_run_repository import GhRunRepository
 from slice_runner.infrastructure.harness_call_payload import HarnessCallPayload
 from slice_runner.infrastructure.implementer_invocation import ImplementerInvocation
 from slice_runner.infrastructure.judge_invocation import JudgeInvocation
@@ -41,8 +40,6 @@ from slice_runner.infrastructure.local_metrics_log import LocalMetricsLog
 from slice_runner.infrastructure.metrics_entry_payload import MetricsEntryPayload
 from slice_runner.infrastructure.reset_comment import ResetComment
 from slice_runner.infrastructure.system_clock import SystemClock
-from slice_runner.infrastructure.understanding_comment import UnderstandingComment
-from slice_runner.infrastructure.understanding_invocation import UnderstandingInvocation
 from slice_runner.infrastructure.uv_program_origin import UvProgramOrigin
 from slice_runner.infrastructure.veto_findings_comment import VetoFindingsComment
 from slice_runner.tests.argv import Argv
@@ -50,7 +47,6 @@ from slice_runner.tests.doubles import (
     Answer,
     AnsweringByArgv,
     AnsweringByArgvWithADiffThatMoves,
-    GhCallDoubles,
     MissingExecutableReplacement,
     ProcessDoubles,
     RealExceptTheJudge,
@@ -118,17 +114,7 @@ _TABLE: list[tuple[Step, Outcome, dict[str, int], tuple[Step, RunState, int]]] =
     (Step.AWAIT_CI, Outcome.WORKTREE_LEFT_BEHIND, {}, (Step.AWAIT_CI, RunState.BLOCKED_LEFTOVER_WORKTREE, 0)),
     (Step.CATCH_UP, Outcome.WORKTREE_LEFT_BEHIND, {}, (Step.CATCH_UP, RunState.BLOCKED_LEFTOVER_WORKTREE, 0)),
     (Step.AWAIT_MERGE, Outcome.WORKTREE_LEFT_BEHIND, {}, (Step.AWAIT_MERGE, RunState.BLOCKED_LEFTOVER_WORKTREE, 0)),
-    (Step.UNDERSTAND, Outcome.DONE, {}, (Step.IMPLEMENT, RunState.OPEN, 0)),
-    (Step.UNDERSTAND, Outcome.PENDING, {}, (Step.UNDERSTAND, RunState.OPEN, 0)),
-    (Step.UNDERSTAND, Outcome.CHANGES_REQUESTED, {}, (Step.UNDERSTAND, RunState.OPEN, 0)),
-    (Step.UNDERSTAND, Outcome.DISCARDED, {}, (Step.UNDERSTAND, RunState.OPEN, 0)),
     (Step.UNDERSTAND, Outcome.OVER_BUDGET, {}, (Step.UNDERSTAND, RunState.ABORTED_BUDGET, 0)),
-    (
-        Step.UNDERSTAND,
-        Outcome.CALL_NOT_MEASURED,
-        {},
-        (Step.UNDERSTAND, RunState.ABORTED_UNMEASURED_CALL, 0),
-    ),
     (Step.UNDERSTAND, Outcome.CONFLICTING, {}, (Step.UNDERSTAND, RunState.BLOCKED_CI_CONFLICT, 0)),
     (Step.IMPLEMENT, Outcome.DONE, {}, (Step.RUN_CONTROLS, RunState.OPEN, 0)),
     (Step.IMPLEMENT, Outcome.DISCARDED, {}, (Step.IMPLEMENT, RunState.OPEN, 0)),
@@ -1148,8 +1134,6 @@ class TestTheTransitionOfEveryPair:
         assert json.loads(capsys.readouterr().out) == {
             "run": {
                 "step": "implement",
-                "corrected": "",
-                "alignment": "awaiting",
                 "retry_instruction": "",
                 "tree_unexpected": False,
                 "previous_call_died": False,
@@ -1161,7 +1145,6 @@ class TestTheTransitionOfEveryPair:
                 "catch_up_retries": 0,
                 "indeterminate_ticks": 0,
                 "verify_discards": 1,
-                "understand_discards": 0,
                 "implement_discards": 0,
                 "control_rounds_logged": 1,
                 "verify_rounds_logged": 0,
@@ -1170,33 +1153,7 @@ class TestTheTransitionOfEveryPair:
             },
             "state": "open",
             "wait_seconds": 0,
-            "awaits_a_person": False,
         }
-
-    @pytest.mark.parametrize(
-        ("step", "outcome", "awaits_a_person"),
-        [
-            (Step.UNDERSTAND, Outcome.PENDING, True),
-            (Step.UNDERSTAND, Outcome.DONE, False),
-            (Step.UNDERSTAND, Outcome.CHANGES_REQUESTED, False),
-            (Step.UNDERSTAND, Outcome.DISCARDED, False),
-            (Step.AWAIT_MERGE, Outcome.PENDING, False),
-            (Step.AWAIT_CI, Outcome.PENDING, False),
-        ],
-    )
-    def test_only_the_alignment_pause_ends_the_wait_by_handing_the_slice_to_a_person(
-        self, step: Step, outcome: Outcome, awaits_a_person: bool, capsys: pytest.CaptureFixture[str]
-    ) -> None:
-        Cli.explain(request=TransitionRequestMother.asking(step, outcome), budgets=Budgets())
-
-        assert json.loads(capsys.readouterr().out)["awaits_a_person"] is awaits_a_person
-
-    def test_the_pause_asks_for_no_tick_because_nothing_is_polled_while_a_person_decides(
-        self, capsys: pytest.CaptureFixture[str]
-    ) -> None:
-        Cli.explain(request=TransitionRequestMother.asking(Step.UNDERSTAND, Outcome.PENDING), budgets=Budgets())
-
-        assert json.loads(capsys.readouterr().out)["wait_seconds"] == 0
 
 
 class TestWhatEachBudgetPays:
@@ -2061,7 +2018,6 @@ class TestWhenTheRunStaysOpen:
         invocation.conduct(logs=tmp_path / "logs")
 
         assert invocation.process.invoked(ImplementerInvocation.EXECUTABLE, "bypassPermissions")
-        assert not invocation.process.invoked(UnderstandingInvocation.MODEL, "stream-json")
 
     def test_a_precheck_that_is_not_clear_exits_with_its_own_code_and_names_which_one_stopped_it(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
@@ -3229,88 +3185,8 @@ class TestTheCommandThatFollowsTheEvents(WithTheDurableStoresOutOfTheRealHome):
         assert "not JSON" in output.err
 
 
-class TestTheCommandThatReadsTheUnderstanding:
-    _REPO = "alcaptar/agentic-skills"
-    _ISSUE = 45
-
-    @classmethod
-    def _process(cls, bodies: list[str]) -> AnsweringByArgv:
-        template = GhResponseMother.subissue_comments()[0]
-        payload = {"comments": [{**template, "body": body} for body in bodies]}
-
-        return AnsweringByArgv(Answer(to=("issue", "view", "--json", "comments"), stdout=json.dumps(payload)))
-
-    def test_it_prints_one_json_line_with_the_version_and_the_last_understanding_even_when_it_was_answered(
-        self, capsys: pytest.CaptureFixture[str]
-    ) -> None:
-        process = self._process(
-            [
-                UnderstandingComment.rendered("el primero"),
-                "-REVIEW usa Run",
-                UnderstandingComment.rendered("el ultimo"),
-                "-GO",
-            ]
-        )
-
-        code = Cli(process=process, budgets=Budgets()).understanding(repo=self._REPO, issue=self._ISSUE, as_json=True)
-
-        assert code == ExitCode.OK
-        assert json.loads(capsys.readouterr().out) == {"version": 1, "text": "el ultimo"}
-
-    def test_without_the_json_flag_it_prints_the_text_alone(self, capsys: pytest.CaptureFixture[str]) -> None:
-        process = self._process([UnderstandingComment.rendered("el contador vive en Run")])
-
-        Cli(process=process, budgets=Budgets()).understanding(repo=self._REPO, issue=self._ISSUE, as_json=False)
-
-        assert capsys.readouterr().out == "el contador vive en Run\n"
-
-    def test_a_subissue_without_any_understanding_exits_with_its_own_code_and_says_why_only_on_stderr(
-        self, capsys: pytest.CaptureFixture[str]
-    ) -> None:
-        process = self._process(["un comentario cualquiera", "-GO"])
-
-        code = Cli(process=process, budgets=Budgets()).understanding(repo=self._REPO, issue=self._ISSUE, as_json=True)
-
-        captured = capsys.readouterr()
-        assert code == ExitCode.NO_UNDERSTANDING
-        assert captured.out == ""
-        assert str(self._ISSUE) in captured.err
-
-    def test_it_prints_the_same_text_the_run_reads_from_the_same_subissue(
-        self, capsys: pytest.CaptureFixture[str]
-    ) -> None:
-        bodies = [
-            UnderstandingComment.rendered("el primero"),
-            "-REVIEW usa Run",
-            UnderstandingComment.rendered("el ultimo"),
-        ]
-        read_by_the_run = GhRunRepository(call=GhCallDoubles.wired(self._process(bodies))).read_understanding(
-            repo=self._REPO, issue=self._ISSUE
-        )
-
-        Cli(process=self._process(bodies), budgets=Budgets()).understanding(
-            repo=self._REPO, issue=self._ISSUE, as_json=True
-        )
-
-        assert json.loads(capsys.readouterr().out)["text"] == read_by_the_run
-
-    def test_it_parses_with_the_subissue_as_a_positional_and_the_repo_and_json_as_flags(self) -> None:
-        arguments = Cli.parser().parse_args(["understanding", "45", "--repo", "alcaptar/agentic-skills", "--json"])
-
-        assert (arguments.issue, arguments.repo, arguments.json) == (45, "alcaptar/agentic-skills", True)
-
-
 class TestACommentTypedOnTheSubissueChangesNothingInTheNextRun:
     WRITING_COMMANDS: ClassVar[tuple[list[str], ...]] = (["issue", "edit"], ["issue", "comment"])
-
-    @staticmethod
-    def _awaiting_alignment(typed: str | None) -> RunInvocation:
-        return TestACommentTypedOnTheSubissueChangesNothingInTheNextRun._with(
-            children=GhConversationMother.the_slice_resumed_at(
-                RunMother.awaiting_alignment(), label=IssueLabel.AWAITING_ALIGNMENT
-            ),
-            typed=typed,
-        )
 
     @staticmethod
     def _blocked(typed: str | None) -> RunInvocation:
@@ -3320,7 +3196,7 @@ class TestACommentTypedOnTheSubissueChangesNothingInTheNextRun:
 
     @staticmethod
     def _with(*, children: str, typed: str | None) -> RunInvocation:
-        comments = [UnderstandingComment.MARKER] if typed is None else [UnderstandingComment.MARKER, typed]
+        comments = [] if typed is None else [typed]
 
         return RunInvocation(
             children=children,
@@ -3346,17 +3222,6 @@ class TestACommentTypedOnTheSubissueChangesNothingInTheNextRun:
 
         return code, writes
 
-    @pytest.mark.parametrize("token", ["-GO", "-REVIEW cambia el nombre de la clase"])
-    def test_a_go_or_a_review_typed_while_the_slice_waits_leaves_the_same_label_state_block_and_exit_code(
-        self, token: str, tmp_path: Path, capsys: pytest.CaptureFixture[str]
-    ) -> None:
-        without = self._outcome(self._awaiting_alignment(None), tmp_path / "without", capsys)
-
-        with_the_comment = self._outcome(self._awaiting_alignment(token), tmp_path / "with", capsys)
-
-        assert with_the_comment == without
-        assert without[0] == ExitCode.AWAITING_ALIGNMENT
-
     def test_a_retry_typed_on_a_blocked_slice_leaves_the_same_label_state_block_and_exit_code(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
@@ -3365,31 +3230,6 @@ class TestACommentTypedOnTheSubissueChangesNothingInTheNextRun:
         with_the_comment = self._outcome(self._blocked("-RETRY ya esta resuelto a mano"), tmp_path / "with", capsys)
 
         assert with_the_comment == without
-
-
-class TestARunBlockWrittenByAnEarlierVersionIsStillRead:
-    def test_a_block_that_was_not_pending_goes_on_as_an_understanding_awaiting_the_person(
-        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
-    ) -> None:
-        earlier = GhConversationMother.the_subissue_viewed(
-            label=IssueLabel.AWAITING_ALIGNMENT, run=RunMother.awaiting_alignment(), stale=True
-        )
-        invocation = RunInvocation(
-            children=json.dumps([earlier]),
-            answers=(
-                Answer(
-                    to=("gh", "issue", "view", "comments"),
-                    stdout=GhConversationMother.the_comments_of_a_person_typing("nada que ver"),
-                ),
-                Answer(to=("git", "rev-list", "--count"), stdout="0\n"),
-                Answer(to=("gh", "pr", "list"), stdout=GhConversationMother.no_open_pull_request()),
-            ),
-        )
-
-        code = invocation.conduct(logs=tmp_path / "logs")
-
-        assert code == ExitCode.AWAITING_ALIGNMENT
-        assert "understanding_pending" not in capsys.readouterr().err
 
 
 class TestOpeningTheInterface:

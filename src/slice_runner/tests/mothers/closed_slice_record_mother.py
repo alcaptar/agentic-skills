@@ -66,12 +66,8 @@ class ClosedSliceRecordMother:
         return cls._record(RunState.MERGED, discarded_call=discarded)
 
     @classmethod
-    def merged_after_discarding_harness_calls(
-        cls, *, understand_discards: int, implement_discards: int
-    ) -> ClosedSliceRecord:
-        return cls._record(
-            RunState.MERGED, understand_discards=understand_discards, implement_discards=implement_discards
-        )
+    def merged_after_discarding_harness_calls(cls, *, implement_discards: int) -> ClosedSliceRecord:
+        return cls._record(RunState.MERGED, implement_discards=implement_discards)
 
     @classmethod
     def blocked_indeterminate_because_of(cls, cause: CiIndeterminateCause | None) -> ClosedSliceRecord:
@@ -96,7 +92,6 @@ class ClosedSliceRecordMother:
         verify_retries: int = 0,
         discarded_call: DiscardedCall | None = None,
         ci_indeterminate_cause: CiIndeterminateCause | None = None,
-        understand_discards: int = 0,
         implement_discards: int = 0,
         variant: str | None = "program",
         models: tuple[str, ...] = ("claude-sonnet-5",),
@@ -115,7 +110,6 @@ class ClosedSliceRecordMother:
             ci_retries=0,
             verify_retries=verify_retries,
             verify_discards=0,
-            understand_discards=understand_discards,
             implement_discards=implement_discards,
             discarded_call=discarded_call,
             ci_indeterminate_cause=ci_indeterminate_cause,

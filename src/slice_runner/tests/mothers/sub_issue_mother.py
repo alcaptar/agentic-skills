@@ -5,14 +5,12 @@ from typing import TYPE_CHECKING, ClassVar
 
 from slice_runner.domain.issue_label import IssueLabel
 from slice_runner.domain.issue_state import IssueState
-from slice_runner.domain.run import Run
 from slice_runner.domain.slice_identity import SliceIdentity
-from slice_runner.domain.step import Step
 from slice_runner.domain.sub_issue import SubIssue
 from slice_runner.tests.mothers.run_mother import RunMother
 
 if TYPE_CHECKING:
-    from slice_runner.domain.harness_spend import HarnessSpend
+    from slice_runner.domain.run import Run
 
 
 class SubIssueMother:
@@ -66,42 +64,8 @@ class SubIssueMother:
         return replace(SubIssueMother.pending(), label=label, run=run)
 
     @staticmethod
-    def paused_after_spending(spend: HarnessSpend) -> SubIssue:
-        return replace(
-            SubIssueMother.pending(),
-            label=IssueLabel.AWAITING_ALIGNMENT,
-            run=Run(step=Step.UNDERSTAND, spend=spend),
-        )
-
-    @staticmethod
-    def awaiting_alignment() -> SubIssue:
-        return replace(
-            SubIssueMother.pending(), label=IssueLabel.AWAITING_ALIGNMENT, run=RunMother.awaiting_alignment()
-        )
-
-    @staticmethod
-    def awaiting_alignment_with_the_understanding_agreed() -> SubIssue:
-        return replace(
-            SubIssueMother.pending(),
-            label=IssueLabel.AWAITING_ALIGNMENT,
-            run=RunMother.with_the_understanding_agreed(),
-        )
-
-    @staticmethod
-    def redrafting_after_a_correction(correction: str) -> SubIssue:
-        return replace(
-            SubIssueMother.pending(),
-            label=IssueLabel.AWAITING_ALIGNMENT,
-            run=RunMother.about_to_redraft_after_a_correction(correction),
-        )
-
-    @staticmethod
     def unlabelled() -> SubIssue:
         return replace(SubIssueMother.pending(), label=None)
-
-    @staticmethod
-    def understanding_published_but_relabelled_by_hand() -> SubIssue:
-        return replace(SubIssueMother.pending(), run=Run(step=Step.UNDERSTAND))
 
     @staticmethod
     def without_decisions() -> SubIssue:

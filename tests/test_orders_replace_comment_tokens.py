@@ -28,7 +28,6 @@ class TestEveryOrderIsASubcommandTheReadmeDocuments:
 class TestNoDocumentOrTemplateOffersACommentAsAnOrder:
     TOKEN: ClassVar[re.Pattern[str]] = re.compile(r"(?<![A-Za-z-])-(?:GO|REVIEW|RETRY)(?![A-Za-z])")
     PATHS: ClassVar[tuple[str, ...]] = (
-        "src/slice_runner/infrastructure/understanding_comment.py",
         "README.md",
         "skills/slice-spec/SKILL.md",
         "docs/arranque.md",

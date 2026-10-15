@@ -29,6 +29,10 @@ _RUN_PATH = "src/slice_runner/domain/run.py"
 _PAYLOAD_PATH = "src/slice_runner/infrastructure/run_payload.py"
 
 _READ_COMPATIBILITY_ONLY = {
+    "corrected": "read-only compatibility for state blocks written while the understanding was still corrected",
+    "alignment": "read-only compatibility for state blocks written while the understanding was still aligned",
+    "understanding_pending": "read-only compatibility for state blocks written by the generation before `alignment`",
+    "understand_discards": "read-only compatibility for state blocks written while the understanding still ran",
     "spend_before_reopening": (
         "read-only compatibility for state blocks written before `Run.spend_before_reopening` was "
         "retired; see `docs/design-notes.md`, 'El gasto que se consulta deja de depender del `Run` "

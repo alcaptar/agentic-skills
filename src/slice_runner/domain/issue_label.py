@@ -8,7 +8,6 @@ from slice_runner.domain.step import Step
 
 class IssueLabel(StrEnum):
     PENDING = "estado:pendiente"
-    AWAITING_ALIGNMENT = "estado:esperando-alineacion"
     IN_PROGRESS = "estado:en-curso"
     AWAITING_MERGE = "estado:esperando-merge"
     BLOCKED_CONTROLS = "bloqueada:controles"
@@ -58,12 +57,11 @@ class IssueLabel(StrEnum):
     @classmethod
     def _of_the_open_step(cls, step: Step) -> IssueLabel:
         match step:
-            case Step.UNDERSTAND:
-                return cls.AWAITING_ALIGNMENT
             case Step.AWAIT_MERGE:
                 return cls.AWAITING_MERGE
             case (
                 Step.MOUNT_WORKTREE
+                | Step.UNDERSTAND
                 | Step.IMPLEMENT
                 | Step.RUN_CONTROLS
                 | Step.VERIFY

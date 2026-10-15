@@ -190,7 +190,7 @@ class TestReopenSlice:
     @pytest.mark.parametrize(
         "subissue",
         [
-            SubIssueMother.awaiting_alignment(),
+            SubIssueMother.pending(),
             replace(SubIssueMother.pending(), label=IssueLabel.IN_PROGRESS, run=RunMother.implementing()),
         ],
     )

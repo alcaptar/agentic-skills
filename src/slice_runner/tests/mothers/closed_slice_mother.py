@@ -28,7 +28,7 @@ class ClosedSliceMother:
     SLICE_ID: ClassVar[str] = "slice-07"
     NAME: ClassVar[str] = "controles-como-puerto"
     BUDGETS: ClassVar[Budgets] = Budgets()
-    MODELS: ClassVar[RoleModels] = RoleModels(understand="sonnet", implement="sonnet", verify="sonnet")
+    MODELS: ClassVar[RoleModels] = RoleModels(implement="sonnet", verify="sonnet")
 
     @classmethod
     def merged(cls) -> ClosedSlice:

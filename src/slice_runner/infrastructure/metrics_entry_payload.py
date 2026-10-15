@@ -198,7 +198,7 @@ class MetricsEntryPayload(StampedRow, ReadableLedgerRow):
     ci_retries: int
     verify_retries: int
     verify_discards: int
-    understand_discards: int
+    understand_discards: int | None = None
     implement_discards: int
     harness: SpendPayload | None = None
     discarded_call: DiscardedCallPayload | None = None
@@ -248,7 +248,6 @@ class MetricsEntryPayload(StampedRow, ReadableLedgerRow):
                 "ci_retries": closed.run.ci_retries,
                 "verify_retries": closed.run.verify_retries,
                 "verify_discards": closed.run.verify_discards,
-                "understand_discards": closed.run.understand_discards,
                 "implement_discards": closed.run.implement_discards,
                 "harness": SpendPayload.from_domain(spend) if spend.measured else None,
                 "discarded_call": DiscardedCallPayload.from_domain(closed.run.discarded_call)

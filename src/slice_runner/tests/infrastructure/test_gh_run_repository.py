@@ -6,7 +6,6 @@ from datetime import UTC, datetime
 
 import pytest
 
-from slice_runner.domain.alignment_stage import AlignmentStage
 from slice_runner.domain.budgets import Budgets
 from slice_runner.domain.control_command import ControlCommand
 from slice_runner.domain.controls import Controls
@@ -34,7 +33,6 @@ from slice_runner.infrastructure.catch_up_conflict_comment import CatchUpConflic
 from slice_runner.infrastructure.gh_run_repository import GhCommandFailedError, GhRunRepository
 from slice_runner.infrastructure.process import ProcessOutput
 from slice_runner.infrastructure.reset_comment import ResetComment
-from slice_runner.infrastructure.understanding_comment import UnderstandingComment
 from slice_runner.infrastructure.veto_findings_comment import VetoFindingsComment
 from slice_runner.tests.argv import Argv
 from slice_runner.tests.doubles import GhCallDoubles, ScriptedProcess
@@ -63,13 +61,13 @@ _SUB1_BODY = (
     "SENAL: exenta - spike de medicion\n"
     "\n"
     "<!-- slice-runner:estado\n"
-    '{"step": "await-ci", "corrected": "", "alignment": "awaiting", "retry_instruction": "", '
+    '{"step": "await-ci", "retry_instruction": "", '
     '"tree_unexpected": false, '
     '"previous_call_died": false, "catching_up_the_branch": false, "control_retries": 1, '
     '"hygiene_retries": 0, "verify_retries": 0, '
     '"ci_retries": 0, "catch_up_retries": 0, "indeterminate_ticks": 2, '
     '"verify_discards": 0, '
-    '"understand_discards": 0, "implement_discards": 0, "control_rounds_logged": 0, "verify_rounds_logged": 0, '
+    '"implement_discards": 0, "control_rounds_logged": 0, "verify_rounds_logged": 0, '
     '"last_reviewed_id": 0, "requested_changes": []}\n'
     "-->\n\n"
 )
@@ -729,16 +727,29 @@ class TestWritingTheExecutionStateBlock:
             "SENAL: exenta - spike de medicion\n"
             "\n"
             "<!-- slice-runner:estado\n"
-            '{"step": "implement", "corrected": "", "alignment": "awaiting", "retry_instruction": "", '
+            '{"step": "implement", "retry_instruction": "", '
             '"tree_unexpected": false, '
             '"previous_call_died": false, "catching_up_the_branch": false, '
             '"control_retries": 0, "hygiene_retries": 0, "verify_retries": 0, '
             '"ci_retries": 0, "catch_up_retries": 0, "indeterminate_ticks": 0, '
             '"verify_discards": 0, '
-            '"understand_discards": 0, "implement_discards": 0, "control_rounds_logged": 0, "verify_rounds_logged": 0, '
+            '"implement_discards": 0, "control_rounds_logged": 0, "verify_rounds_logged": 0, '
             '"last_reviewed_id": 0, "requested_changes": []}\n'
             "-->\n"
         )
+
+    def test_a_block_written_now_carries_neither_the_alignment_nor_the_correction_nor_the_understand_discards(
+        self,
+    ) -> None:
+        process = self._process(body=_SUB2_BODY)
+
+        GhRunRepository(call=GhCallDoubles.wired(process)).write_run(
+            repo=_OTHER_REPO, issue=44, run=RunMother.implementing()
+        )
+
+        block = re.search(r"<!-- slice-runner:estado\n(.*?)\n-->", process.calls[1].stdin, re.DOTALL)
+        assert block is not None
+        assert {"alignment", "corrected", "understand_discards"} & json.loads(block.group(1)).keys() == set()
 
     def test_a_run_carrying_a_dead_previous_call_writes_it_as_true_so_the_next_round_reads_it_back(self) -> None:
         process = self._process(body=_SUB2_BODY)
@@ -765,13 +776,13 @@ class TestWritingTheExecutionStateBlock:
             "SENAL: exenta - spike de medicion\n"
             "\n"
             "<!-- slice-runner:estado\n"
-            '{"step": "await-merge", "corrected": "", "alignment": "awaiting", "retry_instruction": "", '
+            '{"step": "await-merge", "retry_instruction": "", '
             '"tree_unexpected": false, '
             '"previous_call_died": false, "catching_up_the_branch": false, '
             '"control_retries": 0, "hygiene_retries": 0, "verify_retries": 0, '
             '"ci_retries": 0, "catch_up_retries": 0, "indeterminate_ticks": 0, '
             '"verify_discards": 0, '
-            '"understand_discards": 0, "implement_discards": 0, "control_rounds_logged": 0, "verify_rounds_logged": 0, '
+            '"implement_discards": 0, "control_rounds_logged": 0, "verify_rounds_logged": 0, '
             '"last_reviewed_id": 0, "requested_changes": []}\n'
             "-->\n\n"
         )
@@ -825,13 +836,13 @@ class TestWritingTheExecutionStateBlock:
             "SENAL: exenta - spike de medicion\n"
             "\n"
             "<!-- slice-runner:estado\n"
-            '{"step": "verify", "corrected": "", "alignment": "awaiting", "retry_instruction": "", '
+            '{"step": "verify", "retry_instruction": "", '
             '"tree_unexpected": false, '
             '"previous_call_died": false, "catching_up_the_branch": false, '
             '"control_retries": 0, "hygiene_retries": 0, "verify_retries": 0, '
             '"ci_retries": 0, "catch_up_retries": 0, "indeterminate_ticks": 0, '
             '"verify_discards": 0, '
-            '"understand_discards": 0, "implement_discards": 0, "control_rounds_logged": 0, "verify_rounds_logged": 0, '
+            '"implement_discards": 0, "control_rounds_logged": 0, "verify_rounds_logged": 0, '
             '"last_reviewed_id": 0, "requested_changes": [], '
             '"spend": {"cost_usd": 0.3433209, "turns": 9, "duration_ms": 36315, "calls": 1, '
             '"models": ["claude-sonnet-5"], "input_tokens": 13, "output_tokens": 1159, '
@@ -1086,106 +1097,17 @@ class TestRemovingTheMacroStateLabel:
             )
 
 
-class TestWritingTheUnderstanding:
-    def test_the_call_is_a_comment_carrying_the_understanding_as_stdin(self) -> None:
-        process = ScriptedProcess(ProcessOutput(code=0, stdout="", stderr=""))
-
-        GhRunRepository(call=GhCallDoubles.wired(process)).write_understanding(
-            repo=_REPO, issue=45, understanding="lo que el agente entendio de la slice"
-        )
-
-        assert process.calls[0].argv == ["gh", "issue", "comment", "45", "--repo", _REPO, "--body-file", "-"]
-        assert process.calls[0].stdin == UnderstandingComment.rendered("lo que el agente entendio de la slice")
-
-    def test_the_comment_says_how_to_respond_because_the_instruction_travels_with_the_artifact(self) -> None:
-        process = ScriptedProcess(ProcessOutput(code=0, stdout="", stderr=""))
-
-        GhRunRepository(call=GhCallDoubles.wired(process)).write_understanding(repo=_REPO, issue=45, understanding="x")
-
-        stdin = process.calls[0].stdin
-        assert "slice-runner go" in stdin
-        assert "slice-runner review" in stdin
-
-    def test_the_comment_carries_the_marker_that_lets_a_later_read_find_it_back(self) -> None:
-        process = ScriptedProcess(ProcessOutput(code=0, stdout="", stderr=""))
-
-        GhRunRepository(call=GhCallDoubles.wired(process)).write_understanding(repo=_REPO, issue=45, understanding="x")
-
-        assert UnderstandingComment.MARKER in process.calls[0].stdin
-
-    def test_the_comment_carries_the_visible_automation_mark(self) -> None:
-        process = ScriptedProcess(ProcessOutput(code=0, stdout="", stderr=""))
-
-        GhRunRepository(call=GhCallDoubles.wired(process)).write_understanding(repo=_REPO, issue=45, understanding="x")
-
-        assert AutomationMark.TEXT in process.calls[0].stdin
-
-    def test_a_non_zero_exit_raises_with_the_stderr_it_carried(self) -> None:
-        process = ScriptedProcess(ProcessOutput(code=1, stdout="", stderr="HTTP 422: Unprocessable Entity"))
-
-        with pytest.raises(GhCommandFailedError, match="HTTP 422"):
-            GhRunRepository(call=GhCallDoubles.wired(process)).write_understanding(
-                repo=_REPO, issue=45, understanding="x"
-            )
-
-
-class TestReadingBackWhatWasAgreed:
-    @staticmethod
-    def _process(bodies: list[str]) -> ScriptedProcess:
-        template = GhResponseMother.subissue_comments()[0]
-        payload = {"comments": [{**template, "body": body} for body in bodies]}
-
-        return ScriptedProcess(ProcessOutput(code=0, stdout=json.dumps(payload), stderr=""))
-
-    def test_what_comes_back_is_the_understanding_without_the_instructions_that_were_added_to_publish_it(
-        self,
-    ) -> None:
-        process = self._process([UnderstandingComment.rendered("el contador vive en Run")])
-
-        assert (
-            GhRunRepository(call=GhCallDoubles.wired(process)).read_understanding(repo=_REPO, issue=45)
-            == "el contador vive en Run"
-        )
-
-    def test_the_last_one_published_wins_because_a_review_republishes_it_corrected(self) -> None:
-        process = self._process(
-            [UnderstandingComment.rendered("el primero"), "-REVIEW usa Run", UnderstandingComment.rendered("el ultimo")]
-        )
-
-        assert (
-            GhRunRepository(call=GhCallDoubles.wired(process)).read_understanding(repo=_REPO, issue=45) == "el ultimo"
-        )
-
-    def test_a_subissue_without_any_understanding_comes_back_empty_instead_of_raising(self) -> None:
-        process = self._process(["un comentario cualquiera", "-GO"])
-
-        assert GhRunRepository(call=GhCallDoubles.wired(process)).read_understanding(repo=_REPO, issue=45) == ""
-
-    def test_a_comment_in_the_previous_format_with_no_visible_mark_is_still_read_as_the_understanding(self) -> None:
-        previous_format = GhResponseMother.subissue_comments()[0]["body"]
-        assert isinstance(previous_format, str)
-        process = self._process([previous_format])
-
-        understood = GhRunRepository(call=GhCallDoubles.wired(process)).read_understanding(repo=_REPO, issue=45)
-
-        assert understood == "asi entiendo la slice-10"
-
-
 class TestMarkingAnOrder:
-    @pytest.mark.parametrize(
-        ("order", "text"),
-        [(Order.GO, ""), (Order.REVIEW, "falta la senal"), (Order.RETRY, "el control ya esta arreglado")],
-    )
-    def test_the_call_is_a_comment_saying_which_order_was_given_and_with_what_text(
-        self, order: Order, text: str
-    ) -> None:
+    def test_the_call_is_a_comment_saying_which_order_was_given_and_with_what_text(self) -> None:
         process = ScriptedProcess(ProcessOutput(code=0, stdout="", stderr=""))
 
-        GhRunRepository(call=GhCallDoubles.wired(process)).mark_order(repo=_REPO, issue=45, order=order, text=text)
+        GhRunRepository(call=GhCallDoubles.wired(process)).mark_order(
+            repo=_REPO, issue=45, order=Order.RETRY, text="el control ya esta arreglado"
+        )
 
         assert process.calls[0].argv == ["gh", "issue", "comment", "45", "--repo", _REPO, "--body-file", "-"]
-        assert f"`{order}`" in process.calls[0].stdin
-        assert text in process.calls[0].stdin
+        assert f"`{Order.RETRY}`" in process.calls[0].stdin
+        assert "el control ya esta arreglado" in process.calls[0].stdin
 
     @pytest.mark.parametrize("order", list(Order))
     def test_the_comment_carries_none_of_the_tokens_the_run_used_to_read(self, order: Order) -> None:
@@ -1198,7 +1120,7 @@ class TestMarkingAnOrder:
     def test_the_comment_carries_the_visible_automation_mark(self) -> None:
         process = ScriptedProcess(ProcessOutput(code=0, stdout="", stderr=""))
 
-        GhRunRepository(call=GhCallDoubles.wired(process)).mark_order(repo=_REPO, issue=45, order=Order.GO, text="")
+        GhRunRepository(call=GhCallDoubles.wired(process)).mark_order(repo=_REPO, issue=45, order=Order.RETRY, text="")
 
         assert AutomationMark.TEXT in process.calls[0].stdin
 
@@ -1206,15 +1128,15 @@ class TestMarkingAnOrder:
         process = ScriptedProcess(ProcessOutput(code=1, stdout="", stderr="HTTP 422: Unprocessable Entity"))
 
         with pytest.raises(GhCommandFailedError, match="HTTP 422"):
-            GhRunRepository(call=GhCallDoubles.wired(process)).mark_order(repo=_REPO, issue=45, order=Order.GO, text="")
+            GhRunRepository(call=GhCallDoubles.wired(process)).mark_order(
+                repo=_REPO, issue=45, order=Order.RETRY, text=""
+            )
 
 
 class TestReadingASubissueWhoseRunBlockWasWrittenByAnEarlierVersion:
     @staticmethod
-    def _read(*, pending: bool) -> Run:
-        retired = '"understanding_pending": true' if pending else '"understanding_pending": false'
-        earlier = _SUB1_BODY.replace('"alignment": "awaiting", "retry_instruction": "", ', f"{retired}, ")
-        payload = {**GhResponseMother.children_of_parent()[1], "body": earlier}
+    def _read(body: str) -> Run:
+        payload = {**GhResponseMother.children_of_parent()[1], "body": body}
         process = ScriptedProcess(ProcessOutput(code=0, stdout=json.dumps(payload), stderr=""))
 
         subissue = GhRunRepository(call=GhCallDoubles.wired(process)).read_subissue(repo=_REPO, issue=49)
@@ -1222,17 +1144,26 @@ class TestReadingASubissueWhoseRunBlockWasWrittenByAnEarlierVersion:
 
         return subissue.run
 
-    def test_a_block_that_was_pending_is_read_as_an_understanding_still_to_draft(self) -> None:
-        assert self._read(pending=True).alignment is AlignmentStage.DRAFT
+    @staticmethod
+    def _with_keys_before_the_retry_instruction(keys: str) -> str:
+        return _SUB1_BODY.replace('"retry_instruction": "", ', f'{keys}, "retry_instruction": "", ')
 
-    def test_a_block_that_was_not_pending_is_read_as_an_understanding_awaiting_the_person(self) -> None:
-        assert self._read(pending=False).alignment is AlignmentStage.AWAITING
+    def test_a_block_carrying_the_alignment_the_correction_and_the_understand_discards_is_read_without_them(
+        self,
+    ) -> None:
+        keys = '"corrected": "falta la senal", "alignment": "agreed", "understand_discards": 2'
+
+        assert self._read(self._with_keys_before_the_retry_instruction(keys)) == self._read(_SUB1_BODY)
+
+    @pytest.mark.parametrize("pending", ["true", "false"])
+    def test_a_block_carrying_the_retired_pending_flag_is_read_without_it(self, pending: str) -> None:
+        keys = f'"understanding_pending": {pending}'
+
+        assert self._read(self._with_keys_before_the_retry_instruction(keys)) == self._read(_SUB1_BODY)
 
     def test_a_retired_key_carrying_something_that_is_not_a_boolean_is_still_refused(self) -> None:
-        earlier = _SUB1_BODY.replace(
-            '"alignment": "awaiting", "retry_instruction": "", ', '"understanding_pending": "yes", '
-        )
-        payload = {**GhResponseMother.children_of_parent()[1], "body": earlier}
+        body = self._with_keys_before_the_retry_instruction('"understanding_pending": "yes"')
+        payload = {**GhResponseMother.children_of_parent()[1], "body": body}
         process = ScriptedProcess(ProcessOutput(code=0, stdout=json.dumps(payload), stderr=""))
 
         with pytest.raises(UnreadableRunError):
@@ -1288,78 +1219,6 @@ class TestMarkingASliceReset:
             GhRunRepository(call=GhCallDoubles.wired(process)).mark_reset(
                 repo=_REPO, issue=45, branch=self._BRANCH, at=self._AT
             )
-
-
-class TestPausingForAlignment:
-    def test_a_single_call_adds_the_pause_label_removes_the_prior_one_and_assigns_the_agent(self) -> None:
-        process = ScriptedProcess(ProcessOutput(code=0, stdout="", stderr=""))
-
-        GhRunRepository(call=GhCallDoubles.wired(process)).pause_for_alignment(
-            repo=_REPO, issue=45, remove=IssueLabel.IN_PROGRESS
-        )
-
-        assert len(process.calls) == 1
-        argv = Argv(process.calls[0].argv)
-        assert argv.value_of("--add-label") == "estado:esperando-alineacion"
-        assert argv.value_of("--remove-label") == "estado:en-curso"
-        assert argv.value_of("--add-assignee") == "@me"
-
-    @pytest.mark.parametrize("remove", [IssueLabel.PENDING, IssueLabel.IN_PROGRESS, IssueLabel.BLOCKED_CI_RED])
-    def test_no_value_of_remove_ever_changes_the_label_that_gets_added(self, remove: IssueLabel) -> None:
-        process = ScriptedProcess(ProcessOutput(code=0, stdout="", stderr=""))
-
-        GhRunRepository(call=GhCallDoubles.wired(process)).pause_for_alignment(repo=_REPO, issue=45, remove=remove)
-
-        assert Argv(process.calls[0].argv).value_of("--add-label") == "estado:esperando-alineacion"
-
-    def test_a_subissue_carrying_no_label_is_paused_with_no_remove_flag_because_gh_refuses_an_absent_one(self) -> None:
-        process = ScriptedProcess(ProcessOutput(code=0, stdout="", stderr=""))
-
-        GhRunRepository(call=GhCallDoubles.wired(process)).pause_for_alignment(repo=_REPO, issue=45, remove=None)
-
-        assert len(process.calls) == 1
-        argv = Argv(process.calls[0].argv)
-        assert argv.value_of("--add-label") == "estado:esperando-alineacion"
-        assert argv.value_of("--add-assignee") == "@me"
-        assert "--remove-label" not in process.calls[0].argv
-
-    def test_a_pause_label_missing_on_the_repo_is_created_once_and_the_edit_is_retried(self) -> None:
-        process = ScriptedProcess(
-            ProcessOutput(code=1, stdout="", stderr="'estado:esperando-alineacion' not found"),
-            ProcessOutput(code=0, stdout="", stderr=""),
-            ProcessOutput(code=0, stdout="", stderr=""),
-        )
-
-        GhRunRepository(call=GhCallDoubles.wired(process)).pause_for_alignment(
-            repo=_REPO, issue=45, remove=IssueLabel.IN_PROGRESS
-        )
-
-        assert len(process.calls) == 3
-        assert process.calls[1].argv[:3] == ["gh", "label", "create"]
-        assert process.calls[1].argv[3] == "estado:esperando-alineacion"
-        assert process.calls[2].argv == process.calls[0].argv
-
-    def test_a_second_failure_after_creating_the_label_still_raises(self) -> None:
-        process = ScriptedProcess(
-            ProcessOutput(code=1, stdout="", stderr="'estado:esperando-alineacion' not found"),
-            ProcessOutput(code=0, stdout="", stderr=""),
-            ProcessOutput(code=1, stdout="", stderr="rate limited"),
-        )
-
-        with pytest.raises(GhCommandFailedError):
-            GhRunRepository(call=GhCallDoubles.wired(process)).pause_for_alignment(
-                repo=_REPO, issue=45, remove=IssueLabel.IN_PROGRESS
-            )
-
-    def test_a_failure_unrelated_to_a_missing_label_raises_without_trying_to_create_one(self) -> None:
-        process = ScriptedProcess(ProcessOutput(code=1, stdout="", stderr="authentication required"))
-
-        with pytest.raises(GhCommandFailedError):
-            GhRunRepository(call=GhCallDoubles.wired(process)).pause_for_alignment(
-                repo=_REPO, issue=45, remove=IssueLabel.IN_PROGRESS
-            )
-
-        assert len(process.calls) == 1
 
 
 class TestFlaggingAPullRequestLeftUnmerged:
@@ -1645,8 +1504,8 @@ class TestGhRunRepositoryRetryingTransientFailures:
         process = ScriptedProcess(ProcessOutput(code=1, stdout="", stderr="connection reset by peer"))
 
         with pytest.raises(GhCommandFailedError):
-            GhRunRepository(call=GhCallDoubles.wired(process)).write_understanding(
-                repo=_REPO, issue=45, understanding="x"
+            GhRunRepository(call=GhCallDoubles.wired(process)).mark_order(
+                repo=_REPO, issue=45, order=Order.RETRY, text="x"
             )
 
         assert len(process.calls) == 1
