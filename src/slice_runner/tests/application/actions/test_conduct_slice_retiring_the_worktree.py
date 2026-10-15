@@ -228,7 +228,10 @@ class TestConductSliceTheEndingsThatKeepTheWorktree(_Merging):
         self.published(conductor, WorktreeRetirement.KEPT_FOR_RESUMING)
 
     def test_a_run_aborted_before_touching_code_leaves_no_worktree_and_no_branch(self) -> None:
-        conductor = Conductor(chosen=SelectSliceResultMother.about_to_start(), budgets=Budgets(slice_cost_usd=0.03))
+        conductor = Conductor(
+            chosen=SelectSliceResultMother.resumed_at(RunMother.about_to_publish_the_understanding()),
+            budgets=Budgets(slice_cost_usd=0.03),
+        )
         conductor.listing_the_tree_once_mounted()
         conductor.understanding.write.side_effect = [
             RejectionMother.invalid_understanding_report(),
@@ -243,7 +246,10 @@ class TestConductSliceTheEndingsThatKeepTheWorktree(_Merging):
         conductor.repository.publish_kept_worktree.assert_not_called()
 
     def test_a_run_aborted_before_touching_code_still_keeps_a_tree_that_holds_uncommitted_work(self) -> None:
-        conductor = Conductor(chosen=SelectSliceResultMother.about_to_start(), budgets=Budgets(slice_cost_usd=0.03))
+        conductor = Conductor(
+            chosen=SelectSliceResultMother.resumed_at(RunMother.about_to_publish_the_understanding()),
+            budgets=Budgets(slice_cost_usd=0.03),
+        )
         conductor.listing_the_tree_once_mounted()
         conductor.worktrees.has_uncommitted_work.return_value = True
         conductor.understanding.write.side_effect = [

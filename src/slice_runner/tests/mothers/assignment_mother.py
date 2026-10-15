@@ -19,11 +19,11 @@ class AssignmentMother:
         "SubissueAlreadyClosedPrecheck.blocking(subissue): comprueba el precheck de subissue cerrada antes de "
         "tocar la rama."
     )
-    UNDERSTANDING: ClassVar[str] = (
-        "## Resumen\n"
-        "El precheck de subissue cerrada se llama `SUBISSUE_ALREADY_CLOSED` y corta antes de tocar la rama.\n"
-        "\n"
-        f"## Plan\n```\n{PLAN_PIECE}\n    motivo: la regla es del dominio\n```"
+    DECISIONS: ClassVar[tuple[str, ...]] = (
+        "el padre decide que la regla vive en el dominio",
+        "el padre decide que el adaptador no captura el OSError",
+        "la subissue decide que el campo se llama decisions",
+        "la subissue decide que la tupla vacia no emite seccion",
     )
     RETRY_INSTRUCTION: ClassVar[str] = "el control ya esta arreglado a mano"
     REVIEW: ClassVar[str] = "falta manejar el caso donde la lista viene vacia"
@@ -84,8 +84,8 @@ class AssignmentMother:
         return replace(cls.of_the_first_round(), controls=ParentIssueMother.with_exempt_controls().controls)
 
     @classmethod
-    def of_the_first_round_with_an_agreed_understanding(cls) -> Assignment:
-        return replace(cls.of_the_first_round(), understanding=cls.UNDERSTANDING)
+    def of_the_first_round_with_decisions(cls) -> Assignment:
+        return replace(cls.of_the_first_round(), decisions=cls.DECISIONS)
 
     @classmethod
     def of_a_round_after_reopening(cls) -> Assignment:

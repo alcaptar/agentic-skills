@@ -29,7 +29,7 @@ class Assignment:
     findings: tuple[Finding, ...] = ()
     control_logs: tuple[Path, ...] = ()
     hygiene_refusal: str = ""
-    understanding: str = ""
+    decisions: tuple[str, ...] = ()
     retry_instruction: str = ""
     requested_changes: tuple[RequestedChange, ...] = ()
     dirty_worktree_files: tuple[str, ...] = ()

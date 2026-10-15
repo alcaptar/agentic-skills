@@ -85,7 +85,7 @@ class ImplementerInvocation(HarnessInvocation):
                 *self._control_logs,
                 *self._hygiene_refusal,
                 *self._dirty_worktree,
-                *self._understanding,
+                *self._decisions,
                 *self._retry_instruction,
                 *self._requested_changes,
             ]
@@ -135,20 +135,12 @@ class ImplementerInvocation(HarnessInvocation):
         ]
 
     @property
-    def _understanding(self) -> list[str]:
-        agreed = self.assignment.understanding.strip()
-        if not agreed:
+    def _decisions(self) -> list[str]:
+        decisions = self.assignment.decisions
+        if not decisions:
             return []
 
-        return [
-            "",
-            "## Entendimiento acordado",
-            "",
-            "Es el plan que una persona reviso y aprobo antes de que empezaras. Donde lo contradigan,",
-            "las convenciones del repo y los criterios de aceptacion ganan; en lo demas, esto es lo acordado.",
-            "",
-            agreed,
-        ]
+        return ["", "## Decisiones de diseno", "", *(f"- {decision}" for decision in decisions)]
 
     @property
     def _controls(self) -> list[str]:

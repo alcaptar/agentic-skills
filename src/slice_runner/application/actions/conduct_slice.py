@@ -22,7 +22,6 @@ from slice_runner.application.queries.read_ci_status import ReadCiStatusParams
 from slice_runner.application.queries.read_pull_request_status import ReadPullRequestStatusParams
 from slice_runner.application.queries.run_prechecks import RunPrechecksParams
 from slice_runner.application.queries.select_slice import SelectSliceParams
-from slice_runner.domain.alignment_stage import AlignmentStage
 from slice_runner.domain.closing_worktree import ClosingWorktree
 from slice_runner.domain.discarded_call import DiscardedCall
 from slice_runner.domain.exceptions import (
@@ -390,7 +389,7 @@ class ConductSlice:
         marked = self._marked_in_progress(progress)
         arrived = self._machine.after(marked.run, Outcome.DONE).run
 
-        return self._conducting(replace(marked, run=replace(arrived, alignment=AlignmentStage.DRAFT)))
+        return self._conducting(replace(marked, run=arrived))
 
     def _halted_by(self, progress: ConductSliceProgress, precheck: PrecheckResult) -> ConductSliceResult:
         if precheck.reason is not None:
@@ -452,14 +451,6 @@ class ConductSlice:
         )
 
         return replace(progress, label=IssueLabel.AWAITING_ALIGNMENT)
-
-    def _seeded(self, progress: ConductSliceProgress) -> ConductSliceProgress:
-        if progress.understanding:
-            return progress
-
-        agreed = self._repository.read_understanding(repo=progress.params.repo, issue=progress.subissue.number)
-
-        return replace(progress, understanding=agreed)
 
     def _conducting(self, progress: ConductSliceProgress) -> ConductSliceResult:
         while True:
@@ -546,8 +537,6 @@ class ConductSlice:
         if self._budgets.exhausted(progress.spend):
             return SteppedSlice(progress=progress, outcome=Outcome.OVER_BUDGET)
 
-        progress = self._seeded(progress)
-
         try:
             implementation = self._implement.execute(
                 ImplementSliceParams(
@@ -558,7 +547,6 @@ class ConductSlice:
                     findings=progress.findings_of_the_last_round,
                     control_logs=progress.control_logs,
                     hygiene_refusal=progress.hygiene_refusal,
-                    understanding=progress.understanding,
                     retry_instruction=progress.run.retry_instruction,
                     requested_changes=progress.run.requested_changes,
                     previous_call_died=progress.run.previous_call_died,

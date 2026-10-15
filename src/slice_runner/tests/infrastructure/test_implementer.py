@@ -277,7 +277,7 @@ class TestTheSliceDataThatTravelsWithTheBrief(Calling):
         assert "murio sin informe legible" not in self._sent(AssignmentMother.of_the_first_round())
 
 
-class TestTheAgreedUnderstandingThatTravelsWithTheBrief(Calling):
+class TestTheDesignDecisionsThatTravelWithTheBrief(Calling):
     @classmethod
     def _sent(cls, assignment: Assignment) -> str:
         process = RecordedProcess(HarnessEnvelopeMother.recorded(_RECORDED))
@@ -286,30 +286,27 @@ class TestTheAgreedUnderstandingThatTravelsWithTheBrief(Calling):
 
         return process.stdin
 
-    def test_what_the_person_agreed_to_travels_even_when_nobody_corrected_it(self) -> None:
-        sent = self._sent(AssignmentMother.of_the_first_round_with_an_agreed_understanding())
-
-        assert AssignmentMother.UNDERSTANDING in sent
-
-    def test_it_says_the_conventions_and_the_criteria_win_so_it_does_not_read_as_an_order_to_transcribe(self) -> None:
-        sent = self._sent(AssignmentMother.of_the_first_round_with_an_agreed_understanding())
-
-        assert "las convenciones del repo y los criterios de aceptacion ganan" in sent
-
-    def test_it_closes_the_prompt_so_the_variable_part_stays_last(self) -> None:
-        assert self._sent(AssignmentMother.of_the_first_round_with_an_agreed_understanding()).endswith(
-            AssignmentMother.UNDERSTANDING
-        )
-
-    def test_a_slice_conducted_without_an_alignment_carries_no_section_instead_of_an_empty_one(self) -> None:
-        assert "\n## Entendimiento acordado\n" not in self._sent(AssignmentMother.of_the_first_round())
-
-    def test_the_plan_of_the_agreed_understanding_reaches_the_implementer_because_it_travels_inside_it(
+    def test_the_decisions_of_the_parent_and_then_those_of_the_subissue_appear_in_that_order_under_their_section(
         self,
     ) -> None:
-        sent = self._sent(AssignmentMother.of_the_first_round_with_an_agreed_understanding())
+        sent = self._sent(AssignmentMother.of_the_first_round_with_decisions())
 
-        assert AssignmentMother.PLAN_PIECE in sent
+        section = sent[sent.index("\n## Decisiones de diseno\n") :]
+        positions = [section.index(decision) for decision in AssignmentMother.DECISIONS]
+        assert positions == sorted(positions)
+
+    def test_each_decision_is_a_line_of_the_list(self) -> None:
+        sent = self._sent(AssignmentMother.of_the_first_round_with_decisions())
+
+        assert all(f"\n- {decision}" in sent for decision in AssignmentMother.DECISIONS)
+
+    def test_the_prompt_no_longer_carries_the_agreed_understanding_section(self) -> None:
+        sent = self._sent(AssignmentMother.of_the_first_round_with_decisions())
+
+        assert "## Entendimiento acordado" not in sent
+
+    def test_a_slice_without_decisions_carries_no_section_instead_of_an_empty_one(self) -> None:
+        assert "\n## Decisiones de diseno\n" not in self._sent(AssignmentMother.of_the_first_round())
 
 
 class TestTheRetryInstructionThatTravelsWithTheBrief(Calling):
@@ -376,6 +373,22 @@ class TestWhatTheBriefSaysAboutReplaces:
         self,
     ) -> None:
         assert "no lo cambies por tu cuenta: implementa el que la linea pide y declaralo en `left_out`" in self._said()
+
+
+class TestWhatTheBriefSaysAboutDesignDecisions:
+    @staticmethod
+    def _said() -> str:
+        return " ".join(SliceImplementerBrief.TEXT.split())
+
+    def test_it_names_the_section_that_carries_the_decisions(self) -> None:
+        assert '**"## Decisiones de diseno"**' in self._said()
+
+    def test_it_says_the_decisions_are_binding_and_are_not_reopened_on_the_implementers_own(self) -> None:
+        assert "Son **vinculantes**" in self._said()
+        assert "no se reabre por tu cuenta" in self._said()
+
+    def test_it_no_longer_talks_about_the_agreed_understanding(self) -> None:
+        assert "Entendimiento acordado" not in self._said()
 
 
 class TestThePendingReviewsThatTravelWithTheBrief(Calling):
