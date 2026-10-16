@@ -135,6 +135,10 @@ class UnreadableEventLogError(ValueError):
     pass
 
 
+class UnreadableActivityLogError(ValueError):
+    pass
+
+
 class ConversationNotFoundError(OSError):
     pass
 

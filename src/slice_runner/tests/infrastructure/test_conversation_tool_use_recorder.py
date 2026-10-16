@@ -15,6 +15,7 @@ from slice_runner.infrastructure.harness_telemetry import HarnessTelemetry
 from slice_runner.infrastructure.local_conversation_log import LocalConversationLog
 from slice_runner.infrastructure.local_tool_use_log import LocalToolUseLog
 from slice_runner.tests.doubles import (
+    RecordedActivityLog,
     RecordedProcess,
     RecordedSourceReader,
     RecordedSpendLog,
@@ -218,7 +219,11 @@ class TestARunThatCallsBothStepsOfTheHarness(WithTheDurableStoresOutOfTheRealHom
             tool_use_log=LocalToolUseLog(clock=WithTheDurableStoresOutOfTheRealHome.frozen_at()),
         )
         telemetry = HarnessTelemetry(
-            trace=RecordedTrace(), turns=RecordedTurnLog(), spend_log=RecordedSpendLog(), tool_uses=tool_uses
+            trace=RecordedTrace(),
+            turns=RecordedTurnLog(),
+            activity=RecordedActivityLog(),
+            spend_log=RecordedSpendLog(),
+            tool_uses=tool_uses,
         )
         reader = RecordedSourceReader()
 

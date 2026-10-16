@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 
+from slice_runner.infrastructure.activity_payload import ActivityPayload
 from slice_runner.infrastructure.call_spend_payload import CallSpendPayload
 from slice_runner.infrastructure.corpus_diff_payload import CorpusDiffPayload
 from slice_runner.infrastructure.corpus_verdict_payload import CorpusVerdictPayload
@@ -87,6 +88,17 @@ class TestEveryDurableLogDeclaresASchemaAProgramCanRead:
             "rounds",
             "spend",
             "budget_usd",
+        }
+
+    def test_the_activity_schema_requires_the_coordinates_the_actor_the_tool_and_the_target(self) -> None:
+        assert self._required(ActivityPayload.json_schema()) == {
+            "ts",
+            "repo",
+            "issue",
+            "slice_id",
+            "actor",
+            "tool",
+            "target",
         }
 
     def test_none_of_the_nine_schemas_leaves_a_reference_unresolved(self) -> None:

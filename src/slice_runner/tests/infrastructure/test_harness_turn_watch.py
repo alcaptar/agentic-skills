@@ -2,17 +2,23 @@ from __future__ import annotations
 
 import json
 
+from slice_runner.domain.activity_actor import ActivityActor
 from slice_runner.domain.step import Step
 from slice_runner.infrastructure.harness_turn_watch import HarnessTurnWatch
-from slice_runner.tests.doubles import RecordedTurnLog
-
-_SLICE_ID = "slice-05"
+from slice_runner.tests.doubles import RecordedActivityLog, RecordedTurnLog
+from slice_runner.tests.mothers.harness_call_spend_mother import HarnessCallSpendMother
 
 
 class Watching:
     @staticmethod
     def _watch(turns: RecordedTurnLog) -> HarnessTurnWatch:
-        return HarnessTurnWatch(turns=turns, slice_id=_SLICE_ID, step=Step.IMPLEMENT)
+        return HarnessTurnWatch(
+            turns=turns,
+            activity=RecordedActivityLog(),
+            coordinates=HarnessCallSpendMother.coordinates(),
+            actor=ActivityActor.IMPLEMENTER,
+            step=Step.IMPLEMENT,
+        )
 
 
 class TestTheTargetOfATool(Watching):

@@ -32,6 +32,7 @@ from slice_runner.application.actions.stage_slice import StageSlice
 from slice_runner.application.actions.verify_slice import VerifySlice, VerifySliceParams
 from slice_runner.application.queries.check_readiness import CheckReadiness, CheckReadinessParams, CheckReadinessPorts
 from slice_runner.application.queries.check_sources import CheckSources
+from slice_runner.application.queries.follow_activity import FollowActivity, FollowActivityParams
 from slice_runner.application.queries.follow_events import FollowEvents, FollowEventsParams
 from slice_runner.application.queries.list_closed_slices import ListClosedSlices, ListClosedSlicesParams
 from slice_runner.application.queries.read_ci_status import ReadCiStatus
@@ -42,6 +43,7 @@ from slice_runner.application.queries.select_slice import SelectSlice
 from slice_runner.application.queries.show_feature_status import ShowFeatureStatus, ShowFeatureStatusParams
 from slice_runner.application.queries.spend_by_role import SpendByRole, SpendByRoleParams
 from slice_runner.application.queries.spend_of_step import SpendOfStep, SpendOfStepParams
+from slice_runner.domain.activity_cursors import ActivityCursors
 from slice_runner.domain.budgets import Budgets
 from slice_runner.domain.closed_slice_metrics import ClosedSliceMetrics
 from slice_runner.domain.closed_slice_scope import ClosedSliceScope
@@ -64,6 +66,7 @@ from slice_runner.domain.exceptions import (
     ProtectedBranchError,
     RunNotClosedError,
     SourcesBudgetExceededError,
+    UnreadableActivityLogError,
     UnreadableCallSpendLogError,
     UnreadableCallTraceError,
     UnreadableConversationError,
@@ -80,6 +83,7 @@ from slice_runner.domain.role_models import RoleModels
 from slice_runner.domain.state_machine import StateMachine
 from slice_runner.domain.step import Step
 from slice_runner.domain.worktree_retirement import WorktreeRetirement
+from slice_runner.infrastructure.activity_follow_json_report import ActivityFollowJsonReport
 from slice_runner.infrastructure.branches_without_catch_up import BranchesWithoutCatchUp
 from slice_runner.infrastructure.claude_implementer import ClaudeImplementer
 from slice_runner.infrastructure.claude_verifier import ClaudeVerifier
@@ -112,6 +116,8 @@ from slice_runner.infrastructure.harness_telemetry import HarnessTelemetry
 from slice_runner.infrastructure.implementer_invocation import ImplementerInvocation
 from slice_runner.infrastructure.judge_invocation import JudgeInvocation
 from slice_runner.infrastructure.kept_worktree_comment import KeptWorktreeComment
+from slice_runner.infrastructure.local_activity_log import LocalActivityLog
+from slice_runner.infrastructure.local_activity_reader import LocalActivityReader
 from slice_runner.infrastructure.local_call_spend_log import LocalCallSpendLog
 from slice_runner.infrastructure.local_call_trace import LocalCallTrace
 from slice_runner.infrastructure.local_control_runner import LocalControlRunner
@@ -145,6 +151,7 @@ from slice_runner.infrastructure.verdict_payload import VerdictPayload
 
 if TYPE_CHECKING:
     from slice_runner.application.actions.conduct_slice import ConductSliceResult
+    from slice_runner.domain.activity_reader import ActivityReader
     from slice_runner.domain.clock import Clock
     from slice_runner.domain.corpus import Corpus
     from slice_runner.domain.event import Event
@@ -186,9 +193,10 @@ class Cli:
         GhCommandFailedError,
     )
 
-    def __init__(self, *, process: Process, budgets: Budgets) -> None:
+    def __init__(self, *, process: Process, budgets: Budgets, activity: ActivityReader | None = None) -> None:
         self._process = process
         self._budgets = budgets
+        self._activity = activity
 
     @classmethod
     def main(cls, argv: list[str] | None = None) -> int:
@@ -254,7 +262,9 @@ class Cli:
     def _dispatched_for_the_interface(cls, arguments: argparse.Namespace, *, budgets: Budgets) -> int:
         match Subcommand(arguments.command):
             case Subcommand.FOLLOW:
-                result = cls(process=LocalProcess(budgets=budgets), budgets=budgets).follow(
+                result = cls(
+                    process=LocalProcess(budgets=budgets), budgets=budgets, activity=LocalActivityReader()
+                ).follow(
                     repo=arguments.repo,
                     once=arguments.once,
                     as_json=arguments.json,
@@ -744,20 +754,32 @@ class Cli:
 
         return ExitCode.OK
 
-    def follow(self, *, repo: str | None, once: bool, reader: EventReader, clock: Clock, as_json: bool = False) -> int:
+    def follow(
+        self,
+        *,
+        repo: str | None,
+        once: bool,
+        reader: EventReader,
+        clock: Clock,
+        as_json: bool = False,
+    ) -> int:
         query = FollowEvents(reader=reader)
+        live = FollowActivity(reader=self._activity) if as_json and self._activity is not None else None
+        cursors = ActivityCursors()
         try:
             followed = query.execute(FollowEventsParams(cursor=EventCursor.start(), repo=repo))
             self._printed(followed.snapshot, as_json=as_json)
+            cursors = self._printed_activity(live, followed.snapshot, cursors)
             while not once:
                 clock.sleep(seconds=self._budgets.seconds_between_follow_reads)
                 followed = query.execute(
                     FollowEventsParams(cursor=followed.cursor, snapshot=followed.snapshot, repo=repo)
                 )
                 self._printed(followed.changes, as_json=as_json)
+                cursors = self._printed_activity(live, followed.snapshot, cursors)
         except KeyboardInterrupt:
             return ExitCode.OK
-        except UnreadableEventLogError as error:
+        except (UnreadableEventLogError, UnreadableActivityLogError) as error:
             return self._reported(f"the events could not be followed: {error}", ExitCode.USAGE_ERROR)
 
         return ExitCode.OK
@@ -777,6 +799,19 @@ class Cli:
             return self._reported(f"the pending slices could not be registered: {error}", ExitCode.RUN_INTERRUPTED)
 
         return ExitCode.OK
+
+    @staticmethod
+    def _printed_activity(
+        live: FollowActivity | None, snapshot: tuple[Event, ...], cursors: ActivityCursors
+    ) -> ActivityCursors:
+        if live is None:
+            return cursors
+
+        followed = live.execute(FollowActivityParams(snapshot=snapshot, cursors=cursors))
+        for line in ActivityFollowJsonReport(activities=followed.activities).lines():
+            print(line, flush=True)
+
+        return followed.cursors
 
     @staticmethod
     def _printed(events: tuple[Event, ...], *, as_json: bool) -> None:
@@ -831,11 +866,13 @@ class Cli:
         reader = ProcessSourceReader(process=self._process, budgets=self._budgets)
         corpus = LocalCorpus(clock=clock)
         debt_ledger = LocalDebtLedger(clock=clock)
+        activity = LocalActivityLog(clock=clock)
         calls = HarnessInvocationRunner(
             process=self._process,
             telemetry=HarnessTelemetry(
                 trace=LocalCallTrace(clock=clock),
                 turns=StderrTurnLog(),
+                activity=activity,
                 spend_log=LocalCallSpendLog(clock=clock),
                 tool_uses=self._tool_uses(clock=clock),
             ),
@@ -856,7 +893,7 @@ class Cli:
                 stage=StageSlice(workspace=workspace),
                 commit=CommitRound(workspace=workspace, events=LocalEventLog(), clock=clock, budgets=self._budgets),
                 rescue=RescueStagedWork(workspace=workspace),
-                run_controls=RunControls(controls=LocalControlRunner(process=self._process)),
+                run_controls=RunControls(controls=LocalControlRunner(process=self._process), activity=activity),
                 verify=self._action(clock=clock, corpus=corpus),
                 deliver=DeliverSlice(workspace=workspace, forum=forum),
                 close=CloseParent(repository=repository),
@@ -904,6 +941,7 @@ class Cli:
                     telemetry=HarnessTelemetry(
                         trace=LocalCallTrace(clock=used),
                         turns=StderrTurnLog(),
+                        activity=LocalActivityLog(clock=used),
                         spend_log=LocalCallSpendLog(clock=used),
                         tool_uses=self._tool_uses(clock=used),
                     ),

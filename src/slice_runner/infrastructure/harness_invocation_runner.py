@@ -4,6 +4,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from slice_runner.domain.activity_actor import ActivityActor
 from slice_runner.domain.call_spend_log import HarnessCallSpend
 from slice_runner.domain.call_trace import HarnessCall
 from slice_runner.infrastructure.harness_output import HarnessOutput
@@ -42,7 +43,14 @@ class HarnessInvocationRunner:
         self._telemetry = telemetry
 
     def call(self, invocation: HarnessInvocation, *, step: Step, subject: HarnessCallSubject) -> HarnessOutput:
-        watch = HarnessTurnWatch(turns=self._telemetry.turns, slice_id=subject.coordinates.slice_id.text, step=step)
+        self._telemetry.activity.restart(subject.coordinates)
+        watch = HarnessTurnWatch(
+            turns=self._telemetry.turns,
+            activity=self._telemetry.activity,
+            coordinates=subject.coordinates,
+            actor=ActivityActor.of_the_harness_call_at(step),
+            step=step,
+        )
         output = self._process.run(invocation.argv, stdin=invocation.text, cwd=invocation.cwd, on_line=watch)
         envelope = HarnessOutput.from_process(output)
         self._telemetry.trace.record(
