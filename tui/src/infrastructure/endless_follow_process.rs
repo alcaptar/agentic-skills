@@ -31,7 +31,9 @@ impl EndlessFollowProcess {
         let (sender, deliveries) = channel();
         thread::spawn(move || {
             for line in BufReader::new(stdout).lines().map_while(Result::ok) {
-                if sender.send(FollowLinePayload::parsed(&line)).is_err() {
+                if let Some(delivery) = FollowLinePayload::delivery(&line)
+                    && sender.send(delivery).is_err()
+                {
                     return;
                 }
             }

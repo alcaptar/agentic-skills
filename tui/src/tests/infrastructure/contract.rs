@@ -112,3 +112,58 @@ mod the_follow_line_contract {
         }
     }
 }
+
+mod the_follow_line_version_2_contract {
+    use crate::infrastructure::follow_line_payload::FollowLinePayload;
+    use crate::tests::infrastructure::contract::LineContract;
+
+    #[test]
+    fn every_transition_example_parses_and_every_activity_example_is_discarded() {
+        let contract = LineContract::on_disk("follow-line-v2.json");
+
+        assert!(!contract.examples.is_empty());
+        for example in &contract.examples {
+            let delivery = FollowLinePayload::delivery(&LineContract::raw(example));
+            match example["kind"].as_str().unwrap() {
+                "transition" => assert!(
+                    delivery.as_ref().is_some_and(Result::is_ok),
+                    "{example:?}: {delivery:?}"
+                ),
+                "activity" => assert_eq!(delivery, None, "{example:?}"),
+                other => panic!("the contract has an example of kind {other}"),
+            }
+        }
+    }
+
+    #[test]
+    fn the_blocked_and_aborted_examples_are_painted_with_their_reason() {
+        let contract = LineContract::on_disk("follow-line-v2.json");
+
+        let statuses: Vec<String> = contract
+            .examples
+            .iter()
+            .filter(|example| example["kind"] == "transition")
+            .filter(|example| example["standing"] == "blocked" || example["standing"] == "aborted")
+            .map(|example| {
+                FollowLinePayload::parsed(&LineContract::raw(example))
+                    .unwrap()
+                    .status()
+                    .to_string()
+            })
+            .collect();
+
+        assert_eq!(
+            statuses,
+            vec![
+                "bloqueada: controles",
+                "bloqueada: juez",
+                "bloqueada: ci roja",
+                "bloqueada: ci indeterminada",
+                "bloqueada: conflicto",
+                "bloqueada: worktree",
+                "abortada: presupuesto",
+                "abortada: llamada no medida",
+            ]
+        );
+    }
+}

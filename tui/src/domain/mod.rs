@@ -1,5 +1,7 @@
 pub mod binding_cadence;
 pub mod clock;
+pub mod closing_reason;
+pub mod closure;
 pub mod errors;
 pub mod follow_line;
 pub mod follow_source;
@@ -12,6 +14,8 @@ pub mod session_transcripts;
 pub mod slice_board;
 pub mod slice_key;
 pub mod slice_row;
+pub mod standing;
+pub mod step;
 pub mod workspace_binding;
 pub mod workspace_id;
 pub mod workspace_ids;

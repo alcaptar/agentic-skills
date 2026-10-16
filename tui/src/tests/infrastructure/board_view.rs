@@ -129,3 +129,61 @@ mod the_board_view_with_a_selection {
         assert!(!screen.contains("event-1"), "{screen}");
     }
 }
+
+mod the_board_view_with_version_2_lines {
+    use crate::infrastructure::follow_line_payload::FollowLinePayload;
+    use crate::tests::application::watching::Watching;
+    use crate::tests::infrastructure::board_view::Screen;
+    use crate::tests::infrastructure::follow_line_payload::RawTransition;
+
+    struct Feed;
+
+    impl Feed {
+        fn watched_from(raws: &[String]) -> crate::application::queries::watch_slices::WatchedBoard {
+            Watching::one_tick(raws.iter().filter_map(|raw| FollowLinePayload::delivery(raw)).collect())
+        }
+    }
+
+    #[test]
+    fn paints_a_blocked_slice_with_its_reason() {
+        let screen = Screen::text_of(&Feed::watched_from(&[RawTransition::blocked_by_controls()]));
+
+        assert!(screen.contains("bloqueada: controles"), "{screen}");
+    }
+
+    #[test]
+    fn paints_a_slice_waiting_for_the_merge() {
+        let screen = Screen::text_of(&Feed::watched_from(&[RawTransition::awaiting_merge()]));
+
+        assert!(screen.contains("esperando merge"), "{screen}");
+    }
+
+    #[test]
+    fn paints_an_error_naming_a_version_it_does_not_understand() {
+        let screen = Screen::text_of(&Feed::watched_from(&[
+            RawTransition::awaiting_merge(),
+            r#"{"version":3,"kind":"transition"}"#.to_string(),
+        ]));
+
+        assert!(screen.contains("version 3"), "{screen}");
+        assert!(screen.contains("esperando merge"), "{screen}");
+    }
+
+    #[test]
+    fn paints_an_error_naming_a_kind_it_does_not_understand() {
+        let screen = Screen::text_of(&Feed::watched_from(
+            &[r#"{"version":2,"kind":"heartbeat"}"#.to_string()],
+        ));
+
+        assert!(screen.contains("heartbeat"), "{screen}");
+    }
+
+    #[test]
+    fn an_activity_line_changes_no_row_and_leaves_no_error() {
+        let watched = Feed::watched_from(&[RawTransition::awaiting_merge(), RawTransition::activity()]);
+        let alone = Feed::watched_from(&[RawTransition::awaiting_merge()]);
+
+        assert_eq!(watched, alone);
+        assert_eq!(watched.rejection(), None);
+    }
+}
