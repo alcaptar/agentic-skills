@@ -17,7 +17,6 @@ if TYPE_CHECKING:
 class SliceRates:
     verifier_fail: Measurement
     blocked_by_controls: Measurement
-    blocked_by_hygiene: Measurement
     first_attempt: Measurement
     implement_retries: Measurement
     verify_discards: Measurement
@@ -28,13 +27,10 @@ class SliceRates:
         total = len(records)
         return cls(
             verifier_fail=Measurement.of_the_fraction(
-                sum(1 for record in records if record.closure == Closure.because_of(ClosingReason.VERIFY)), total
+                sum(1 for record in records if record.closure == Closure.because_of(ClosingReason.JUDGE)), total
             ),
             blocked_by_controls=Measurement.of_the_fraction(
                 sum(1 for record in records if record.closure == Closure.because_of(ClosingReason.CONTROLS)), total
-            ),
-            blocked_by_hygiene=Measurement.of_the_fraction(
-                sum(1 for record in records if record.closure == Closure.because_of(ClosingReason.HYGIENE)), total
             ),
             first_attempt=Measurement.of_the_fraction(sum(1 for record in records if record.first_attempt), total),
             implement_retries=Measurement.of_the_mean([float(record.implement_retries) for record in records]),

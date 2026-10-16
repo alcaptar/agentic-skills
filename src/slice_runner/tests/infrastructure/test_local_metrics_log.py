@@ -70,9 +70,9 @@ class TestHowEachClosureIsRecorded(WithTheDurableStoresOutOfTheRealHome):
             (Closure.merged(), "pass", "green"),
             (Closure.because_of(ClosingReason.CI_RED), "pass", "red"),
             (Closure.because_of(ClosingReason.CI_INDETERMINATE), "pass", "none"),
-            (Closure.because_of(ClosingReason.VERIFY), "fail", "none"),
+            (Closure.because_of(ClosingReason.JUDGE), "fail", "none"),
             (Closure.because_of(ClosingReason.CONTROLS), "blocked-controls", "none"),
-            (Closure.because_of(ClosingReason.HYGIENE), "blocked-hygiene", "none"),
+            (Closure.because_of(ClosingReason.WORKTREE), "blocked-worktree", "none"),
             (Closure.because_of(ClosingReason.BUDGET), "aborted-budget", "none"),
             (Closure.because_of(ClosingReason.UNMEASURED_CALL), "aborted-unmeasured-call", "none"),
         ],
@@ -395,7 +395,7 @@ class TestTheLedgerOnlyGrows(WithTheDurableStoresOutOfTheRealHome):
         log = LocalMetricsLog(clock=self.frozen_at())
 
         log.record(ClosedSliceMother.closed_as(Closure.merged()))
-        log.record(ClosedSliceMother.closed_as(Closure.because_of(ClosingReason.VERIFY)))
+        log.record(ClosedSliceMother.closed_as(Closure.because_of(ClosingReason.JUDGE)))
 
         assert [row["verdict"] for row in WrittenMetricsLog.rows_under(tmp_path)] == ["pass", "fail"]
 
@@ -414,13 +414,13 @@ class TestReadingBackTheClosedSlices(WithTheDurableStoresOutOfTheRealHome):
         log = LocalMetricsLog(clock=self.frozen_at(datetime(2026, 2, 1, tzinfo=UTC)))
         log.record(
             ClosedSliceMother.closed_as_for_issue(
-                Closure.because_of(ClosingReason.VERIFY), issue=ClosedSliceMother.ISSUE + 1
+                Closure.because_of(ClosingReason.JUDGE), issue=ClosedSliceMother.ISSUE + 1
             )
         )
 
         found = log.closed_slices(_WIDE_OPEN)
 
-        assert [record.closure for record in found] == [Closure.merged(), Closure.because_of(ClosingReason.VERIFY)]
+        assert [record.closure for record in found] == [Closure.merged(), Closure.because_of(ClosingReason.JUDGE)]
 
     def test_a_slice_outside_the_date_range_is_left_out(self, tmp_path: Path) -> None:
         log = LocalMetricsLog(clock=self.frozen_at(datetime(2026, 1, 1, tzinfo=UTC)))
@@ -497,7 +497,7 @@ class TestDeduplicatingRepeatedClosuresOfTheSameSlice(WithTheDurableStoresOutOfT
         self, tmp_path: Path
     ) -> None:
         log = LocalMetricsLog(clock=self.frozen_at(datetime(2026, 1, 1, tzinfo=UTC)))
-        log.record(ClosedSliceMother.closed_as(Closure.because_of(ClosingReason.VERIFY)))
+        log.record(ClosedSliceMother.closed_as(Closure.because_of(ClosingReason.JUDGE)))
         log = LocalMetricsLog(clock=self.frozen_at(datetime(2026, 1, 2, tzinfo=UTC)))
         log.record(ClosedSliceMother.closed_as(Closure.merged()))
 
@@ -509,7 +509,7 @@ class TestDeduplicatingRepeatedClosuresOfTheSameSlice(WithTheDurableStoresOutOfT
         self, tmp_path: Path
     ) -> None:
         log = LocalMetricsLog(clock=self.frozen_at(datetime(2026, 8, 8, tzinfo=UTC)))
-        log.record(ClosedSliceMother.closed_as(Closure.because_of(ClosingReason.VERIFY)))
+        log.record(ClosedSliceMother.closed_as(Closure.because_of(ClosingReason.JUDGE)))
         log = LocalMetricsLog(clock=self.frozen_at(datetime(2026, 8, 18, tzinfo=UTC)))
         log.record(ClosedSliceMother.closed_as(Closure.merged()))
 
@@ -519,7 +519,7 @@ class TestDeduplicatingRepeatedClosuresOfTheSameSlice(WithTheDurableStoresOutOfT
             )
         )
 
-        assert [record.closure for record in found] == [Closure.because_of(ClosingReason.VERIFY)]
+        assert [record.closure for record in found] == [Closure.because_of(ClosingReason.JUDGE)]
 
     def test_the_key_is_the_repo_and_the_issue_and_not_the_slice_id_that_can_change_mid_feature(
         self, tmp_path: Path
@@ -650,9 +650,11 @@ class TestTheRowCarriesWhatBecameOfTheWorktree(WithTheDurableStoresOutOfTheRealH
 
         assert len(found) == 1
 
-    def test_the_new_leftover_closing_is_written_as_its_own_verdict(self, tmp_path: Path) -> None:
+    def test_the_worktree_closing_is_written_with_the_verdict_of_the_majority_side_of_the_pair(
+        self, tmp_path: Path
+    ) -> None:
         LocalMetricsLog(clock=self.frozen_at()).record(
-            ClosedSliceMother.closed_as(Closure.because_of(ClosingReason.LEFTOVER_WORKTREE))
+            ClosedSliceMother.closed_as(Closure.because_of(ClosingReason.WORKTREE))
         )
 
-        assert WrittenMetricsLog.row_under(tmp_path)["verdict"] == "blocked-leftover-worktree"
+        assert WrittenMetricsLog.row_under(tmp_path)["verdict"] == "blocked-worktree"

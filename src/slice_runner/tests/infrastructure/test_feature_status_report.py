@@ -142,7 +142,7 @@ class TestFeatureStatusReport:
         assert rendered.index(IssueLabel.PENDING.value) == 11
 
     def test_a_closed_slice_without_a_run_shows_its_closure_state_from_the_registry_as_the_step(self) -> None:
-        record = ClosedSliceRecordMother.closed_as(Closure.because_of(ClosingReason.VERIFY))
+        record = ClosedSliceRecordMother.closed_as(Closure.because_of(ClosingReason.JUDGE))
         status = SliceStatus(sub_issue=SubIssueMother.pending(), pull_request=None, record=record)
 
         rendered = FeatureStatusReport(statuses=(status,)).rendered()

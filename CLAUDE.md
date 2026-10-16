@@ -127,8 +127,7 @@ Estos no son convenciones de codigo: son las invariantes del pipeline, y valen e
 - **Los controles los declara el issue**: la seccion `## Controles` (pares `nombre: comando`, por repo)
   fija con que se mide cada repo. La descubre `slice-spec` con `discover_controles.py`, la **confirma la
   persona**, y `slice-runner` solo la lee: ningun agente abre un `Makefile` en tiempo de run. Se llaman
-  **controles**, no "puertas" -era un calco de *gate*-; el motivo viejo `bloqueada: puertas` se sigue
-  parseando porque esta escrito en issues abiertos. Y nadie que juzgue ve output de build: con `--out`,
+  **controles**, no "puertas" -era un calco de *gate*-. Y nadie que juzgue ve output de build: con `--out`,
   la salida de un control fallido va a disco y el orquestador solo reenvia la ruta.
 - **La observabilidad es parte de la slice**: cada slice que cambia comportamiento en prod declara su
   linea `SENAL:` (como se comprueba viva; la consume `deploy-watch`), y las exentas lo declaran con

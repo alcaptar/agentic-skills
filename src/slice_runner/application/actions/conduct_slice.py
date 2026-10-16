@@ -8,7 +8,7 @@ from slice_runner.application.actions.close_parent import CloseParentParams
 from slice_runner.application.actions.commit_round import CommitRoundParams
 from slice_runner.application.actions.deliver_slice import DeliverSliceParams
 from slice_runner.application.actions.implement_slice import ImplementSliceParams
-from slice_runner.application.actions.mount_worktree import MountWorktreeParams
+from slice_runner.application.actions.mount_worktree import MountWorktreeParams, MountWorktreeResult
 from slice_runner.application.actions.record_closure import RecordClosureParams
 from slice_runner.application.actions.record_start import RecordStartParams
 from slice_runner.application.actions.record_step import RecordStepParams
@@ -132,6 +132,7 @@ class ConductSliceProgress:
     ci_indeterminate_cause: CiIndeterminateCause | None = None
     conflicting_paths: tuple[str, ...] = field(default=())
     expects_a_tree: bool = True
+    tree_left_behind: bool = False
 
     @property
     def spend(self) -> HarnessSpend:
@@ -302,10 +303,20 @@ class ConductSlice:
         )
         if mounted.outcome is Outcome.WORKTREE_TAKEN or mounted.outcome is Outcome.WORKTREE_LEFT_BEHIND:
             return self._blocked_by_the_worktree(
-                replace(progress, conflicting_paths=(mounted.conflicting_path,)), mounted.outcome
+                self._with_the_tree_left_behind(progress, mounted),
+                mounted.outcome,
             )
 
         return then(self._with_the_tree_expected_from_now_on(progress))
+
+    @staticmethod
+    def _with_the_tree_left_behind(
+        progress: ConductSliceProgress, mounted: MountWorktreeResult
+    ) -> ConductSliceProgress:
+        left_behind = mounted.outcome is Outcome.WORKTREE_LEFT_BEHIND
+        run = replace(progress.run, tree_unexpected=True) if left_behind else progress.run
+
+        return replace(progress, run=run, conflicting_paths=(mounted.conflicting_path,), tree_left_behind=left_behind)
 
     def _with_the_tree_expected_from_now_on(self, progress: ConductSliceProgress) -> ConductSliceProgress:
         if not progress.run.tree_unexpected:
@@ -764,6 +775,7 @@ class ConductSlice:
                     closure=Closure.merged(),
                     step=run.step,
                     derived=True,
+                    tree_left_behind=False,
                 ),
             )
         )
@@ -797,9 +809,9 @@ class ConductSlice:
         return replace(progress, waited_seconds=progress.waited_seconds + seconds)
 
     def _retiring(
-        self, tree: RetireWorktreeParams, *, closure: Closure, step: Step, derived: bool
+        self, tree: RetireWorktreeParams, *, closure: Closure, step: Step, derived: bool, tree_left_behind: bool
     ) -> WorktreeRetirement:
-        closing = WorktreeRetirementPolicy.of_the_closing(closure=closure, step=step)
+        closing = WorktreeRetirementPolicy.of_the_closing(closure=closure, step=step, tree_left_behind=tree_left_behind)
         if closing is not ClosingWorktree.RETIRE or not derived:
             return WorktreeRetirement.without_retiring(closing)
 
@@ -817,6 +829,7 @@ class ConductSlice:
             closure=closure,
             step=progress.run.step,
             derived=progress.params.worktree is None,
+            tree_left_behind=progress.tree_left_behind,
         )
         self._record_closure.execute(
             RecordClosureParams(
@@ -859,7 +872,5 @@ class ConductSlice:
             pull_request=progress.pull_request,
             worktree=progress.worktree,
             worktree_retirement=retirement,
-            conflicting_path=progress.conflicting_paths[0]
-            if closure.reason in (ClosingReason.WORKTREE, ClosingReason.LEFTOVER_WORKTREE)
-            else "",
+            conflicting_path=progress.conflicting_paths[0] if closure.reason is ClosingReason.WORKTREE else "",
         )

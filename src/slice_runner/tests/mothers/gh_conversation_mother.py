@@ -8,6 +8,7 @@ from slice_runner.domain.issue_state import IssueState
 from slice_runner.tests.mothers.run_mother import RunMother
 
 if TYPE_CHECKING:
+    from slice_runner.domain.retired_issue_label import RetiredIssueLabel
     from slice_runner.domain.run import Run
 
 _PARENT_BODY_WITHOUT_DECISIONS = (
@@ -93,11 +94,11 @@ class GhConversationMother:
         return json.dumps({"body": _SUBISSUE_PROSE})
 
     @classmethod
-    def the_slice_resumed_at(cls, run: Run, *, label: IssueLabel = IssueLabel.IN_PROGRESS) -> str:
+    def the_slice_resumed_at(cls, run: Run, *, label: IssueLabel | RetiredIssueLabel = IssueLabel.IN_PROGRESS) -> str:
         return cls._children(body=f"{_SUBISSUE_PROSE}\n{cls._state_block(run)}\n", label=label, state=IssueState.OPEN)
 
     @classmethod
-    def the_subissue_viewed(cls, *, label: IssueLabel, run: Run | None = None) -> dict[str, object]:
+    def the_subissue_viewed(cls, *, label: IssueLabel | RetiredIssueLabel, run: Run | None = None) -> dict[str, object]:
         block = cls._state_block(run) if run is not None else ""
         body = f"{_SUBISSUE_PROSE}\n{block}\n"
 
@@ -148,7 +149,9 @@ class GhConversationMother:
         return cls._children(body=_SUBISSUE_PROSE, label=IssueLabel.PENDING, state=IssueState.CLOSED)
 
     @classmethod
-    def two_slices_resumed_at(cls, run: Run, *, second_label: IssueLabel = IssueLabel.IN_PROGRESS) -> str:
+    def two_slices_resumed_at(
+        cls, run: Run, *, second_label: IssueLabel | RetiredIssueLabel = IssueLabel.IN_PROGRESS
+    ) -> str:
         body = f"{_SUBISSUE_PROSE}\n{cls._state_block(run)}\n"
         return json.dumps(
             [
@@ -220,7 +223,7 @@ class GhConversationMother:
         return json.dumps([{"name": "check", "bucket": "fail"}])
 
     @classmethod
-    def _children(cls, *, body: str, label: IssueLabel, state: IssueState) -> str:
+    def _children(cls, *, body: str, label: IssueLabel | RetiredIssueLabel, state: IssueState) -> str:
         return json.dumps(
             [
                 cls._entry(
@@ -237,7 +240,14 @@ class GhConversationMother:
 
     @staticmethod
     def _entry(
-        *, number: int, slice_id: str, name: str, summary: str, body: str, label: IssueLabel, state: IssueState
+        *,
+        number: int,
+        slice_id: str,
+        name: str,
+        summary: str,
+        body: str,
+        label: IssueLabel | RetiredIssueLabel,
+        state: IssueState,
     ) -> dict[str, object]:
         return {
             "number": number,

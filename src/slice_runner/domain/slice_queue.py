@@ -53,14 +53,11 @@ class SliceQueue:
                 return False
             case (
                 IssueLabel.BLOCKED_CONTROLS
-                | IssueLabel.BLOCKED_HYGIENE
-                | IssueLabel.BLOCKED_VERIFY
-                | IssueLabel.BLOCKED_UNCHANGED_DIFF
+                | IssueLabel.BLOCKED_JUDGE
                 | IssueLabel.BLOCKED_CI_RED
                 | IssueLabel.BLOCKED_CI_INDETERMINATE
                 | IssueLabel.BLOCKED_CI_CONFLICT
                 | IssueLabel.BLOCKED_WORKTREE
-                | IssueLabel.BLOCKED_LEFTOVER_WORKTREE
                 | IssueLabel.ABORTED_BUDGET
                 | IssueLabel.ABORTED_UNMEASURED_CALL
             ):

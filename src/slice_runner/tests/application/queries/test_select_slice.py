@@ -21,14 +21,14 @@ _PARAMS = SelectSliceParams(repo=_REPO, issue=_ISSUE)
 
 _CLOSURES_OF_A_PREVIOUS_RUN = (
     IssueLabel.BLOCKED_CONTROLS,
-    IssueLabel.BLOCKED_HYGIENE,
-    IssueLabel.BLOCKED_VERIFY,
-    IssueLabel.BLOCKED_UNCHANGED_DIFF,
+    IssueLabel.BLOCKED_CONTROLS,
+    IssueLabel.BLOCKED_JUDGE,
+    IssueLabel.BLOCKED_JUDGE,
     IssueLabel.BLOCKED_CI_RED,
     IssueLabel.BLOCKED_CI_INDETERMINATE,
     IssueLabel.BLOCKED_CI_CONFLICT,
     IssueLabel.BLOCKED_WORKTREE,
-    IssueLabel.BLOCKED_LEFTOVER_WORKTREE,
+    IssueLabel.BLOCKED_WORKTREE,
     IssueLabel.ABORTED_BUDGET,
     IssueLabel.ABORTED_UNMEASURED_CALL,
 )
@@ -272,7 +272,7 @@ class TestSelectSliceWhenEverySliceLeftIsBlocked:
     def test_naming_a_blocked_slice_raises_pointing_at_the_retry_subcommand(
         self, query: SelectSlice, repository: Mock
     ) -> None:
-        blocked = SubIssueMother.blocked(IssueLabel.BLOCKED_VERIFY, RunMother.blocked_on_verify())
+        blocked = SubIssueMother.blocked(IssueLabel.BLOCKED_JUDGE, RunMother.blocked_on_verify())
         repository.read_children.return_value = (blocked,)
         params = SelectSliceParams(repo=_REPO, issue=_ISSUE, slice_id=blocked.slice_id.canonical)
 

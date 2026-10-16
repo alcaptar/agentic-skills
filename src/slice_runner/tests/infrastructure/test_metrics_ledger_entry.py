@@ -73,14 +73,32 @@ class TestReadingBackARowThisProgramWrote(ReadingARow):
 
             assert record.closure == closure
 
-    def test_a_row_with_the_blocked_hygiene_verdict_is_still_read_as_the_hygiene_closure(self) -> None:
-        closed = ClosedSliceMother.closed_as(Closure.because_of(ClosingReason.HYGIENE))
+    @pytest.mark.parametrize(
+        ("verdict", "reason"),
+        [
+            ("blocked-hygiene", ClosingReason.CONTROLS),
+            ("blocked-unchanged-diff", ClosingReason.JUDGE),
+            ("blocked-leftover-worktree", ClosingReason.WORKTREE),
+        ],
+    )
+    def test_a_row_with_a_verdict_of_a_retired_reason_is_read_as_the_reason_that_replaced_it(
+        self, verdict: str, reason: ClosingReason
+    ) -> None:
+        closed = ClosedSliceMother.closed_as(Closure.because_of(reason))
         row = MetricsEntryPayload.from_domain(closed, ts=_STAMP.isoformat()).to_contract()
-        row["verdict"] = "blocked-hygiene"
+        row["verdict"] = verdict
 
         record = self._read(row)
 
-        assert record.closure == Closure(state=RunState.BLOCKED, reason=ClosingReason.HYGIENE)
+        assert record.closure == Closure(state=RunState.BLOCKED, reason=reason)
+
+    @pytest.mark.parametrize("reason", [ClosingReason.CONTROLS, ClosingReason.JUDGE, ClosingReason.WORKTREE])
+    def test_a_closure_is_never_written_with_the_verdict_of_a_retired_reason(self, reason: ClosingReason) -> None:
+        closed = ClosedSliceMother.closed_as(Closure.because_of(reason))
+
+        row = MetricsEntryPayload.from_domain(closed, ts=_STAMP.isoformat()).to_contract()
+
+        assert row["verdict"] not in {"blocked-hygiene", "blocked-unchanged-diff", "blocked-leftover-worktree"}
 
     def test_the_harness_spend_measured_across_every_call_is_read_back_whole(self) -> None:
         closed = ClosedSliceMother.merged_measuring(

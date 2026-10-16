@@ -33,7 +33,7 @@ class StateMachine:
         if outcome is Outcome.WORKTREE_TAKEN:
             return self._closed(run, ClosingReason.WORKTREE)
         if outcome is Outcome.WORKTREE_LEFT_BEHIND:
-            return self._closed(run, ClosingReason.LEFTOVER_WORKTREE)
+            return self._closed(run, ClosingReason.WORKTREE)
         if outcome is Outcome.CONFLICTING:
             return self._after_a_catch_up_conflict(run)
 
@@ -74,9 +74,7 @@ class StateMachine:
         match blocked:
             case (
                 IssueLabel.BLOCKED_CONTROLS
-                | IssueLabel.BLOCKED_HYGIENE
-                | IssueLabel.BLOCKED_VERIFY
-                | IssueLabel.BLOCKED_UNCHANGED_DIFF
+                | IssueLabel.BLOCKED_JUDGE
                 | IssueLabel.BLOCKED_CI_RED
                 | IssueLabel.BLOCKED_CI_INDETERMINATE
                 | IssueLabel.BLOCKED_CI_CONFLICT
@@ -84,9 +82,7 @@ class StateMachine:
                 return self._with_the_retry_counter_reset(run, blocked=blocked)
             case IssueLabel.ABORTED_BUDGET:
                 return replace(run, spend=HarnessSpend.nothing())
-            case (
-                IssueLabel.ABORTED_UNMEASURED_CALL | IssueLabel.BLOCKED_WORKTREE | IssueLabel.BLOCKED_LEFTOVER_WORKTREE
-            ):
+            case IssueLabel.ABORTED_UNMEASURED_CALL | IssueLabel.BLOCKED_WORKTREE:
                 return run
             case _:
                 raise ImpossibleTransitionError(f"the label `{blocked}` names no closed run that can be reopened")
@@ -97,9 +93,7 @@ class StateMachine:
         *,
         blocked: Literal[
             IssueLabel.BLOCKED_CONTROLS,
-            IssueLabel.BLOCKED_HYGIENE,
-            IssueLabel.BLOCKED_VERIFY,
-            IssueLabel.BLOCKED_UNCHANGED_DIFF,
+            IssueLabel.BLOCKED_JUDGE,
             IssueLabel.BLOCKED_CI_RED,
             IssueLabel.BLOCKED_CI_INDETERMINATE,
             IssueLabel.BLOCKED_CI_CONFLICT,
@@ -107,10 +101,8 @@ class StateMachine:
     ) -> Run:
         match blocked:
             case IssueLabel.BLOCKED_CONTROLS:
-                return replace(run, control_retries=0)
-            case IssueLabel.BLOCKED_HYGIENE:
-                return replace(run, hygiene_retries=0)
-            case IssueLabel.BLOCKED_VERIFY | IssueLabel.BLOCKED_UNCHANGED_DIFF:
+                return replace(run, control_retries=0, hygiene_retries=0)
+            case IssueLabel.BLOCKED_JUDGE:
                 return replace(run, verify_retries=0)
             case IssueLabel.BLOCKED_CI_RED:
                 return replace(run, ci_retries=0)
@@ -227,7 +219,7 @@ class StateMachine:
                 replace(run, hygiene_retries=run.hygiene_retries + 1, catching_up_the_branch=False), Step.IMPLEMENT
             )
 
-        return self._closed(run, ClosingReason.HYGIENE)
+        return self._closed(run, ClosingReason.CONTROLS)
 
     def _after_the_judge(self, run: Run, outcome: Outcome, *, call_died: bool) -> Transition:
         match outcome:
@@ -238,7 +230,7 @@ class StateMachine:
             case Outcome.FAILED:
                 return self._retrying_a_veto(self._logged_a_verify_round(run))
             case Outcome.UNCHANGED:
-                return self._closed(run, ClosingReason.UNCHANGED_DIFF)
+                return self._closed(run, ClosingReason.JUDGE)
             case Outcome.CALL_NOT_MEASURED:
                 return self._closed(self._marking_a_dead_call(run, call_died), ClosingReason.UNMEASURED_CALL)
             case _:
@@ -252,7 +244,7 @@ class StateMachine:
         if run.verify_retries < self.budgets.verify_retries:
             return self._moving_to(replace(run, verify_retries=run.verify_retries + 1), Step.IMPLEMENT)
 
-        return self._closed(run, ClosingReason.VERIFY)
+        return self._closed(run, ClosingReason.JUDGE)
 
     def _after_the_pull_request(self, run: Run, outcome: Outcome) -> Transition:
         if outcome is Outcome.DONE:

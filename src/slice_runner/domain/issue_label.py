@@ -13,14 +13,11 @@ class IssueLabel(StrEnum):
     IN_PROGRESS = "estado:en-curso"
     AWAITING_MERGE = "estado:esperando-merge"
     BLOCKED_CONTROLS = "bloqueada:controles"
-    BLOCKED_HYGIENE = "bloqueada:higiene"
-    BLOCKED_VERIFY = "bloqueada:verify"
-    BLOCKED_UNCHANGED_DIFF = "bloqueada:sin-cambios"
+    BLOCKED_JUDGE = "bloqueada:juez"
     BLOCKED_CI_RED = "bloqueada:ci-roja"
     BLOCKED_CI_INDETERMINATE = "bloqueada:ci-indeterminada"
     BLOCKED_CI_CONFLICT = "bloqueada:conflicto"
     BLOCKED_WORKTREE = "bloqueada:worktree"
-    BLOCKED_LEFTOVER_WORKTREE = "bloqueada:worktree-sin-retirar"
     ABORTED_BUDGET = "abortada:presupuesto"
     ABORTED_UNMEASURED_CALL = "abortada:llamada-no-medida"
 
@@ -64,14 +61,11 @@ class IssueLabel(StrEnum):
     def _of_the_closed(cls, closure: Closure) -> IssueLabel:
         return {
             Closure.because_of(ClosingReason.CONTROLS): cls.BLOCKED_CONTROLS,
-            Closure.because_of(ClosingReason.HYGIENE): cls.BLOCKED_HYGIENE,
-            Closure.because_of(ClosingReason.VERIFY): cls.BLOCKED_VERIFY,
-            Closure.because_of(ClosingReason.UNCHANGED_DIFF): cls.BLOCKED_UNCHANGED_DIFF,
+            Closure.because_of(ClosingReason.JUDGE): cls.BLOCKED_JUDGE,
             Closure.because_of(ClosingReason.CI_RED): cls.BLOCKED_CI_RED,
             Closure.because_of(ClosingReason.CI_INDETERMINATE): cls.BLOCKED_CI_INDETERMINATE,
             Closure.because_of(ClosingReason.CI_CONFLICT): cls.BLOCKED_CI_CONFLICT,
             Closure.because_of(ClosingReason.WORKTREE): cls.BLOCKED_WORKTREE,
-            Closure.because_of(ClosingReason.LEFTOVER_WORKTREE): cls.BLOCKED_LEFTOVER_WORKTREE,
             Closure.because_of(ClosingReason.BUDGET): cls.ABORTED_BUDGET,
             Closure.because_of(ClosingReason.UNMEASURED_CALL): cls.ABORTED_UNMEASURED_CALL,
         }[closure]

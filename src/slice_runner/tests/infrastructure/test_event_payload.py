@@ -116,14 +116,14 @@ class TestReadingTheClosedAsOfEveryRowOfTheLog:
         [
             ("merged", RunState.MERGED, None),
             ("blocked-controls", RunState.BLOCKED, ClosingReason.CONTROLS),
-            ("blocked-hygiene", RunState.BLOCKED, ClosingReason.HYGIENE),
-            ("blocked-verify", RunState.BLOCKED, ClosingReason.VERIFY),
-            ("blocked-unchanged-diff", RunState.BLOCKED, ClosingReason.UNCHANGED_DIFF),
+            ("blocked-hygiene", RunState.BLOCKED, ClosingReason.CONTROLS),
+            ("blocked-verify", RunState.BLOCKED, ClosingReason.JUDGE),
+            ("blocked-unchanged-diff", RunState.BLOCKED, ClosingReason.JUDGE),
             ("blocked-ci-red", RunState.BLOCKED, ClosingReason.CI_RED),
             ("blocked-ci-indeterminate", RunState.BLOCKED, ClosingReason.CI_INDETERMINATE),
             ("blocked-ci-conflict", RunState.BLOCKED, ClosingReason.CI_CONFLICT),
             ("blocked-worktree", RunState.BLOCKED, ClosingReason.WORKTREE),
-            ("blocked-leftover-worktree", RunState.BLOCKED, ClosingReason.LEFTOVER_WORKTREE),
+            ("blocked-leftover-worktree", RunState.BLOCKED, ClosingReason.WORKTREE),
             ("aborted-budget", RunState.ABORTED, ClosingReason.BUDGET),
             ("aborted-unmeasured-call", RunState.ABORTED, ClosingReason.UNMEASURED_CALL),
         ],
@@ -143,11 +143,25 @@ class TestReadingTheClosedAsOfEveryRowOfTheLog:
         with pytest.raises(UnreadableEventLogError):
             EventPayload.from_dict(row)
 
-    @pytest.mark.parametrize("reason", list(ClosingReason))
-    def test_every_closure_is_written_back_with_the_value_it_always_had(self, reason: ClosingReason) -> None:
+    @pytest.mark.parametrize(
+        ("reason", "closed_as"),
+        [
+            (ClosingReason.CONTROLS, "blocked-controls"),
+            (ClosingReason.JUDGE, "blocked-verify"),
+            (ClosingReason.CI_RED, "blocked-ci-red"),
+            (ClosingReason.CI_INDETERMINATE, "blocked-ci-indeterminate"),
+            (ClosingReason.CI_CONFLICT, "blocked-ci-conflict"),
+            (ClosingReason.WORKTREE, "blocked-worktree"),
+            (ClosingReason.BUDGET, "aborted-budget"),
+            (ClosingReason.UNMEASURED_CALL, "aborted-unmeasured-call"),
+        ],
+    )
+    def test_every_closure_is_written_with_the_value_of_the_majority_side_of_its_pair(
+        self, reason: ClosingReason, closed_as: str
+    ) -> None:
         closure = Closure.because_of(reason)
         event = replace(EventMother.closed(), closure=closure)
 
         written = EventPayload.from_domain(event).to_contract()
 
-        assert written["closed_as"] == f"{closure.state}-{reason}"
+        assert written["closed_as"] == closed_as
