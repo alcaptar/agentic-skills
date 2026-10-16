@@ -4,10 +4,11 @@ from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING
 
 from slice_runner.domain.event import Event
-from slice_runner.domain.event_status import EventStatus
 from slice_runner.domain.issue_label import IssueLabel
+from slice_runner.domain.rounds import Rounds
 
 if TYPE_CHECKING:
+    from slice_runner.domain.budgets import Budgets
     from slice_runner.domain.clock import Clock
     from slice_runner.domain.event_log import EventLog
     from slice_runner.domain.feature_slice import FeatureSlice
@@ -36,10 +37,11 @@ class RecordStepResult:
 
 
 class RecordStep:
-    def __init__(self, *, repository: RunRepository, events: EventLog, clock: Clock) -> None:
+    def __init__(self, *, repository: RunRepository, events: EventLog, clock: Clock, budgets: Budgets) -> None:
         self._repository = repository
         self._events = events
         self._clock = clock
+        self._budgets = budgets
 
     def execute(self, params: RecordStepParams) -> RecordStepResult:
         run = replace(params.transition.run, spend=params.spend)
@@ -65,7 +67,6 @@ class RecordStep:
         return label
 
     def _emit(self, params: RecordStepParams, *, run: Run) -> None:
-        status = EventStatus.of_the_transition(params.transition)
         self._events.emit(
             Event(
                 slice_id=params.slice_id,
@@ -74,7 +75,8 @@ class RecordStep:
                 step=run.step,
                 at=self._clock.now(),
                 spend=params.spend,
-                status=status,
+                budget_usd=self._budgets.slice_cost_usd,
+                rounds=Rounds.of(run, self._budgets),
                 closure=params.transition.closure,
                 feature_slice=params.feature_slice,
             )

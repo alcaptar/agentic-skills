@@ -14,7 +14,6 @@ from slice_runner.domain.ci_status import CiStatus
 from slice_runner.domain.closing_reason import ClosingReason
 from slice_runner.domain.closure import Closure
 from slice_runner.domain.discard_cause import DiscardCause
-from slice_runner.domain.event_status import EventStatus
 from slice_runner.domain.exceptions import (
     CiCommandFailedError,
     DirtyIndexError,
@@ -316,9 +315,8 @@ class TestConductSliceClosingAMergeMissedBetweenInvocations:
         conductor.conduct()
 
         merged = [event for event in conductor.emitted_events if event.closure == Closure.merged()]
-        assert [(event.status, event.slice_id, event.feature_slice) for event in merged] == [
+        assert [(event.slice_id, event.feature_slice) for event in merged] == [
             (
-                EventStatus.CLOSED,
                 dangling.slice_id.canonical,
                 FeatureSlice(parent=Conductor.ISSUE, name=dangling.slice_id.name),
             )
@@ -1069,26 +1067,24 @@ class TestConductSliceReportingEvents:
         expected = FeatureSlice(parent=Conductor.ISSUE, name=SubIssueMother.pending().slice_id.name)
         assert {e.feature_slice for e in conductor.emitted_events} == {expected}
 
-    def test_the_happy_path_reports_advancing_for_every_step_until_the_run_closes_and_then_reports_closed(
-        self,
-    ) -> None:
+    def test_the_happy_path_reports_every_step_open_until_the_run_closes_as_merged(self) -> None:
         conductor = self._conductor()
 
         conductor.conduct()
 
         emitted = conductor.emitted_events
-        assert [e.status for e in emitted] == [EventStatus.ADVANCING] * 6 + [EventStatus.CLOSED]
+        assert [e.closure for e in emitted] == [Closure.open()] * 6 + [Closure.merged()]
 
-    def test_a_pending_merge_reports_awaiting_a_person_because_the_merge_is_a_human_decision(self) -> None:
+    def test_a_pending_merge_reports_the_await_merge_step_still_open(self) -> None:
         conductor = self._conductor(budgets=Budgets(person_wait_seconds=30))
         conductor.forum.pull_request_state.return_value = PullRequestStatusMother.open_and_mergeable()
 
         conductor.conduct()
 
         emitted = conductor.emitted_events
-        assert (emitted[-1].step, emitted[-1].status) == (Step.AWAIT_MERGE, EventStatus.AWAITING_PERSON)
+        assert (emitted[-1].step, emitted[-1].closure) == (Step.AWAIT_MERGE, Closure.open())
 
-    def test_a_pending_ci_reports_waiting_because_no_person_is_deciding_anything_yet(self) -> None:
+    def test_a_pending_ci_reports_the_await_ci_step_on_every_tick(self) -> None:
         conductor = Conductor(
             chosen=SelectSliceResultMother.resumed_at(RunMother.about_to_ask_the_ci()),
             budgets=Budgets(ci_wait_seconds=90),
@@ -1098,7 +1094,7 @@ class TestConductSliceReportingEvents:
         conductor.conduct()
 
         emitted = conductor.emitted_events
-        assert [e.status for e in emitted] == [EventStatus.WAITING] * 3
+        assert [(e.step, e.closure) for e in emitted] == [(Step.AWAIT_CI, Closure.open())] * 3
 
 
 class TestConductSliceChainingDeployWatchAfterAMerge:
@@ -2628,9 +2624,8 @@ class TestConductSliceLeavingAnEventWhenItStarts:
         conductor.conduct()
 
         first = conductor.emitted_events[0]
-        assert (first.step, first.status, first.closure, first.spend) == (
+        assert (first.step, first.closure, first.spend) == (
             Step.IMPLEMENT,
-            EventStatus.ADVANCING,
             Closure.open(),
             HarnessSpend.nothing(),
         )
@@ -2649,7 +2644,7 @@ class TestConductSliceLeavingAnEventWhenItStarts:
 
         conductor.conduct()
 
-        assert [e.status for e in conductor.emitted_events] == [EventStatus.CLOSED]
+        assert [e.closure for e in conductor.emitted_events] == [Closure.merged()]
 
     def test_a_run_resumed_awaiting_the_ci_leaves_its_first_transition_as_the_first_event(self) -> None:
         conductor = Conductor(chosen=SelectSliceResultMother.resumed_at(RunMother.awaiting_ci()))
@@ -2686,4 +2681,4 @@ class TestConductSliceLeavingAnEventWhenItStarts:
 
         conductor.conduct()
 
-        assert [e.status for e in conductor.emitted_events] == [EventStatus.CLOSED]
+        assert [e.closure for e in conductor.emitted_events] == [Closure.because_of(ClosingReason.WORKTREE)]

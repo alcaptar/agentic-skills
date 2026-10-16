@@ -13,14 +13,14 @@ from slice_runner.tests.mothers.event_mother import EventMother
 
 
 class TestWhatTheSnapshotHolds:
-    def test_the_snapshot_keeps_the_last_event_of_every_slice_with_its_step_status_spend_and_instant(self) -> None:
+    def test_the_snapshot_keeps_the_last_event_of_every_slice_with_its_step_closure_spend_and_instant(self) -> None:
         last = EventMother.closed()
         reader = ScriptedEventReader(EventBatch(events=(EventMother.advancing(), last), cursor=EventCursor(offset=10)))
 
         result = FollowEvents(reader=reader).execute(FollowEventsParams(cursor=EventCursor.start()))
 
         assert result.snapshot == (last,)
-        assert (result.snapshot[0].step, result.snapshot[0].status) == (last.step, last.status)
+        assert (result.snapshot[0].step, result.snapshot[0].closure) == (last.step, last.closure)
         assert result.snapshot[0].spend == last.spend
         assert result.snapshot[0].at == last.at
 
@@ -58,7 +58,7 @@ class TestWhatTheSnapshotHolds:
 
 
 class TestWhatCountsAsAChange:
-    def test_three_consecutive_rows_of_a_slice_with_the_same_step_and_status_make_exactly_one_change(self) -> None:
+    def test_three_consecutive_rows_of_a_slice_with_the_same_step_and_closure_make_exactly_one_change(self) -> None:
         reader = ScriptedEventReader(
             EventBatch(
                 events=(
@@ -74,7 +74,7 @@ class TestWhatCountsAsAChange:
 
         assert len(result.changes) == 1
 
-    def test_a_row_whose_step_and_status_differ_from_the_previous_row_of_its_slice_is_a_change(self) -> None:
+    def test_a_row_whose_step_and_closure_differ_from_the_previous_row_of_its_slice_is_a_change(self) -> None:
         waiting = EventMother.waiting_on_a_machine()
         reader = ScriptedEventReader(
             EventBatch(events=(EventMother.advancing(), waiting), cursor=EventCursor(offset=10))
@@ -83,6 +83,16 @@ class TestWhatCountsAsAChange:
         result = FollowEvents(reader=reader).execute(FollowEventsParams(cursor=EventCursor.start()))
 
         assert result.changes == (EventMother.advancing(), waiting)
+
+    def test_a_round_without_changes_on_the_same_step_and_closure_is_a_change_so_it_reaches_the_screen(self) -> None:
+        empty_round = EventMother.round_without_changes()
+        reader = ScriptedEventReader(
+            EventBatch(events=(EventMother.advancing(), empty_round), cursor=EventCursor(offset=10))
+        )
+
+        result = FollowEvents(reader=reader).execute(FollowEventsParams(cursor=EventCursor.start()))
+
+        assert result.changes == (EventMother.advancing(), empty_round)
 
     def test_a_closing_row_that_goes_from_blocked_to_merged_on_the_same_step_is_a_change_and_the_snapshot_ends_merged(
         self,

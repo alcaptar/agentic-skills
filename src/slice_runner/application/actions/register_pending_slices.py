@@ -6,13 +6,13 @@ from typing import TYPE_CHECKING
 from slice_runner.domain.closure import Closure
 from slice_runner.domain.event import Event
 from slice_runner.domain.event_cursor import EventCursor
-from slice_runner.domain.event_status import EventStatus
 from slice_runner.domain.feature_slice import FeatureSlice
 from slice_runner.domain.harness_spend import HarnessSpend
 from slice_runner.domain.issue_state import IssueState
-from slice_runner.domain.step import Step
+from slice_runner.domain.rounds import Rounds
 
 if TYPE_CHECKING:
+    from slice_runner.domain.budgets import Budgets
     from slice_runner.domain.child_issue import ChildIssue
     from slice_runner.domain.child_issues import ChildIssues
     from slice_runner.domain.clock import Clock
@@ -32,11 +32,14 @@ class RegisterPendingSlicesResult:
 
 
 class RegisterPendingSlices:
-    def __init__(self, *, children: ChildIssues, reader: EventReader, log: EventLog, clock: Clock) -> None:
+    def __init__(
+        self, *, children: ChildIssues, reader: EventReader, log: EventLog, clock: Clock, budgets: Budgets
+    ) -> None:
         self._children = children
         self._reader = reader
         self._log = log
         self._clock = clock
+        self._budgets = budgets
 
     def execute(self, params: RegisterPendingSlicesParams) -> RegisterPendingSlicesResult:
         started = {event.slice_key for event in self._reader.read_since(EventCursor.start()).events}
@@ -56,10 +59,11 @@ class RegisterPendingSlices:
             slice_id=child.slice_id.canonical,
             repo=params.repo,
             issue=child.number,
-            step=Step.MOUNT_WORKTREE,
+            step=None,
             at=self._clock.now(),
             spend=HarnessSpend.nothing(),
-            status=EventStatus.PENDING,
+            budget_usd=self._budgets.slice_cost_usd,
+            rounds=Rounds.untouched(self._budgets),
             closure=Closure.open(),
             feature_slice=FeatureSlice(parent=params.parent, name=child.slice_id.name),
         )

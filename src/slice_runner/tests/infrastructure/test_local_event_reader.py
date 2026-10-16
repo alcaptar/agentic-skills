@@ -110,3 +110,17 @@ class TestARowOfTheRetiredUnderstandStep(WithTheDurableStoresOutOfTheRealHome):
         batch = LocalEventReader().read_since(EventCursor.start())
 
         assert [event.step for event in batch.events] == [Step.UNDERSTAND]
+
+
+class TestARowOfTheRetiredStatusGeneration(WithTheDurableStoresOutOfTheRealHome):
+    def test_a_line_with_a_status_field_is_an_error_that_names_the_line(self) -> None:
+        log = LocalEventLog()
+        log.emit(EventMother.advancing())
+        ledger = DurableLedger(name=LocalEventLog.LEDGER, row=EventPayload).path()
+        first_line = ledger.read_text(encoding="utf-8")
+        row = {**EventPayload.from_domain(EventMother.advancing()).to_contract(), "status": "advancing"}
+        with ledger.open("a", encoding="utf-8") as stream:
+            stream.write(json.dumps(row) + "\n")
+
+        with pytest.raises(UnreadableEventLogError, match=rf"offset {len(first_line.encode('utf-8'))}.*`status`"):
+            LocalEventReader().read_since(EventCursor.start())

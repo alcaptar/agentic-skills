@@ -235,15 +235,20 @@ concreta -viven en `~/.claude/projects/`, una por sesion- sin adivinar por marca
 ficheros. Tambien append-only y tambien fuera del repo, y por el mismo motivo.
 
 Y **cada transicion del run** -avanzo, se quedo esperando a una maquina, se quedo esperando a una
-persona, o cerro- anexa su linea a `~/.claude/slice-runner/runs/events.jsonl`, con el repo y el issue del
-run ademas de la slice, el paso al que llego, el instante, el gasto acumulado y el estado. Es la misma fila
+persona, o cerro- anexa su linea a `~/.claude/slice-runner/runs/transitions.jsonl`, con el repo y el issue
+del run ademas de la slice, el estado (`pending`, `in-progress`, `awaiting-merge`, `blocked`, `aborted` o
+`merged`) y, si bloqueo o aborto, el motivo, el paso al que llego, el instante, los seis contadores de
+vueltas con su tope, el gasto acumulado con su tope y `round_without_changes` cuando la vuelta no dejo nada
+que comitear. El resumen que antes se calculaba al escribir (`status`) ya no existe, y una linea que lo traiga
+es un error que nombra la posicion de la linea. `events.jsonl` ya no se lee ni se escribe: sus filas se
+quedan intactas, sin lector. Es la misma fila
 que hasta ahora solo salia por la salida de error de `run` -y sigue saliendo, para poder mirar un run en
 marcha-, pero ahora tambien dura: reconstruir cuanto tardo o cuanto espero una slice deja de depender de
 tener la terminal abierta cuando corrio. Lo que no anexa esta fila es el turno del arnes -numero, herramienta
 y objetivo-, porque eso ya lo escribe `tool-uses.jsonl` al terminar cada llamada.
 
 Una fila con estado `pending` no es una transicion: la escribe `register`, sin que haya run, con gasto cero y
-el paso `mount-worktree` por convencion, para que el panel de la interfaz muestre una feature recien
+sin paso, para que el panel de la interfaz muestre una feature recien
 creada. **No marca el inicio de nada**: el instante de una fila `pending` es el de `register`, asi que no
 sirve para medir cuanto tardo una slice.
 
@@ -257,7 +262,7 @@ vueltas que declaren huecos distintos aparecen las dos en la fila de cierre y la
 vueltas cuenta una sola vez. Una slice que nunca llego a declarar nada se distingue de una que declaro
 explicitamente que no dejo nada fuera: la primera no deja fila en este almacen.
 
-Los nueve almacenes durables del programa -`metrics.jsonl`, `calls.jsonl`, `spend.jsonl`, `events.jsonl`,
+Los nueve almacenes durables del programa -`metrics.jsonl`, `calls.jsonl`, `spend.jsonl`, `transitions.jsonl`,
 `debt.jsonl`, el par `verdicts.jsonl`/`diffs.jsonl` y el par `tool-uses.jsonl`/`unrecorded-tool-uses.jsonl`-
 comparten el mismo patron de nombre, `~/.claude/slice-runner/runs/<concepto>.jsonl`, y lo comparten porque
 pasan por la misma pieza (`DurableLedger`): un adaptador solo le da su nombre y el payload de su fila, y es

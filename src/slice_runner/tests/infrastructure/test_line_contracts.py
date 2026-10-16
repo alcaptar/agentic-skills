@@ -6,7 +6,8 @@ from typing import ClassVar
 
 from slice_runner.domain.issue_label import IssueLabel
 from slice_runner.domain.slice_status import SliceStatus
-from slice_runner.infrastructure.event_follow_line_payload import EventFollowLinePayload
+from slice_runner.infrastructure.follow_line_v2_payload import FollowLineV2Payload
+from slice_runner.infrastructure.follow_transition_v2_payload import FollowTransitionV2Payload
 from slice_runner.infrastructure.slice_status_line_payload import SliceStatusLinePayload
 from slice_runner.tests.mothers.closed_slice_record_mother import ClosedSliceRecordMother
 from slice_runner.tests.mothers.event_mother import EventMother
@@ -65,29 +66,53 @@ class TheLineAgainstItsExamples:
         assert left_out == set(optional)
 
 
-class TestTheFollowLineAgainstItsExamples(TheLineAgainstItsExamples):
-    _CONTRACT: ClassVar[Path] = Path(__file__).resolve().parents[4] / "contract" / "follow-line.json"
+class TestTheFollowTransitionLineAgainstItsExamples:
+    _CONTRACT: ClassVar[Path] = Path(__file__).resolve().parents[4] / "contract" / "follow-line-v2.json"
+
+    @classmethod
+    def _examples_of_the_transition(cls) -> list[dict[str, object]]:
+        declared = json.loads(cls._CONTRACT.read_text(encoding="utf-8"))
+
+        return [example for example in declared["examples"] if example["kind"] == "transition"]
 
     @staticmethod
     def _emitted() -> list[dict[str, object]]:
         events = (
             EventMother.advancing(),
             EventMother.closed(),
+            EventMother.blocked_by_the_judge(),
+            EventMother.round_without_changes(),
             EventMother.advancing_before_the_feature_was_recorded(),
             EventMother.pending(),
         )
 
-        return [EventFollowLinePayload.from_domain(event).to_contract() for event in events]
+        return [FollowTransitionV2Payload.from_domain(event).to_contract() for event in events]
 
-    def test_the_line_of_a_pending_event_equals_its_example_value_by_value_except_the_instant(self) -> None:
-        examples = self._declared()["examples"]
-        assert isinstance(examples, list)
-        example = next(example for example in examples if example["status"] == "pending")
-        line = EventFollowLinePayload.from_domain(EventMother.pending()).to_contract()
+    def test_every_emitted_line_validates_against_the_model_of_the_contract(self) -> None:
+        for line in self._emitted():
+            FollowLineV2Payload.from_contract(line)
 
-        assert {key: value for key, value in line.items() if key != "ts"} == {
-            key: value for key, value in example.items() if key != "ts"
-        }
+    def test_the_program_never_emits_a_key_the_examples_of_the_transition_do_not_have(self) -> None:
+        declared = {key for example in self._examples_of_the_transition() for key in example}
+        emitted = {key for line in self._emitted() for key in line}
+
+        assert emitted - declared == set()
+
+    @staticmethod
+    def _without_the_instant_and_the_limits(line: dict[str, object]) -> dict[str, object]:
+        rounds = line["rounds"]
+        assert isinstance(rounds, dict)
+        used = {name: counter["used"] for name, counter in rounds.items()}
+
+        return {**{key: value for key, value in line.items() if key not in ("ts", "rounds")}, "rounds": used}
+
+    def test_the_line_of_a_pending_event_equals_its_example_value_by_value_except_the_instant_and_the_limits(
+        self,
+    ) -> None:
+        example = next(example for example in self._examples_of_the_transition() if example["standing"] == "pending")
+        line = FollowTransitionV2Payload.from_domain(EventMother.pending()).to_contract()
+
+        assert self._without_the_instant_and_the_limits(line) == self._without_the_instant_and_the_limits(example)
 
 
 class TestTheStatusLineAgainstItsExamples(TheLineAgainstItsExamples):

@@ -31,7 +31,7 @@ class IssueLabel(StrEnum):
         return None
 
     @classmethod
-    def of(cls, *, closure: Closure, step: Step) -> IssueLabel | None:
+    def of(cls, *, closure: Closure, step: Step | None) -> IssueLabel | None:
         match closure.state:
             case RunState.OPEN:
                 return cls._of_the_open_step(step)
@@ -41,8 +41,10 @@ class IssueLabel(StrEnum):
                 return cls._of_the_closed(closure)
 
     @classmethod
-    def _of_the_open_step(cls, step: Step) -> IssueLabel:
+    def _of_the_open_step(cls, step: Step | None) -> IssueLabel:
         match step:
+            case None:
+                return cls.PENDING
             case Step.AWAIT_MERGE:
                 return cls.AWAITING_MERGE
             case (

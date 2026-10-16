@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 from slice_runner.infrastructure import local_event_log
 from slice_runner.infrastructure.claude_config import ClaudeConfig
@@ -19,45 +19,57 @@ if TYPE_CHECKING:
     import pytest
 
 
+class ExpectedRow:
+    ROUNDS: ClassVar[dict[str, object]] = {
+        "controls": {"used": 0, "limit": 2},
+        "hygiene": {"used": 0, "limit": 2},
+        "judge": {"used": 0, "limit": 2},
+        "ci": {"used": 0, "limit": 1},
+        "ci_indeterminate": {"used": 0, "limit": 10},
+        "catch_up": {"used": 0, "limit": 3},
+    }
+    ADVANCING: ClassVar[dict[str, object]] = {
+        "slice_id": "slice-05",
+        "repo": EventMother.REPO,
+        "issue": EventMother.ISSUE,
+        "standing": "in-progress",
+        "step": "run-controls",
+        "ts": "2024-01-01T12:30:45+00:00",
+        "rounds": ROUNDS,
+        "spend": {
+            "cost_usd": 0.3433209,
+            "turns": 9,
+            "duration_ms": 36315,
+            "calls": 1,
+            "models": ["claude-sonnet-5"],
+            "input_tokens": 13,
+            "output_tokens": 1159,
+            "cache_creation_tokens": 42251,
+            "cache_read_tokens": 241303,
+            "ttft_ms": 5588,
+            "duration_api_ms": 32189,
+        },
+        "budget_usd": 50.0,
+        "parent": FeatureSliceMother.PARENT,
+        "name": FeatureSliceMother.NAME,
+    }
+
+
 class WrittenEvents:
     @staticmethod
     def records_under(root: Path) -> list[dict[str, object]]:
-        ledger = root / "slice-runner" / "runs" / "events.jsonl"
+        ledger = root / "slice-runner" / "runs" / "transitions.jsonl"
 
         return [json.loads(line) for line in ledger.read_text(encoding="utf-8").splitlines()]
 
 
 class TestWhatIsWrittenDownOfAnEvent(WithTheDurableStoresOutOfTheRealHome):
-    def test_an_event_is_written_with_the_repo_the_issue_the_slice_the_step_the_spend_and_the_status(
+    def test_an_event_is_written_with_the_coordinates_the_standing_the_step_the_rounds_the_spend_and_the_budget(
         self, tmp_path: Path
     ) -> None:
         LocalEventLog().emit(EventMother.advancing())
 
-        assert WrittenEvents.records_under(tmp_path) == [
-            {
-                "slice_id": "slice-05",
-                "repo": EventMother.REPO,
-                "issue": EventMother.ISSUE,
-                "step": "run-controls",
-                "ts": "2024-01-01T12:30:45+00:00",
-                "spend": {
-                    "cost_usd": 0.3433209,
-                    "turns": 9,
-                    "duration_ms": 36315,
-                    "calls": 1,
-                    "models": ["claude-sonnet-5"],
-                    "input_tokens": 13,
-                    "output_tokens": 1159,
-                    "cache_creation_tokens": 42251,
-                    "cache_read_tokens": 241303,
-                    "ttft_ms": 5588,
-                    "duration_api_ms": 32189,
-                },
-                "status": "advancing",
-                "parent": FeatureSliceMother.PARENT,
-                "name": FeatureSliceMother.NAME,
-            }
-        ]
+        assert WrittenEvents.records_under(tmp_path) == [ExpectedRow.ADVANCING]
 
 
 class TestTheLogOnlyGrows(WithTheDurableStoresOutOfTheRealHome):
@@ -78,29 +90,7 @@ class TestTheSameEventStillReachesStandardError(WithTheDurableStoresOutOfTheReal
 
         output = capsys.readouterr()
         assert output.out == ""
-        assert json.loads(output.err) == {
-            "slice_id": "slice-05",
-            "repo": EventMother.REPO,
-            "issue": EventMother.ISSUE,
-            "step": "run-controls",
-            "ts": "2024-01-01T12:30:45+00:00",
-            "spend": {
-                "cost_usd": 0.3433209,
-                "turns": 9,
-                "duration_ms": 36315,
-                "calls": 1,
-                "models": ["claude-sonnet-5"],
-                "input_tokens": 13,
-                "output_tokens": 1159,
-                "cache_creation_tokens": 42251,
-                "cache_read_tokens": 241303,
-                "ttft_ms": 5588,
-                "duration_api_ms": 32189,
-            },
-            "status": "advancing",
-            "parent": FeatureSliceMother.PARENT,
-            "name": FeatureSliceMother.NAME,
-        }
+        assert json.loads(output.err) == ExpectedRow.ADVANCING
 
     def test_two_consecutive_events_land_on_two_separable_lines_and_never_on_a_single_run_together(
         self, capsys: pytest.CaptureFixture[str]
@@ -111,9 +101,9 @@ class TestTheSameEventStillReachesStandardError(WithTheDurableStoresOutOfTheReal
         log.emit(EventMother.closed())
 
         payloads = [json.loads(line) for line in capsys.readouterr().err.splitlines()]
-        assert [(payload["step"], payload["status"]) for payload in payloads] == [
-            ("run-controls", "advancing"),
-            ("await-merge", "closed"),
+        assert [(payload["step"], payload["standing"]) for payload in payloads] == [
+            ("run-controls", "in-progress"),
+            ("await-merge", "merged"),
         ]
 
 
@@ -125,14 +115,14 @@ class TestWhereTheLogLives:
 
         LocalEventLog().emit(EventMother.advancing())
 
-        assert (tmp_path / "never-used-before" / "slice-runner" / "runs" / "events.jsonl").exists()
+        assert (tmp_path / "never-used-before" / "slice-runner" / "runs" / "transitions.jsonl").exists()
 
     def test_the_ledger_path_is_composed_under_runs(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
 
         events = DurableLedger(name=LocalEventLog.LEDGER, row=EventPayload).path()
 
-        assert events == tmp_path / "slice-runner" / "runs" / "events.jsonl"
+        assert events == tmp_path / "slice-runner" / "runs" / "transitions.jsonl"
 
 
 class TestTheAdapterOwnsOnlyItsNameAndItsPayload:

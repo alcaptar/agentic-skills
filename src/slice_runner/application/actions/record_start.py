@@ -5,9 +5,10 @@ from typing import TYPE_CHECKING
 
 from slice_runner.domain.closure import Closure
 from slice_runner.domain.event import Event
-from slice_runner.domain.event_status import EventStatus
+from slice_runner.domain.rounds import Rounds
 
 if TYPE_CHECKING:
+    from slice_runner.domain.budgets import Budgets
     from slice_runner.domain.clock import Clock
     from slice_runner.domain.event_log import EventLog
     from slice_runner.domain.feature_slice import FeatureSlice
@@ -26,9 +27,10 @@ class RecordStartParams:
 
 
 class RecordStart:
-    def __init__(self, *, events: EventLog, clock: Clock) -> None:
+    def __init__(self, *, events: EventLog, clock: Clock, budgets: Budgets) -> None:
         self._events = events
         self._clock = clock
+        self._budgets = budgets
 
     def execute(self, params: RecordStartParams) -> None:
         if params.run.step.is_after_delivery():
@@ -42,7 +44,8 @@ class RecordStart:
                 step=params.run.step,
                 at=self._clock.now(),
                 spend=params.spend,
-                status=EventStatus.ADVANCING,
+                budget_usd=self._budgets.slice_cost_usd,
+                rounds=Rounds.of(params.run, self._budgets),
                 closure=Closure.open(),
                 feature_slice=params.feature_slice,
             )

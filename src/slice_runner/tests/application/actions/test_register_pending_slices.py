@@ -10,6 +10,7 @@ from slice_runner.application.actions.register_pending_slices import (
     RegisterPendingSlices,
     RegisterPendingSlicesParams,
 )
+from slice_runner.domain.budgets import Budgets
 from slice_runner.domain.child_issues import ChildIssues
 from slice_runner.domain.clock import Clock
 from slice_runner.domain.closure import Closure
@@ -17,11 +18,10 @@ from slice_runner.domain.event import Event
 from slice_runner.domain.event_cursor import EventCursor
 from slice_runner.domain.event_log import EventLog
 from slice_runner.domain.event_reader import EventBatch, EventReader
-from slice_runner.domain.event_status import EventStatus
 from slice_runner.domain.exceptions import UnreadableEventLogError
 from slice_runner.domain.feature_slice import FeatureSlice
 from slice_runner.domain.harness_spend import HarnessSpend
-from slice_runner.domain.step import Step
+from slice_runner.domain.rounds import Rounds
 from slice_runner.tests.mothers.child_issue_mother import ChildIssueMother
 from slice_runner.tests.mothers.event_mother import EventMother
 
@@ -49,7 +49,7 @@ class TestRegisteringThePendingSlices:
         clock: Mock = create_autospec(Clock, spec_set=True, instance=True)
         clock.now.return_value = cls._NOW
 
-        return RegisterPendingSlices(children=children, reader=reader, log=log, clock=clock)
+        return RegisterPendingSlices(children=children, reader=reader, log=log, clock=clock, budgets=Budgets())
 
     @staticmethod
     def _log() -> Mock:
@@ -78,7 +78,7 @@ class TestRegisteringThePendingSlices:
         assert [event.issue for event in self._emitted(log)] == [524, 527]
         assert result.registered == tuple(self._emitted(log))
 
-    def test_a_pending_event_is_open_with_zero_spend_at_the_first_step_and_carries_its_parent_and_name(self) -> None:
+    def test_a_pending_event_is_open_with_zero_spend_and_no_step_and_carries_its_parent_and_name(self) -> None:
         log = self._log()
 
         self._action(
@@ -92,10 +92,11 @@ class TestRegisteringThePendingSlices:
                 slice_id="slice-01",
                 repo=ChildIssueMother.REPO,
                 issue=524,
-                step=Step.MOUNT_WORKTREE,
+                step=None,
                 at=self._NOW,
                 spend=HarnessSpend.nothing(),
-                status=EventStatus.PENDING,
+                budget_usd=Budgets().slice_cost_usd,
+                rounds=Rounds.untouched(Budgets()),
                 closure=Closure.open(),
                 feature_slice=FeatureSlice(parent=ChildIssueMother.PARENT, name="registrar"),
             )
