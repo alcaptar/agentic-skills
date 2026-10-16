@@ -5,9 +5,10 @@ from typing import TYPE_CHECKING
 
 from slice_runner.domain.canonical_slice_id import CanonicalSliceId
 from slice_runner.domain.closed_slice import ClosedSlice
+from slice_runner.domain.closing_reason import ClosingReason
+from slice_runner.domain.closure import Closure
 from slice_runner.domain.declared_debt import DeclaredDebt
 from slice_runner.domain.findings_history import FindingsHistory
-from slice_runner.domain.run_state import RunState
 from slice_runner.domain.slice_coordinates import SliceCoordinates
 from slice_runner.domain.worktree_retirement import WorktreeRetirement
 
@@ -31,7 +32,7 @@ class RecordClosureParams:
     issue: int
     slice_id: str
     name: str
-    state: RunState
+    closure: Closure
     run: Run
     budgets: Budgets
     models: RoleModels
@@ -67,7 +68,7 @@ class RecordClosure:
                 issue=params.issue,
                 slice_id=params.slice_id,
                 name=params.name,
-                state=params.state,
+                closure=params.closure,
                 run=params.run,
                 budgets=params.budgets,
                 models=params.models,
@@ -83,9 +84,9 @@ class RecordClosure:
                 worktree_retirement=params.worktree_retirement,
             )
         )
-        if params.state.publishes_the_findings and not history.is_empty:
+        if params.closure.publishes_the_findings and not history.is_empty:
             self._repository.publish_findings(repo=params.repo, issue=params.issue, history=history, debt=debt)
-        if params.state is RunState.BLOCKED_CI_CONFLICT and params.conflicting_paths:
+        if params.closure == Closure.because_of(ClosingReason.CI_CONFLICT) and params.conflicting_paths:
             self._repository.publish_catch_up_conflict(
                 repo=params.repo, issue=params.issue, paths=params.conflicting_paths
             )

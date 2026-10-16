@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar
 
+from slice_runner.infrastructure.closed_as import ClosedAs
+
 if TYPE_CHECKING:
     from slice_runner.domain.slice_status import SliceStatus
 
@@ -29,7 +31,7 @@ class FeatureStatusReport:
             if run.implement_retries > 0:
                 parts.append(f"retries={run.implement_retries}")
         elif status.record is not None:
-            parts.append(status.record.state.value)
+            parts.append(ClosedAs.of(status.record.closure).value)
             if status.shown_cost_usd is not None:
                 parts.append(f"${status.shown_cost_usd:.2f}")
         if status.pull_request is not None:

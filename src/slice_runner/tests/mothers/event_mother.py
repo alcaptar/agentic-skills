@@ -4,10 +4,11 @@ from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import ClassVar
 
+from slice_runner.domain.closing_reason import ClosingReason
+from slice_runner.domain.closure import Closure
 from slice_runner.domain.event import Event
 from slice_runner.domain.event_status import EventStatus
 from slice_runner.domain.harness_spend import HarnessSpend
-from slice_runner.domain.run_state import RunState
 from slice_runner.domain.step import Step
 from slice_runner.tests.mothers.feature_slice_mother import FeatureSliceMother
 from slice_runner.tests.mothers.harness_spend_mother import HarnessSpendMother
@@ -28,7 +29,7 @@ class EventMother:
             at=datetime(2024, 1, 1, 12, 30, 45, tzinfo=UTC),
             spend=HarnessSpendMother.of_the_implementer_call(),
             status=EventStatus.ADVANCING,
-            state=RunState.OPEN,
+            closure=Closure.open(),
             feature_slice=FeatureSliceMother.of_the_feature(),
         )
 
@@ -48,17 +49,17 @@ class EventMother:
             at=datetime(2024, 1, 1, 12, 31, 15, tzinfo=UTC),
             spend=HarnessSpendMother.of_the_judge_call(),
             status=EventStatus.CLOSED,
-            state=RunState.MERGED,
+            closure=Closure.merged(),
             feature_slice=FeatureSliceMother.of_the_feature(),
         )
 
     @classmethod
     def blocked_by_the_judge(cls) -> Event:
-        return replace(cls.closed(), state=RunState.BLOCKED_VERIFY)
+        return replace(cls.closed(), closure=Closure.because_of(ClosingReason.VERIFY))
 
     @classmethod
     def closed_before_the_closing_state_was_recorded(cls) -> Event:
-        return replace(cls.closed(), state=RunState.OPEN)
+        return replace(cls.closed(), closure=Closure.open())
 
     @classmethod
     def advancing_before_the_feature_was_recorded(cls) -> Event:

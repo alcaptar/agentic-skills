@@ -11,6 +11,8 @@ from slice_runner.application.actions.close_parent import CloseParentParams
 from slice_runner.domain.budgets import Budgets
 from slice_runner.domain.ci_indeterminate_cause import CiIndeterminateCause
 from slice_runner.domain.ci_status import CiStatus
+from slice_runner.domain.closing_reason import ClosingReason
+from slice_runner.domain.closure import Closure
 from slice_runner.domain.discard_cause import DiscardCause
 from slice_runner.domain.event_status import EventStatus
 from slice_runner.domain.exceptions import (
@@ -31,7 +33,6 @@ from slice_runner.domain.precheck_result import PrecheckResult
 from slice_runner.domain.requested_change import RequestedChange
 from slice_runner.domain.role_models import RoleModels
 from slice_runner.domain.run import Run
-from slice_runner.domain.run_state import RunState
 from slice_runner.domain.step import Step
 from slice_runner.tests.conductor import Conductor
 from slice_runner.tests.mothers.branch_catch_up_mother import BranchCatchUpMother
@@ -202,11 +203,11 @@ class TestConductSliceClosingAMergeMissedBetweenInvocations:
         conductor.conduct()
 
         recorded = conductor.metrics.record.call_args_list[0].args[0]
-        assert (recorded.repo, recorded.slice_id, recorded.name, recorded.state, recorded.run) == (
+        assert (recorded.repo, recorded.slice_id, recorded.name, recorded.closure, recorded.run) == (
             Conductor.REPO,
             dangling.slice_id.canonical,
             dangling.slice_id.name,
-            RunState.MERGED,
+            Closure.merged(),
             dangling.run,
         )
 
@@ -314,7 +315,7 @@ class TestConductSliceClosingAMergeMissedBetweenInvocations:
 
         conductor.conduct()
 
-        merged = [event for event in conductor.emitted_events if event.state is RunState.MERGED]
+        merged = [event for event in conductor.emitted_events if event.closure == Closure.merged()]
         assert [(event.status, event.slice_id, event.feature_slice) for event in merged] == [
             (
                 EventStatus.CLOSED,
@@ -333,7 +334,7 @@ class TestConductSliceClosingAMergeMissedBetweenInvocations:
         conductor.conduct()
         conductor.conduct()
 
-        merged = [event for event in conductor.emitted_events if event.state is RunState.MERGED]
+        merged = [event for event in conductor.emitted_events if event.closure == Closure.merged()]
         assert len(merged) == 1
 
     def test_a_dangling_subissue_whose_pull_request_closed_without_merging_leaves_no_merged_closing_event(
@@ -345,7 +346,7 @@ class TestConductSliceClosingAMergeMissedBetweenInvocations:
 
         conductor.conduct()
 
-        assert [event for event in conductor.emitted_events if event.state is RunState.MERGED] == []
+        assert [event for event in conductor.emitted_events if event.closure == Closure.merged()] == []
 
     def test_a_dangling_subissue_with_no_pull_request_found_leaves_no_merged_closing_event(self) -> None:
         dangling = SubIssueMother.dangling()
@@ -354,7 +355,7 @@ class TestConductSliceClosingAMergeMissedBetweenInvocations:
 
         conductor.conduct()
 
-        assert [event for event in conductor.emitted_events if event.state is RunState.MERGED] == []
+        assert [event for event in conductor.emitted_events if event.closure == Closure.merged()] == []
 
 
 class TestConductSliceWhenTheNamedSliceCannotBeSelected:
@@ -376,7 +377,7 @@ class TestConductSliceWhenTheNamedSliceCannotBeSelected:
             conductor.conduct()
 
         recorded = conductor.metrics.record.call_args_list[0].args[0]
-        assert (recorded.slice_id, recorded.state) == (dangling.slice_id.canonical, RunState.MERGED)
+        assert (recorded.slice_id, recorded.closure) == (dangling.slice_id.canonical, Closure.merged())
 
     def test_the_slice_that_cannot_be_selected_still_fails_the_invocation_once_the_dangling_run_is_closed(
         self,
@@ -567,7 +568,7 @@ class TestConductSliceResumingCatchesUpTheBranch:
 
         result = conductor.conduct()
 
-        assert result.state is RunState.BLOCKED_CI_CONFLICT
+        assert result.closure == Closure.because_of(ClosingReason.CI_CONFLICT)
         assert (conductor.implement.execute.call_count, conductor.verify.execute.call_count) == (0, 0)
 
     def test_a_conflicting_catch_up_writes_the_conflict_label_and_records_the_closed_row(self) -> None:
@@ -579,7 +580,7 @@ class TestConductSliceResumingCatchesUpTheBranch:
         conductor.repository.write_label.assert_called_once_with(
             repo=Conductor.REPO, issue=_SUBISSUE, remove=IssueLabel.IN_PROGRESS, add=IssueLabel.BLOCKED_CI_CONFLICT
         )
-        assert conductor.metrics.record.call_args.args[0].state is RunState.BLOCKED_CI_CONFLICT
+        assert conductor.metrics.record.call_args.args[0].closure == Closure.because_of(ClosingReason.CI_CONFLICT)
 
     def test_a_conflicting_catch_up_publishes_the_paths_git_reported_as_a_comment(self) -> None:
         conductor = self._conductor()
@@ -621,7 +622,7 @@ class TestConductSliceCatchesUpTheBranchWhenTheCiFindsAConflict(_ResumedAwaiting
         result = conductor.conduct()
 
         assert conductor.branches.catch_up.call_count == 1
-        assert (result.halt, result.state, result.step) == (Halt.WAIT_EXHAUSTED, RunState.OPEN, Step.AWAIT_CI)
+        assert (result.halt, result.closure, result.step) == (Halt.WAIT_EXHAUSTED, Closure.open(), Step.AWAIT_CI)
 
     def test_the_round_trip_after_a_conflict_never_repays_the_implementer_or_the_judge(self) -> None:
         conductor = self._conductor(budgets=Budgets(ci_wait_seconds=30))
@@ -658,7 +659,7 @@ class TestConductSliceCatchesUpTheBranchWhenTheCiFindsAConflict(_ResumedAwaiting
         result = conductor.conduct()
 
         assert conductor.branches.catch_up.call_count == 1
-        assert result.state is RunState.BLOCKED_CI_CONFLICT
+        assert result.closure == Closure.because_of(ClosingReason.CI_CONFLICT)
 
     def test_a_conflict_found_while_catching_up_the_branch_after_a_ci_retry_publishes_its_paths(self) -> None:
         conductor = self._conductor(budgets=Budgets(catch_up_retries=1))
@@ -668,7 +669,7 @@ class TestConductSliceCatchesUpTheBranchWhenTheCiFindsAConflict(_ResumedAwaiting
 
         result = conductor.conduct()
 
-        assert result.state is RunState.BLOCKED_CI_CONFLICT
+        assert result.closure == Closure.because_of(ClosingReason.CI_CONFLICT)
         conductor.repository.publish_catch_up_conflict.assert_called_once_with(
             repo=Conductor.REPO, issue=_SUBISSUE, paths=BranchCatchUpMother.CONFLICTING_PATHS
         )
@@ -684,7 +685,7 @@ class TestConductSliceCatchesUpTheBranchWhenTheCiFindsAConflict(_ResumedAwaiting
         result = conductor.conduct()
 
         assert conductor.branches.catch_up.call_count == 0
-        assert result.state is RunState.BLOCKED_CI_CONFLICT
+        assert result.closure == Closure.because_of(ClosingReason.CI_CONFLICT)
 
     def test_a_control_round_that_fails_after_the_catch_up_still_sends_the_repaired_round_to_the_judge(self) -> None:
         conductor = self._conductor(budgets=Budgets(ci_wait_seconds=60))
@@ -720,7 +721,7 @@ class TestConductSliceResumingWithSpendAlreadyPersisted:
         result = conductor.conduct()
 
         assert conductor.verify.execute.call_count == 0
-        assert result.state is RunState.ABORTED_BUDGET
+        assert result.closure == Closure.because_of(ClosingReason.BUDGET)
 
     def test_the_durable_row_of_a_reinvoked_run_still_carries_the_cost_paid_in_an_earlier_invocation(self) -> None:
         prior = HarnessSpendMother.of_the_implementer_call()
@@ -778,7 +779,7 @@ class TestConductSliceOnTheHappyPath:
             Step.AWAIT_CI,
             Step.AWAIT_MERGE,
         ]
-        assert (result.state, result.step) == (RunState.OPEN, Step.AWAIT_MERGE)
+        assert (result.closure, result.step) == (Closure.open(), Step.AWAIT_MERGE)
 
     def test_the_index_is_staged_with_exactly_what_the_implementer_reported(self) -> None:
         conductor = self._conductor()
@@ -888,9 +889,9 @@ class TestConductSliceOnTheHappyPath:
 
         result = conductor.conduct()
 
-        assert (result.halt, result.state, result.pull_request) == (
+        assert (result.halt, result.closure, result.pull_request) == (
             Halt.RUN_CLOSED,
-            RunState.MERGED,
+            Closure.merged(),
             Conductor.PULL_REQUEST,
         )
 
@@ -959,7 +960,7 @@ class TestConductSliceOnTheHappyPath:
             "slice-05",
             "prechecks-deterministas",
         )
-        assert recorded.state is RunState.MERGED
+        assert recorded.closure == Closure.merged()
         assert recorded.spend == HarnessSpend.summing(
             (HarnessSpendMother.of_the_implementer_call(), HarnessSpendMother.of_the_judge_call())
         )
@@ -1165,7 +1166,7 @@ class TestConductSliceClosingTheParentAfterAMerge:
 
         result = conductor.conduct()
 
-        assert result.state is RunState.BLOCKED_HYGIENE
+        assert result.closure == Closure.because_of(ClosingReason.HYGIENE)
         assert conductor.close.execute.call_count == 0
 
 
@@ -1232,7 +1233,7 @@ class TestConductSliceImplementing:
 
         result = conductor.conduct()
 
-        assert result.state is RunState.ABORTED_UNMEASURED_CALL
+        assert result.closure == Closure.because_of(ClosingReason.UNMEASURED_CALL)
         written = [call.kwargs["run"] for call in conductor.repository.write_run.call_args_list]
         assert written[-1].previous_call_died is True
 
@@ -1268,11 +1269,11 @@ class TestConductSliceWhenTheControlsComeBackRed:
 
         result = conductor.conduct()
 
-        assert result.state is RunState.BLOCKED_CONTROLS
+        assert result.closure == Closure.because_of(ClosingReason.CONTROLS)
         conductor.repository.write_label.assert_called_once_with(
             repo=Conductor.REPO, issue=_SUBISSUE, remove=IssueLabel.IN_PROGRESS, add=IssueLabel.BLOCKED_CONTROLS
         )
-        assert conductor.metrics.record.call_args.args[0].state is RunState.BLOCKED_CONTROLS
+        assert conductor.metrics.record.call_args.args[0].closure == Closure.because_of(ClosingReason.CONTROLS)
 
     def test_a_repo_exempt_from_controls_goes_straight_to_the_judge(self) -> None:
         conductor = Conductor(
@@ -1412,7 +1413,7 @@ class TestConductSliceWhenTheStagedIndexIsRejected:
         result = conductor.conduct()
 
         assert conductor.controls.run.call_count == 0
-        assert result.state is RunState.BLOCKED_HYGIENE
+        assert result.closure == Closure.because_of(ClosingReason.HYGIENE)
 
     def test_a_rejection_spends_no_retry_of_the_controls_even_when_their_own_budget_is_exhausted(self) -> None:
         conductor = self._conductor(budgets=Budgets(control_retries=0))
@@ -1420,7 +1421,7 @@ class TestConductSliceWhenTheStagedIndexIsRejected:
 
         result = conductor.conduct()
 
-        assert result.state is RunState.MERGED
+        assert result.closure == Closure.merged()
 
     def test_the_reason_the_index_was_refused_reaches_the_next_implementer_so_it_does_not_repeat_it(self) -> None:
         conductor = self._conductor()
@@ -1448,11 +1449,11 @@ class TestConductSliceWhenTheStagedIndexIsRejected:
 
         result = conductor.conduct()
 
-        assert result.state is RunState.BLOCKED_HYGIENE
+        assert result.closure == Closure.because_of(ClosingReason.HYGIENE)
         conductor.repository.write_label.assert_called_once_with(
             repo=Conductor.REPO, issue=_SUBISSUE, remove=IssueLabel.IN_PROGRESS, add=IssueLabel.BLOCKED_HYGIENE
         )
-        assert conductor.metrics.record.call_args.args[0].state is RunState.BLOCKED_HYGIENE
+        assert conductor.metrics.record.call_args.args[0].closure == Closure.because_of(ClosingReason.HYGIENE)
 
     def test_a_dirty_index_in_a_later_round_does_not_add_a_second_commit_and_blocks_on_hygiene(
         self,
@@ -1465,7 +1466,7 @@ class TestConductSliceWhenTheStagedIndexIsRejected:
         result = conductor.conduct()
 
         assert conductor.commit.execute.call_count == 1
-        assert result.state is RunState.BLOCKED_HYGIENE
+        assert result.closure == Closure.because_of(ClosingReason.HYGIENE)
 
 
 class TestConductSliceWhenAControlCannotBeMeasured:
@@ -1493,7 +1494,7 @@ class TestConductSliceWhenAControlCannotBeMeasured:
 
         result = conductor.conduct()
 
-        assert result.state is RunState.BLOCKED_CONTROLS
+        assert result.closure == Closure.because_of(ClosingReason.CONTROLS)
 
 
 class TestConductSliceWhenTheJudgeSpeaks:
@@ -1642,7 +1643,7 @@ class TestConductSliceWhenTheJudgeSpeaks:
 
         result = conductor.conduct()
 
-        assert result.state is RunState.BLOCKED_VERIFY
+        assert result.closure == Closure.because_of(ClosingReason.VERIFY)
         conductor.repository.write_label.assert_called_once_with(
             repo=Conductor.REPO, issue=_SUBISSUE, remove=IssueLabel.IN_PROGRESS, add=IssueLabel.BLOCKED_VERIFY
         )
@@ -1717,7 +1718,7 @@ class TestConductSliceWhenTheImplementerMovedNothing:
 
         result = conductor.conduct()
 
-        assert result.state is RunState.BLOCKED_UNCHANGED_DIFF
+        assert result.closure == Closure.because_of(ClosingReason.UNCHANGED_DIFF)
         assert conductor.implement.execute.call_count == 1
 
     def test_the_issue_is_labelled_with_a_label_of_its_own_and_not_the_one_of_a_veto(self) -> None:
@@ -1764,12 +1765,12 @@ class TestConductSliceWhenTheCostOfTheSliceRunsOut:
         result = conductor.conduct()
 
         assert conductor.verify.execute.call_count == 2
-        assert result.state is RunState.ABORTED_BUDGET
+        assert result.closure == Closure.because_of(ClosingReason.BUDGET)
         conductor.repository.write_label.assert_called_once_with(
             repo=Conductor.REPO, issue=_SUBISSUE, remove=IssueLabel.IN_PROGRESS, add=IssueLabel.ABORTED_BUDGET
         )
         recorded = conductor.metrics.record.call_args.args[0]
-        assert recorded.state is RunState.ABORTED_BUDGET
+        assert recorded.closure == Closure.because_of(ClosingReason.BUDGET)
         assert recorded.run.discarded_call is not None
         assert recorded.run.discarded_call.step is Step.VERIFY
         assert recorded.run.discarded_call.cause is DiscardCause.INCOHERENT_VERDICT
@@ -1787,12 +1788,12 @@ class TestConductSliceWhenTheCostOfTheSliceRunsOut:
         result = conductor.conduct()
 
         assert conductor.implement.execute.call_count == 2
-        assert result.state is RunState.ABORTED_BUDGET
+        assert result.closure == Closure.because_of(ClosingReason.BUDGET)
         conductor.repository.write_label.assert_called_once_with(
             repo=Conductor.REPO, issue=_SUBISSUE, remove=IssueLabel.IN_PROGRESS, add=IssueLabel.ABORTED_BUDGET
         )
         recorded = conductor.metrics.record.call_args.args[0]
-        assert recorded.state is RunState.ABORTED_BUDGET
+        assert recorded.closure == Closure.because_of(ClosingReason.BUDGET)
         assert recorded.run.discarded_call is not None
         assert recorded.run.discarded_call.step is Step.IMPLEMENT
         assert recorded.run.discarded_call.cause is DiscardCause.FAILED_CALL
@@ -1804,7 +1805,7 @@ class TestConductSliceWhenTheCostOfTheSliceRunsOut:
         result = conductor.conduct()
 
         assert conductor.verify.execute.call_count == 2
-        assert result.state is RunState.MERGED
+        assert result.closure == Closure.merged()
 
     def test_a_veto_that_exhausts_the_budget_still_counts_the_round_whose_row_was_already_written(self) -> None:
         conductor = self._judging(budgets=Budgets(slice_cost_usd=0.01))
@@ -1812,7 +1813,7 @@ class TestConductSliceWhenTheCostOfTheSliceRunsOut:
 
         result = conductor.conduct()
 
-        assert result.state is RunState.ABORTED_BUDGET
+        assert result.closure == Closure.because_of(ClosingReason.BUDGET)
         recorded = conductor.metrics.record.call_args.args[0]
         assert recorded.run.verify_rounds_logged == 1
 
@@ -1828,7 +1829,7 @@ class TestConductSliceWhenTheCostOfTheSliceRunsOut:
         result = conductor.conduct()
 
         assert conductor.verify.execute.call_count == 1
-        assert result.state is RunState.ABORTED_UNMEASURED_CALL
+        assert result.closure == Closure.because_of(ClosingReason.UNMEASURED_CALL)
         recorded = conductor.metrics.record.call_args.args[0]
         assert recorded.run.discarded_call.step is Step.VERIFY
         assert recorded.run.discarded_call.cause is DiscardCause.FAILED_CALL
@@ -1846,7 +1847,7 @@ class TestConductSliceWhenTheCostOfTheSliceRunsOut:
 
         assert conductor.implement.execute.call_count == 1
         assert conductor.verify.execute.call_count == 1
-        assert result.state is RunState.ABORTED_UNMEASURED_CALL
+        assert result.closure == Closure.because_of(ClosingReason.UNMEASURED_CALL)
 
     def test_an_unmeasured_implementation_call_closes_the_run_instead_of_spinning_for_a_cost_nobody_can_add_up(
         self,
@@ -1860,7 +1861,7 @@ class TestConductSliceWhenTheCostOfTheSliceRunsOut:
         result = conductor.conduct()
 
         assert conductor.implement.execute.call_count == 1
-        assert result.state is RunState.ABORTED_UNMEASURED_CALL
+        assert result.closure == Closure.because_of(ClosingReason.UNMEASURED_CALL)
 
     def test_an_implementation_that_spent_the_whole_cost_closes_before_running_a_single_control(self) -> None:
         conductor = Conductor(
@@ -1871,7 +1872,7 @@ class TestConductSliceWhenTheCostOfTheSliceRunsOut:
         result = conductor.conduct()
 
         assert (conductor.stage.execute.call_count, conductor.controls.run.call_count) == (0, 0)
-        assert result.state is RunState.ABORTED_BUDGET
+        assert result.closure == Closure.because_of(ClosingReason.BUDGET)
 
     def test_a_step_that_never_called_the_harness_is_not_measured_against_the_cost_of_the_slice(self) -> None:
         conductor = Conductor(
@@ -1880,7 +1881,7 @@ class TestConductSliceWhenTheCostOfTheSliceRunsOut:
 
         result = conductor.conduct()
 
-        assert result.state is RunState.MERGED
+        assert result.closure == Closure.merged()
 
     def test_a_pass_that_alone_exceeds_the_cost_still_merges_because_it_was_already_paid_for(self) -> None:
         conductor = self._judging(budgets=Budgets(slice_cost_usd=0.01))
@@ -1889,7 +1890,7 @@ class TestConductSliceWhenTheCostOfTheSliceRunsOut:
         result = conductor.conduct()
 
         assert conductor.verify.execute.call_count == 1
-        assert result.state is RunState.MERGED
+        assert result.closure == Closure.merged()
 
     def test_a_pass_with_accepted_debt_still_delivers_over_budget_because_delivering_costs_no_harness(self) -> None:
         conductor = self._judging(budgets=Budgets(slice_cost_usd=0.01))
@@ -1900,7 +1901,7 @@ class TestConductSliceWhenTheCostOfTheSliceRunsOut:
         result = conductor.conduct()
 
         assert conductor.verify.execute.call_count == 1
-        assert result.state is RunState.MERGED
+        assert result.closure == Closure.merged()
 
     def test_the_cost_of_an_over_budget_pass_still_blocks_the_next_call_the_harness_would_make(self) -> None:
         conductor = self._judging(budgets=Budgets(slice_cost_usd=0.01, ci_retries=1))
@@ -1910,7 +1911,7 @@ class TestConductSliceWhenTheCostOfTheSliceRunsOut:
         result = conductor.conduct()
 
         assert conductor.implement.execute.call_count == 0
-        assert result.state is RunState.ABORTED_BUDGET
+        assert result.closure == Closure.because_of(ClosingReason.BUDGET)
 
     @staticmethod
     def _judging(*, budgets: Budgets) -> Conductor:
@@ -1939,9 +1940,9 @@ class TestConductSliceWhenThePullRequestWasClosedWithoutMerging:
 
         result = conductor.conduct()
 
-        assert (result.halt, result.state, result.step, result.pull_request) == (
+        assert (result.halt, result.closure, result.step, result.pull_request) == (
             Halt.PULL_REQUEST_CLOSED,
-            RunState.OPEN,
+            Closure.open(),
             Step.AWAIT_MERGE,
             Conductor.PULL_REQUEST,
         )
@@ -2170,7 +2171,7 @@ class TestConductSliceWaitingForTheCi(_ResumedAwaitingTheCi):
         result = conductor.conduct()
 
         assert [call.kwargs["seconds"] for call in conductor.clock.sleep.call_args_list] == [30, 30, 30]
-        assert (result.halt, result.state, result.step) == (Halt.WAIT_EXHAUSTED, RunState.OPEN, Step.AWAIT_CI)
+        assert (result.halt, result.closure, result.step) == (Halt.WAIT_EXHAUSTED, Closure.open(), Step.AWAIT_CI)
 
     def test_a_hung_ci_runs_out_on_its_own_cap_however_long_a_person_is_allowed_to_take(self) -> None:
         conductor = self._conductor(budgets=Budgets(ci_wait_seconds=60, person_wait_seconds=86400))
@@ -2230,7 +2231,7 @@ class TestConductSliceWaitingForTheCi(_ResumedAwaitingTheCi):
         result = conductor.conduct()
 
         assert conductor.clock.sleep.call_count == Budgets().indeterminate_ticks - 1
-        assert result.state is RunState.BLOCKED_CI_INDETERMINATE
+        assert result.closure == Closure.because_of(ClosingReason.CI_INDETERMINATE)
         conductor.repository.write_label.assert_called_once_with(
             repo=Conductor.REPO,
             issue=_SUBISSUE,
@@ -2248,7 +2249,7 @@ class TestConductSliceWaitingForTheCi(_ResumedAwaitingTheCi):
         result = conductor.conduct()
 
         assert conductor.clock.sleep.call_count == Budgets().catch_up_retries
-        assert result.state is RunState.BLOCKED_CI_CONFLICT
+        assert result.closure == Closure.because_of(ClosingReason.CI_CONFLICT)
         conductor.repository.write_label.assert_called_once_with(
             repo=Conductor.REPO,
             issue=_SUBISSUE,
@@ -2273,7 +2274,7 @@ class TestConductSliceWaitingForTheCi(_ResumedAwaitingTheCi):
         result = conductor.conduct()
 
         assert conductor.clock.sleep.call_count == Budgets().indeterminate_ticks - 1
-        assert result.state is RunState.BLOCKED_CI_INDETERMINATE
+        assert result.closure == Closure.because_of(ClosingReason.CI_INDETERMINATE)
 
     def test_a_ci_state_nobody_can_read_counts_as_indeterminate_and_not_as_a_failure_of_the_slice(self) -> None:
         conductor = self._conductor(budgets=Budgets(indeterminate_ticks=1))
@@ -2282,7 +2283,7 @@ class TestConductSliceWaitingForTheCi(_ResumedAwaitingTheCi):
         result = conductor.conduct()
 
         assert conductor.implement.execute.call_count == 0
-        assert result.state is RunState.BLOCKED_CI_INDETERMINATE
+        assert result.closure == Closure.because_of(ClosingReason.CI_INDETERMINATE)
 
     def test_a_red_ci_sends_the_slice_back_to_be_implemented_and_closes_when_that_budget_runs_out(self) -> None:
         conductor = self._conductor()
@@ -2291,8 +2292,8 @@ class TestConductSliceWaitingForTheCi(_ResumedAwaitingTheCi):
         result = conductor.conduct()
 
         assert conductor.implement.execute.call_count == 1
-        assert result.state is RunState.BLOCKED_CI_RED
-        assert conductor.metrics.record.call_args.args[0].state is RunState.BLOCKED_CI_RED
+        assert result.closure == Closure.because_of(ClosingReason.CI_RED)
+        assert conductor.metrics.record.call_args.args[0].closure == Closure.because_of(ClosingReason.CI_RED)
 
 
 class TestConductSliceReusesTheSamePullRequestStatusReadForTheCiAndTheMerge(_ResumedAwaitingTheCi):
@@ -2321,7 +2322,7 @@ class TestConductSliceWhenTheCiCannotBeRead:
 
         result = conductor.conduct()
 
-        assert result.state is RunState.BLOCKED_CI_INDETERMINATE
+        assert result.closure == Closure.because_of(ClosingReason.CI_INDETERMINATE)
 
     def test_the_command_itself_failing_records_that_concrete_cause_on_the_durable_row(self) -> None:
         conductor = self._conductor()
@@ -2371,7 +2372,7 @@ class TestConductSliceWhenTheCiCannotBeRead:
 
         result = conductor.conduct()
 
-        assert result.state is RunState.MERGED
+        assert result.closure == Closure.merged()
         recorded = conductor.metrics.record.call_args.args[0]
         assert recorded.ci_indeterminate_cause is CiIndeterminateCause.COMMAND_FAILED
 
@@ -2436,9 +2437,9 @@ class TestConductSliceMountingTheWorktreeBeforeUnderstanding:
 
         result = conductor.conduct()
 
-        assert (result.halt, result.state) == (Halt.RUN_CLOSED, RunState.BLOCKED_WORKTREE)
+        assert (result.halt, result.closure) == (Halt.RUN_CLOSED, Closure.because_of(ClosingReason.WORKTREE))
         assert result.conflicting_path == self._MANUAL
-        assert conductor.metrics.record.call_args.args[0].state is RunState.BLOCKED_WORKTREE
+        assert conductor.metrics.record.call_args.args[0].closure == Closure.because_of(ClosingReason.WORKTREE)
 
     def test_a_taken_branch_labels_the_subissue_and_reads_no_sources_nor_asks_the_harness(self) -> None:
         conductor = self._conductor()
@@ -2514,7 +2515,7 @@ class TestConductSliceMountingTheWorktreeBeforeUnderstanding:
 
         result = conductor.conduct(worktree=self._MANUAL)
 
-        assert result.state is RunState.BLOCKED_WORKTREE
+        assert result.closure == Closure.because_of(ClosingReason.WORKTREE)
         assert not conductor.worktrees.add_new_branch.called
         assert not conductor.worktrees.add_on_branch.called
         assert not conductor.worktrees.prune.called
@@ -2529,7 +2530,7 @@ class TestConductSliceMountingTheWorktreeBeforeUnderstanding:
 
         result = conductor.conduct(worktree=self._MANUAL)
 
-        assert result.state is not RunState.BLOCKED_WORKTREE
+        assert result.closure != Closure.because_of(ClosingReason.WORKTREE)
         assert not conductor.worktrees.add_new_branch.called
         assert conductor.check_sources.execute.call_args.args[0].worktree == self._MANUAL
 
@@ -2542,7 +2543,7 @@ class TestConductSliceMountingTheWorktreeBeforeUnderstanding:
 
         result = conductor.conduct(worktree=self._MANUAL)
 
-        assert (result.state, result.conflicting_path) == (RunState.BLOCKED_WORKTREE, self._MANUAL)
+        assert (result.closure, result.conflicting_path) == (Closure.because_of(ClosingReason.WORKTREE), self._MANUAL)
 
 
 class TestConductSliceResumingMountsTheWorktreeFirst:
@@ -2591,7 +2592,7 @@ class TestConductSliceResumingMountsTheWorktreeFirst:
 
         result = conductor.conduct()
 
-        assert (result.state, result.step) == (RunState.BLOCKED_WORKTREE, Step.IMPLEMENT)
+        assert (result.closure, result.step) == (Closure.because_of(ClosingReason.WORKTREE), Step.IMPLEMENT)
         conductor.repository.write_label.assert_called_once_with(
             repo=Conductor.REPO, issue=_SUBISSUE, remove=IssueLabel.IN_PROGRESS, add=IssueLabel.BLOCKED_WORKTREE
         )
@@ -2627,10 +2628,10 @@ class TestConductSliceLeavingAnEventWhenItStarts:
         conductor.conduct()
 
         first = conductor.emitted_events[0]
-        assert (first.step, first.status, first.state, first.spend) == (
+        assert (first.step, first.status, first.closure, first.spend) == (
             Step.IMPLEMENT,
             EventStatus.ADVANCING,
-            RunState.OPEN,
+            Closure.open(),
             HarnessSpend.nothing(),
         )
         assert emitted_when_asked == [1]

@@ -3,9 +3,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from slice_runner.domain.closure import Closure
 from slice_runner.domain.event import Event
 from slice_runner.domain.event_status import EventStatus
-from slice_runner.domain.run_state import RunState
 
 if TYPE_CHECKING:
     from slice_runner.domain.clock import Clock
@@ -43,7 +43,7 @@ class RecordStart:
                 at=self._clock.now(),
                 spend=params.spend,
                 status=EventStatus.ADVANCING,
-                state=RunState.OPEN,
+                closure=Closure.open(),
                 feature_slice=params.feature_slice,
             )
         )

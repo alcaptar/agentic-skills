@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, ClassVar, Self
 from slice_runner.domain.event_status import EventStatus
 from slice_runner.domain.run_state import RunState
 from slice_runner.domain.step import Step
+from slice_runner.infrastructure.closed_as import ClosedAs
 from slice_runner.infrastructure.contract_model import ContractModel
 
 if TYPE_CHECKING:
@@ -22,7 +23,7 @@ class EventFollowLinePayload(ContractModel):
     step: Step
     status: EventStatus
     cost_usd: float
-    closed_as: RunState | None = None
+    closed_as: ClosedAs | None = None
     parent: int | None = None
     name: str | None = None
 
@@ -37,7 +38,7 @@ class EventFollowLinePayload(ContractModel):
             step=event.step,
             status=event.status,
             cost_usd=event.spend.cost_usd,
-            closed_as=None if event.state is RunState.OPEN else event.state,
+            closed_as=None if event.closure.state is RunState.OPEN else ClosedAs.of(event.closure),
             parent=None if event.feature_slice is None else event.feature_slice.parent,
             name=None if event.feature_slice is None else event.feature_slice.name,
         )

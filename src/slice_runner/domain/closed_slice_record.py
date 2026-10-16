@@ -9,6 +9,7 @@ if TYPE_CHECKING:
     from datetime import datetime
 
     from slice_runner.domain.ci_indeterminate_cause import CiIndeterminateCause
+    from slice_runner.domain.closure import Closure
     from slice_runner.domain.diff_stats import DiffStats
     from slice_runner.domain.discarded_call import DiscardedCall
     from slice_runner.domain.recorded_spend import RecordedSpend
@@ -22,7 +23,7 @@ class ClosedSliceRecord:
     issue: int
     slice_id: str
     name: str
-    state: RunState
+    closure: Closure
     findings: SeverityCount
     findings_of_the_last_round: SeverityCount
     implement_retries: int
@@ -44,7 +45,7 @@ class ClosedSliceRecord:
     @property
     def first_attempt(self) -> bool:
         return (
-            self.state == RunState.MERGED
+            self.closure.state is RunState.MERGED
             and self.implement_retries == 0
             and self.control_retries == 0
             and self.ci_retries == 0

@@ -20,7 +20,7 @@ class EventStatus(StrEnum):
 
     @classmethod
     def of_the_transition(cls, transition: Transition) -> EventStatus:
-        if transition.state is not RunState.OPEN:
+        if transition.closure.state is not RunState.OPEN:
             return cls.CLOSED
         if transition.wait_seconds > 0:
             if WaitingOn.of_the_step(transition.run.step) is WaitingOn.PERSON:

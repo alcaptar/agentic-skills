@@ -9,9 +9,13 @@ file for.
 from __future__ import annotations
 
 from slice_runner.domain.check_verdict import CheckVerdict
+from slice_runner.domain.closing_reason import ClosingReason
+from slice_runner.domain.closure import Closure
 from slice_runner.domain.issue_label import IssueLabel
 from slice_runner.domain.run_state import RunState
 from slice_runner.domain.step import Step
+
+_EVERY_CLOSURE = (Closure.open(), Closure.merged(), *(Closure.because_of(reason) for reason in ClosingReason))
 
 
 def test_every_runstate_closure_the_translator_is_asked_about_returns_a_label_or_none_only_for_merged() -> None:
@@ -23,14 +27,16 @@ def test_every_runstate_closure_the_translator_is_asked_about_returns_a_label_or
     purpose -- GitHub closes the issue itself when the pull request merges -- so it is the sole `None`
     this loop may see; any other closure coming back empty is a step the translator forgot to project.
     """
-    for state in RunState:
-        if state is RunState.OPEN:
+    for closure in _EVERY_CLOSURE:
+        if closure.state is RunState.OPEN:
             continue
-        label = IssueLabel.of(state=state, step=Step.IMPLEMENT)
-        if state is RunState.MERGED:
+        label = IssueLabel.of(closure=closure, step=Step.IMPLEMENT)
+        if closure.state is RunState.MERGED:
             assert label is None, "MERGED closes the issue on GitHub's side and must carry no label"
         else:
-            assert label in set(IssueLabel), f"{state} projects to {label!r}, which is not a label the vocabulary knows"
+            assert label in set(IssueLabel), (
+                f"{closure} projects to {label!r}, which is not a label the vocabulary knows"
+            )
 
 
 def test_no_label_in_the_vocabulary_lacks_a_source_in_the_translator_or_a_manual_entry_point() -> None:
@@ -42,7 +48,7 @@ def test_no_label_in_the_vocabulary_lacks_a_source_in_the_translator_or_a_manual
     nobody ever writes.
     """
     manual_source = {IssueLabel.PENDING}
-    produced = {IssueLabel.of(state=state, step=step) for state in RunState for step in Step} - {None}
+    produced = {IssueLabel.of(closure=closure, step=step) for closure in _EVERY_CLOSURE for step in Step} - {None}
 
     assert set(IssueLabel) - produced == manual_source
 

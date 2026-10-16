@@ -7,6 +7,8 @@ from slice_runner.application.actions.record_closure import RecordClosure, Recor
 from slice_runner.domain.budgets import Budgets
 from slice_runner.domain.call_spend_log import CallSpendLog
 from slice_runner.domain.canonical_slice_id import CanonicalSliceId
+from slice_runner.domain.closing_reason import ClosingReason
+from slice_runner.domain.closure import Closure
 from slice_runner.domain.corpus import Corpus
 from slice_runner.domain.debt_ledger import DebtDeclaration, DebtLedger
 from slice_runner.domain.declared_debt import DeclaredDebt
@@ -15,7 +17,6 @@ from slice_runner.domain.harness_spend import HarnessSpend
 from slice_runner.domain.metrics_log import MetricsLog
 from slice_runner.domain.role_models import RoleModels
 from slice_runner.domain.run_repository import RunRepository
-from slice_runner.domain.run_state import RunState
 from slice_runner.domain.severity import Severity
 from slice_runner.domain.slice_coordinates import SliceCoordinates
 from slice_runner.tests.mothers.discarded_call_mother import DiscardedCallMother
@@ -63,7 +64,7 @@ class _Closer:
             "issue": _ISSUE,
             "slice_id": _SLICE,
             "name": _NAME,
-            "state": RunState.MERGED,
+            "closure": Closure.merged(),
             "run": RunMother.awaiting_merge(),
             "budgets": Budgets(),
             "models": RoleModels(implement="sonnet", verify="sonnet"),
@@ -79,12 +80,12 @@ class TestTheRowItWrites:
     def test_the_row_names_the_slice_and_the_state_the_run_closed_in(self) -> None:
         closer = _Closer()
 
-        written = closer.close(state=RunState.BLOCKED_VERIFY)
+        written = closer.close(closure=Closure.because_of(ClosingReason.VERIFY))
 
         assert written.repo == _REPO
         assert written.slice_id == _SLICE
         assert written.name == _NAME
-        assert written.state is RunState.BLOCKED_VERIFY
+        assert written.closure == Closure.because_of(ClosingReason.VERIFY)
 
     def test_the_findings_of_every_round_and_of_the_last_one_travel_apart_so_a_fixed_one_is_not_lost(self) -> None:
         closer = _Closer()
@@ -240,21 +241,21 @@ class TestPublishingTheCatchUpConflict:
         closer = _Closer()
         paths = ("shared.txt", "src/module.py")
 
-        closer.close(state=RunState.BLOCKED_CI_CONFLICT, conflicting_paths=paths)
+        closer.close(closure=Closure.because_of(ClosingReason.CI_CONFLICT), conflicting_paths=paths)
 
         closer.repository.publish_catch_up_conflict.assert_called_once_with(repo=_REPO, issue=_ISSUE, paths=paths)
 
     def test_a_closure_by_conflict_with_no_paths_publishes_nothing(self) -> None:
         closer = _Closer()
 
-        closer.close(state=RunState.BLOCKED_CI_CONFLICT, conflicting_paths=())
+        closer.close(closure=Closure.because_of(ClosingReason.CI_CONFLICT), conflicting_paths=())
 
         closer.repository.publish_catch_up_conflict.assert_not_called()
 
     def test_a_closure_in_another_state_never_publishes_even_if_conflicting_paths_arrived(self) -> None:
         closer = _Closer()
 
-        closer.close(state=RunState.MERGED, conflicting_paths=("shared.txt",))
+        closer.close(closure=Closure.merged(), conflicting_paths=("shared.txt",))
 
         closer.repository.publish_catch_up_conflict.assert_not_called()
 
@@ -266,7 +267,7 @@ class TestPublishingTheVetoFindings:
         low = FindingMother.low_severity()
         closer.corpus.rounds_of_the_slice.return_value = (JudgedRoundMother.of_the_round(1, high, low),)
 
-        closer.close(state=RunState.BLOCKED_VERIFY)
+        closer.close(closure=Closure.because_of(ClosingReason.VERIFY))
 
         closer.repository.publish_findings.assert_called_once_with(
             repo=_REPO,
@@ -280,7 +281,7 @@ class TestPublishingTheVetoFindings:
         high = FindingMother.without_line()
         closer.corpus.rounds_of_the_slice.return_value = (JudgedRoundMother.of_the_round(1, high),)
 
-        closer.close(state=RunState.BLOCKED_UNCHANGED_DIFF)
+        closer.close(closure=Closure.because_of(ClosingReason.UNCHANGED_DIFF))
 
         closer.repository.publish_findings.assert_called_once_with(
             repo=_REPO,
@@ -298,7 +299,7 @@ class TestPublishingTheVetoFindings:
             DebtDeclaration(left_out=("no cubri el caso de un binario",)),
         )
 
-        closer.close(state=RunState.BLOCKED_UNCHANGED_DIFF)
+        closer.close(closure=Closure.because_of(ClosingReason.UNCHANGED_DIFF))
 
         published = closer.repository.publish_findings.call_args.kwargs["debt"]
         assert published.left_out == ("no cubri el caso de un binario",)
@@ -306,7 +307,7 @@ class TestPublishingTheVetoFindings:
     def test_a_closure_by_veto_with_no_findings_at_all_publishes_nothing(self) -> None:
         closer = _Closer()
 
-        closer.close(state=RunState.BLOCKED_VERIFY)
+        closer.close(closure=Closure.because_of(ClosingReason.VERIFY))
 
         closer.repository.publish_findings.assert_not_called()
 
@@ -316,7 +317,7 @@ class TestPublishingTheVetoFindings:
             JudgedRoundMother.of_the_round(1, FindingMother.without_line()),
         )
 
-        closer.close(state=RunState.MERGED)
+        closer.close(closure=Closure.merged())
 
         closer.repository.publish_findings.assert_not_called()
 

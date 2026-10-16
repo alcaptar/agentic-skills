@@ -5,9 +5,9 @@ from datetime import timedelta
 import pytest
 
 from slice_runner.application.queries.follow_events import FollowEvents, FollowEventsParams
+from slice_runner.domain.closure import Closure
 from slice_runner.domain.event_cursor import EventCursor
 from slice_runner.domain.event_reader import EventBatch
-from slice_runner.domain.run_state import RunState
 from slice_runner.tests.doubles import ScriptedEventReader
 from slice_runner.tests.mothers.event_mother import EventMother
 
@@ -96,7 +96,7 @@ class TestWhatCountsAsAChange:
         )
 
         assert result.changes == (merged,)
-        assert [event.state for event in result.snapshot] == [RunState.MERGED]
+        assert [event.closure for event in result.snapshot] == [Closure.merged()]
 
     def test_interleaved_slices_are_compared_each_against_its_own_previous_row(self) -> None:
         reader = ScriptedEventReader(

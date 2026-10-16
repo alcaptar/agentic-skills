@@ -3,10 +3,10 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING
 
+from slice_runner.domain.closure import Closure
 from slice_runner.domain.exceptions import ImpossibleTransitionError, OrderRefusedError
 from slice_runner.domain.issue_label import IssueLabel
 from slice_runner.domain.order import Order
-from slice_runner.domain.run_state import RunState
 from slice_runner.domain.slice_queue import SliceQueue
 from slice_runner.domain.worktree_retirement_policy import WorktreeRetirementPolicy
 
@@ -50,7 +50,7 @@ class ReopenSlice:
             retry_instruction=params.instruction,
             tree_unexpected=not WorktreeRetirementPolicy.expects_a_tree(label=subissue.label, run=subissue.run),
         )
-        label = IssueLabel.of(state=RunState.OPEN, step=run.step)
+        label = IssueLabel.of(closure=Closure.open(), step=run.step)
         if label is None:
             raise ImpossibleTransitionError(f"the step `{run.step}` of an open run maps to no label")
 

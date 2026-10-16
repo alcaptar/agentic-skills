@@ -6,6 +6,8 @@ from typing import TYPE_CHECKING, ClassVar, Self
 
 from slice_runner.domain.canonical_slice_id import CanonicalSliceId
 from slice_runner.domain.ci_indeterminate_cause import CiIndeterminateCause
+from slice_runner.domain.closing_reason import ClosingReason
+from slice_runner.domain.closure import Closure
 from slice_runner.domain.discard_cause import DiscardCause
 from slice_runner.domain.discarded_call import DiscardedCall
 from slice_runner.domain.exceptions import RunNotClosedError, UnreadableMetricsLogError
@@ -95,56 +97,41 @@ class DurableClosure:
     verdict: DurableVerdict
     ci: DurableCi
 
-    _VERDICTS_WITH_NO_CI: ClassVar[dict[RunState, DurableVerdict]] = {
-        RunState.BLOCKED_VERIFY: DurableVerdict.FAIL,
-        RunState.BLOCKED_UNCHANGED_DIFF: DurableVerdict.BLOCKED_UNCHANGED_DIFF,
-        RunState.BLOCKED_CONTROLS: DurableVerdict.BLOCKED_CONTROLS,
-        RunState.BLOCKED_HYGIENE: DurableVerdict.BLOCKED_HYGIENE,
-        RunState.BLOCKED_WORKTREE: DurableVerdict.BLOCKED_WORKTREE,
-        RunState.BLOCKED_LEFTOVER_WORKTREE: DurableVerdict.BLOCKED_LEFTOVER_WORKTREE,
-        RunState.ABORTED_BUDGET: DurableVerdict.ABORTED_BUDGET,
-        RunState.ABORTED_UNMEASURED_CALL: DurableVerdict.ABORTED_UNMEASURED_CALL,
+    _VERDICTS_WITH_NO_CI: ClassVar[dict[ClosingReason, DurableVerdict]] = {
+        ClosingReason.VERIFY: DurableVerdict.FAIL,
+        ClosingReason.UNCHANGED_DIFF: DurableVerdict.BLOCKED_UNCHANGED_DIFF,
+        ClosingReason.CONTROLS: DurableVerdict.BLOCKED_CONTROLS,
+        ClosingReason.HYGIENE: DurableVerdict.BLOCKED_HYGIENE,
+        ClosingReason.WORKTREE: DurableVerdict.BLOCKED_WORKTREE,
+        ClosingReason.LEFTOVER_WORKTREE: DurableVerdict.BLOCKED_LEFTOVER_WORKTREE,
+        ClosingReason.BUDGET: DurableVerdict.ABORTED_BUDGET,
+        ClosingReason.UNMEASURED_CALL: DurableVerdict.ABORTED_UNMEASURED_CALL,
     }
 
-    _STATES_WITH_NO_CI: ClassVar[dict[DurableVerdict, RunState]] = {
-        DurableVerdict.FAIL: RunState.BLOCKED_VERIFY,
-        DurableVerdict.BLOCKED_UNCHANGED_DIFF: RunState.BLOCKED_UNCHANGED_DIFF,
-        DurableVerdict.BLOCKED_CONTROLS: RunState.BLOCKED_CONTROLS,
-        DurableVerdict.BLOCKED_HYGIENE: RunState.BLOCKED_HYGIENE,
-        DurableVerdict.BLOCKED_WORKTREE: RunState.BLOCKED_WORKTREE,
-        DurableVerdict.BLOCKED_LEFTOVER_WORKTREE: RunState.BLOCKED_LEFTOVER_WORKTREE,
-        DurableVerdict.ABORTED_BUDGET: RunState.ABORTED_BUDGET,
-        DurableVerdict.ABORTED_UNMEASURED_CALL: RunState.ABORTED_UNMEASURED_CALL,
+    _REASONS_WITH_NO_CI: ClassVar[dict[DurableVerdict, ClosingReason]] = {
+        DurableVerdict.FAIL: ClosingReason.VERIFY,
+        DurableVerdict.BLOCKED_UNCHANGED_DIFF: ClosingReason.UNCHANGED_DIFF,
+        DurableVerdict.BLOCKED_CONTROLS: ClosingReason.CONTROLS,
+        DurableVerdict.BLOCKED_HYGIENE: ClosingReason.HYGIENE,
+        DurableVerdict.BLOCKED_WORKTREE: ClosingReason.WORKTREE,
+        DurableVerdict.BLOCKED_LEFTOVER_WORKTREE: ClosingReason.LEFTOVER_WORKTREE,
+        DurableVerdict.ABORTED_BUDGET: ClosingReason.BUDGET,
+        DurableVerdict.ABORTED_UNMEASURED_CALL: ClosingReason.UNMEASURED_CALL,
     }
-    _MERGED_STATES: ClassVar[dict[DurableCi, RunState]] = {
-        DurableCi.GREEN: RunState.MERGED,
-        DurableCi.RED: RunState.BLOCKED_CI_RED,
-        DurableCi.NONE: RunState.BLOCKED_CI_INDETERMINATE,
-        DurableCi.CONFLICT: RunState.BLOCKED_CI_CONFLICT,
+    _MERGED_CLOSURES: ClassVar[dict[DurableCi, Closure]] = {
+        DurableCi.GREEN: Closure.merged(),
+        DurableCi.RED: Closure.because_of(ClosingReason.CI_RED),
+        DurableCi.NONE: Closure.because_of(ClosingReason.CI_INDETERMINATE),
+        DurableCi.CONFLICT: Closure.because_of(ClosingReason.CI_CONFLICT),
     }
 
     @classmethod
-    def of(cls, state: RunState) -> DurableClosure:
-        match state:
+    def of(cls, closure: Closure) -> DurableClosure:
+        match closure.state:
             case RunState.MERGED:
                 return cls(verdict=DurableVerdict.PASS, ci=DurableCi.GREEN)
-            case RunState.BLOCKED_CI_RED:
-                return cls(verdict=DurableVerdict.PASS, ci=DurableCi.RED)
-            case RunState.BLOCKED_CI_INDETERMINATE:
-                return cls(verdict=DurableVerdict.PASS, ci=DurableCi.NONE)
-            case RunState.BLOCKED_CI_CONFLICT:
-                return cls(verdict=DurableVerdict.PASS, ci=DurableCi.CONFLICT)
-            case (
-                RunState.BLOCKED_VERIFY
-                | RunState.BLOCKED_UNCHANGED_DIFF
-                | RunState.BLOCKED_CONTROLS
-                | RunState.BLOCKED_HYGIENE
-                | RunState.BLOCKED_WORKTREE
-                | RunState.BLOCKED_LEFTOVER_WORKTREE
-                | RunState.ABORTED_BUDGET
-                | RunState.ABORTED_UNMEASURED_CALL
-            ):
-                return cls(verdict=cls._VERDICTS_WITH_NO_CI[state], ci=DurableCi.NONE)
+            case RunState.BLOCKED | RunState.ABORTED:
+                return cls._of_the_reason(closure.reason)
             case RunState.OPEN:
                 raise RunNotClosedError(
                     f"a run in state {RunState.OPEN} has no verdict to record: "
@@ -152,10 +139,33 @@ class DurableClosure:
                 )
 
     @classmethod
-    def state_of(cls, *, verdict: DurableVerdict, ci: DurableCi) -> RunState:
+    def _of_the_reason(cls, reason: ClosingReason | None) -> DurableClosure:
+        match reason:
+            case ClosingReason.CI_RED:
+                return cls(verdict=DurableVerdict.PASS, ci=DurableCi.RED)
+            case ClosingReason.CI_INDETERMINATE:
+                return cls(verdict=DurableVerdict.PASS, ci=DurableCi.NONE)
+            case ClosingReason.CI_CONFLICT:
+                return cls(verdict=DurableVerdict.PASS, ci=DurableCi.CONFLICT)
+            case (
+                ClosingReason.VERIFY
+                | ClosingReason.UNCHANGED_DIFF
+                | ClosingReason.CONTROLS
+                | ClosingReason.HYGIENE
+                | ClosingReason.WORKTREE
+                | ClosingReason.LEFTOVER_WORKTREE
+                | ClosingReason.BUDGET
+                | ClosingReason.UNMEASURED_CALL
+            ):
+                return cls(verdict=cls._VERDICTS_WITH_NO_CI[reason], ci=DurableCi.NONE)
+            case None:
+                raise RunNotClosedError("a blocked or aborted run without a closing reason has no verdict to record")
+
+    @classmethod
+    def closure_of(cls, *, verdict: DurableVerdict, ci: DurableCi) -> Closure:
         match verdict:
             case DurableVerdict.PASS:
-                return cls._MERGED_STATES[ci]
+                return cls._MERGED_CLOSURES[ci]
             case (
                 DurableVerdict.FAIL
                 | DurableVerdict.BLOCKED_UNCHANGED_DIFF
@@ -166,7 +176,7 @@ class DurableClosure:
                 | DurableVerdict.ABORTED_BUDGET
                 | DurableVerdict.ABORTED_UNMEASURED_CALL
             ):
-                return cls._STATES_WITH_NO_CI[verdict]
+                return Closure.because_of(cls._REASONS_WITH_NO_CI[verdict])
 
 
 class DiscardedCallPayload(ContractModel):
@@ -217,7 +227,7 @@ class MetricsEntryPayload(StampedRow, ReadableLedgerRow):
 
     @classmethod
     def from_domain(cls, closed: ClosedSlice, *, ts: str) -> Self:
-        closure = DurableClosure.of(closed.state)
+        closure = DurableClosure.of(closed.closure)
         spend = closed.spend
         coordinates = SliceCoordinates(
             repo=closed.repo, issue=closed.issue, slice_id=CanonicalSliceId.of_text(closed.slice_id)

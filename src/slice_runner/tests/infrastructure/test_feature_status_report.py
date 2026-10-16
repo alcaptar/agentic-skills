@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+from slice_runner.domain.closing_reason import ClosingReason
+from slice_runner.domain.closure import Closure
 from slice_runner.domain.harness_spend import HarnessSpend
 from slice_runner.domain.issue_label import IssueLabel
 from slice_runner.domain.issue_state import IssueState
-from slice_runner.domain.run_state import RunState
 from slice_runner.domain.slice_status import SliceStatus
 from slice_runner.domain.step import Step
 from slice_runner.infrastructure.feature_status_report import FeatureStatusReport
@@ -141,12 +142,12 @@ class TestFeatureStatusReport:
         assert rendered.index(IssueLabel.PENDING.value) == 11
 
     def test_a_closed_slice_without_a_run_shows_its_closure_state_from_the_registry_as_the_step(self) -> None:
-        record = ClosedSliceRecordMother.closed_as(RunState.BLOCKED_VERIFY)
+        record = ClosedSliceRecordMother.closed_as(Closure.because_of(ClosingReason.VERIFY))
         status = SliceStatus(sub_issue=SubIssueMother.pending(), pull_request=None, record=record)
 
         rendered = FeatureStatusReport(statuses=(status,)).rendered()
 
-        assert RunState.BLOCKED_VERIFY.value in rendered
+        assert "blocked-verify" in rendered
 
     def test_a_closed_slice_without_a_run_shows_the_cost_the_registry_recorded(self) -> None:
         record = ClosedSliceRecordMother.merged()
@@ -166,7 +167,7 @@ class TestFeatureStatusReport:
         assert "$" not in rendered
 
     def test_a_slice_with_an_open_run_prefers_the_run_over_a_stale_registry_row(self) -> None:
-        record = ClosedSliceRecordMother.closed_as(RunState.MERGED)
+        record = ClosedSliceRecordMother.closed_as(Closure.merged())
         status = SliceStatus(
             sub_issue=SubIssueMother.blocked(IssueLabel.BLOCKED_CI_RED, RunMother.blocked_on_red_ci()),
             pull_request=None,
@@ -176,4 +177,4 @@ class TestFeatureStatusReport:
         rendered = FeatureStatusReport(statuses=(status,)).rendered()
 
         assert Step.AWAIT_CI.value in rendered
-        assert RunState.MERGED.value not in rendered
+        assert "merged" not in rendered

@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Self
 
 from slice_runner.domain.ci_indeterminate_cause import CiIndeterminateCause
-from slice_runner.domain.run_state import RunState
+from slice_runner.infrastructure.closed_as import ClosedAs
 from slice_runner.infrastructure.contract_model import ContractModel
 from slice_runner.infrastructure.diff_stats_payload import DiffStatsPayload
 from slice_runner.infrastructure.discarded_call_payload import DiscardedCallPayload
@@ -50,7 +50,7 @@ class ClosedSliceRecordPayload(ContractModel):
     issue: int
     slice_id: str
     name: str
-    state: RunState
+    state: ClosedAs
     findings: SeverityCountPayload
     findings_of_the_last_round: SeverityCountPayload
     implement_retries: int
@@ -78,7 +78,7 @@ class ClosedSliceRecordPayload(ContractModel):
                 "issue": record.issue,
                 "slice_id": record.slice_id,
                 "name": record.name,
-                "state": record.state,
+                "state": ClosedAs.of(record.closure),
                 "findings": SeverityCountPayload.from_domain(record.findings),
                 "findings_of_the_last_round": SeverityCountPayload.from_domain(record.findings_of_the_last_round),
                 "implement_retries": record.implement_retries,

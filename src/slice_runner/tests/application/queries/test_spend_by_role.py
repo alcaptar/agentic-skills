@@ -63,7 +63,7 @@ class TestAddingUpWhatEachRoleSpentAcrossASetOfSlices:
         spend_log.spend_of.side_effect = None
         spend_log.spend_of.return_value = HarnessSpendMother.of_the_implementer_call()
         query = SpendByRole(trace=trace, spend_log=spend_log)
-        other = ClosedSliceRecordMother.closed_as(_RECORD.state)
+        other = ClosedSliceRecordMother.closed_as(_RECORD.closure)
 
         query.execute(SpendByRoleParams(records=(_RECORD, other)))
 
