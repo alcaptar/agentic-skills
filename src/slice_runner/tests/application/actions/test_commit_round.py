@@ -6,15 +6,16 @@ from unittest.mock import Mock, create_autospec
 import pytest
 
 from slice_runner.application.actions.commit_round import CommitRound, CommitRoundParams
+from slice_runner.domain.budgets import Budgets
 from slice_runner.domain.clock import Clock
 from slice_runner.domain.event_log import EventLog
-from slice_runner.domain.event_status import EventStatus
 from slice_runner.domain.exceptions import BranchMismatchError, ProtectedBranchError
 from slice_runner.domain.harness_spend import HarnessSpend
 from slice_runner.domain.protected_branch import ProtectedBranch
 from slice_runner.domain.step import Step
 from slice_runner.domain.workspace import Workspace
 from slice_runner.tests.mothers.feature_slice_mother import FeatureSliceMother
+from slice_runner.tests.mothers.run_mother import RunMother
 
 _WORKTREE = "/repos/agentic-skills"
 _BRANCH = "slice/14-una-correccion-va-en-su-propio-commit"
@@ -46,7 +47,7 @@ class TestCommitRound:
 
     @pytest.fixture
     def action(self, workspace: Mock, events: Mock, clock: Mock) -> CommitRound:
-        return CommitRound(workspace=workspace, events=events, clock=clock)
+        return CommitRound(workspace=workspace, events=events, clock=clock, budgets=Budgets())
 
     @staticmethod
     def _params() -> CommitRoundParams:
@@ -57,6 +58,7 @@ class TestCommitRound:
             repo=_REPO,
             issue=_ISSUE,
             slice_id=_SLICE_ID,
+            run=RunMother.implementing(),
             spend=HarnessSpend.nothing(),
             feature_slice=FeatureSliceMother.of_the_feature(),
         )
@@ -83,8 +85,15 @@ class TestCommitRound:
         action.execute(self._params())
 
         emitted = events.emit.call_args.args[0]
-        assert (emitted.status, emitted.step, emitted.slice_id, emitted.repo, emitted.issue, emitted.at) == (
-            EventStatus.NOTHING_TO_COMMIT,
+        assert (
+            emitted.round_without_changes,
+            emitted.step,
+            emitted.slice_id,
+            emitted.repo,
+            emitted.issue,
+            emitted.at,
+        ) == (
+            True,
             Step.RUN_CONTROLS,
             _SLICE_ID,
             _REPO,
@@ -92,7 +101,7 @@ class TestCommitRound:
             _NOW,
         )
 
-    def test_the_nothing_to_commit_event_names_the_parent_issue_and_the_slice(
+    def test_the_round_without_changes_event_names_the_parent_issue_and_the_slice(
         self, action: CommitRound, workspace: Mock, events: Mock
     ) -> None:
         workspace.staged.return_value = ()
@@ -101,7 +110,9 @@ class TestCommitRound:
 
         assert events.emit.call_args.args[0].feature_slice == FeatureSliceMother.of_the_feature()
 
-    def test_a_round_that_commits_leaves_no_nothing_to_commit_event(self, action: CommitRound, events: Mock) -> None:
+    def test_a_round_that_commits_leaves_no_round_without_changes_event(
+        self, action: CommitRound, events: Mock
+    ) -> None:
         action.execute(self._params())
 
         events.emit.assert_not_called()

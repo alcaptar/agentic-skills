@@ -7,9 +7,9 @@ if TYPE_CHECKING:
     from datetime import datetime
 
     from slice_runner.domain.closure import Closure
-    from slice_runner.domain.event_status import EventStatus
     from slice_runner.domain.feature_slice import FeatureSlice
     from slice_runner.domain.harness_spend import HarnessSpend
+    from slice_runner.domain.rounds import Rounds
     from slice_runner.domain.step import Step
 
 
@@ -18,12 +18,14 @@ class Event:
     slice_id: str
     repo: str
     issue: int
-    step: Step
+    step: Step | None
     at: datetime
     spend: HarnessSpend
-    status: EventStatus
+    budget_usd: float
+    rounds: Rounds
     closure: Closure
     feature_slice: FeatureSlice | None
+    round_without_changes: bool = False
 
     @property
     def slice_key(self) -> tuple[str, int, str]:

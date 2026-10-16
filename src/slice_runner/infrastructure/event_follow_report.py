@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from slice_runner.domain.run_state import RunState
-from slice_runner.infrastructure.closed_as import ClosedAs
+from slice_runner.infrastructure.follow_reason import FollowReason
+from slice_runner.infrastructure.follow_standing import FollowStanding
 
 if TYPE_CHECKING:
     from slice_runner.domain.event import Event
@@ -18,11 +18,12 @@ class EventFollowReport:
 
     @staticmethod
     def _line_of(event: Event) -> str:
-        line = (
-            f"{event.at.isoformat()} {event.repo} #{event.issue} {event.slice_id} "
-            f"{event.step} {event.status} ${event.spend.cost_usd:.2f}"
-        )
-        if event.closure.state is RunState.OPEN:
-            return line
+        step = "-" if event.step is None else event.step
+        standing = str(FollowStanding.of(closure=event.closure, step=event.step))
+        if event.closure.reason is not None:
+            standing = f"{standing} {FollowReason.of(event.closure.reason)}"
 
-        return f"{line} {ClosedAs.of(event.closure)}"
+        return (
+            f"{event.at.isoformat()} {event.repo} #{event.issue} {event.slice_id} "
+            f"{step} {standing} ${event.spend.cost_usd:.2f}"
+        )

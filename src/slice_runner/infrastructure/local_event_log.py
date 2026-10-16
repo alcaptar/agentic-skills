@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 
 
 class LocalEventLog(EventLog):
-    LEDGER: ClassVar[str] = "events"
+    LEDGER: ClassVar[str] = "transitions"
 
     def __init__(self) -> None:
         self._events: DurableLedger[EventPayload] = DurableLedger(name=self.LEDGER, row=EventPayload)

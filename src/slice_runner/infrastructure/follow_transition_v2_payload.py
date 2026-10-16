@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import ClassVar, Literal, Self
+from typing import TYPE_CHECKING, ClassVar, Literal, Self
 
 from pydantic import model_validator
 
@@ -11,9 +11,12 @@ from slice_runner.infrastructure.follow_reason import FollowReason
 from slice_runner.infrastructure.follow_rounds_payload import FollowRoundsPayload
 from slice_runner.infrastructure.follow_standing import FollowStanding
 
+if TYPE_CHECKING:
+    from slice_runner.domain.event import Event
+
 
 class FollowTransitionV2Payload(ContractModel):
-    VERSION: ClassVar[int] = 2
+    VERSION: ClassVar[Literal[2]] = 2
 
     version: Literal[2]
     kind: Literal["transition"]
@@ -45,6 +48,29 @@ class FollowTransitionV2Payload(ContractModel):
             raise ValueError(f"`step` is required when standing is {self.standing}")
 
         return self
+
+    @classmethod
+    def from_domain(cls, event: Event) -> Self:
+        reason = event.closure.reason
+        feature = event.feature_slice
+
+        return cls(
+            version=cls.VERSION,
+            kind="transition",
+            ts=int(event.at.timestamp() * 1000),
+            repo=event.repo,
+            issue=event.issue,
+            parent=None if feature is None else feature.parent,
+            slice_id=event.slice_id,
+            name=None if feature is None else feature.name,
+            standing=FollowStanding.of(closure=event.closure, step=event.step),
+            reason=None if reason is None else FollowReason.of(reason),
+            step=event.step,
+            rounds=FollowRoundsPayload.from_domain(event.rounds),
+            round_without_changes=True if event.round_without_changes else None,
+            cost_usd=event.spend.cost_usd,
+            budget_usd=event.budget_usd,
+        )
 
     @classmethod
     def from_contract(cls, data: dict[str, object]) -> Self:

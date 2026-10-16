@@ -1502,6 +1502,17 @@ class TestConductingASliceAnEarlierInvocationLeftHalfDone:
 
         assert logs.is_dir()
 
+    def test_the_run_leaves_its_transitions_in_the_ledger_without_a_status_and_the_last_one_is_merged(
+        self, tmp_path: Path
+    ) -> None:
+        self._invocation().conduct(logs=tmp_path / "logs")
+
+        ledger = DurableLedger(name=LocalEventLog.LEDGER, row=EventPayload).path()
+        rows = [json.loads(line) for line in ledger.read_text(encoding="utf-8").splitlines()]
+        assert ledger.name == "transitions.jsonl"
+        assert all("status" not in row for row in rows)
+        assert rows[-1]["standing"] == "merged"
+
     def test_the_transition_that_closes_the_run_is_reported_on_standard_error_leaving_the_result_untouched(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
@@ -1509,7 +1520,8 @@ class TestConductingASliceAnEarlierInvocationLeftHalfDone:
 
         output = capsys.readouterr()
         reported = json.loads(output.err)
-        assert (reported["step"], reported["status"]) == ("await-merge", "closed")
+        assert (reported["step"], reported["standing"]) == ("await-merge", "merged")
+        assert "status" not in reported
         assert json.loads(output.out)["halt"] == "run-closed"
 
 
@@ -3020,30 +3032,43 @@ class TestTheStatusCommandParsing:
 
 
 class TestTheCommandThatFollowsTheEventsAsJson(WithTheDurableStoresOutOfTheRealHome):
+    _ROUNDS: ClassVar[dict[str, object]] = {
+        "controls": {"used": 0, "limit": 2},
+        "hygiene": {"used": 0, "limit": 2},
+        "judge": {"used": 0, "limit": 2},
+        "ci": {"used": 0, "limit": 1},
+        "ci_indeterminate": {"used": 0, "limit": 10},
+        "catch_up": {"used": 0, "limit": 3},
+    }
     _ADVANCING: ClassVar[dict[str, object]] = {
-        "version": 1,
-        "ts": "2024-01-01T12:30:45+00:00",
+        "version": 2,
+        "kind": "transition",
+        "ts": 1704112245000,
         "repo": EventMother.REPO,
         "issue": EventMother.ISSUE,
-        "slice_id": "slice-05",
-        "step": "run-controls",
-        "status": "advancing",
-        "cost_usd": 0.3433209,
         "parent": FeatureSliceMother.PARENT,
+        "slice_id": "slice-05",
         "name": FeatureSliceMother.NAME,
+        "standing": "in-progress",
+        "step": "run-controls",
+        "rounds": _ROUNDS,
+        "cost_usd": 0.3433209,
+        "budget_usd": 50.0,
     }
     _MERGED: ClassVar[dict[str, object]] = {
-        "version": 1,
-        "ts": "2024-01-01T12:31:15+00:00",
+        "version": 2,
+        "kind": "transition",
+        "ts": 1704112275000,
         "repo": EventMother.REPO,
         "issue": EventMother.ISSUE,
-        "slice_id": "slice-05",
-        "step": "await-merge",
-        "status": "closed",
-        "cost_usd": 0.051877,
-        "closed_as": "merged",
         "parent": FeatureSliceMother.PARENT,
+        "slice_id": "slice-05",
         "name": FeatureSliceMother.NAME,
+        "standing": "merged",
+        "step": "await-merge",
+        "rounds": _ROUNDS,
+        "cost_usd": 0.051877,
+        "budget_usd": 50.0,
     }
 
     @staticmethod
@@ -3103,7 +3128,7 @@ class TestTheCommandThatFollowsTheEventsAsJson(WithTheDurableStoresOutOfTheRealH
         printed = self._printed(capsys)
         assert "parent" not in printed[0]
         assert "name" not in printed[0]
-        assert printed[0]["version"] == 1
+        assert printed[0]["version"] == 2
 
     def test_main_with_the_json_flag_reads_the_real_ledger_and_prints_objects(
         self, capsys: pytest.CaptureFixture[str]
@@ -3118,13 +3143,11 @@ class TestTheCommandThatFollowsTheEventsAsJson(WithTheDurableStoresOutOfTheRealH
 
 
 class TestTheCommandThatFollowsTheEvents(WithTheDurableStoresOutOfTheRealHome):
-    _ADVANCING_LINE = "2024-01-01T12:30:45+00:00 alcaptar/agentic-skills #150 slice-05 run-controls advancing $0.34"
-    _WAITING_LINE = "2024-01-01T12:31:45+00:00 alcaptar/agentic-skills #150 slice-05 await-ci waiting $0.34"
-    _CLOSED_WITHOUT_STATE_LINE = (
-        "2024-01-01T12:31:15+00:00 alcaptar/agentic-skills #150 slice-05 await-merge closed $0.05"
-    )
-    _MERGED_LINE = f"{_CLOSED_WITHOUT_STATE_LINE} merged"
-    _BLOCKED_LINE = f"{_CLOSED_WITHOUT_STATE_LINE} blocked-verify"
+    _ADVANCING_LINE = "2024-01-01T12:30:45+00:00 alcaptar/agentic-skills #150 slice-05 run-controls in-progress $0.34"
+    _WAITING_LINE = "2024-01-01T12:31:45+00:00 alcaptar/agentic-skills #150 slice-05 await-ci in-progress $0.34"
+    _PENDING_LINE = "2024-01-01T12:30:45+00:00 alcaptar/agentic-skills #150 slice-05 - pending $0.00"
+    _MERGED_LINE = "2024-01-01T12:31:15+00:00 alcaptar/agentic-skills #150 slice-05 await-merge merged $0.05"
+    _BLOCKED_LINE = "2024-01-01T12:31:15+00:00 alcaptar/agentic-skills #150 slice-05 await-merge blocked judge $0.05"
 
     @staticmethod
     def _clock_interrupted_after(sleeps: int) -> Mock:
@@ -3178,18 +3201,31 @@ class TestTheCommandThatFollowsTheEvents(WithTheDurableStoresOutOfTheRealHome):
 
         assert capsys.readouterr().out.splitlines() == [self._ADVANCING_LINE, self._MERGED_LINE]
 
-    def test_a_closing_row_without_the_state_is_printed_without_it(self, capsys: pytest.CaptureFixture[str]) -> None:
+    def test_a_pending_row_is_printed_with_no_step_and_the_pending_standing(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        reader = ScriptedEventReader(EventBatch(events=(EventMother.pending(),), cursor=EventCursor(offset=10)))
+
+        self._cli().follow(repo=None, once=True, reader=reader, clock=self._clock_interrupted_after(1))
+
+        assert capsys.readouterr().out.splitlines() == [self._PENDING_LINE]
+
+    def test_the_text_never_prints_a_value_of_the_retired_status_vocabulary(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
         reader = ScriptedEventReader(
             EventBatch(
-                events=(EventMother.closed_before_the_closing_state_was_recorded(),), cursor=EventCursor(offset=10)
+                events=(EventMother.advancing(), EventMother.pending(), EventMother.round_without_changes()),
+                cursor=EventCursor(offset=10),
             )
         )
 
         self._cli().follow(repo=None, once=True, reader=reader, clock=self._clock_interrupted_after(1))
 
-        assert capsys.readouterr().out.splitlines() == [self._CLOSED_WITHOUT_STATE_LINE]
+        retired = {"advancing", "waiting", "awaiting-person", "closed", "nothing-to-commit"}
+        assert retired.isdisjoint(capsys.readouterr().out.split())
 
-    def test_a_row_repeating_the_step_and_status_of_the_snapshot_prints_nothing_after_it(
+    def test_a_row_repeating_the_step_and_closure_of_the_snapshot_prints_nothing_after_it(
         self, capsys: pytest.CaptureFixture[str]
     ) -> None:
         reader = ScriptedEventReader(
@@ -3254,7 +3290,7 @@ class TestTheCommandThatFollowsTheEvents(WithTheDurableStoresOutOfTheRealHome):
 
         assert code == ExitCode.OK
         assert capsys.readouterr().out.splitlines() == [
-            f"2024-01-01T12:30:45+00:00 {EventMother.ANOTHER_REPO} #150 slice-05 run-controls advancing $0.34"
+            f"2024-01-01T12:30:45+00:00 {EventMother.ANOTHER_REPO} #150 slice-05 run-controls in-progress $0.34"
         ]
 
     def test_main_without_the_repo_flag_prints_every_repo(self, capsys: pytest.CaptureFixture[str]) -> None:

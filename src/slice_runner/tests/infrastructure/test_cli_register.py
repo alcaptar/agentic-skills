@@ -4,8 +4,8 @@ import json
 from typing import TYPE_CHECKING
 
 from slice_runner.domain.budgets import Budgets
+from slice_runner.domain.closure import Closure
 from slice_runner.domain.event_cursor import EventCursor
-from slice_runner.domain.event_status import EventStatus
 from slice_runner.infrastructure.cli import Cli
 from slice_runner.infrastructure.durable_ledger import DurableLedger
 from slice_runner.infrastructure.event_payload import EventPayload
@@ -51,9 +51,18 @@ class TestTheCommandThatRegistersThePendingSlices(WithTheDurableStoresOutOfTheRe
 
         events = LocalEventReader().read_since(EventCursor.start()).events
         assert code == ExitCode.OK
-        assert [(event.repo, event.issue, event.slice_id, event.status) for event in events] == [
-            (ChildIssueMother.REPO, 524, "AS-255-01", EventStatus.PENDING)
+        assert [(event.repo, event.issue, event.slice_id, event.step, event.closure) for event in events] == [
+            (ChildIssueMother.REPO, 524, "AS-255-01", None, Closure.open())
         ]
+
+    def test_the_pending_row_in_the_ledger_has_the_pending_standing_and_no_step_key(self) -> None:
+        self._registered(self._answering(self._SUB_ISSUES))
+
+        (line,) = self._ledger().path().read_text(encoding="utf-8").splitlines()
+        row = json.loads(line)
+        assert row["standing"] == "pending"
+        assert "step" not in row
+        assert "status" not in row
 
     def test_registering_twice_writes_the_rows_only_once(self) -> None:
         self._registered(self._answering(self._SUB_ISSUES))
@@ -102,7 +111,7 @@ class TestTheCommandThatRegistersThePendingSlices(WithTheDurableStoresOutOfTheRe
 
 
 class TestFollowingAPendingSlice(WithTheDurableStoresOutOfTheRealHome):
-    def test_follow_prints_the_pending_row_with_its_step_status_and_zero_spend(
+    def test_follow_prints_the_pending_row_with_no_step_the_standing_and_zero_spend(
         self, capsys: pytest.CaptureFixture[str]
     ) -> None:
         LocalEventLog().emit(EventMother.pending())
@@ -112,7 +121,7 @@ class TestFollowingAPendingSlice(WithTheDurableStoresOutOfTheRealHome):
 
         assert code == ExitCode.OK
         assert capsys.readouterr().out.splitlines() == [
-            "2024-01-01T12:30:45+00:00 alcaptar/agentic-skills #150 slice-05 mount-worktree pending $0.00"
+            "2024-01-01T12:30:45+00:00 alcaptar/agentic-skills #150 slice-05 - pending $0.00"
         ]
 
     def test_after_a_real_event_of_the_same_slice_follow_prints_a_single_line_for_it(
@@ -127,4 +136,4 @@ class TestFollowingAPendingSlice(WithTheDurableStoresOutOfTheRealHome):
 
         lines = capsys.readouterr().out.splitlines()
         assert len(lines) == 1
-        assert "run-controls advancing" in lines[0]
+        assert "run-controls in-progress" in lines[0]

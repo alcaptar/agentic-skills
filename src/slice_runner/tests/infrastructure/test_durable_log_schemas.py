@@ -75,17 +75,18 @@ class TestEveryDurableLogDeclaresASchemaAProgramCanRead:
             "cause",
         }
 
-    def test_the_event_schema_requires_the_repo_the_issue_the_slice_the_step_the_instant_the_spend_and_the_status(
+    def test_the_event_schema_requires_the_coordinates_the_standing_the_rounds_the_spend_and_the_budget(
         self,
     ) -> None:
         assert self._required(EventPayload.json_schema()) == {
             "slice_id",
             "repo",
             "issue",
-            "step",
             "ts",
+            "standing",
+            "rounds",
             "spend",
-            "status",
+            "budget_usd",
         }
 
     def test_none_of_the_nine_schemas_leaves_a_reference_unresolved(self) -> None:

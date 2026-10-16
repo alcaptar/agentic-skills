@@ -267,17 +267,37 @@ class TestNoDurableStoreWritesAKeyInSpanish(ReadingTheLedger):
 
         assert keys == {"ts", "repo", "issue", "slice_id", "step", "session", "cause"}
 
-    def test_the_event_keys_cover_the_spend_it_carries(self, tmp_path: Path) -> None:
+    def test_the_event_keys_cover_the_rounds_and_the_spend_it_carries(self, tmp_path: Path) -> None:
         LocalEventLog().emit(EventMother.advancing())
 
-        keys = self.flattened(self.rows_of(tmp_path, "events")[0])
+        keys = self.flattened(self.rows_of(tmp_path, "transitions")[0])
 
         assert keys == {
             "ts",
             "repo",
             "issue",
             "slice_id",
+            "standing",
             "step",
+            "rounds",
+            "rounds.controls",
+            "rounds.controls.used",
+            "rounds.controls.limit",
+            "rounds.hygiene",
+            "rounds.hygiene.used",
+            "rounds.hygiene.limit",
+            "rounds.judge",
+            "rounds.judge.used",
+            "rounds.judge.limit",
+            "rounds.ci",
+            "rounds.ci.used",
+            "rounds.ci.limit",
+            "rounds.ci_indeterminate",
+            "rounds.ci_indeterminate.used",
+            "rounds.ci_indeterminate.limit",
+            "rounds.catch_up",
+            "rounds.catch_up.used",
+            "rounds.catch_up.limit",
             "spend",
             "spend.cost_usd",
             "spend.turns",
@@ -290,7 +310,7 @@ class TestNoDurableStoreWritesAKeyInSpanish(ReadingTheLedger):
             "spend.cache_read_tokens",
             "spend.ttft_ms",
             "spend.duration_api_ms",
-            "status",
+            "budget_usd",
             "parent",
             "name",
         }

@@ -45,4 +45,4 @@ class FollowEvents:
         if previous is None:
             return True
 
-        return (previous.step, previous.status, previous.closure) != (event.step, event.status, event.closure)
+        return (previous.step, previous.closure) != (event.step, event.closure)

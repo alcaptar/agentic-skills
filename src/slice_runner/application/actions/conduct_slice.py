@@ -574,6 +574,7 @@ class ConductSlice:
                     repo=round_progress.params.repo,
                     issue=round_progress.subissue.number,
                     slice_id=round_progress.subissue.slice_id.canonical,
+                    run=round_progress.run,
                     spend=round_progress.spend,
                     feature_slice=self._feature_slice_of(
                         params=round_progress.params, subissue=round_progress.subissue
