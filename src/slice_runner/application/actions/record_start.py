@@ -27,10 +27,11 @@ class RecordStartParams:
 
 
 class RecordStart:
-    def __init__(self, *, events: EventLog, clock: Clock, budgets: Budgets) -> None:
+    def __init__(self, *, events: EventLog, clock: Clock, budgets: Budgets, pid: int) -> None:
         self._events = events
         self._clock = clock
         self._budgets = budgets
+        self._pid = pid
 
     def execute(self, params: RecordStartParams) -> None:
         if params.run.step.is_after_delivery():
@@ -48,5 +49,6 @@ class RecordStart:
                 rounds=Rounds.of(params.run, self._budgets),
                 closure=Closure.open(),
                 feature_slice=params.feature_slice,
+                pid=self._pid,
             )
         )

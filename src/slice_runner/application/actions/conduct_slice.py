@@ -579,6 +579,7 @@ class ConductSlice:
                     feature_slice=self._feature_slice_of(
                         params=round_progress.params, subissue=round_progress.subissue
                     ),
+                    pull_request=round_progress.pull_request,
                 )
             )
 
@@ -730,6 +731,7 @@ class ConductSlice:
                 transition=transition,
                 spend=progress.spend,
                 feature_slice=self._feature_slice_of(params=progress.params, subissue=progress.subissue),
+                pull_request=progress.pull_request,
             )
         )
 
@@ -790,6 +792,7 @@ class ConductSlice:
                 transition=Transition(run=run, closure=Closure.merged()),
                 spend=run.spend,
                 feature_slice=self._feature_slice_of(params=params, subissue=subissue),
+                pull_request=opened,
             )
         )
         self._repository.clear_run(repo=params.repo, issue=subissue.number)

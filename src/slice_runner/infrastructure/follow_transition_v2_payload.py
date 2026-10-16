@@ -68,6 +68,8 @@ class FollowTransitionV2Payload(ContractModel):
             step=event.step,
             rounds=FollowRoundsPayload.from_domain(event.rounds),
             round_without_changes=True if event.round_without_changes else None,
+            pull_request=event.pull_request,
+            pid=event.pid,
             cost_usd=event.spend.cost_usd,
             budget_usd=event.budget_usd,
         )

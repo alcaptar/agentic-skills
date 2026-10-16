@@ -24,6 +24,7 @@ _REPO = "alcaptar/agentic-skills"
 _ISSUE = 172
 _SLICE_ID = "slice-14"
 _NOW = datetime(2026, 10, 15, 9, 0, tzinfo=UTC)
+_PID = 48213
 
 
 class TestRecordStart:
@@ -40,7 +41,7 @@ class TestRecordStart:
 
     @pytest.fixture
     def action(self, events: Mock, clock: Mock) -> RecordStart:
-        return RecordStart(events=events, clock=clock, budgets=Budgets())
+        return RecordStart(events=events, clock=clock, budgets=Budgets(), pid=_PID)
 
     @staticmethod
     def _params(run: Run) -> RecordStartParams:
@@ -86,6 +87,14 @@ class TestRecordStart:
             HarnessSpendMother.of_the_implementer_call(),
             FeatureSliceMother.of_the_feature(),
         )
+
+    def test_the_start_carries_the_pid_of_the_process_and_no_pull_request_because_none_is_open_yet(
+        self, action: RecordStart, events: Mock
+    ) -> None:
+        action.execute(self._params(RunMother.implementing()))
+
+        emitted = events.emit.call_args.args[0]
+        assert (emitted.pid, emitted.pull_request) == (_PID, None)
 
     @pytest.mark.parametrize(
         ("run", "step"),

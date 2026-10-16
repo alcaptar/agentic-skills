@@ -53,6 +53,19 @@ class TestWhatTheProgramEmits:
             "name": FeatureSliceMother.NAME,
         }
 
+    def test_an_event_with_a_pull_request_and_a_pid_writes_both_and_reads_them_back(self) -> None:
+        event = EventMother.awaiting_merge_of_a_pull_request_from_a_process()
+
+        contract = EventPayload.from_domain(event).to_contract()
+
+        assert (contract["pull_request"], contract["pid"]) == (EventMother.PULL_REQUEST, EventMother.PID)
+        assert EventPayload.from_dict(contract).to_domain() == event
+
+    def test_an_event_without_a_pull_request_or_a_pid_leaves_both_keys_out(self) -> None:
+        contract = EventPayload.from_domain(EventMother.pending()).to_contract()
+
+        assert {"pull_request", "pid"} & set(contract) == set()
+
     def test_an_event_never_writes_a_status_key(self) -> None:
         events = (EventMother.advancing(), EventMother.pending(), EventMother.closed())
 

@@ -30,6 +30,7 @@ class RecordStepParams:
     transition: Transition
     spend: HarnessSpend
     feature_slice: FeatureSlice
+    pull_request: int | None
 
 
 @dataclass(frozen=True, kw_only=True, slots=True)
@@ -39,11 +40,14 @@ class RecordStepResult:
 
 
 class RecordStep:
-    def __init__(self, *, repository: RunRepository, events: EventLog, clock: Clock, budgets: Budgets) -> None:
+    def __init__(
+        self, *, repository: RunRepository, events: EventLog, clock: Clock, budgets: Budgets, pid: int
+    ) -> None:
         self._repository = repository
         self._events = events
         self._clock = clock
         self._budgets = budgets
+        self._pid = pid
         self._last_written: dict[tuple[str, int, str], tuple[Step | None, Closure]] = {}
 
     def execute(self, params: RecordStepParams) -> RecordStepResult:
@@ -91,5 +95,7 @@ class RecordStep:
                 rounds=Rounds.of(run, self._budgets),
                 closure=params.transition.closure,
                 feature_slice=params.feature_slice,
+                pull_request=params.pull_request,
+                pid=self._pid,
             )
         )

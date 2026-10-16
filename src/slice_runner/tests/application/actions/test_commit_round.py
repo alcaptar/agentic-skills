@@ -23,6 +23,8 @@ _REPO = "alcaptar/agentic-skills"
 _ISSUE = 172
 _SLICE_ID = "slice-14"
 _NOW = datetime(2026, 10, 6, 9, 0, tzinfo=UTC)
+_PID = 48213
+_PULL_REQUEST = 151
 _MESSAGE = "feat(una-correccion): el commit de la vuelta 2\n\nCo-Authored-By: Claude <noreply@anthropic.com>"
 
 
@@ -47,7 +49,7 @@ class TestCommitRound:
 
     @pytest.fixture
     def action(self, workspace: Mock, events: Mock, clock: Mock) -> CommitRound:
-        return CommitRound(workspace=workspace, events=events, clock=clock, budgets=Budgets())
+        return CommitRound(workspace=workspace, events=events, clock=clock, budgets=Budgets(), pid=_PID)
 
     @staticmethod
     def _params() -> CommitRoundParams:
@@ -61,7 +63,18 @@ class TestCommitRound:
             run=RunMother.implementing(),
             spend=HarnessSpend.nothing(),
             feature_slice=FeatureSliceMother.of_the_feature(),
+            pull_request=_PULL_REQUEST,
         )
+
+    def test_a_round_with_nothing_staged_names_the_pull_request_and_the_pid_in_its_event(
+        self, action: CommitRound, workspace: Mock, events: Mock
+    ) -> None:
+        workspace.staged.return_value = ()
+
+        action.execute(self._params())
+
+        emitted = events.emit.call_args.args[0]
+        assert (emitted.pull_request, emitted.pid) == (_PULL_REQUEST, _PID)
 
     def test_a_round_with_something_staged_is_committed_with_the_message_it_was_given(
         self, action: CommitRound, workspace: Mock

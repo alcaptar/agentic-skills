@@ -20,6 +20,8 @@ class EventMother:
     ISSUE: ClassVar[int] = 150
     ANOTHER_REPO: ClassVar[str] = "alcaptar/another-repo"
     BUDGETS: ClassVar[Budgets] = Budgets()
+    PULL_REQUEST: ClassVar[int] = 151
+    PID: ClassVar[int] = 48213
 
     @classmethod
     def advancing(cls) -> Event:
@@ -66,6 +68,10 @@ class EventMother:
     @classmethod
     def awaiting_merge(cls) -> Event:
         return replace(cls.closed(), closure=Closure.open())
+
+    @classmethod
+    def awaiting_merge_of_a_pull_request_from_a_process(cls) -> Event:
+        return replace(cls.awaiting_merge(), pull_request=cls.PULL_REQUEST, pid=cls.PID)
 
     @classmethod
     def advancing_before_the_feature_was_recorded(cls) -> Event:

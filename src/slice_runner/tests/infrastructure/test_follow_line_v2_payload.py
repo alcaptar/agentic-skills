@@ -11,6 +11,8 @@ from slice_runner.infrastructure.follow_actor import FollowActor
 from slice_runner.infrastructure.follow_line_v2_payload import FollowLineV2Payload
 from slice_runner.infrastructure.follow_reason import FollowReason
 from slice_runner.infrastructure.follow_standing import FollowStanding
+from slice_runner.infrastructure.follow_transition_v2_payload import FollowTransitionV2Payload
+from slice_runner.tests.mothers.event_mother import EventMother
 
 
 class TheV2Contract:
@@ -127,3 +129,15 @@ class TestTheModelRejectsWhatTheContractForbids(TheV2Contract):
 
         with pytest.raises(UnreadableFollowLineError, match="summary"):
             FollowLineV2Payload.from_contract(line)
+
+
+class TestTheTransitionBuiltFromAnEvent:
+    def test_it_carries_the_pull_request_and_the_pid_of_the_event(self) -> None:
+        line = FollowTransitionV2Payload.from_domain(EventMother.awaiting_merge_of_a_pull_request_from_a_process())
+
+        assert (line.pull_request, line.pid) == (EventMother.PULL_REQUEST, EventMother.PID)
+
+    def test_an_event_without_them_leaves_both_keys_out_of_the_line(self) -> None:
+        contract = FollowTransitionV2Payload.from_domain(EventMother.pending()).to_contract()
+
+        assert {"pull_request", "pid"} & set(contract) == set()
