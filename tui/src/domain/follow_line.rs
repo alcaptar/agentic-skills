@@ -1,4 +1,6 @@
+use crate::domain::closure::Closure;
 use crate::domain::parent::Parent;
+use crate::domain::step::Step;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FollowLine {
@@ -30,6 +32,26 @@ impl FollowLine {
             parent,
             name: name.map(str::to_string),
         }
+    }
+
+    pub fn transition(
+        repo: &str,
+        issue: u64,
+        slice_id: &str,
+        step: Option<Step>,
+        closure: Closure,
+        parent: Parent,
+        name: Option<&str>,
+    ) -> Self {
+        Self::new(
+            repo,
+            issue,
+            slice_id,
+            step.map_or("", Step::name),
+            &closure.label(),
+            parent,
+            name,
+        )
     }
 
     pub fn repo(&self) -> &str {

@@ -5,6 +5,8 @@ use std::time::Duration;
 pub enum FollowLineRejected {
     NotJson { line: String },
     WrongValue { key: String, reason: String },
+    UnsupportedVersion { version: u64 },
+    UnknownKind { kind: String },
     FollowEnded,
     FollowNotLaunched { reason: String },
 }
@@ -14,6 +16,8 @@ impl fmt::Display for FollowLineRejected {
         match self {
             Self::NotJson { line } => write!(formatter, "line is not a JSON object: {line}"),
             Self::WrongValue { key, reason } => write!(formatter, "wrong value for `{key}`: {reason}"),
+            Self::UnsupportedVersion { version } => write!(formatter, "unsupported follow line version {version}"),
+            Self::UnknownKind { kind } => write!(formatter, "unknown follow line kind `{kind}`"),
             Self::FollowEnded => write!(formatter, "slice-runner follow ended"),
             Self::FollowNotLaunched { reason } => write!(formatter, "could not launch slice-runner follow: {reason}"),
         }
