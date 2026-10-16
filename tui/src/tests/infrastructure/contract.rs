@@ -1,10 +1,8 @@
-use std::collections::BTreeSet;
 use std::path::PathBuf;
 
 use serde_json::Value;
 
 pub struct LineContract {
-    pub optional: BTreeSet<String>,
     pub examples: Vec<serde_json::Map<String, Value>>,
 }
 
@@ -15,12 +13,6 @@ impl LineContract {
             .join("contract")
             .join(file);
         let document: Value = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
-        let optional = document["optional"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .map(|key| key.as_str().unwrap().to_string())
-            .collect();
         let examples = document["examples"]
             .as_array()
             .unwrap()
@@ -28,7 +20,7 @@ impl LineContract {
             .map(|example| example.as_object().unwrap().clone())
             .collect();
 
-        Self { optional, examples }
+        Self { examples }
     }
 
     pub fn raw(example: &serde_json::Map<String, Value>) -> String {
@@ -69,91 +61,44 @@ impl MarkerContract {
     }
 }
 
-mod the_follow_line_contract {
-    use crate::infrastructure::follow_line_payload::FollowLinePayload;
-    use crate::tests::infrastructure::contract::LineContract;
-
-    #[test]
-    fn has_examples_and_every_one_parses() {
-        let contract = LineContract::on_disk("follow-line.json");
-
-        assert!(!contract.examples.is_empty());
-        for example in &contract.examples {
-            let parsed = FollowLinePayload::parsed(&LineContract::raw(example));
-            assert!(parsed.is_ok(), "{example:?}: {parsed:?}");
-        }
-    }
-
-    #[test]
-    fn declares_every_key_the_interface_requires_as_present_and_not_optional() {
-        let contract = LineContract::on_disk("follow-line.json");
-
-        for key in FollowLinePayload::REQUIRED_KEYS {
-            assert!(!contract.optional.contains(key), "{key} is optional in the contract");
-            for example in &contract.examples {
-                assert!(example.contains_key(key), "{key} missing from an example");
-            }
-        }
-    }
-
-    #[test]
-    fn stops_parsing_when_a_required_key_is_taken_out_of_an_example() {
-        let contract = LineContract::on_disk("follow-line.json");
-
-        for key in FollowLinePayload::REQUIRED_KEYS {
-            for example in &contract.examples {
-                let mut without = example.clone();
-                without.remove(key);
-
-                let parsed = FollowLinePayload::parsed(&LineContract::raw(&without));
-
-                assert!(parsed.is_err(), "taking {key} out of an example still parses");
-            }
-        }
-    }
-}
-
 mod the_follow_line_version_2_contract {
+    use crate::domain::follow_entry::FollowEntry;
     use crate::infrastructure::follow_line_payload::FollowLinePayload;
     use crate::tests::infrastructure::contract::LineContract;
 
     #[test]
-    fn every_transition_example_parses_and_every_activity_example_is_discarded() {
+    fn every_example_is_delivered_as_its_own_kind() {
         let contract = LineContract::on_disk("follow-line-v2.json");
 
         assert!(!contract.examples.is_empty());
         for example in &contract.examples {
             let delivery = FollowLinePayload::delivery(&LineContract::raw(example));
-            match example["kind"].as_str().unwrap() {
-                "transition" => assert!(
-                    delivery.as_ref().is_some_and(Result::is_ok),
-                    "{example:?}: {delivery:?}"
-                ),
-                "activity" => assert_eq!(delivery, None, "{example:?}"),
-                other => panic!("the contract has an example of kind {other}"),
+            match (example["kind"].as_str().unwrap(), &delivery) {
+                ("transition", Ok(FollowEntry::Transition(_))) | ("activity", Ok(FollowEntry::Activity(_))) => {}
+                (kind, other) => panic!("an example of kind {kind} was delivered as {other:?}"),
             }
         }
     }
 
     #[test]
-    fn the_blocked_and_aborted_examples_are_painted_with_their_reason() {
+    fn the_blocked_and_aborted_examples_carry_the_label_of_github() {
         let contract = LineContract::on_disk("follow-line-v2.json");
 
-        let statuses: Vec<String> = contract
+        let labels: Vec<String> = contract
             .examples
             .iter()
             .filter(|example| example["kind"] == "transition")
             .filter(|example| example["standing"] == "blocked" || example["standing"] == "aborted")
-            .map(|example| {
-                FollowLinePayload::parsed(&LineContract::raw(example))
-                    .unwrap()
-                    .status()
-                    .to_string()
-            })
+            .map(
+                |example| match FollowLinePayload::delivery(&LineContract::raw(example)).unwrap() {
+                    FollowEntry::Transition(line) => line.into_parts().1.closure().label(),
+                    FollowEntry::Activity(activity) => panic!("{activity:?}"),
+                },
+            )
             .collect();
 
         assert_eq!(
-            statuses,
+            labels,
             vec![
                 "bloqueada: controles",
                 "bloqueada: juez",

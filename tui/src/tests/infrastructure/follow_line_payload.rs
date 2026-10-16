@@ -1,243 +1,175 @@
-pub struct RawLine;
-
-impl RawLine {
-    pub fn with(issue: &str, extra: &str) -> String {
-        format!(
-            r#"{{"version":1,"repo":"alcaptar/agentic-skills","issue":{issue},"slice_id":"slice-05","step":"run-controls","status":"advancing"{extra}}}"#
-        )
-    }
-
-    pub fn valid() -> String {
-        Self::with("150", "")
-    }
-}
-
-mod an_unknown_key {
-    use crate::infrastructure::follow_line_payload::FollowLinePayload;
-    use crate::tests::infrastructure::follow_line_payload::RawLine;
-
-    #[test]
-    fn is_ignored() {
-        let raw = RawLine::with("150", r#","something_new":{"nested":true}"#);
-
-        let line = FollowLinePayload::parsed(&raw).unwrap();
-
-        assert_eq!(line.issue(), 150);
-        assert_eq!(line.slice_id(), "slice-05");
-    }
-}
-
-mod a_known_key_with_a_wrong_value {
-    use crate::domain::errors::FollowLineRejected;
-    use crate::infrastructure::follow_line_payload::FollowLinePayload;
-    use crate::tests::infrastructure::follow_line_payload::RawLine;
-
-    #[test]
-    fn is_a_typed_rejection_naming_the_key() {
-        let rejected = FollowLinePayload::parsed(&RawLine::with(r#""one hundred""#, "")).unwrap_err();
-
-        assert!(
-            matches!(rejected, FollowLineRejected::WrongValue { ref key, .. } if key == "issue"),
-            "{rejected:?}"
-        );
-    }
-
-    #[test]
-    fn also_rejects_an_optional_key_that_arrives_with_the_wrong_type() {
-        let rejected = FollowLinePayload::parsed(&RawLine::with("150", r#","parent":"140""#)).unwrap_err();
-
-        assert!(
-            matches!(rejected, FollowLineRejected::WrongValue { ref key, .. } if key == "parent"),
-            "{rejected:?}"
-        );
-    }
-
-    #[test]
-    fn also_rejects_a_missing_required_key() {
-        let raw = r#"{"repo":"alcaptar/agentic-skills","issue":150,"slice_id":"slice-05","step":"run-controls"}"#;
-
-        let rejected = FollowLinePayload::parsed(raw).unwrap_err();
-
-        assert!(
-            matches!(rejected, FollowLineRejected::WrongValue { ref key, .. } if key == "status"),
-            "{rejected:?}"
-        );
-    }
-}
-
-mod a_line_that_is_not_a_json_object {
-    use crate::domain::errors::FollowLineRejected;
-    use crate::infrastructure::follow_line_payload::FollowLinePayload;
-
-    #[test]
-    fn is_rejected_with_the_text_it_carried() {
-        assert_eq!(
-            FollowLinePayload::parsed("Traceback (most recent call last)").unwrap_err(),
-            FollowLineRejected::NotJson {
-                line: "Traceback (most recent call last)".to_string()
-            }
-        );
-        assert_eq!(
-            FollowLinePayload::parsed("[1, 2]").unwrap_err(),
-            FollowLineRejected::NotJson {
-                line: "[1, 2]".to_string()
-            }
-        );
-    }
-}
-
-mod the_optional_keys {
-    use crate::domain::parent::Parent;
-    use crate::infrastructure::follow_line_payload::FollowLinePayload;
-    use crate::tests::infrastructure::follow_line_payload::RawLine;
-
-    #[test]
-    fn become_an_absent_parent_and_no_name_when_left_out() {
-        let line = FollowLinePayload::parsed(&RawLine::valid()).unwrap();
-
-        assert_eq!(line.parent(), Parent::Absent);
-        assert_eq!(line.name(), None);
-    }
-
-    #[test]
-    fn carry_the_parent_and_the_name_when_present() {
-        let line =
-            FollowLinePayload::parsed(&RawLine::with("150", r#","parent":140,"name":"follow-speaks-json""#)).unwrap();
-
-        assert_eq!(line.parent(), Parent::Issue(140));
-        assert_eq!(line.name(), Some("follow-speaks-json"));
-    }
-}
+use crate::domain::errors::FollowLineRejected;
+use crate::domain::follow_entry::FollowEntry;
+use crate::domain::follow_line::FollowLine;
+use crate::domain::transition::Transition;
+use crate::infrastructure::follow_line_payload::FollowLinePayload;
 
 pub struct RawTransition;
 
 impl RawTransition {
+    pub const ROUNDS: &'static str = r#""rounds":{"controls":{"used":1,"limit":2},"hygiene":{"used":0,"limit":2},"judge":{"used":0,"limit":2},"ci":{"used":0,"limit":1},"ci_indeterminate":{"used":0,"limit":10},"catch_up":{"used":0,"limit":3}}"#;
+
     pub fn with(standing_and_more: &str) -> String {
         format!(
-            r#"{{"version":2,"kind":"transition","ts":1767268800000,"repo":"alcaptar/agentic-skills","issue":150,"slice_id":"slice-05",{standing_and_more}}}"#
+            r#"{{"version":2,"kind":"transition","ts":1767268800000,"repo":"alcaptar/agentic-skills","issue":150,"slice_id":"slice-05","cost_usd":4.5,"budget_usd":50.0,{},{standing_and_more}}}"#,
+            Self::ROUNDS
         )
     }
 
     pub fn blocked_by_controls() -> String {
-        Self::with(r#""standing":"blocked","reason":"controls","step":"run-controls""#)
-    }
-
-    pub fn awaiting_merge() -> String {
-        Self::with(r#""standing":"awaiting-merge","step":"await-merge","pull_request":151"#)
+        Self::with(r#""standing":"blocked","reason":"controls","step":"run-controls","pid":48213"#)
     }
 
     pub fn activity() -> String {
-        r#"{"version":2,"kind":"activity","ts":1767268920000,"repo":"alcaptar/agentic-skills","issue":150,"slice_id":"slice-05","actor":"implementer","tool":"Edit","target":"a.py"}"#.to_string()
+        r#"{"version":2,"kind":"activity","ts":1767268920000,"repo":"alcaptar/agentic-skills","issue":150,"slice_id":"slice-05","actor":"judge","tool":"Read","target":"src/x.py"}"#.to_string()
+    }
+
+    pub fn rejected_key(raw: &str) -> String {
+        let rejected = FollowLinePayload::delivery(raw).unwrap_err();
+        let FollowLineRejected::WrongValue { key, .. } = rejected else {
+            panic!("expected a wrong value, got {rejected:?}");
+        };
+        key
+    }
+
+    pub fn transition_of(raw: &str) -> (FollowLine, Transition) {
+        match FollowLinePayload::delivery(raw).unwrap() {
+            FollowEntry::Transition(line) => {
+                let transition = line.clone().into_parts().1;
+                (line, transition)
+            }
+            FollowEntry::Activity(activity) => panic!("expected a transition, got {activity:?}"),
+        }
     }
 }
 
 mod a_version_2_transition {
-    use crate::domain::errors::FollowLineRejected;
-    use crate::domain::parent::Parent;
-    use crate::infrastructure::follow_line_payload::FollowLinePayload;
+    use crate::domain::closing_reason::ClosingReason;
+    use crate::domain::closure::Closure;
+    use crate::domain::rounds::Counter;
+    use crate::domain::step::Step;
     use crate::tests::infrastructure::follow_line_payload::RawTransition;
 
     #[test]
-    fn blocked_by_controls_carries_its_step_and_the_label_of_github() {
-        let line = FollowLinePayload::parsed(&RawTransition::blocked_by_controls()).unwrap();
+    fn carries_its_moment_closure_step_rounds_spend_and_process() {
+        let (line, transition) = RawTransition::transition_of(&RawTransition::blocked_by_controls());
 
-        assert_eq!(line.status(), "bloqueada: controles");
-        assert_eq!(line.step(), "run-controls");
-        assert_eq!(line.slice_id(), "slice-05");
-        assert_eq!(line.parent(), Parent::Absent);
+        assert_eq!(line.issue(), 150);
+        assert_eq!(transition.at(), 1_767_268_800_000);
+        assert_eq!(transition.closure(), Closure::Blocked(ClosingReason::Controls));
+        assert_eq!(transition.step(), Some(Step::RunControls));
+        assert_eq!(transition.rounds().of(Counter::Controls).used(), 1);
+        assert_eq!(transition.rounds().of(Counter::CiIndeterminate).limit(), 10);
+        assert!((transition.spend().cost_usd() - 4.5).abs() < f64::EPSILON);
+        assert_eq!(transition.pid(), Some(48213));
+        assert_eq!(transition.pull_request(), None);
+        assert!(!transition.round_without_changes());
     }
 
     #[test]
-    fn awaiting_merge_is_labelled_as_such() {
-        let line = FollowLinePayload::parsed(&RawTransition::awaiting_merge()).unwrap();
+    fn carries_its_pull_request_and_a_round_without_changes() {
+        let (_, transition) = RawTransition::transition_of(&RawTransition::with(
+            r#""standing":"in-progress","step":"implement","pull_request":151,"round_without_changes":true"#,
+        ));
 
-        assert_eq!(line.status(), "esperando merge");
+        assert_eq!(transition.pull_request(), Some(151));
+        assert!(transition.round_without_changes());
     }
 
     #[test]
     fn a_pending_one_has_no_step() {
-        let line = FollowLinePayload::parsed(&RawTransition::with(r#""standing":"pending""#)).unwrap();
+        let (_, transition) = RawTransition::transition_of(&RawTransition::with(r#""standing":"pending""#));
 
-        assert_eq!(line.status(), "pendiente");
-        assert_eq!(line.step(), "");
-    }
-
-    #[test]
-    fn a_blocked_one_without_reason_is_rejected_naming_the_reason() {
-        let rejected =
-            FollowLinePayload::parsed(&RawTransition::with(r#""standing":"blocked","step":"verify""#)).unwrap_err();
-
-        assert!(
-            matches!(rejected, FollowLineRejected::WrongValue { ref key, .. } if key == "reason"),
-            "{rejected:?}"
-        );
-    }
-
-    #[test]
-    fn an_unknown_standing_is_rejected_naming_the_standing() {
-        let rejected = FollowLinePayload::parsed(&RawTransition::with(r#""standing":"sleeping""#)).unwrap_err();
-
-        assert!(
-            matches!(rejected, FollowLineRejected::WrongValue { ref key, .. } if key == "standing"),
-            "{rejected:?}"
-        );
+        assert_eq!(transition.closure(), Closure::Pending);
+        assert_eq!(transition.step(), None);
     }
 }
 
-mod a_line_of_a_version_the_interface_does_not_speak {
-    use crate::domain::errors::FollowLineRejected;
+mod a_version_2_activity {
+    use crate::domain::activity_line::Actor;
+    use crate::domain::follow_entry::FollowEntry;
+    use crate::domain::slice_key::SliceKey;
     use crate::infrastructure::follow_line_payload::FollowLinePayload;
+    use crate::tests::infrastructure::follow_line_payload::RawTransition;
+    use crate::tests::mothers::follow_line_mother::FollowLineMother;
 
     #[test]
-    fn is_rejected_naming_the_version() {
-        let rejected = FollowLinePayload::delivery(r#"{"version":3,"kind":"transition"}"#)
-            .unwrap()
-            .unwrap_err();
+    fn carries_who_does_what_on_which_slice() {
+        let FollowEntry::Activity(activity) = FollowLinePayload::delivery(&RawTransition::activity()).unwrap() else {
+            panic!("expected an activity line");
+        };
 
-        assert_eq!(rejected, FollowLineRejected::UnsupportedVersion { version: 3 });
-        assert!(rejected.to_string().contains("version 3"), "{rejected}");
+        assert_eq!(activity.key(), &SliceKey::new(FollowLineMother::REPO, 150));
+        assert_eq!(activity.actor(), Actor::Judge);
+        assert_eq!(activity.tool(), "Read");
+        assert_eq!(activity.target(), "src/x.py");
     }
 }
 
-mod a_line_of_an_unknown_kind {
+mod a_line_the_interface_rejects {
     use crate::domain::errors::FollowLineRejected;
-    use crate::infrastructure::follow_line_payload::FollowLinePayload;
-
-    #[test]
-    fn is_rejected_naming_the_kind() {
-        let rejected = FollowLinePayload::delivery(r#"{"version":2,"kind":"heartbeat"}"#)
-            .unwrap()
-            .unwrap_err();
-
-        assert_eq!(
-            rejected,
-            FollowLineRejected::UnknownKind {
-                kind: "heartbeat".to_string()
-            }
-        );
-        assert!(rejected.to_string().contains("heartbeat"), "{rejected}");
-    }
-}
-
-mod an_activity_line {
     use crate::infrastructure::follow_line_payload::FollowLinePayload;
     use crate::tests::infrastructure::follow_line_payload::RawTransition;
 
     #[test]
-    fn is_read_and_delivers_nothing() {
-        assert_eq!(FollowLinePayload::delivery(&RawTransition::activity()), None);
+    fn names_the_reason_of_a_blocked_one_without_reason() {
+        assert_eq!(
+            RawTransition::rejected_key(&RawTransition::with(r#""standing":"blocked","step":"verify""#)),
+            "reason"
+        );
     }
-}
-
-mod a_version_1_line {
-    use crate::infrastructure::follow_line_payload::FollowLinePayload;
-    use crate::tests::infrastructure::follow_line_payload::RawLine;
 
     #[test]
-    fn is_still_delivered_with_its_own_status_text() {
-        let line = FollowLinePayload::delivery(&RawLine::valid()).unwrap().unwrap();
+    fn names_an_unknown_standing() {
+        assert_eq!(
+            RawTransition::rejected_key(&RawTransition::with(r#""standing":"sleeping""#)),
+            "standing"
+        );
+    }
 
-        assert_eq!(line.status(), "advancing");
-        assert_eq!(line.step(), "run-controls");
+    #[test]
+    fn names_a_round_without_used_and_limit() {
+        let raw = RawTransition::with(r#""standing":"pending""#)
+            .replace(r#""ci":{"used":0,"limit":1}"#, r#""ci":{"used":0}"#);
+
+        assert_eq!(RawTransition::rejected_key(&raw), "ci");
+    }
+
+    #[test]
+    fn names_a_known_optional_key_with_the_wrong_type() {
+        assert_eq!(
+            RawTransition::rejected_key(&RawTransition::with(r#""standing":"pending","parent":"140""#)),
+            "parent"
+        );
+    }
+
+    #[test]
+    fn rejects_a_version_1_line_naming_its_version() {
+        let raw = r#"{"version":1,"repo":"alcaptar/agentic-skills","issue":150,"slice_id":"slice-05","step":"run-controls","status":"advancing"}"#;
+
+        assert_eq!(
+            FollowLinePayload::delivery(raw).unwrap_err(),
+            FollowLineRejected::UnsupportedVersion { version: 1 }
+        );
+    }
+
+    #[test]
+    fn rejects_an_unknown_kind_naming_it() {
+        assert_eq!(
+            FollowLinePayload::delivery(r#"{"version":2,"kind":"heartbeat"}"#).unwrap_err(),
+            FollowLineRejected::UnknownKind {
+                kind: "heartbeat".to_string()
+            }
+        );
+    }
+
+    #[test]
+    fn rejects_a_line_that_is_not_a_json_object_with_the_text_it_carried() {
+        assert_eq!(
+            FollowLinePayload::delivery("Traceback (most recent call last)").unwrap_err(),
+            FollowLineRejected::NotJson {
+                line: "Traceback (most recent call last)".to_string()
+            }
+        );
     }
 }

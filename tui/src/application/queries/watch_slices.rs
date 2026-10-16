@@ -1,10 +1,11 @@
 use crate::application::queries::bind_workspace::WorkspaceState;
 use crate::domain::errors::FollowLineRejected;
 use crate::domain::follow_source::FollowSource;
+use crate::domain::process_probe::ProcessProbe;
 use crate::domain::slice_board::SliceBoard;
 use crate::domain::workspace_repo::WorkspaceRepo;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct WatchedBoard {
     board: SliceBoard,
     rejection: Option<FollowLineRejected>,
@@ -36,15 +37,17 @@ impl WatchedBoard {
     }
 }
 
-pub struct WatchSlices<S: FollowSource> {
+pub struct WatchSlices<S: FollowSource, P: ProcessProbe> {
     source: S,
+    probe: P,
     rejection: Option<FollowLineRejected>,
 }
 
-impl<S: FollowSource> WatchSlices<S> {
-    pub fn new(source: S) -> Self {
+impl<S: FollowSource, P: ProcessProbe> WatchSlices<S, P> {
+    pub fn new(source: S, probe: P) -> Self {
         Self {
             source,
+            probe,
             rejection: None,
         }
     }
@@ -53,8 +56,8 @@ impl<S: FollowSource> WatchSlices<S> {
         let mut board = board;
         for delivery in self.source.pending() {
             match delivery {
-                Ok(line) => {
-                    board = board.with_line(line);
+                Ok(entry) => {
+                    board = board.with_entry(entry);
                     self.rejection = None;
                 }
                 Err(rejection) => self.rejection = Some(rejection),
@@ -62,7 +65,7 @@ impl<S: FollowSource> WatchSlices<S> {
         }
 
         WatchedBoard {
-            board,
+            board: board.probed(&self.probe),
             rejection: self.rejection.clone(),
         }
     }

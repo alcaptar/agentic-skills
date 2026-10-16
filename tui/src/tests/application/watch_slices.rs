@@ -40,54 +40,56 @@ mod grouping {
 
 mod a_slice_that_reappears {
     use crate::application::queries::watch_slices::WatchSlices;
+    use crate::domain::closure::Closure;
     use crate::domain::parent::Parent;
     use crate::domain::slice_board::SliceBoard;
+    use crate::domain::step::Step;
     use crate::tests::application::watching::Watching;
-    use crate::tests::doubles::ScriptedFollowSource;
+    use crate::tests::doubles::{FixedProbe, ScriptedFollowSource};
     use crate::tests::mothers::follow_line_mother::FollowLineMother;
     #[test]
     fn keeps_a_single_row_with_the_state_of_the_second_line() {
         let first = FollowLineMother::child_of(140, 150);
-        let second = FollowLineMother::closed(&first);
+        let second = FollowLineMother::merged(&first);
 
         let watched = Watching::one_tick(Watching::lines(vec![first, second]));
 
         let groups = watched.board().groups();
         assert_eq!(groups.len(), 1);
         assert_eq!(groups[0].rows().len(), 1);
-        assert_eq!(groups[0].rows()[0].step(), "await-merge");
-        assert_eq!(groups[0].rows()[0].status(), "closed");
+        assert_eq!(groups[0].rows()[0].latest().step(), Some(Step::AwaitMerge));
+        assert_eq!(groups[0].rows()[0].latest().closure(), Closure::Merged);
     }
 
     #[test]
     fn updates_across_ticks_without_duplicating_the_row() {
         let first = FollowLineMother::child_of(140, 150);
-        let second = FollowLineMother::closed(&first);
-        let mut watch = WatchSlices::new(ScriptedFollowSource::delivering(vec![
-            Watching::lines(vec![first]),
-            Watching::lines(vec![second]),
-        ]));
+        let second = FollowLineMother::merged(&first);
+        let mut watch = WatchSlices::new(
+            ScriptedFollowSource::delivering(vec![Watching::lines(vec![first]), Watching::lines(vec![second])]),
+            FixedProbe::everyone_alive(),
+        );
 
         let after_first = watch.execute(SliceBoard::empty());
         let after_second = watch.execute(after_first.into_board());
 
         let groups = after_second.board().groups();
         assert_eq!(groups[0].rows().len(), 1);
-        assert_eq!(groups[0].rows()[0].status(), "closed");
+        assert_eq!(groups[0].rows()[0].latest().closure(), Closure::Merged);
     }
 
     #[test]
     fn keeps_the_last_known_parent_and_name_when_the_later_line_arrives_without_them() {
         let first = FollowLineMother::child_of(140, 150);
-        let second = FollowLineMother::closed_without_parent_or_name(&first);
+        let second = FollowLineMother::merged_without_parent_or_name(&first);
 
         let watched = Watching::one_tick(Watching::lines(vec![first, second]));
 
         let groups = watched.board().groups();
         assert_eq!(groups.len(), 1);
         assert_eq!(groups[0].parent(), Parent::Issue(140));
-        assert_eq!(groups[0].rows()[0].name(), Some(FollowLineMother::NAME));
-        assert_eq!(groups[0].rows()[0].status(), "closed");
+        assert_eq!(groups[0].rows()[0].label(), FollowLineMother::NAME);
+        assert_eq!(groups[0].rows()[0].latest().closure(), Closure::Merged);
     }
 }
 
@@ -95,12 +97,12 @@ mod a_rejected_line {
     use crate::application::queries::watch_slices::WatchSlices;
     use crate::domain::slice_board::SliceBoard;
     use crate::tests::application::watching::Watching;
-    use crate::tests::doubles::ScriptedFollowSource;
+    use crate::tests::doubles::{FixedProbe, ScriptedFollowSource};
     use crate::tests::mothers::follow_line_mother::FollowLineMother;
     #[test]
     fn is_reported_without_losing_the_slices_already_listed() {
         let watched = Watching::one_tick(vec![
-            Ok(FollowLineMother::child_of(140, 150)),
+            Watching::lines(vec![FollowLineMother::child_of(140, 150)]).remove(0),
             Err(Watching::wrong_issue()),
         ]);
 
@@ -110,10 +112,10 @@ mod a_rejected_line {
 
     #[test]
     fn stays_reported_on_a_tick_with_nothing_new() {
-        let mut watch = WatchSlices::new(ScriptedFollowSource::delivering(vec![
-            vec![Err(Watching::wrong_issue())],
-            vec![],
-        ]));
+        let mut watch = WatchSlices::new(
+            ScriptedFollowSource::delivering(vec![vec![Err(Watching::wrong_issue())], vec![]]),
+            FixedProbe::everyone_alive(),
+        );
 
         let after_rejection = watch.execute(SliceBoard::empty());
         let quiet = watch.execute(after_rejection.into_board());
@@ -123,7 +125,10 @@ mod a_rejected_line {
 
     #[test]
     fn is_cleared_when_a_valid_line_arrives_afterwards() {
-        let watched = Watching::one_tick(vec![Err(Watching::wrong_issue()), Ok(FollowLineMother::orphan(170))]);
+        let watched = Watching::one_tick(vec![
+            Err(Watching::wrong_issue()),
+            Watching::lines(vec![FollowLineMother::orphan(170)]).remove(0),
+        ]);
 
         assert_eq!(watched.rejection(), None);
     }
@@ -171,8 +176,8 @@ mod the_board_shown_for_a_workspace {
     #[test]
     fn keeps_the_rejection_and_leaves_the_accumulated_board_whole_for_the_next_tick() {
         let watched = Watching::one_tick(vec![
-            Ok(FollowLineMother::child_of(140, 150)),
-            Ok(FollowLineMother::orphan(180)),
+            Watching::lines(vec![FollowLineMother::child_of(140, 150)]).remove(0),
+            Watching::lines(vec![FollowLineMother::orphan(180)]).remove(0),
             Err(Watching::wrong_issue()),
         ]);
 
@@ -197,5 +202,72 @@ mod the_board_shown_for_a_workspace {
         let shown = watched.shown_for(&WorkspaceMother::bound_to(140));
 
         assert_eq!(shown.board().groups().len(), 1);
+    }
+}
+
+mod the_process_of_a_slice {
+    use crate::application::queries::watch_slices::WatchSlices;
+    use crate::domain::attention::Attention;
+    use crate::domain::follow_entry::FollowEntry;
+    use crate::domain::slice_board::SliceBoard;
+    use crate::tests::application::watching::Watching;
+    use crate::tests::doubles::{FixedProbe, ScriptedFollowSource, UnaskedProbe};
+    use crate::tests::mothers::screen_mother::ScreenMother;
+
+    #[test]
+    fn a_running_slice_whose_process_is_gone_needs_you_and_one_whose_process_lives_runs() {
+        let watched = Watching::entries(
+            ScreenMother::feature(),
+            FixedProbe::alive_only(&[ScreenMother::JUDGED_PID]),
+        );
+
+        let board = watched.board();
+        assert_eq!(
+            board.row(&ScreenMother::key(3)).unwrap().attention(),
+            Attention::NeedsYou
+        );
+        assert_eq!(
+            board.row(&ScreenMother::key(2)).unwrap().attention(),
+            Attention::Running
+        );
+    }
+
+    #[test]
+    fn is_not_asked_about_a_slice_that_is_pending_blocked_or_merged() {
+        let only_settled: Vec<_> = ScreenMother::feature()
+            .into_iter()
+            .filter(|entry| match entry {
+                FollowEntry::Transition(line) => [529, 530, 531].contains(&line.issue()),
+                FollowEntry::Activity(_) => false,
+            })
+            .collect();
+        let mut watch = WatchSlices::new(
+            ScriptedFollowSource::delivering(vec![only_settled.into_iter().map(Ok).collect()]),
+            UnaskedProbe,
+        );
+
+        let watched = watch.execute(SliceBoard::empty());
+
+        assert_eq!(watched.board().groups()[0].rows().len(), 3);
+    }
+}
+
+mod a_transition_that_repeats_the_last_one {
+    use crate::domain::step::Step;
+    use crate::tests::application::watching::Watching;
+    use crate::tests::mothers::follow_line_mother::FollowLineMother;
+
+    #[test]
+    fn leaves_a_single_entry_in_the_history_of_its_slice() {
+        let first = FollowLineMother::child_of(140, 150);
+
+        let watched = Watching::one_tick(Watching::lines(vec![
+            first.clone(),
+            FollowLineMother::moved_to(&first, Step::AwaitCi),
+            FollowLineMother::moved_to(&first, Step::AwaitCi),
+            FollowLineMother::moved_to(&first, Step::AwaitCi),
+        ]));
+
+        assert_eq!(watched.board().row(&Watching::key(150)).unwrap().transitions().len(), 2);
     }
 }

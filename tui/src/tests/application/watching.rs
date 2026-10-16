@@ -1,22 +1,29 @@
 use crate::application::queries::watch_slices::{WatchSlices, WatchedBoard};
 use crate::domain::errors::FollowLineRejected;
+use crate::domain::follow_entry::FollowEntry;
 use crate::domain::follow_line::FollowLine;
 use crate::domain::slice_board::SliceBoard;
 use crate::domain::slice_key::SliceKey;
-use crate::tests::doubles::{Delivery, ScriptedFollowSource};
+use crate::tests::doubles::{Delivery, FixedProbe, ScriptedFollowSource};
 use crate::tests::mothers::follow_line_mother::FollowLineMother;
 
 pub struct Watching;
 
 impl Watching {
     pub fn one_tick(lines: Vec<Delivery>) -> WatchedBoard {
-        let mut watch = WatchSlices::new(ScriptedFollowSource::delivering(vec![lines]));
+        let mut watch = WatchSlices::new(
+            ScriptedFollowSource::delivering(vec![lines]),
+            FixedProbe::everyone_alive(),
+        );
 
         watch.execute(SliceBoard::empty())
     }
 
     pub fn lines(lines: Vec<FollowLine>) -> Vec<Delivery> {
-        lines.into_iter().map(Ok).collect()
+        lines
+            .into_iter()
+            .map(|line| Ok(FollowEntry::Transition(line)))
+            .collect()
     }
 
     pub fn wrong_issue() -> FollowLineRejected {
@@ -36,5 +43,16 @@ impl Watching {
             FollowLineMother::child_of(141, 160),
             FollowLineMother::child_of(140, 150),
         ]))
+    }
+}
+
+impl Watching {
+    pub fn entries(entries: Vec<FollowEntry>, probe: FixedProbe) -> WatchedBoard {
+        let mut watch = WatchSlices::new(
+            ScriptedFollowSource::delivering(vec![entries.into_iter().map(Ok).collect()]),
+            probe,
+        );
+
+        watch.execute(SliceBoard::empty())
     }
 }

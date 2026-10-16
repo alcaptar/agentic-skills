@@ -1,12 +1,17 @@
 use std::collections::BTreeMap;
 
+use crate::domain::activity_line::ActivityLine;
+use crate::domain::attention::Attention;
+use crate::domain::follow_entry::FollowEntry;
 use crate::domain::follow_line::FollowLine;
+use crate::domain::liveness::Liveness;
 use crate::domain::parent::Parent;
+use crate::domain::process_probe::ProcessProbe;
 use crate::domain::slice_key::SliceKey;
 use crate::domain::slice_row::SliceRow;
 use crate::domain::workspace_binding::WorkspaceBinding;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct FeatureGroup {
     repo: String,
     parent: Parent,
@@ -25,9 +30,17 @@ impl FeatureGroup {
     pub fn rows(&self) -> &[SliceRow] {
         &self.rows
     }
+
+    pub fn needing_you(&self) -> usize {
+        self.rows_in(Attention::NeedsYou).len()
+    }
+
+    pub fn rows_in(&self, attention: Attention) -> Vec<&SliceRow> {
+        self.rows.iter().filter(|row| row.attention() == attention).collect()
+    }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct SliceBoard {
     rows: Vec<SliceRow>,
 }
@@ -37,6 +50,13 @@ impl SliceBoard {
         Self { rows: Vec::new() }
     }
 
+    pub fn with_entry(self, entry: FollowEntry) -> Self {
+        match entry {
+            FollowEntry::Transition(line) => self.with_line(line),
+            FollowEntry::Activity(line) => self.with_activity(line),
+        }
+    }
+
     pub fn with_line(mut self, line: FollowLine) -> Self {
         match self.rows.iter().position(|row| row.is_the_slice_of(&line)) {
             Some(index) => self.rows[index] = self.rows[index].with_line(line),
@@ -44,6 +64,27 @@ impl SliceBoard {
         }
 
         self
+    }
+
+    fn with_activity(mut self, line: ActivityLine) -> Self {
+        if let Some(index) = self.rows.iter().position(|row| row.key() == line.key()) {
+            self.rows[index] = self.rows[index].with_activity(line);
+        }
+
+        self
+    }
+
+    pub fn probed(self, probe: &impl ProcessProbe) -> Self {
+        Self {
+            rows: self
+                .rows
+                .iter()
+                .map(|row| match (row.is_running(), row.pid()) {
+                    (true, Some(pid)) => row.with_liveness(probe.liveness_of(pid)),
+                    (true | false, None) | (false, Some(_)) => row.with_liveness(Liveness::Unchecked),
+                })
+                .collect(),
+        }
     }
 
     pub fn shown_for(&self, repo: &str, binding: WorkspaceBinding) -> Self {
@@ -99,7 +140,12 @@ impl SliceBoard {
 
         grouped
             .into_iter()
-            .map(|((repo, parent), rows)| FeatureGroup { repo, parent, rows })
+            .map(|((repo, parent), mut rows)| {
+                rows.sort_by(|left, right| {
+                    (left.attention(), left.subject().slice_id()).cmp(&(right.attention(), right.subject().slice_id()))
+                });
+                FeatureGroup { repo, parent, rows }
+            })
             .collect()
     }
 }

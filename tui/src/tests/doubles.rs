@@ -6,16 +6,18 @@ use std::time::{Duration, Instant};
 
 use crate::domain::clock::Clock;
 use crate::domain::errors::{FollowLineRejected, IssuesUnread};
-use crate::domain::follow_line::FollowLine;
+use crate::domain::follow_entry::FollowEntry;
 use crate::domain::follow_source::FollowSource;
 use crate::domain::issue_source::IssueSource;
+use crate::domain::liveness::Liveness;
 use crate::domain::open_issue::OpenIssue;
+use crate::domain::process_probe::ProcessProbe;
 use crate::domain::session_transcripts::SessionTranscripts;
 use crate::domain::workspace_id::WorkspaceId;
 use crate::domain::workspace_ids::WorkspaceIds;
 use crate::tests::mothers::workspace_mother::WorkspaceMother;
 
-pub type Delivery = Result<FollowLine, FollowLineRejected>;
+pub type Delivery = Result<FollowEntry, FollowLineRejected>;
 
 pub struct ScriptedFollowSource {
     batches: VecDeque<Vec<Delivery>>,
@@ -204,5 +206,44 @@ impl IssueSource for GatedIssueSource {
         Err(IssuesUnread::CommandFailed {
             reason: "nobody scripted an answer for issue view".to_string(),
         })
+    }
+}
+
+pub struct FixedProbe {
+    alive: Vec<u32>,
+    everyone_alive: bool,
+}
+
+impl FixedProbe {
+    pub fn everyone_alive() -> Self {
+        Self {
+            alive: Vec::new(),
+            everyone_alive: true,
+        }
+    }
+
+    pub fn alive_only(alive: &[u32]) -> Self {
+        Self {
+            alive: alive.to_vec(),
+            everyone_alive: false,
+        }
+    }
+}
+
+impl ProcessProbe for FixedProbe {
+    fn liveness_of(&self, pid: u32) -> Liveness {
+        if self.everyone_alive || self.alive.contains(&pid) {
+            return Liveness::Alive;
+        }
+
+        Liveness::Gone
+    }
+}
+
+pub struct UnaskedProbe;
+
+impl ProcessProbe for UnaskedProbe {
+    fn liveness_of(&self, pid: u32) -> Liveness {
+        panic!("the probe was asked about {pid}")
     }
 }
