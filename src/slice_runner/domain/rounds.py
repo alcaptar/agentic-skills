@@ -4,10 +4,11 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from slice_runner.domain.round_budget import RoundBudget
+from slice_runner.domain.run import Run
+from slice_runner.domain.step import Step
 
 if TYPE_CHECKING:
     from slice_runner.domain.budgets import Budgets
-    from slice_runner.domain.run import Run
 
 
 @dataclass(frozen=True, kw_only=True, slots=True)
@@ -32,11 +33,4 @@ class Rounds:
 
     @classmethod
     def untouched(cls, budgets: Budgets) -> Rounds:
-        return cls(
-            controls=RoundBudget(used=0, limit=budgets.control_retries),
-            hygiene=RoundBudget(used=0, limit=budgets.hygiene_retries),
-            judge=RoundBudget(used=0, limit=budgets.verify_retries),
-            ci=RoundBudget(used=0, limit=budgets.ci_retries),
-            ci_indeterminate=RoundBudget(used=0, limit=budgets.indeterminate_ticks),
-            catch_up=RoundBudget(used=0, limit=budgets.catch_up_retries),
-        )
+        return cls.of(Run(step=Step.MOUNT_WORKTREE), budgets)

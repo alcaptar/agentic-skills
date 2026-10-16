@@ -98,15 +98,21 @@ class TestTheFollowTransitionLineAgainstItsExamples:
 
         assert emitted - declared == set()
 
+    @staticmethod
+    def _without_the_instant_and_the_limits(line: dict[str, object]) -> dict[str, object]:
+        rounds = line["rounds"]
+        assert isinstance(rounds, dict)
+        used = {name: counter["used"] for name, counter in rounds.items()}
+
+        return {**{key: value for key, value in line.items() if key not in ("ts", "rounds")}, "rounds": used}
+
     def test_the_line_of_a_pending_event_equals_its_example_value_by_value_except_the_instant_and_the_limits(
         self,
     ) -> None:
         example = next(example for example in self._examples_of_the_transition() if example["standing"] == "pending")
         line = FollowTransitionV2Payload.from_domain(EventMother.pending()).to_contract()
 
-        assert {key for key in line if key != "ts"} <= set(example)
-        assert line["standing"] == example["standing"]
-        assert "step" not in line
+        assert self._without_the_instant_and_the_limits(line) == self._without_the_instant_and_the_limits(example)
 
 
 class TestTheStatusLineAgainstItsExamples(TheLineAgainstItsExamples):

@@ -84,6 +84,16 @@ class TestWhatCountsAsAChange:
 
         assert result.changes == (EventMother.advancing(), waiting)
 
+    def test_a_round_without_changes_on_the_same_step_and_closure_is_a_change_so_it_reaches_the_screen(self) -> None:
+        empty_round = EventMother.round_without_changes()
+        reader = ScriptedEventReader(
+            EventBatch(events=(EventMother.advancing(), empty_round), cursor=EventCursor(offset=10))
+        )
+
+        result = FollowEvents(reader=reader).execute(FollowEventsParams(cursor=EventCursor.start()))
+
+        assert result.changes == (EventMother.advancing(), empty_round)
+
     def test_a_closing_row_that_goes_from_blocked_to_merged_on_the_same_step_is_a_change_and_the_snapshot_ends_merged(
         self,
     ) -> None:
