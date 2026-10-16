@@ -11,6 +11,7 @@ from slice_runner.infrastructure.harness_invocation_runner import HarnessInvocat
 from slice_runner.infrastructure.harness_telemetry import HarnessTelemetry
 from slice_runner.infrastructure.judge_invocation import JudgeInvocation
 from slice_runner.tests.doubles import (
+    RecordedActivityLog,
     RecordedProcess,
     RecordedSourceReader,
     RecordedSpendLog,
@@ -42,6 +43,7 @@ class Calling:
             telemetry=HarnessTelemetry(
                 trace=trace or RecordedTrace(),
                 turns=RecordedTurnLog(),
+                activity=RecordedActivityLog(),
                 spend_log=RecordedSpendLog(),
                 tool_uses=tool_uses or RecordedToolUseRecorder(),
             ),

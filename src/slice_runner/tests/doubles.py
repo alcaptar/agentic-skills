@@ -6,6 +6,8 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, ClassVar, NoReturn
 from unittest.mock import Mock, create_autospec
 
+from slice_runner.domain.activity_log import ActivityLog
+from slice_runner.domain.activity_reader import ActivityBatch, ActivityReader
 from slice_runner.domain.budgets import Budgets
 from slice_runner.domain.call_spend_log import CallSpendLog
 from slice_runner.domain.call_trace import CallTrace
@@ -35,6 +37,7 @@ from slice_runner.tests.real_process import Real
 if TYPE_CHECKING:
     from collections.abc import Callable
 
+    from slice_runner.domain.activity import Activity
     from slice_runner.domain.call_spend_log import HarnessCallSpend
     from slice_runner.domain.call_trace import HarnessCall
     from slice_runner.domain.corpus_entry import CorpusEntry
@@ -366,6 +369,18 @@ class RecordedTurnLog(TurnLog):
         self.turns.append(turn)
 
 
+class RecordedActivityLog(ActivityLog):
+    def __init__(self) -> None:
+        self.activities: list[Activity] = []
+        self.restarts: list[SliceCoordinates] = []
+
+    def restart(self, coordinates: SliceCoordinates) -> None:
+        self.restarts.append(coordinates)
+
+    def record(self, activity: Activity) -> None:
+        self.activities.append(activity)
+
+
 class RecordedSpendLog(CallSpendLog):
     def __init__(self) -> None:
         self.calls: list[HarnessCallSpend] = []
@@ -507,6 +522,17 @@ class ScriptedEventReader(EventReader):
         self.cursors.append(cursor)
 
         return self._batches.pop(0)
+
+
+class RecordedActivityReader(ActivityReader):
+    def __init__(self, batches: dict[SliceCoordinates, ActivityBatch]) -> None:
+        self._batches = batches
+        self.reads: list[tuple[SliceCoordinates, EventCursor]] = []
+
+    def read_since(self, coordinates: SliceCoordinates, cursor: EventCursor) -> ActivityBatch:
+        self.reads.append((coordinates, cursor))
+
+        return self._batches.get(coordinates, ActivityBatch(activities=(), cursor=cursor))
 
 
 class ReplacementRequestedError(Exception):

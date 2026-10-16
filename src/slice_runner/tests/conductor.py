@@ -53,7 +53,7 @@ from slice_runner.domain.slice_coordinates import SliceCoordinates
 from slice_runner.domain.state_machine import StateMachine
 from slice_runner.domain.workspace import Workspace
 from slice_runner.domain.worktrees import Worktrees
-from slice_runner.tests.doubles import RecordedCorpus, RecordedDebtLedger, RecordedSpendLog
+from slice_runner.tests.doubles import RecordedActivityLog, RecordedCorpus, RecordedDebtLedger, RecordedSpendLog
 from slice_runner.tests.mothers.branch_catch_up_mother import BranchCatchUpMother
 from slice_runner.tests.mothers.control_outcome_mother import ControlOutcomeMother
 from slice_runner.tests.mothers.implementation_mother import ImplementationMother
@@ -120,6 +120,7 @@ class Conductor:
         self.branches.catch_up.return_value = BranchCatchUpMother.caught_up()
         self.controls: Mock = create_autospec(ControlRunner, spec_set=True, instance=True)
         self.controls.run.return_value = ControlOutcomeMother.green()
+        self.activity = RecordedActivityLog()
         self.ci: Mock = create_autospec(Ci, spec_set=True, instance=True)
         self.ci.status.return_value = CiStatus.GREEN
         self.forum: Mock = create_autospec(Forum, spec_set=True, instance=True)
@@ -203,7 +204,7 @@ class Conductor:
                 stage=self.stage,
                 commit=self.commit,
                 rescue=self.rescue,
-                run_controls=RunControls(controls=self.controls),
+                run_controls=RunControls(controls=self.controls, activity=self.activity),
                 verify=self.verify,
                 deliver=self.deliver,
                 close=self.close,
