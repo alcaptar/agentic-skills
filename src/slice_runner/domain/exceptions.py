@@ -87,6 +87,10 @@ class UnreadableIssueError(ValueError):
     pass
 
 
+class RetiredLabelError(UnreadableIssueError):
+    pass
+
+
 class UnreadableForumError(ValueError):
     pass
 

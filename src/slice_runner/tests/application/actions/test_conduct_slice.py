@@ -1166,7 +1166,7 @@ class TestConductSliceClosingTheParentAfterAMerge:
 
         result = conductor.conduct()
 
-        assert result.closure == Closure.because_of(ClosingReason.HYGIENE)
+        assert result.closure == Closure.because_of(ClosingReason.CONTROLS)
         assert conductor.close.execute.call_count == 0
 
 
@@ -1413,7 +1413,7 @@ class TestConductSliceWhenTheStagedIndexIsRejected:
         result = conductor.conduct()
 
         assert conductor.controls.run.call_count == 0
-        assert result.closure == Closure.because_of(ClosingReason.HYGIENE)
+        assert result.closure == Closure.because_of(ClosingReason.CONTROLS)
 
     def test_a_rejection_spends_no_retry_of_the_controls_even_when_their_own_budget_is_exhausted(self) -> None:
         conductor = self._conductor(budgets=Budgets(control_retries=0))
@@ -1449,11 +1449,11 @@ class TestConductSliceWhenTheStagedIndexIsRejected:
 
         result = conductor.conduct()
 
-        assert result.closure == Closure.because_of(ClosingReason.HYGIENE)
+        assert result.closure == Closure.because_of(ClosingReason.CONTROLS)
         conductor.repository.write_label.assert_called_once_with(
-            repo=Conductor.REPO, issue=_SUBISSUE, remove=IssueLabel.IN_PROGRESS, add=IssueLabel.BLOCKED_HYGIENE
+            repo=Conductor.REPO, issue=_SUBISSUE, remove=IssueLabel.IN_PROGRESS, add=IssueLabel.BLOCKED_CONTROLS
         )
-        assert conductor.metrics.record.call_args.args[0].closure == Closure.because_of(ClosingReason.HYGIENE)
+        assert conductor.metrics.record.call_args.args[0].closure == Closure.because_of(ClosingReason.CONTROLS)
 
     def test_a_dirty_index_in_a_later_round_does_not_add_a_second_commit_and_blocks_on_hygiene(
         self,
@@ -1466,7 +1466,7 @@ class TestConductSliceWhenTheStagedIndexIsRejected:
         result = conductor.conduct()
 
         assert conductor.commit.execute.call_count == 1
-        assert result.closure == Closure.because_of(ClosingReason.HYGIENE)
+        assert result.closure == Closure.because_of(ClosingReason.CONTROLS)
 
 
 class TestConductSliceWhenAControlCannotBeMeasured:
@@ -1643,9 +1643,9 @@ class TestConductSliceWhenTheJudgeSpeaks:
 
         result = conductor.conduct()
 
-        assert result.closure == Closure.because_of(ClosingReason.VERIFY)
+        assert result.closure == Closure.because_of(ClosingReason.JUDGE)
         conductor.repository.write_label.assert_called_once_with(
-            repo=Conductor.REPO, issue=_SUBISSUE, remove=IssueLabel.IN_PROGRESS, add=IssueLabel.BLOCKED_VERIFY
+            repo=Conductor.REPO, issue=_SUBISSUE, remove=IssueLabel.IN_PROGRESS, add=IssueLabel.BLOCKED_JUDGE
         )
         assert conductor.metrics.record.call_args.args[0].findings == VerdictMother.failing().findings
 
@@ -1718,7 +1718,7 @@ class TestConductSliceWhenTheImplementerMovedNothing:
 
         result = conductor.conduct()
 
-        assert result.closure == Closure.because_of(ClosingReason.UNCHANGED_DIFF)
+        assert result.closure == Closure.because_of(ClosingReason.JUDGE)
         assert conductor.implement.execute.call_count == 1
 
     def test_the_issue_is_labelled_with_a_label_of_its_own_and_not_the_one_of_a_veto(self) -> None:
@@ -1730,7 +1730,7 @@ class TestConductSliceWhenTheImplementerMovedNothing:
             repo=Conductor.REPO,
             issue=_SUBISSUE,
             remove=IssueLabel.IN_PROGRESS,
-            add=IssueLabel.BLOCKED_UNCHANGED_DIFF,
+            add=IssueLabel.BLOCKED_JUDGE,
         )
 
     def test_the_round_that_was_not_judged_is_not_counted_as_a_verify_round_nor_as_a_retry(self) -> None:

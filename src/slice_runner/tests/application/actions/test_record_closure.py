@@ -80,12 +80,12 @@ class TestTheRowItWrites:
     def test_the_row_names_the_slice_and_the_state_the_run_closed_in(self) -> None:
         closer = _Closer()
 
-        written = closer.close(closure=Closure.because_of(ClosingReason.VERIFY))
+        written = closer.close(closure=Closure.because_of(ClosingReason.JUDGE))
 
         assert written.repo == _REPO
         assert written.slice_id == _SLICE
         assert written.name == _NAME
-        assert written.closure == Closure.because_of(ClosingReason.VERIFY)
+        assert written.closure == Closure.because_of(ClosingReason.JUDGE)
 
     def test_the_findings_of_every_round_and_of_the_last_one_travel_apart_so_a_fixed_one_is_not_lost(self) -> None:
         closer = _Closer()
@@ -267,7 +267,7 @@ class TestPublishingTheVetoFindings:
         low = FindingMother.low_severity()
         closer.corpus.rounds_of_the_slice.return_value = (JudgedRoundMother.of_the_round(1, high, low),)
 
-        closer.close(closure=Closure.because_of(ClosingReason.VERIFY))
+        closer.close(closure=Closure.because_of(ClosingReason.JUDGE))
 
         closer.repository.publish_findings.assert_called_once_with(
             repo=_REPO,
@@ -281,7 +281,7 @@ class TestPublishingTheVetoFindings:
         high = FindingMother.without_line()
         closer.corpus.rounds_of_the_slice.return_value = (JudgedRoundMother.of_the_round(1, high),)
 
-        closer.close(closure=Closure.because_of(ClosingReason.UNCHANGED_DIFF))
+        closer.close(closure=Closure.because_of(ClosingReason.JUDGE))
 
         closer.repository.publish_findings.assert_called_once_with(
             repo=_REPO,
@@ -299,7 +299,7 @@ class TestPublishingTheVetoFindings:
             DebtDeclaration(left_out=("no cubri el caso de un binario",)),
         )
 
-        closer.close(closure=Closure.because_of(ClosingReason.UNCHANGED_DIFF))
+        closer.close(closure=Closure.because_of(ClosingReason.JUDGE))
 
         published = closer.repository.publish_findings.call_args.kwargs["debt"]
         assert published.left_out == ("no cubri el caso de un binario",)
@@ -307,7 +307,7 @@ class TestPublishingTheVetoFindings:
     def test_a_closure_by_veto_with_no_findings_at_all_publishes_nothing(self) -> None:
         closer = _Closer()
 
-        closer.close(closure=Closure.because_of(ClosingReason.VERIFY))
+        closer.close(closure=Closure.because_of(ClosingReason.JUDGE))
 
         closer.repository.publish_findings.assert_not_called()
 

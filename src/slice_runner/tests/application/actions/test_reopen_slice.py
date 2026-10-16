@@ -28,16 +28,11 @@ _INSTRUCTION = "el control ya esta arreglado a mano"
 _BLOCKS: list[tuple[IssueLabel, Run, Run]] = [
     (
         IssueLabel.BLOCKED_CONTROLS,
-        RunMother.blocked_on_controls(),
-        replace(RunMother.blocked_on_controls(), control_retries=0),
+        replace(RunMother.blocked_on_controls(), control_retries=2, hygiene_retries=2),
+        replace(RunMother.blocked_on_controls(), control_retries=0, hygiene_retries=0),
     ),
     (
-        IssueLabel.BLOCKED_HYGIENE,
-        RunMother.blocked_on_hygiene(),
-        replace(RunMother.blocked_on_hygiene(), hygiene_retries=0),
-    ),
-    (
-        IssueLabel.BLOCKED_VERIFY,
+        IssueLabel.BLOCKED_JUDGE,
         RunMother.blocked_on_verify(),
         replace(RunMother.blocked_on_verify(), verify_retries=0),
     ),
@@ -54,8 +49,8 @@ _BLOCKS: list[tuple[IssueLabel, Run, Run]] = [
     ),
     (IssueLabel.BLOCKED_WORKTREE, RunMother.blocked_on_the_worktree(), RunMother.blocked_on_the_worktree()),
     (
-        IssueLabel.BLOCKED_LEFTOVER_WORKTREE,
-        RunMother.blocked_on_the_worktree(),
+        IssueLabel.BLOCKED_WORKTREE,
+        replace(RunMother.blocked_on_the_worktree(), tree_unexpected=True),
         replace(RunMother.blocked_on_the_worktree(), tree_unexpected=True),
     ),
     (
@@ -181,7 +176,7 @@ class TestReopenSlice:
     def test_a_run_blocked_while_it_kept_its_tree_is_reopened_expecting_it(
         self, action: ReopenSlice, repository: Mock
     ) -> None:
-        blocked = SubIssueMother.blocked(IssueLabel.BLOCKED_VERIFY, RunMother.blocked_on_verify())
+        blocked = SubIssueMother.blocked(IssueLabel.BLOCKED_JUDGE, RunMother.blocked_on_verify())
 
         action.execute(ReopenSliceParams(repo=_REPO, subissue=blocked, instruction=_INSTRUCTION))
 

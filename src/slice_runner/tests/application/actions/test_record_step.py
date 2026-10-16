@@ -174,7 +174,7 @@ class TestTheEventItEmits:
 
         assert recorder.events.emit.call_args.args[0].status is EventStatus.CLOSED
 
-    @pytest.mark.parametrize("closure", [Closure.merged(), Closure.because_of(ClosingReason.VERIFY)])
+    @pytest.mark.parametrize("closure", [Closure.merged(), Closure.because_of(ClosingReason.JUDGE)])
     def test_a_closing_transition_emits_the_state_it_closed_with(self, closure: Closure) -> None:
         recorder = _Recorder()
         transition = Transition(run=RunMother.awaiting_merge(), closure=closure)

@@ -55,7 +55,7 @@ class EventMother:
 
     @classmethod
     def blocked_by_the_judge(cls) -> Event:
-        return replace(cls.closed(), closure=Closure.because_of(ClosingReason.VERIFY))
+        return replace(cls.closed(), closure=Closure.because_of(ClosingReason.JUDGE))
 
     @classmethod
     def closed_before_the_closing_state_was_recorded(cls) -> Event:

@@ -249,7 +249,7 @@ class TestConductSliceWhenATreeIsFoundThatNobodyExpected(_Merging):
 
         result = conductor.conduct()
 
-        assert (result.halt, result.closure) == (Halt.RUN_CLOSED, Closure.because_of(ClosingReason.LEFTOVER_WORKTREE))
+        assert (result.halt, result.closure) == (Halt.RUN_CLOSED, Closure.because_of(ClosingReason.WORKTREE))
         assert result.conflicting_path == Conductor.WORKTREE
 
     def test_a_tree_left_by_a_stop_of_the_prechecks_is_reused_by_the_next_invocation(self) -> None:
@@ -262,7 +262,7 @@ class TestConductSliceWhenATreeIsFoundThatNobodyExpected(_Merging):
 
         result = conductor.conduct()
 
-        assert result.closure != Closure.because_of(ClosingReason.LEFTOVER_WORKTREE)
+        assert result.closure != Closure.because_of(ClosingReason.WORKTREE)
         assert not conductor.worktrees.add_new_branch.called
         assert not conductor.worktrees.add_on_branch.called
         assert conductor.check_sources.execute.call_count == 1
@@ -286,9 +286,9 @@ class TestConductSliceWhenATreeIsFoundThatNobodyExpected(_Merging):
             repo=Conductor.REPO,
             issue=_SUBISSUE,
             remove=IssueLabel.IN_PROGRESS,
-            add=IssueLabel.BLOCKED_LEFTOVER_WORKTREE,
+            add=IssueLabel.BLOCKED_WORKTREE,
         )
-        assert conductor.closed.closure == Closure.because_of(ClosingReason.LEFTOVER_WORKTREE)
+        assert conductor.closed.closure == Closure.because_of(ClosingReason.WORKTREE)
 
     def test_the_closing_names_the_path_and_leaves_the_tree_for_a_person_to_resolve(self) -> None:
         conductor = self._after_an_abort_that_left_its_tree()
@@ -300,13 +300,13 @@ class TestConductSliceWhenATreeIsFoundThatNobodyExpected(_Merging):
         assert not conductor.worktrees.has_uncommitted_work.called
 
     def test_a_blocked_run_reopened_by_the_retry_subcommand_reuses_the_tree_it_kept(self) -> None:
-        blocked = SubIssueMother.blocked(IssueLabel.BLOCKED_VERIFY, RunMother.blocked_on_verify())
+        blocked = SubIssueMother.blocked(IssueLabel.BLOCKED_JUDGE, RunMother.blocked_on_verify())
         reopened = replace(blocked, run=RunMother.implementing(), label=IssueLabel.IN_PROGRESS)
         conductor = Conductor(chosen=SelectSliceResultMother.about_to_start(subissue=reopened))
 
         result = conductor.conduct()
 
-        assert result.closure != Closure.because_of(ClosingReason.LEFTOVER_WORKTREE)
+        assert result.closure != Closure.because_of(ClosingReason.WORKTREE)
         assert not conductor.worktrees.add_new_branch.called
         assert not conductor.worktrees.add_on_branch.called
         assert conductor.implement.execute.call_count == 1
@@ -327,7 +327,7 @@ class TestConductSliceWhenATreeIsFoundThatNobodyExpected(_Merging):
 
         result = conductor.conduct()
 
-        assert result.closure == Closure.because_of(ClosingReason.LEFTOVER_WORKTREE)
+        assert result.closure == Closure.because_of(ClosingReason.WORKTREE)
         assert conductor.implement.execute.call_count == 0
 
     def test_a_run_reopened_by_the_retry_subcommand_with_no_tree_in_the_way_mounts_one_and_expects_it_from_then_on(
@@ -351,7 +351,7 @@ class TestConductSliceWhenATreeIsFoundThatNobodyExpected(_Merging):
 
         result = conductor.conduct(worktree="/trees/by-hand")
 
-        assert result.closure != Closure.because_of(ClosingReason.LEFTOVER_WORKTREE)
+        assert result.closure != Closure.because_of(ClosingReason.WORKTREE)
 
 
 class TestConductSliceRetiringTheWorktreeOfAMergeMissedBetweenInvocations:

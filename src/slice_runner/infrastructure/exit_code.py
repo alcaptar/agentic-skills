@@ -3,7 +3,6 @@ from __future__ import annotations
 from enum import IntEnum
 from typing import TYPE_CHECKING
 
-from slice_runner.domain.closing_reason import ClosingReason
 from slice_runner.domain.halt import Halt
 from slice_runner.domain.ruling import Ruling
 from slice_runner.domain.run_state import RunState
@@ -56,27 +55,5 @@ class ExitCode(IntEnum):
         match closure.state:
             case RunState.MERGED:
                 return cls.OK
-            case RunState.OPEN | RunState.ABORTED:
-                return cls.RUN_UNMERGED
-            case RunState.BLOCKED:
-                return cls._of_the_blocking(closure.reason)
-
-    @classmethod
-    def _of_the_blocking(cls, reason: ClosingReason | None) -> ExitCode:
-        match reason:
-            case ClosingReason.UNCHANGED_DIFF:
-                return cls.UNCHANGED_DIFF
-            case (
-                None
-                | ClosingReason.CONTROLS
-                | ClosingReason.HYGIENE
-                | ClosingReason.VERIFY
-                | ClosingReason.CI_RED
-                | ClosingReason.CI_INDETERMINATE
-                | ClosingReason.CI_CONFLICT
-                | ClosingReason.WORKTREE
-                | ClosingReason.LEFTOVER_WORKTREE
-                | ClosingReason.BUDGET
-                | ClosingReason.UNMEASURED_CALL
-            ):
+            case RunState.OPEN | RunState.ABORTED | RunState.BLOCKED:
                 return cls.RUN_UNMERGED

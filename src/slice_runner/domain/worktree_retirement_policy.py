@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 
 class WorktreeRetirementPolicy:
     @classmethod
-    def of_the_closing(cls, *, closure: Closure, step: Step) -> ClosingWorktree:
+    def of_the_closing(cls, *, closure: Closure, step: Step, tree_left_behind: bool) -> ClosingWorktree:
         match closure.state:
             case RunState.MERGED:
                 return ClosingWorktree.RETIRE
@@ -25,7 +25,7 @@ class WorktreeRetirementPolicy:
             case RunState.OPEN:
                 return ClosingWorktree.KEEP_FOR_RESUMING
             case RunState.BLOCKED:
-                return cls._of_the_blocked(closure.reason)
+                return cls._of_the_blocked(closure.reason, tree_left_behind=tree_left_behind)
 
     @classmethod
     def of(cls, *, uncommitted: bool, local_only_commits: int) -> WorktreeRetirement:
@@ -48,25 +48,21 @@ class WorktreeRetirementPolicy:
         if closed is None:
             return True
 
-        match cls.of_the_closing(closure=closed, step=run.step):
+        match cls.of_the_closing(closure=closed, step=run.step, tree_left_behind=False):
             case ClosingWorktree.RETIRE | ClosingWorktree.UNEXPECTED:
                 return False
             case ClosingWorktree.KEEP_FOR_RESUMING | ClosingWorktree.NOT_OURS:
                 return True
 
     @staticmethod
-    def _of_the_blocked(reason: ClosingReason | None) -> ClosingWorktree:
+    def _of_the_blocked(reason: ClosingReason | None, *, tree_left_behind: bool) -> ClosingWorktree:
         match reason:
             case ClosingReason.WORKTREE:
-                return ClosingWorktree.NOT_OURS
-            case ClosingReason.LEFTOVER_WORKTREE:
-                return ClosingWorktree.UNEXPECTED
+                return ClosingWorktree.UNEXPECTED if tree_left_behind else ClosingWorktree.NOT_OURS
             case (
                 None
                 | ClosingReason.CONTROLS
-                | ClosingReason.HYGIENE
-                | ClosingReason.VERIFY
-                | ClosingReason.UNCHANGED_DIFF
+                | ClosingReason.JUDGE
                 | ClosingReason.CI_RED
                 | ClosingReason.CI_INDETERMINATE
                 | ClosingReason.CI_CONFLICT
