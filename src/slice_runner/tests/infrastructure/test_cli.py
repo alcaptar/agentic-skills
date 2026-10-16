@@ -22,6 +22,7 @@ from slice_runner.domain.event_cursor import EventCursor
 from slice_runner.domain.event_reader import EventBatch
 from slice_runner.domain.issue_label import IssueLabel
 from slice_runner.domain.outcome import Outcome
+from slice_runner.domain.retired_issue_label import RetiredIssueLabel
 from slice_runner.domain.slice_coordinates import SliceCoordinates
 from slice_runner.domain.step import Step
 from slice_runner.infrastructure.call_spend_payload import CallSpendPayload
@@ -115,55 +116,55 @@ _TABLE: list[tuple[Step, Outcome, dict[str, int], tuple[Step, str, int]]] = [
         Step.MOUNT_WORKTREE,
         Outcome.WORKTREE_LEFT_BEHIND,
         {},
-        (Step.MOUNT_WORKTREE, "blocked-leftover-worktree", 0),
+        (Step.MOUNT_WORKTREE, "blocked-worktree", 0),
     ),
     (
         Step.UNDERSTAND,
         Outcome.WORKTREE_LEFT_BEHIND,
         {},
-        (Step.UNDERSTAND, "blocked-leftover-worktree", 0),
+        (Step.UNDERSTAND, "blocked-worktree", 0),
     ),
     (
         Step.IMPLEMENT,
         Outcome.WORKTREE_LEFT_BEHIND,
         {},
-        (Step.IMPLEMENT, "blocked-leftover-worktree", 0),
+        (Step.IMPLEMENT, "blocked-worktree", 0),
     ),
     (
         Step.RUN_CONTROLS,
         Outcome.WORKTREE_LEFT_BEHIND,
         {},
-        (Step.RUN_CONTROLS, "blocked-leftover-worktree", 0),
+        (Step.RUN_CONTROLS, "blocked-worktree", 0),
     ),
     (
         Step.VERIFY,
         Outcome.WORKTREE_LEFT_BEHIND,
         {},
-        (Step.VERIFY, "blocked-leftover-worktree", 0),
+        (Step.VERIFY, "blocked-worktree", 0),
     ),
     (
         Step.OPEN_PULL_REQUEST,
         Outcome.WORKTREE_LEFT_BEHIND,
         {},
-        (Step.OPEN_PULL_REQUEST, "blocked-leftover-worktree", 0),
+        (Step.OPEN_PULL_REQUEST, "blocked-worktree", 0),
     ),
     (
         Step.AWAIT_CI,
         Outcome.WORKTREE_LEFT_BEHIND,
         {},
-        (Step.AWAIT_CI, "blocked-leftover-worktree", 0),
+        (Step.AWAIT_CI, "blocked-worktree", 0),
     ),
     (
         Step.CATCH_UP,
         Outcome.WORKTREE_LEFT_BEHIND,
         {},
-        (Step.CATCH_UP, "blocked-leftover-worktree", 0),
+        (Step.CATCH_UP, "blocked-worktree", 0),
     ),
     (
         Step.AWAIT_MERGE,
         Outcome.WORKTREE_LEFT_BEHIND,
         {},
-        (Step.AWAIT_MERGE, "blocked-leftover-worktree", 0),
+        (Step.AWAIT_MERGE, "blocked-worktree", 0),
     ),
     (Step.UNDERSTAND, Outcome.OVER_BUDGET, {}, (Step.UNDERSTAND, "aborted-budget", 0)),
     (Step.UNDERSTAND, Outcome.CONFLICTING, {}, (Step.UNDERSTAND, "blocked-ci-conflict", 0)),
@@ -192,7 +193,7 @@ _TABLE: list[tuple[Step, Outcome, dict[str, int], tuple[Step, str, int]]] = [
         Step.RUN_CONTROLS,
         Outcome.HYGIENE_REJECTED,
         {"hygiene_retries": 2},
-        (Step.RUN_CONTROLS, "blocked-hygiene", 0),
+        (Step.RUN_CONTROLS, "blocked-controls", 0),
     ),
     (Step.RUN_CONTROLS, Outcome.INDETERMINATE, {}, (Step.RUN_CONTROLS, "open", 30)),
     (Step.RUN_CONTROLS, Outcome.INDETERMINATE, {"control_retries": 2}, (Step.RUN_CONTROLS, "open", 30)),
@@ -203,7 +204,7 @@ _TABLE: list[tuple[Step, Outcome, dict[str, int], tuple[Step, str, int]]] = [
     (Step.VERIFY, Outcome.FAILED, {}, (Step.IMPLEMENT, "open", 0)),
     (Step.VERIFY, Outcome.FAILED, {"verify_retries": 1}, (Step.IMPLEMENT, "open", 0)),
     (Step.VERIFY, Outcome.FAILED, {"verify_retries": 2}, (Step.VERIFY, "blocked-verify", 0)),
-    (Step.VERIFY, Outcome.UNCHANGED, {}, (Step.VERIFY, "blocked-unchanged-diff", 0)),
+    (Step.VERIFY, Outcome.UNCHANGED, {}, (Step.VERIFY, "blocked-verify", 0)),
     (Step.VERIFY, Outcome.OVER_BUDGET, {}, (Step.VERIFY, "aborted-budget", 0)),
     (
         Step.VERIFY,
@@ -897,7 +898,7 @@ class TestTheCommandThatEmitsClosedSliceMetrics:
     def test_the_verifier_fail_rate_counts_only_slices_the_judge_vetoed(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        self._record(ClosedSliceMother.closed_as_for_issue(Closure.because_of(ClosingReason.VERIFY), issue=101))
+        self._record(ClosedSliceMother.closed_as_for_issue(Closure.because_of(ClosingReason.JUDGE), issue=101))
         self._record(ClosedSliceMother.closed_as_for_issue(Closure.merged(), issue=102))
 
         summary = json.loads(self._emitted(tmp_path, capsys)[-1])
@@ -908,7 +909,7 @@ class TestTheCommandThatEmitsClosedSliceMetrics:
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
         self._record(ClosedSliceMother.closed_as_for_issue(Closure.because_of(ClosingReason.CONTROLS), issue=201))
-        self._record(ClosedSliceMother.closed_as_for_issue(Closure.because_of(ClosingReason.VERIFY), issue=202))
+        self._record(ClosedSliceMother.closed_as_for_issue(Closure.because_of(ClosingReason.JUDGE), issue=202))
         self._record(ClosedSliceMother.closed_as_for_issue(Closure.merged(), issue=203))
 
         summary = json.loads(self._emitted(tmp_path, capsys)[-1])
@@ -944,16 +945,6 @@ class TestTheCommandThatEmitsClosedSliceMetrics:
         summary = json.loads(self._emitted(tmp_path, capsys)[-1])
 
         assert summary["rates"]["ci_red"] == {"value": 50.0, "samples": 2}
-
-    def test_the_blocked_by_hygiene_rate_counts_only_slices_closed_over_an_incomplete_report(
-        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
-    ) -> None:
-        self._record(ClosedSliceMother.closed_as_for_issue(Closure.because_of(ClosingReason.HYGIENE), issue=310))
-        self._record(ClosedSliceMother.closed_as_for_issue(Closure.merged(), issue=311))
-
-        summary = json.loads(self._emitted(tmp_path, capsys)[-1])
-
-        assert summary["rates"]["blocked_by_hygiene"] == {"value": 50.0, "samples": 2}
 
     def test_the_verify_discards_rate_counts_slices_where_the_judges_contract_broke_at_least_once(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
@@ -1063,7 +1054,6 @@ class TestTheCommandThatEmitsClosedSliceMetrics:
         assert set(summary["rates"]) == {
             "verifier_fail",
             "blocked_by_controls",
-            "blocked_by_hygiene",
             "first_attempt",
             "implement_retries",
             "verify_discards",
@@ -1512,6 +1502,17 @@ class TestConductingASliceAnEarlierInvocationLeftHalfDone:
 
         assert logs.is_dir()
 
+    def test_the_run_leaves_its_transitions_in_the_ledger_without_a_status_and_the_last_one_is_merged(
+        self, tmp_path: Path
+    ) -> None:
+        self._invocation().conduct(logs=tmp_path / "logs")
+
+        ledger = DurableLedger(name=LocalEventLog.LEDGER, row=EventPayload).path()
+        rows = [json.loads(line) for line in ledger.read_text(encoding="utf-8").splitlines()]
+        assert ledger.name == "transitions.jsonl"
+        assert all("status" not in row for row in rows)
+        assert rows[-1]["standing"] == "merged"
+
     def test_the_transition_that_closes_the_run_is_reported_on_standard_error_leaving_the_result_untouched(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
@@ -1519,7 +1520,8 @@ class TestConductingASliceAnEarlierInvocationLeftHalfDone:
 
         output = capsys.readouterr()
         reported = json.loads(output.err)
-        assert (reported["step"], reported["status"]) == ("await-merge", "closed")
+        assert (reported["step"], reported["standing"]) == ("await-merge", "merged")
+        assert "status" not in reported
         assert json.loads(output.out)["halt"] == "run-closed"
 
 
@@ -1612,7 +1614,7 @@ class TestAskingForASliceThatCannotBeRun:
     ) -> None:
         invocation = RunInvocation(
             children=GhConversationMother.two_slices_resumed_at(
-                RunMother.awaiting_merge(), second_label=IssueLabel.BLOCKED_VERIFY
+                RunMother.awaiting_merge(), second_label=IssueLabel.BLOCKED_JUDGE
             ),
             parent=GhConversationMother.parent_of_two_slices(),
             answers=(Answer(to=("gh", "issue", "view", "--json", "comments"), stdout=json.dumps({"comments": []})),),
@@ -1757,9 +1759,27 @@ class TestRetiringTheWorktreeFromTheCommandLine:
 
         captured = capsys.readouterr()
         assert code == ExitCode.RUN_UNMERGED
-        assert json.loads(captured.out)["state"] == "blocked-leftover-worktree"
+        assert json.loads(captured.out)["state"] == "blocked-worktree"
         assert f"git worktree remove {GhConversationMother.WORKTREE}" in captured.err
         assert not invocation.process.invoked("git", "worktree", "add")
+
+    def test_a_tree_left_by_a_run_that_persisted_nothing_is_written_down_as_unexpected_so_a_retry_blocks_on_it_again(
+        self, tmp_path: Path
+    ) -> None:
+        invocation = RunInvocation(
+            children=GhConversationMother.the_slice_marked_in_progress_that_never_persisted_a_run(),
+            answers=(
+                Answer(to=("git", "rev-list", "--count"), stdout="0\n"),
+                Answer(to=("gh", "pr", "list"), stdout=GhConversationMother.no_open_pull_request()),
+            ),
+        )
+
+        invocation.conduct(logs=tmp_path / "logs", worktree=None)
+
+        written = [
+            call.stdin for call in invocation.process.calls if "edit" in call.argv and "--body-file" in call.argv
+        ]
+        assert '"tree_unexpected": true' in written[-1]
 
     def test_a_tree_left_by_a_run_that_persisted_nothing_closes_the_invocation_with_the_command_to_resolve_it_by_hand(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
@@ -1776,7 +1796,7 @@ class TestRetiringTheWorktreeFromTheCommandLine:
 
         captured = capsys.readouterr()
         assert code == ExitCode.RUN_UNMERGED
-        assert json.loads(captured.out)["state"] == "blocked-leftover-worktree"
+        assert json.loads(captured.out)["state"] == "blocked-worktree"
         assert f"git worktree remove {GhConversationMother.WORKTREE}" in captured.err
         assert not invocation.process.invoked("git", "worktree", "add")
 
@@ -1964,12 +1984,12 @@ class TestWhenTheImplementerLeavesTheDiffUntouched(BlindToTheToolboxOfThisMachin
 
         code = invocation.conduct(logs=tmp_path / "logs", budgets=Budgets(verify_retries=1))
 
-        assert code == ExitCode.UNCHANGED_DIFF
-        assert json.loads(capsys.readouterr().out)["state"] == "blocked-unchanged-diff"
+        assert code == ExitCode.RUN_UNMERGED
+        assert json.loads(capsys.readouterr().out)["state"] == "blocked-verify"
         labels = [
             Argv(call.argv).value_of("--add-label") for call in invocation.process.calls if "--add-label" in call.argv
         ]
-        assert labels[-1] == IssueLabel.BLOCKED_UNCHANGED_DIFF
+        assert labels[-1] == IssueLabel.BLOCKED_JUDGE
 
     def test_the_round_that_was_not_judged_leaves_no_row_in_the_corpus(self, tmp_path: Path) -> None:
         invocation = self._invocation()
@@ -2300,6 +2320,31 @@ class TestWhenTheInvocationCannotBeConducted(ReadingWhatWasReported):
 
         assert code == ExitCode.USAGE_ERROR
         assert "slice-NN" in self._reported(capsys)
+
+    @pytest.mark.parametrize(
+        ("retired", "replacement"),
+        [
+            ("bloqueada:higiene", "bloqueada:controles"),
+            ("bloqueada:verify", "bloqueada:juez"),
+            ("bloqueada:sin-cambios", "bloqueada:juez"),
+            ("bloqueada:worktree-sin-retirar", "bloqueada:worktree"),
+        ],
+    )
+    def test_a_subissue_carrying_a_retired_label_is_refused_naming_the_retired_label_and_the_one_that_replaced_it(
+        self, retired: str, replacement: str, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        children = GhConversationMother.the_slice_resumed_at(
+            RunMother.blocked_on_controls(), label=RetiredIssueLabel(retired)
+        )
+        invocation = RunInvocation(children=children)
+
+        code = invocation.conduct(logs=tmp_path / "logs")
+
+        reported = self._reported(capsys)
+        assert code == ExitCode.USAGE_ERROR
+        assert retired in reported
+        assert replacement in reported
+        assert not invocation.process.invoked("git", "worktree", "add")
 
     def test_a_gh_that_fails_mid_run_exits_with_the_code_of_an_interrupted_run_carrying_what_it_said(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
@@ -2987,30 +3032,43 @@ class TestTheStatusCommandParsing:
 
 
 class TestTheCommandThatFollowsTheEventsAsJson(WithTheDurableStoresOutOfTheRealHome):
+    _ROUNDS: ClassVar[dict[str, object]] = {
+        "controls": {"used": 0, "limit": 2},
+        "hygiene": {"used": 0, "limit": 2},
+        "judge": {"used": 0, "limit": 2},
+        "ci": {"used": 0, "limit": 1},
+        "ci_indeterminate": {"used": 0, "limit": 10},
+        "catch_up": {"used": 0, "limit": 3},
+    }
     _ADVANCING: ClassVar[dict[str, object]] = {
-        "version": 1,
-        "ts": "2024-01-01T12:30:45+00:00",
+        "version": 2,
+        "kind": "transition",
+        "ts": 1704112245000,
         "repo": EventMother.REPO,
         "issue": EventMother.ISSUE,
-        "slice_id": "slice-05",
-        "step": "run-controls",
-        "status": "advancing",
-        "cost_usd": 0.3433209,
         "parent": FeatureSliceMother.PARENT,
+        "slice_id": "slice-05",
         "name": FeatureSliceMother.NAME,
+        "standing": "in-progress",
+        "step": "run-controls",
+        "rounds": _ROUNDS,
+        "cost_usd": 0.3433209,
+        "budget_usd": 50.0,
     }
     _MERGED: ClassVar[dict[str, object]] = {
-        "version": 1,
-        "ts": "2024-01-01T12:31:15+00:00",
+        "version": 2,
+        "kind": "transition",
+        "ts": 1704112275000,
         "repo": EventMother.REPO,
         "issue": EventMother.ISSUE,
-        "slice_id": "slice-05",
-        "step": "await-merge",
-        "status": "closed",
-        "cost_usd": 0.051877,
-        "closed_as": "merged",
         "parent": FeatureSliceMother.PARENT,
+        "slice_id": "slice-05",
         "name": FeatureSliceMother.NAME,
+        "standing": "merged",
+        "step": "await-merge",
+        "rounds": _ROUNDS,
+        "cost_usd": 0.051877,
+        "budget_usd": 50.0,
     }
 
     @staticmethod
@@ -3070,7 +3128,7 @@ class TestTheCommandThatFollowsTheEventsAsJson(WithTheDurableStoresOutOfTheRealH
         printed = self._printed(capsys)
         assert "parent" not in printed[0]
         assert "name" not in printed[0]
-        assert printed[0]["version"] == 1
+        assert printed[0]["version"] == 2
 
     def test_main_with_the_json_flag_reads_the_real_ledger_and_prints_objects(
         self, capsys: pytest.CaptureFixture[str]
@@ -3085,13 +3143,11 @@ class TestTheCommandThatFollowsTheEventsAsJson(WithTheDurableStoresOutOfTheRealH
 
 
 class TestTheCommandThatFollowsTheEvents(WithTheDurableStoresOutOfTheRealHome):
-    _ADVANCING_LINE = "2024-01-01T12:30:45+00:00 alcaptar/agentic-skills #150 slice-05 run-controls advancing $0.34"
-    _WAITING_LINE = "2024-01-01T12:31:45+00:00 alcaptar/agentic-skills #150 slice-05 await-ci waiting $0.34"
-    _CLOSED_WITHOUT_STATE_LINE = (
-        "2024-01-01T12:31:15+00:00 alcaptar/agentic-skills #150 slice-05 await-merge closed $0.05"
-    )
-    _MERGED_LINE = f"{_CLOSED_WITHOUT_STATE_LINE} merged"
-    _BLOCKED_LINE = f"{_CLOSED_WITHOUT_STATE_LINE} blocked-verify"
+    _ADVANCING_LINE = "2024-01-01T12:30:45+00:00 alcaptar/agentic-skills #150 slice-05 run-controls in-progress $0.34"
+    _WAITING_LINE = "2024-01-01T12:31:45+00:00 alcaptar/agentic-skills #150 slice-05 await-ci in-progress $0.34"
+    _PENDING_LINE = "2024-01-01T12:30:45+00:00 alcaptar/agentic-skills #150 slice-05 - pending $0.00"
+    _MERGED_LINE = "2024-01-01T12:31:15+00:00 alcaptar/agentic-skills #150 slice-05 await-merge merged $0.05"
+    _BLOCKED_LINE = "2024-01-01T12:31:15+00:00 alcaptar/agentic-skills #150 slice-05 await-merge blocked judge $0.05"
 
     @staticmethod
     def _clock_interrupted_after(sleeps: int) -> Mock:
@@ -3145,18 +3201,31 @@ class TestTheCommandThatFollowsTheEvents(WithTheDurableStoresOutOfTheRealHome):
 
         assert capsys.readouterr().out.splitlines() == [self._ADVANCING_LINE, self._MERGED_LINE]
 
-    def test_a_closing_row_without_the_state_is_printed_without_it(self, capsys: pytest.CaptureFixture[str]) -> None:
+    def test_a_pending_row_is_printed_with_no_step_and_the_pending_standing(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        reader = ScriptedEventReader(EventBatch(events=(EventMother.pending(),), cursor=EventCursor(offset=10)))
+
+        self._cli().follow(repo=None, once=True, reader=reader, clock=self._clock_interrupted_after(1))
+
+        assert capsys.readouterr().out.splitlines() == [self._PENDING_LINE]
+
+    def test_the_text_never_prints_a_value_of_the_retired_status_vocabulary(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
         reader = ScriptedEventReader(
             EventBatch(
-                events=(EventMother.closed_before_the_closing_state_was_recorded(),), cursor=EventCursor(offset=10)
+                events=(EventMother.advancing(), EventMother.pending(), EventMother.round_without_changes()),
+                cursor=EventCursor(offset=10),
             )
         )
 
         self._cli().follow(repo=None, once=True, reader=reader, clock=self._clock_interrupted_after(1))
 
-        assert capsys.readouterr().out.splitlines() == [self._CLOSED_WITHOUT_STATE_LINE]
+        retired = {"advancing", "waiting", "awaiting-person", "closed", "nothing-to-commit"}
+        assert retired.isdisjoint(capsys.readouterr().out.split())
 
-    def test_a_row_repeating_the_step_and_status_of_the_snapshot_prints_nothing_after_it(
+    def test_a_row_repeating_the_step_and_closure_of_the_snapshot_prints_nothing_after_it(
         self, capsys: pytest.CaptureFixture[str]
     ) -> None:
         reader = ScriptedEventReader(
@@ -3221,7 +3290,7 @@ class TestTheCommandThatFollowsTheEvents(WithTheDurableStoresOutOfTheRealHome):
 
         assert code == ExitCode.OK
         assert capsys.readouterr().out.splitlines() == [
-            f"2024-01-01T12:30:45+00:00 {EventMother.ANOTHER_REPO} #150 slice-05 run-controls advancing $0.34"
+            f"2024-01-01T12:30:45+00:00 {EventMother.ANOTHER_REPO} #150 slice-05 run-controls in-progress $0.34"
         ]
 
     def test_main_without_the_repo_flag_prints_every_repo(self, capsys: pytest.CaptureFixture[str]) -> None:

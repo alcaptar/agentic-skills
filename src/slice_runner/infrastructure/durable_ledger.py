@@ -86,10 +86,18 @@ class ReadableDurableLedger(DurableLedger[_Read]):
             if not raw.endswith(b"\n"):
                 break
             if raw.strip():
-                rows.append(self._row.from_dict(self._decoded(raw.decode("utf-8"), f"offset {position}")))
+                rows.append(self._row_at(raw, position))
             position += len(raw)
 
         return tuple(rows), position
+
+    def _row_at(self, raw: bytes, position: int) -> _Read:
+        where = f"offset {position}"
+        data = self._decoded(raw.decode("utf-8"), where)
+        try:
+            return self._row.from_dict(data)
+        except self._row.UNREADABLE as error:
+            raise self._row.UNREADABLE(f"the {self._name} ledger line at {where}: {error}") from error
 
     @staticmethod
     def _anything(data: dict[str, object]) -> bool:

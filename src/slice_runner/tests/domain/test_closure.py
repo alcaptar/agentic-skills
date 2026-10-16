@@ -19,7 +19,7 @@ class TestWhatAClosureRefuses:
             (RunState.BLOCKED, ClosingReason.BUDGET),
             (RunState.BLOCKED, ClosingReason.UNMEASURED_CALL),
             (RunState.ABORTED, ClosingReason.CONTROLS),
-            (RunState.ABORTED, ClosingReason.LEFTOVER_WORKTREE),
+            (RunState.ABORTED, ClosingReason.WORKTREE),
         ],
         ids=[
             "a-reason-on-an-open-run",

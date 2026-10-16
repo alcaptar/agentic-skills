@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 from unittest.mock import Mock, create_autospec
@@ -7,13 +8,15 @@ from unittest.mock import Mock, create_autospec
 import pytest
 
 from slice_runner.application.actions.record_step import RecordStep, RecordStepParams
+from slice_runner.domain.budgets import Budgets
 from slice_runner.domain.clock import Clock
 from slice_runner.domain.closing_reason import ClosingReason
 from slice_runner.domain.closure import Closure
 from slice_runner.domain.event_log import EventLog
-from slice_runner.domain.event_status import EventStatus
 from slice_runner.domain.harness_spend import HarnessSpend
 from slice_runner.domain.issue_label import IssueLabel
+from slice_runner.domain.round_budget import RoundBudget
+from slice_runner.domain.rounds import Rounds
 from slice_runner.domain.run_repository import RunRepository
 from slice_runner.domain.step import Step
 from slice_runner.domain.transition import Transition
@@ -39,7 +42,7 @@ class _Recorder:
 
     @property
     def action(self) -> RecordStep:
-        return RecordStep(repository=self.repository, events=self.events, clock=self.clock)
+        return RecordStep(repository=self.repository, events=self.events, clock=self.clock, budgets=Budgets())
 
 
 class _Given:
@@ -166,15 +169,23 @@ class TestTheEventItEmits:
         assert emitted.issue == _ISSUE
         assert emitted.at == _AT
 
-    def test_a_closing_transition_is_emitted_as_closed_so_the_log_says_the_run_ended(self) -> None:
+    def test_the_event_carries_the_counters_of_the_run_with_their_limits_and_the_cost_limit(self) -> None:
         recorder = _Recorder()
-        transition = Transition(run=RunMother.awaiting_merge(), closure=Closure.merged())
+        run = replace(RunMother.implementing(), control_retries=1, verify_retries=2)
+        transition = Transition(run=run)
 
-        recorder.action.execute(_Given.params(current=RunMother.awaiting_merge(), transition=transition))
+        recorder.action.execute(_Given.params(current=run, transition=transition))
 
-        assert recorder.events.emit.call_args.args[0].status is EventStatus.CLOSED
+        emitted = recorder.events.emit.call_args.args[0]
+        assert emitted.rounds == Rounds.of(run, Budgets())
+        assert (emitted.rounds.controls, emitted.rounds.judge) == (
+            RoundBudget(used=1, limit=Budgets().control_retries),
+            RoundBudget(used=2, limit=Budgets().verify_retries),
+        )
+        assert emitted.budget_usd == Budgets().slice_cost_usd
+        assert emitted.round_without_changes is False
 
-    @pytest.mark.parametrize("closure", [Closure.merged(), Closure.because_of(ClosingReason.VERIFY)])
+    @pytest.mark.parametrize("closure", [Closure.merged(), Closure.because_of(ClosingReason.JUDGE)])
     def test_a_closing_transition_emits_the_state_it_closed_with(self, closure: Closure) -> None:
         recorder = _Recorder()
         transition = Transition(run=RunMother.awaiting_merge(), closure=closure)

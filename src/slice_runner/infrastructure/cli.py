@@ -79,6 +79,7 @@ from slice_runner.domain.halt import Halt
 from slice_runner.domain.role_models import RoleModels
 from slice_runner.domain.state_machine import StateMachine
 from slice_runner.domain.step import Step
+from slice_runner.domain.worktree_retirement import WorktreeRetirement
 from slice_runner.infrastructure.branches_without_catch_up import BranchesWithoutCatchUp
 from slice_runner.infrastructure.claude_implementer import ClaudeImplementer
 from slice_runner.infrastructure.claude_verifier import ClaudeVerifier
@@ -623,26 +624,27 @@ class Cli:
 
     @staticmethod
     def _warn_about_the_blocked_worktree(conducted: ConductSliceResult) -> None:
-        match conducted.closure.reason:
-            case ClosingReason.WORKTREE:
-                print(
-                    f"the worktree of the slice cannot be mounted because of {conducted.conflicting_path}; "
-                    "free that path or branch and reinvoke with a retry instruction",
-                    file=sys.stderr,
-                )
-            case ClosingReason.LEFTOVER_WORKTREE:
-                command = KeptWorktreeComment.removal_command(conducted.conflicting_path)
-                print(
-                    f"a worktree nobody expected is left at {conducted.conflicting_path}, so it is neither reused "
-                    f"nor mounted over; resolve it by hand with `{command}` and reinvoke with a retry instruction",
-                    file=sys.stderr,
-                )
-            case _:
-                return
+        if conducted.closure.reason is not ClosingReason.WORKTREE:
+            return
+        if conducted.worktree_retirement is WorktreeRetirement.KEPT_UNEXPECTED:
+            command = KeptWorktreeComment.removal_command(conducted.conflicting_path)
+            print(
+                f"a worktree nobody expected is left at {conducted.conflicting_path}, so it is neither reused "
+                f"nor mounted over; resolve it by hand with `{command}` and reinvoke with a retry instruction",
+                file=sys.stderr,
+            )
+            return
+
+        print(
+            f"the worktree of the slice cannot be mounted because of {conducted.conflicting_path}; "
+            "free that path or branch and reinvoke with a retry instruction",
+            file=sys.stderr,
+        )
 
     @staticmethod
     def _warn_about_the_kept_worktree(conducted: ConductSliceResult) -> None:
-        if conducted.closure.reason is ClosingReason.LEFTOVER_WORKTREE or not conducted.worktree_retirement.kept:
+        retirement = conducted.worktree_retirement
+        if retirement is WorktreeRetirement.KEPT_UNEXPECTED or not retirement.kept:
             return
 
         print(
@@ -763,7 +765,11 @@ class Cli:
     def register(self, *, repo: str, issue: int, reader: EventReader, log: EventLog, clock: Clock) -> int:
         try:
             RegisterPendingSlices(
-                children=GhChildIssues(call=self._gh_call(clock=clock)), reader=reader, log=log, clock=clock
+                children=GhChildIssues(call=self._gh_call(clock=clock)),
+                reader=reader,
+                log=log,
+                clock=clock,
+                budgets=self._budgets,
             ).execute(RegisterPendingSlicesParams(repo=repo, parent=issue))
         except (UnreadableEventLogError, UnreadableIssueError) as error:
             return self._reported(f"the pending slices could not be registered: {error}", ExitCode.USAGE_ERROR)
@@ -848,13 +854,15 @@ class Cli:
                     debt_ledger=debt_ledger,
                 ),
                 stage=StageSlice(workspace=workspace),
-                commit=CommitRound(workspace=workspace, events=LocalEventLog(), clock=clock),
+                commit=CommitRound(workspace=workspace, events=LocalEventLog(), clock=clock, budgets=self._budgets),
                 rescue=RescueStagedWork(workspace=workspace),
                 run_controls=RunControls(controls=LocalControlRunner(process=self._process)),
                 verify=self._action(clock=clock, corpus=corpus),
                 deliver=DeliverSlice(workspace=workspace, forum=forum),
                 close=CloseParent(repository=repository),
-                record_step=RecordStep(repository=repository, events=LocalEventLog(), clock=clock),
+                record_step=RecordStep(
+                    repository=repository, events=LocalEventLog(), clock=clock, budgets=self._budgets
+                ),
                 record_closure=RecordClosure(
                     metrics=LocalMetricsLog(clock=clock),
                     repository=repository,
@@ -862,7 +870,7 @@ class Cli:
                     corpus=corpus,
                     debt_ledger=debt_ledger,
                 ),
-                record_start=RecordStart(events=LocalEventLog(), clock=clock),
+                record_start=RecordStart(events=LocalEventLog(), clock=clock, budgets=self._budgets),
                 read_ci=ReadCiStatus(ci=GhCi(call=gh_call), forum=forum),
                 read_pull_request=ReadPullRequestStatus(forum=forum),
                 catch_up=CatchUpBranch(branches=BranchesWithoutCatchUp(branches=branches)),

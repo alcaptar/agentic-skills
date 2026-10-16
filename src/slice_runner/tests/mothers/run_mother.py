@@ -116,10 +116,6 @@ class RunMother:
         return Run(step=Step.RUN_CONTROLS, control_retries=2, control_rounds_logged=3)
 
     @staticmethod
-    def blocked_on_hygiene() -> Run:
-        return Run(step=Step.RUN_CONTROLS, hygiene_retries=2)
-
-    @staticmethod
     def blocked_on_verify() -> Run:
         return Run(step=Step.VERIFY, verify_retries=2)
 

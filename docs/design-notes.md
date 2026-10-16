@@ -324,7 +324,7 @@ mide. Las reglas que salen de estas decisiones siguen en su capa.
   Eso resuelve solo un `catch_up` que fusiona: su commit de merge ya vive en el árbol antes de que la
   ronda de controles se ejecute, así que si esa ronda no dejó nada nuevo que comitear, el índice vacío es
   la señal -no un dato aparte como el antiguo `from_catch_up`- y `CommitRound` simplemente no comitea. Esa
-  vuelta deja fila propia en el registro durable de eventos (`EventStatus.NOTHING_TO_COMMIT`): el fallo
+  vuelta deja fila propia en el registro durable de eventos (`round_without_changes` en la fila de `transitions.jsonl`): el fallo
   ruidoso de "el implementador no produjo nada" ya no revienta el commit, y un run que se queda abierto es
   justo el caso que esa señal existe para cazar, así que no se espera a la fila de cierre para verla.
 - **Por qué reanudar comitea lo que encuentra staged.** Un run persistido en verificar, abrir la pull

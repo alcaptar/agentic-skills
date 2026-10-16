@@ -1,101 +1,101 @@
 from __future__ import annotations
 
-from dataclasses import replace
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar
 
 import pytest
 
-from slice_runner.domain.closing_reason import ClosingReason
-from slice_runner.domain.closure import Closure
-from slice_runner.domain.event_status import EventStatus
 from slice_runner.domain.exceptions import UnreadableEventLogError
-from slice_runner.domain.run_state import RunState
 from slice_runner.infrastructure.event_payload import EventPayload
 from slice_runner.tests.mothers.event_mother import EventMother
 from slice_runner.tests.mothers.feature_slice_mother import FeatureSliceMother
 
+if TYPE_CHECKING:
+    from slice_runner.domain.event import Event
+
 
 class TestWhatTheProgramEmits:
-    def test_the_event_serialises_with_the_repo_the_issue_the_slice_the_step_the_instant_the_spend_and_the_status(
+    _SPEND: ClassVar[dict[str, object]] = {
+        "cost_usd": 0.3433209,
+        "turns": 9,
+        "duration_ms": 36315,
+        "calls": 1,
+        "models": ["claude-sonnet-5"],
+        "input_tokens": 13,
+        "output_tokens": 1159,
+        "cache_creation_tokens": 42251,
+        "cache_read_tokens": 241303,
+        "ttft_ms": 5588,
+        "duration_api_ms": 32189,
+    }
+    _ROUNDS: ClassVar[dict[str, object]] = {
+        "controls": {"used": 0, "limit": 2},
+        "hygiene": {"used": 0, "limit": 2},
+        "judge": {"used": 0, "limit": 2},
+        "ci": {"used": 0, "limit": 1},
+        "ci_indeterminate": {"used": 0, "limit": 10},
+        "catch_up": {"used": 0, "limit": 3},
+    }
+
+    def test_the_event_serialises_with_the_coordinates_the_standing_the_step_the_rounds_the_spend_and_the_budget(
         self,
     ) -> None:
         assert EventPayload.from_domain(EventMother.advancing()).to_contract() == {
             "slice_id": "slice-05",
             "repo": EventMother.REPO,
             "issue": EventMother.ISSUE,
-            "step": "run-controls",
             "ts": "2024-01-01T12:30:45+00:00",
-            "spend": {
-                "cost_usd": 0.3433209,
-                "turns": 9,
-                "duration_ms": 36315,
-                "calls": 1,
-                "models": ["claude-sonnet-5"],
-                "input_tokens": 13,
-                "output_tokens": 1159,
-                "cache_creation_tokens": 42251,
-                "cache_read_tokens": 241303,
-                "ttft_ms": 5588,
-                "duration_api_ms": 32189,
-            },
-            "status": "advancing",
+            "standing": "in-progress",
+            "step": "run-controls",
+            "rounds": self._ROUNDS,
+            "spend": self._SPEND,
+            "budget_usd": 50.0,
             "parent": FeatureSliceMother.PARENT,
             "name": FeatureSliceMother.NAME,
         }
 
-    def test_a_closing_event_writes_the_state_it_closed_with_under_closed_as(self) -> None:
+    def test_an_event_never_writes_a_status_key(self) -> None:
+        events = (EventMother.advancing(), EventMother.pending(), EventMother.closed())
+
+        assert all("status" not in EventPayload.from_domain(event).to_contract() for event in events)
+
+    def test_a_closing_event_writes_the_standing_and_the_reason_it_closed_with(self) -> None:
         merged = EventPayload.from_domain(EventMother.closed()).to_contract()
         blocked = EventPayload.from_domain(EventMother.blocked_by_the_judge()).to_contract()
 
-        assert (merged["status"], merged["closed_as"]) == ("closed", "merged")
-        assert (blocked["status"], blocked["closed_as"]) == ("closed", "blocked-verify")
+        assert (merged["standing"], "reason" in merged) == ("merged", False)
+        assert (blocked["standing"], blocked["reason"]) == ("blocked", "judge")
 
-    def test_an_event_that_does_not_close_leaves_the_key_out_instead_of_emitting_null(self) -> None:
-        assert "closed_as" not in EventPayload.from_domain(EventMother.advancing()).to_contract()
+    def test_a_pending_event_writes_the_pending_standing_and_leaves_the_step_out(self) -> None:
+        row = EventPayload.from_domain(EventMother.pending()).to_contract()
+
+        assert row["standing"] == "pending"
+        assert "step" not in row
+
+    def test_a_round_without_changes_writes_the_flag_as_true_and_any_other_event_leaves_it_out(self) -> None:
+        flagged = EventPayload.from_domain(EventMother.round_without_changes()).to_contract()
+        plain = EventPayload.from_domain(EventMother.advancing()).to_contract()
+
+        assert flagged["round_without_changes"] is True
+        assert "round_without_changes" not in plain
 
 
 class TestWhatTheProgramReads:
-    _ROW_OF_TODAY: ClassVar[dict[str, object]] = {
-        "slice_id": "slice-05",
-        "repo": EventMother.REPO,
-        "issue": EventMother.ISSUE,
-        "step": "await-merge",
-        "ts": "2024-01-01T12:31:15+00:00",
-        "spend": {
-            "cost_usd": 0.0512,
-            "turns": 3,
-            "duration_ms": 1000,
-            "calls": 1,
-            "models": ["claude-sonnet-5"],
-            "input_tokens": 1,
-            "output_tokens": 1,
-            "cache_creation_tokens": 1,
-            "cache_read_tokens": 1,
-            "ttft_ms": 1,
-            "duration_api_ms": 1,
-        },
-        "status": "closed",
-    }
+    @pytest.mark.parametrize(
+        "event",
+        [
+            EventMother.advancing(),
+            EventMother.pending(),
+            EventMother.closed(),
+            EventMother.blocked_by_the_judge(),
+            EventMother.awaiting_merge(),
+            EventMother.round_without_changes(),
+            EventMother.advancing_before_the_feature_was_recorded(),
+        ],
+    )
+    def test_a_row_reads_back_as_the_event_that_was_written(self, event: Event) -> None:
+        row = EventPayload.from_domain(event).to_contract()
 
-    def test_a_closing_row_written_before_the_closing_state_existed_is_still_read(self) -> None:
-        event = EventPayload.from_dict(dict(self._ROW_OF_TODAY)).to_domain()
-
-        assert (event.status, event.closure) == (EventStatus.CLOSED, Closure.open())
-
-    def test_a_closing_row_reads_back_with_the_state_it_closed_with(self) -> None:
-        row = EventPayload.from_domain(EventMother.blocked_by_the_judge()).to_contract()
-
-        assert EventPayload.from_dict(row).to_domain() == EventMother.blocked_by_the_judge()
-
-    def test_a_row_written_before_the_feature_was_recorded_is_still_read_without_it(self) -> None:
-        event = EventPayload.from_dict(dict(self._ROW_OF_TODAY)).to_domain()
-
-        assert event.feature_slice is None
-
-    def test_a_row_with_the_parent_and_the_name_reads_back_with_the_feature_it_belongs_to(self) -> None:
-        row = EventPayload.from_domain(EventMother.advancing()).to_contract()
-
-        assert EventPayload.from_dict(row).to_domain().feature_slice == FeatureSliceMother.of_the_feature()
+        assert EventPayload.from_dict(row).to_domain() == event
 
     def test_an_event_without_the_feature_writes_neither_key(self) -> None:
         row = EventPayload.from_domain(EventMother.advancing_before_the_feature_was_recorded()).to_contract()
@@ -103,51 +103,33 @@ class TestWhatTheProgramReads:
         assert "parent" not in row
         assert "name" not in row
 
-    def test_a_row_with_the_pending_status_reads_as_a_pending_event(self) -> None:
-        row = EventPayload.from_domain(EventMother.pending()).to_contract()
+    def test_a_row_with_a_status_field_is_refused(self) -> None:
+        row = {**EventPayload.from_domain(EventMother.advancing()).to_contract(), "status": "advancing"}
 
-        assert row["status"] == "pending"
-        assert EventPayload.from_dict(row).to_domain().status is EventStatus.PENDING
-
-
-class TestReadingTheClosedAsOfEveryRowOfTheLog:
-    @pytest.mark.parametrize(
-        ("closed_as", "state", "reason"),
-        [
-            ("merged", RunState.MERGED, None),
-            ("blocked-controls", RunState.BLOCKED, ClosingReason.CONTROLS),
-            ("blocked-hygiene", RunState.BLOCKED, ClosingReason.HYGIENE),
-            ("blocked-verify", RunState.BLOCKED, ClosingReason.VERIFY),
-            ("blocked-unchanged-diff", RunState.BLOCKED, ClosingReason.UNCHANGED_DIFF),
-            ("blocked-ci-red", RunState.BLOCKED, ClosingReason.CI_RED),
-            ("blocked-ci-indeterminate", RunState.BLOCKED, ClosingReason.CI_INDETERMINATE),
-            ("blocked-ci-conflict", RunState.BLOCKED, ClosingReason.CI_CONFLICT),
-            ("blocked-worktree", RunState.BLOCKED, ClosingReason.WORKTREE),
-            ("blocked-leftover-worktree", RunState.BLOCKED, ClosingReason.LEFTOVER_WORKTREE),
-            ("aborted-budget", RunState.ABORTED, ClosingReason.BUDGET),
-            ("aborted-unmeasured-call", RunState.ABORTED, ClosingReason.UNMEASURED_CALL),
-        ],
-    )
-    def test_the_value_of_every_generation_reads_as_a_state_and_its_reason(
-        self, closed_as: str, state: RunState, reason: ClosingReason | None
-    ) -> None:
-        row = {**TestWhatTheProgramReads._ROW_OF_TODAY, "closed_as": closed_as}
-
-        event = EventPayload.from_dict(row).to_domain()
-
-        assert event.closure == Closure(state=state, reason=reason)
-
-    def test_a_row_with_a_value_nobody_wrote_still_breaks_the_reading(self) -> None:
-        row = {**TestWhatTheProgramReads._ROW_OF_TODAY, "closed_as": "blocked-nothing"}
-
-        with pytest.raises(UnreadableEventLogError):
+        with pytest.raises(UnreadableEventLogError, match="status"):
             EventPayload.from_dict(row)
 
-    @pytest.mark.parametrize("reason", list(ClosingReason))
-    def test_every_closure_is_written_back_with_the_value_it_always_had(self, reason: ClosingReason) -> None:
-        closure = Closure.because_of(reason)
-        event = replace(EventMother.closed(), closure=closure)
+    def test_a_row_of_the_previous_generation_with_closed_as_is_refused(self) -> None:
+        row = {**EventPayload.from_domain(EventMother.closed()).to_contract(), "closed_as": "merged"}
 
-        written = EventPayload.from_domain(event).to_contract()
+        with pytest.raises(UnreadableEventLogError, match="closed_as"):
+            EventPayload.from_dict(row)
 
-        assert written["closed_as"] == f"{closure.state}-{reason}"
+    def test_a_blocked_standing_without_a_reason_is_refused(self) -> None:
+        row = {**EventPayload.from_domain(EventMother.blocked_by_the_judge()).to_contract()}
+        del row["reason"]
+
+        with pytest.raises(UnreadableEventLogError, match="standing"):
+            EventPayload.from_dict(row)
+
+    def test_a_reason_that_belongs_to_another_standing_is_refused(self) -> None:
+        row = {**EventPayload.from_domain(EventMother.blocked_by_the_judge()).to_contract(), "reason": "budget"}
+
+        with pytest.raises(UnreadableEventLogError, match="standing"):
+            EventPayload.from_dict(row)
+
+    def test_a_pending_standing_with_a_step_is_refused(self) -> None:
+        row = {**EventPayload.from_domain(EventMother.pending()).to_contract(), "step": "implement"}
+
+        with pytest.raises(UnreadableEventLogError, match="standing"):
+            EventPayload.from_dict(row)

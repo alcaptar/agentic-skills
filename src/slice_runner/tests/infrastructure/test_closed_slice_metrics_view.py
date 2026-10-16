@@ -152,7 +152,7 @@ class TestTheRatesSection(RenderingTheView):
     def test_each_rate_is_painted_with_the_number_of_samples_it_comes_from(self) -> None:
         records = (
             ClosedSliceRecordMother.merged(),
-            ClosedSliceRecordMother.closed_as(Closure.because_of(ClosingReason.VERIFY)),
+            ClosedSliceRecordMother.closed_as(Closure.because_of(ClosingReason.JUDGE)),
         )
 
         rendered = self._rendered(records=records)

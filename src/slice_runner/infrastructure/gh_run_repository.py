@@ -4,9 +4,10 @@ import json
 import re
 from typing import TYPE_CHECKING, ClassVar
 
-from slice_runner.domain.exceptions import LaggingSearchIndexError, UnreadableIssueError
+from slice_runner.domain.exceptions import LaggingSearchIndexError, RetiredLabelError, UnreadableIssueError
 from slice_runner.domain.issue_label import IssueLabel
 from slice_runner.domain.parent_issue import ParentIssue
+from slice_runner.domain.retired_issue_label import RetiredIssueLabel
 from slice_runner.domain.run_repository import RunRepository
 from slice_runner.domain.slice_identity import SliceIdentity
 from slice_runner.domain.sub_issue import SubIssue
@@ -340,7 +341,14 @@ class GhRunRepository(RunRepository):
     @staticmethod
     def _label_of(labels: list[GhLabelPayload]) -> IssueLabel | None:
         known = set(IssueLabel)
+        retired = set(RetiredIssueLabel)
         for label in labels:
+            if label.name in retired:
+                gone = RetiredIssueLabel(label.name)
+                raise RetiredLabelError(
+                    f"the subissue carries `{gone}`, a label this program no longer reads; "
+                    f"change it by hand for `{gone.replacement}`"
+                )
             if label.name in known:
                 return IssueLabel(label.name)
 

@@ -6,6 +6,7 @@ import pytest
 
 from slice_runner.domain.budgets import Budgets
 from slice_runner.domain.issue_label import IssueLabel
+from slice_runner.domain.retired_issue_label import RetiredIssueLabel
 from slice_runner.infrastructure.cli import Cli
 from slice_runner.infrastructure.exit_code import ExitCode
 from slice_runner.tests.argv import Argv
@@ -16,6 +17,12 @@ from slice_runner.tests.mothers.run_mother import RunMother
 _REPO = GhConversationMother.REPO
 _ISSUE = GhConversationMother.SUBISSUE
 _TOKENS = ("-GO", "-REVIEW", "-RETRY")
+RETIREMENTS = [
+    ("bloqueada:higiene", "bloqueada:controles"),
+    ("bloqueada:verify", "bloqueada:juez"),
+    ("bloqueada:sin-cambios", "bloqueada:juez"),
+    ("bloqueada:worktree-sin-retirar", "bloqueada:worktree"),
+]
 
 
 class _Orders:
@@ -114,6 +121,25 @@ class TestRetry(_Orders):
         captured = capsys.readouterr()
         assert code == ExitCode.ORDER_REFUSED
         assert "neither blocked nor aborted" in captured.err
+        assert self.wrote_nothing(process)
+
+
+class TestRetryOnASliceCarryingARetiredLabel(_Orders):
+    @pytest.mark.parametrize(("retired", "replacement"), RETIREMENTS)
+    def test_it_fails_naming_the_retired_label_and_the_one_that_replaced_it_and_writes_nothing(
+        self, retired: str, replacement: str, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        view = GhConversationMother.the_subissue_viewed(
+            label=RetiredIssueLabel(retired), run=RunMother.blocked_on_controls()
+        )
+        process = self.process(view)
+
+        code = Cli(process=process, budgets=Budgets()).retry(repo=_REPO, issue=_ISSUE, instruction="x")
+
+        reported = capsys.readouterr().err
+        assert code == ExitCode.USAGE_ERROR
+        assert retired in reported
+        assert replacement in reported
         assert self.wrote_nothing(process)
 
 

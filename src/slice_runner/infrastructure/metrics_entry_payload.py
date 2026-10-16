@@ -98,23 +98,20 @@ class DurableClosure:
     ci: DurableCi
 
     _VERDICTS_WITH_NO_CI: ClassVar[dict[ClosingReason, DurableVerdict]] = {
-        ClosingReason.VERIFY: DurableVerdict.FAIL,
-        ClosingReason.UNCHANGED_DIFF: DurableVerdict.BLOCKED_UNCHANGED_DIFF,
+        ClosingReason.JUDGE: DurableVerdict.FAIL,
         ClosingReason.CONTROLS: DurableVerdict.BLOCKED_CONTROLS,
-        ClosingReason.HYGIENE: DurableVerdict.BLOCKED_HYGIENE,
         ClosingReason.WORKTREE: DurableVerdict.BLOCKED_WORKTREE,
-        ClosingReason.LEFTOVER_WORKTREE: DurableVerdict.BLOCKED_LEFTOVER_WORKTREE,
         ClosingReason.BUDGET: DurableVerdict.ABORTED_BUDGET,
         ClosingReason.UNMEASURED_CALL: DurableVerdict.ABORTED_UNMEASURED_CALL,
     }
 
     _REASONS_WITH_NO_CI: ClassVar[dict[DurableVerdict, ClosingReason]] = {
-        DurableVerdict.FAIL: ClosingReason.VERIFY,
-        DurableVerdict.BLOCKED_UNCHANGED_DIFF: ClosingReason.UNCHANGED_DIFF,
+        DurableVerdict.FAIL: ClosingReason.JUDGE,
+        DurableVerdict.BLOCKED_UNCHANGED_DIFF: ClosingReason.JUDGE,
         DurableVerdict.BLOCKED_CONTROLS: ClosingReason.CONTROLS,
-        DurableVerdict.BLOCKED_HYGIENE: ClosingReason.HYGIENE,
+        DurableVerdict.BLOCKED_HYGIENE: ClosingReason.CONTROLS,
         DurableVerdict.BLOCKED_WORKTREE: ClosingReason.WORKTREE,
-        DurableVerdict.BLOCKED_LEFTOVER_WORKTREE: ClosingReason.LEFTOVER_WORKTREE,
+        DurableVerdict.BLOCKED_LEFTOVER_WORKTREE: ClosingReason.WORKTREE,
         DurableVerdict.ABORTED_BUDGET: ClosingReason.BUDGET,
         DurableVerdict.ABORTED_UNMEASURED_CALL: ClosingReason.UNMEASURED_CALL,
     }
@@ -148,12 +145,9 @@ class DurableClosure:
             case ClosingReason.CI_CONFLICT:
                 return cls(verdict=DurableVerdict.PASS, ci=DurableCi.CONFLICT)
             case (
-                ClosingReason.VERIFY
-                | ClosingReason.UNCHANGED_DIFF
+                ClosingReason.JUDGE
                 | ClosingReason.CONTROLS
-                | ClosingReason.HYGIENE
                 | ClosingReason.WORKTREE
-                | ClosingReason.LEFTOVER_WORKTREE
                 | ClosingReason.BUDGET
                 | ClosingReason.UNMEASURED_CALL
             ):

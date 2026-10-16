@@ -235,15 +235,20 @@ concreta -viven en `~/.claude/projects/`, una por sesion- sin adivinar por marca
 ficheros. Tambien append-only y tambien fuera del repo, y por el mismo motivo.
 
 Y **cada transicion del run** -avanzo, se quedo esperando a una maquina, se quedo esperando a una
-persona, o cerro- anexa su linea a `~/.claude/slice-runner/runs/events.jsonl`, con el repo y el issue del
-run ademas de la slice, el paso al que llego, el instante, el gasto acumulado y el estado. Es la misma fila
+persona, o cerro- anexa su linea a `~/.claude/slice-runner/runs/transitions.jsonl`, con el repo y el issue
+del run ademas de la slice, el estado (`pending`, `in-progress`, `awaiting-merge`, `blocked`, `aborted` o
+`merged`) y, si bloqueo o aborto, el motivo, el paso al que llego, el instante, los seis contadores de
+vueltas con su tope, el gasto acumulado con su tope y `round_without_changes` cuando la vuelta no dejo nada
+que comitear. El resumen que antes se calculaba al escribir (`status`) ya no existe, y una linea que lo traiga
+es un error que nombra la posicion de la linea. `events.jsonl` ya no se lee ni se escribe: sus filas se
+quedan intactas, sin lector. Es la misma fila
 que hasta ahora solo salia por la salida de error de `run` -y sigue saliendo, para poder mirar un run en
 marcha-, pero ahora tambien dura: reconstruir cuanto tardo o cuanto espero una slice deja de depender de
 tener la terminal abierta cuando corrio. Lo que no anexa esta fila es el turno del arnes -numero, herramienta
 y objetivo-, porque eso ya lo escribe `tool-uses.jsonl` al terminar cada llamada.
 
 Una fila con estado `pending` no es una transicion: la escribe `register`, sin que haya run, con gasto cero y
-el paso `mount-worktree` por convencion, para que el panel de la interfaz muestre una feature recien
+sin paso, para que el panel de la interfaz muestre una feature recien
 creada. **No marca el inicio de nada**: el instante de una fila `pending` es el de `register`, asi que no
 sirve para medir cuanto tardo una slice.
 
@@ -257,7 +262,7 @@ vueltas que declaren huecos distintos aparecen las dos en la fila de cierre y la
 vueltas cuenta una sola vez. Una slice que nunca llego a declarar nada se distingue de una que declaro
 explicitamente que no dejo nada fuera: la primera no deja fila en este almacen.
 
-Los nueve almacenes durables del programa -`metrics.jsonl`, `calls.jsonl`, `spend.jsonl`, `events.jsonl`,
+Los nueve almacenes durables del programa -`metrics.jsonl`, `calls.jsonl`, `spend.jsonl`, `transitions.jsonl`,
 `debt.jsonl`, el par `verdicts.jsonl`/`diffs.jsonl` y el par `tool-uses.jsonl`/`unrecorded-tool-uses.jsonl`-
 comparten el mismo patron de nombre, `~/.claude/slice-runner/runs/<concepto>.jsonl`, y lo comparten porque
 pasan por la misma pieza (`DurableLedger`): un adaptador solo le da su nombre y el payload de su fila, y es
@@ -332,7 +337,7 @@ El codigo de salida es el contrato con quien lo invoca:
 | `12` | Una llamada a un proceso externo agoto su tope por llamada y se mato, asi que no hay respuesta que interpretar. Reinvocar a ciegas vuelve a pagar el tope entero: primero hay que mirar **que** se colgo |
 | `13` | `doctor`: el entorno no esta listo para conducir una slice -falta `git`, `gh` no esta autenticado, falta `claude`, falta alguna de las skills `slice-spec`/`deploy-watch`, o el binario instalado y las skills enlazadas vienen de arboles distintos-. Distinto de `4`: la invocacion estaba bien escrita, lo que falta es el entorno |
 | `14` | Las fuentes de convencion declaradas, ya leidas, se pasan del tope de tamano del presupuesto: no se mando ningun prompt. Distinto de `8`: eso para antes de leer nada, esto se descubre sumando contenido ya leido, y reinvocar sin reducir lo declarado repite el mismo cierre |
-| `15` | `run`: el juez ya habia dictaminado sobre este mismo diff en esta invocacion y el implementador no lo movio en la vuelta siguiente, asi que no se le volvio a invocar (el veredicto sobre el mismo diff no puede cambiar). La subissue queda `bloqueada:sin-cambios` y un comentario junta lo que el juez sigue exigiendo con lo que el implementador declaro haber dejado fuera. Distinto de `5`: reinvocar a ciegas repite el cierre, hay que resolver el desacuerdo -o cambiar criterios y reabrir con `slice-runner retry`, que si vuelve a juzgar- |
+| `15` | Retirado, no se emite: el cierre por un diff que el implementador no movio entre dos vueltas es ahora `bloqueada:juez`, igual que un veto agotado, y sale con `5` |
 | `18` | `retry`: la slice no esta en el estado que esa orden necesita -sin bloqueo ni aborto-. El motivo sale por `stderr` y no se escribe nada en el issue. Distinto de `4`: la invocacion estaba bien escrita y la subissue se leyo, lo que no cuadra es el estado de la slice |
 | `19` | `tui`: `slice-runner-tui` no esta en el `PATH`, asi que no hay interfaz que abrir. Ejecuta `make install-tui`. Distinto de `4`: la invocacion estaba bien escrita, lo que falta es el ejecutable |
 
@@ -447,8 +452,8 @@ los controles verdes -> **commit de esa vuelta** -> juzga el diff con `claude -p
 verde -> etiqueta la subissue `estado:esperando-merge` y **para**.
 
 Si algo se rompe, la etiqueta lo dice y el run para en vez de seguir: `bloqueada:controles`,
-`bloqueada:verify`, `bloqueada:sin-cambios`, `bloqueada:ci-roja`, `bloqueada:ci-indeterminada`, `bloqueada:conflicto`,
-`bloqueada:worktree`, `bloqueada:worktree-sin-retirar`, `abortada:presupuesto` o `abortada:llamada-no-medida`.
+`bloqueada:juez`, `bloqueada:ci-roja`, `bloqueada:ci-indeterminada`, `bloqueada:conflicto`,
+`bloqueada:worktree`, `abortada:presupuesto` o `abortada:llamada-no-medida`.
 
 **3. Mergear, o pedir un cambio (tu)**
 

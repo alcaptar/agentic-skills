@@ -7,10 +7,11 @@ from unittest.mock import Mock, create_autospec
 import pytest
 
 from slice_runner.application.actions.record_start import RecordStart, RecordStartParams
+from slice_runner.domain.budgets import Budgets
 from slice_runner.domain.clock import Clock
 from slice_runner.domain.closure import Closure
 from slice_runner.domain.event_log import EventLog
-from slice_runner.domain.event_status import EventStatus
+from slice_runner.domain.rounds import Rounds
 from slice_runner.domain.step import Step
 from slice_runner.tests.mothers.feature_slice_mother import FeatureSliceMother
 from slice_runner.tests.mothers.harness_spend_mother import HarnessSpendMother
@@ -39,7 +40,7 @@ class TestRecordStart:
 
     @pytest.fixture
     def action(self, events: Mock, clock: Mock) -> RecordStart:
-        return RecordStart(events=events, clock=clock)
+        return RecordStart(events=events, clock=clock, budgets=Budgets())
 
     @staticmethod
     def _params(run: Run) -> RecordStartParams:
@@ -52,17 +53,24 @@ class TestRecordStart:
             feature_slice=FeatureSliceMother.of_the_feature(),
         )
 
-    def test_the_start_is_reported_as_advancing_on_the_step_the_run_starts_at_with_the_run_still_open(
+    def test_the_start_is_reported_on_the_step_the_run_starts_at_with_the_run_still_open(
         self, action: RecordStart, events: Mock
     ) -> None:
         action.execute(self._params(RunMother.implementing()))
 
         emitted = events.emit.call_args.args[0]
-        assert (emitted.step, emitted.status, emitted.closure) == (
-            Step.IMPLEMENT,
-            EventStatus.ADVANCING,
-            Closure.open(),
-        )
+        assert (emitted.step, emitted.closure) == (Step.IMPLEMENT, Closure.open())
+
+    def test_the_start_carries_the_counters_of_the_run_with_their_limits_and_the_cost_limit(
+        self, action: RecordStart, events: Mock
+    ) -> None:
+        run = RunMother.implementing()
+
+        action.execute(self._params(run))
+
+        emitted = events.emit.call_args.args[0]
+        assert emitted.rounds == Rounds.of(run, Budgets())
+        assert emitted.budget_usd == Budgets().slice_cost_usd
 
     def test_the_start_names_the_slice_the_instant_the_spend_paid_so_far_and_the_feature(
         self, action: RecordStart, events: Mock

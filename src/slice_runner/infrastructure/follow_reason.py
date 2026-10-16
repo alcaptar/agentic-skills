@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from enum import StrEnum
 
+from slice_runner.domain.closing_reason import ClosingReason
 from slice_runner.infrastructure.follow_standing import FollowStanding
 
 
@@ -14,6 +15,13 @@ class FollowReason(StrEnum):
     WORKTREE = "worktree"
     BUDGET = "budget"
     UNMEASURED_CALL = "unmeasured-call"
+
+    @classmethod
+    def of(cls, reason: ClosingReason) -> FollowReason:
+        return cls(reason.value)
+
+    def to_closing_reason(self) -> ClosingReason:
+        return ClosingReason(self.value)
 
     @property
     def standing(self) -> FollowStanding:

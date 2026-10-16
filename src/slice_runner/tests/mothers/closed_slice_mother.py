@@ -65,7 +65,7 @@ class ClosedSliceMother:
 
     @classmethod
     def vetoed_over(cls, *findings: Finding) -> ClosedSlice:
-        return cls._closed(Closure.because_of(ClosingReason.VERIFY), findings=findings)
+        return cls._closed(Closure.because_of(ClosingReason.JUDGE), findings=findings)
 
     @classmethod
     def merged_after_correcting(cls, *findings: Finding) -> ClosedSlice:
