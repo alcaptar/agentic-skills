@@ -10,11 +10,13 @@ from slice_runner.domain.rounds import Rounds
 if TYPE_CHECKING:
     from slice_runner.domain.budgets import Budgets
     from slice_runner.domain.clock import Clock
+    from slice_runner.domain.closure import Closure
     from slice_runner.domain.event_log import EventLog
     from slice_runner.domain.feature_slice import FeatureSlice
     from slice_runner.domain.harness_spend import HarnessSpend
     from slice_runner.domain.run import Run
     from slice_runner.domain.run_repository import RunRepository
+    from slice_runner.domain.step import Step
     from slice_runner.domain.transition import Transition
 
 
@@ -42,13 +44,15 @@ class RecordStep:
         self._events = events
         self._clock = clock
         self._budgets = budgets
+        self._last_written: dict[tuple[str, int, str], tuple[Step | None, Closure]] = {}
 
     def execute(self, params: RecordStepParams) -> RecordStepResult:
         run = replace(params.transition.run, spend=params.spend)
         if run != params.current:
             self._repository.write_run(repo=params.repo, issue=params.issue, run=run)
         label = self._labelled(params, step_of=run)
-        self._emit(params, run=run)
+        if not self._repeats_the_last_wait(params, run=run):
+            self._emit(params, run=run)
 
         return RecordStepResult(run=run, label=label)
 
@@ -65,6 +69,14 @@ class RecordStep:
         self._repository.write_label(repo=params.repo, issue=params.issue, remove=params.label, add=label)
 
         return label
+
+    def _repeats_the_last_wait(self, params: RecordStepParams, *, run: Run) -> bool:
+        key = (params.repo, params.issue, params.slice_id)
+        standing = (run.step, params.transition.closure)
+        repeats = params.transition.wait_seconds > 0 and self._last_written.get(key) == standing
+        self._last_written[key] = standing
+
+        return repeats
 
     def _emit(self, params: RecordStepParams, *, run: Run) -> None:
         self._events.emit(
