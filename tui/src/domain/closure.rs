@@ -32,6 +32,13 @@ impl Closure {
         }
     }
 
+    pub fn is_settled(self) -> bool {
+        match self {
+            Self::Blocked(_) | Self::Aborted(_) | Self::Merged => true,
+            Self::Pending | Self::InProgress | Self::AwaitingMerge => false,
+        }
+    }
+
     pub fn label(self) -> String {
         match self {
             Self::Pending => "pendiente".to_string(),

@@ -1,75 +1,139 @@
 use serde_json::{Map, Value};
 
+use crate::domain::activity_line::{ActivityLine, Actor};
 use crate::domain::closing_reason::ClosingReason;
 use crate::domain::closure::Closure;
 use crate::domain::errors::FollowLineRejected;
+use crate::domain::follow_entry::FollowEntry;
 use crate::domain::follow_line::FollowLine;
 use crate::domain::parent::Parent;
+use crate::domain::rounds::{Round, Rounds};
+use crate::domain::slice_key::SliceKey;
+use crate::domain::slice_subject::SliceSubject;
+use crate::domain::spend::Spend;
 use crate::domain::standing::Standing;
 use crate::domain::step::Step;
+use crate::domain::transition::Transition;
 
-pub struct FollowLinePayload {
-    fields: Map<String, Value>,
+pub struct FollowLinePayload<'a> {
+    fields: &'a Map<String, Value>,
 }
 
-impl FollowLinePayload {
-    pub const REQUIRED_KEYS: [&'static str; 5] = ["repo", "issue", "slice_id", "step", "status"];
+impl<'a> FollowLinePayload<'a> {
+    const VERSION: u64 = 2;
+    const ROUND_KEYS: [&'static str; 6] = ["controls", "hygiene", "judge", "ci", "ci_indeterminate", "catch_up"];
 
-    #[cfg(test)]
-    pub fn parsed(raw: &str) -> Result<FollowLine, FollowLineRejected> {
-        Self::read(raw)?.ok_or_else(|| Self::wrong("kind", "an activity line is not a transition"))
-    }
-
-    pub fn delivery(raw: &str) -> Option<Result<FollowLine, FollowLineRejected>> {
-        Self::read(raw).transpose()
-    }
-
-    fn read(raw: &str) -> Result<Option<FollowLine>, FollowLineRejected> {
+    pub fn delivery(raw: &str) -> Result<FollowEntry, FollowLineRejected> {
         match serde_json::from_str::<Value>(raw) {
-            Ok(Value::Object(fields)) => Self { fields }.to_domain(),
+            Ok(Value::Object(fields)) => FollowLinePayload { fields: &fields }.to_domain(),
             Ok(_) | Err(_) => Err(FollowLineRejected::NotJson { line: raw.to_string() }),
         }
     }
 
-    fn to_domain(&self) -> Result<Option<FollowLine>, FollowLineRejected> {
+    fn to_domain(&self) -> Result<FollowEntry, FollowLineRejected> {
         match self.optional_number("version")?.unwrap_or(1) {
-            1 => self.version_1().map(Some),
-            2 => self.version_2(),
+            Self::VERSION => match self.required_text("kind")? {
+                "transition" => self.transition().map(FollowEntry::Transition),
+                "activity" => self.activity().map(FollowEntry::Activity),
+                kind => Err(FollowLineRejected::UnknownKind { kind: kind.to_string() }),
+            },
             version => Err(FollowLineRejected::UnsupportedVersion { version }),
         }
     }
 
-    fn version_2(&self) -> Result<Option<FollowLine>, FollowLineRejected> {
-        match self.required_text("kind")? {
-            "transition" => self.transition().map(Some),
-            "activity" => Ok(None),
-            kind => Err(FollowLineRejected::UnknownKind { kind: kind.to_string() }),
+    fn transition(&self) -> Result<FollowLine, FollowLineRejected> {
+        let subject = SliceSubject::new(
+            self.required_text("repo")?,
+            self.required_number("issue")?,
+            self.required_text("slice_id")?,
+            self.parent()?,
+            self.optional_text("name")?,
+        );
+        let mut transition = Transition::new(
+            self.required_number("ts")?,
+            self.closure()?,
+            self.step()?,
+            self.rounds()?,
+            Spend::new(self.required_float("cost_usd")?, self.required_float("budget_usd")?),
+        );
+        if self.optional_flag("round_without_changes")? {
+            transition = transition.without_changes();
         }
+        if let Some(number) = self.optional_number("pull_request")? {
+            transition = transition.with_pull_request(number);
+        }
+        if let Some(pid) = self.optional_number("pid")? {
+            transition = transition.with_pid(u32::try_from(pid).map_err(|_| Self::wrong("pid", "not a process id"))?);
+        }
+
+        Ok(FollowLine::new(subject, transition))
     }
 
-    fn transition(&self) -> Result<FollowLine, FollowLineRejected> {
+    fn activity(&self) -> Result<ActivityLine, FollowLineRejected> {
+        let actor =
+            Actor::parse(self.required_text("actor")?).ok_or_else(|| Self::wrong("actor", "not a known actor"))?;
+
+        Ok(ActivityLine::new(
+            SliceKey::new(self.required_text("repo")?, self.required_number("issue")?),
+            self.required_number("ts")?,
+            actor,
+            self.required_text("tool")?,
+            self.required_text("target")?,
+        ))
+    }
+
+    fn closure(&self) -> Result<Closure, FollowLineRejected> {
         let standing = Standing::parse(self.required_text("standing")?)
             .ok_or_else(|| Self::wrong("standing", "not a known standing"))?;
         let reason = match self.optional_text("reason")? {
             Some(text) => Some(ClosingReason::parse(text).ok_or_else(|| Self::wrong("reason", "not a known reason"))?),
             None => None,
         };
-        let closure =
-            Closure::of(standing, reason).ok_or_else(|| Self::wrong("reason", "does not belong with the standing"))?;
-        let step = match self.optional_text("step")? {
-            Some(text) => Some(Step::parse(text).ok_or_else(|| Self::wrong("step", "not a known step"))?),
-            None => None,
+
+        Closure::of(standing, reason).ok_or_else(|| Self::wrong("reason", "does not belong with the standing"))
+    }
+
+    fn step(&self) -> Result<Option<Step>, FollowLineRejected> {
+        match self.optional_text("step")? {
+            Some(text) => Ok(Some(
+                Step::parse(text).ok_or_else(|| Self::wrong("step", "not a known step"))?,
+            )),
+            None => Ok(None),
+        }
+    }
+
+    fn rounds(&self) -> Result<Rounds, FollowLineRejected> {
+        let rounds = self
+            .fields
+            .get("rounds")
+            .ok_or_else(|| Self::wrong("rounds", "required key is missing"))?
+            .as_object()
+            .ok_or_else(|| Self::wrong("rounds", "expected an object"))?;
+        let [controls, hygiene, judge, ci, ci_indeterminate, catch_up] = Self::ROUND_KEYS;
+
+        Ok(Rounds::new(
+            Self::round(rounds, controls)?,
+            Self::round(rounds, hygiene)?,
+            Self::round(rounds, judge)?,
+            Self::round(rounds, ci)?,
+            Self::round(rounds, ci_indeterminate)?,
+            Self::round(rounds, catch_up)?,
+        ))
+    }
+
+    fn round(rounds: &Map<String, Value>, key: &str) -> Result<Round, FollowLineRejected> {
+        let round = rounds
+            .get(key)
+            .and_then(Value::as_object)
+            .ok_or_else(|| Self::wrong(key, "expected an object with used and limit"))?;
+        let number = |field: &str| {
+            round
+                .get(field)
+                .and_then(Value::as_u64)
+                .ok_or_else(|| Self::wrong(key, "expected whole numbers in used and limit"))
         };
 
-        Ok(FollowLine::transition(
-            self.required_text("repo")?,
-            self.required_number("issue")?,
-            self.required_text("slice_id")?,
-            step,
-            closure,
-            self.parent()?,
-            self.optional_text("name")?,
-        ))
+        Ok(Round::new(number("used")?, number("limit")?))
     }
 
     fn parent(&self) -> Result<Parent, FollowLineRejected> {
@@ -79,30 +143,12 @@ impl FollowLinePayload {
         })
     }
 
-    fn version_1(&self) -> Result<FollowLine, FollowLineRejected> {
-        if let Some(key) = Self::REQUIRED_KEYS
-            .into_iter()
-            .find(|key| !self.fields.contains_key(*key))
-        {
-            return Err(Self::wrong(key, "required key is missing"));
-        }
-        Ok(FollowLine::new(
-            self.required_text("repo")?,
-            self.required_number("issue")?,
-            self.required_text("slice_id")?,
-            self.required_text("step")?,
-            self.required_text("status")?,
-            self.parent()?,
-            self.optional_text("name")?,
-        ))
-    }
-
-    fn required_text(&self, key: &str) -> Result<&str, FollowLineRejected> {
+    fn required_text(&self, key: &str) -> Result<&'a str, FollowLineRejected> {
         self.optional_text(key)?
             .ok_or_else(|| Self::wrong(key, "required key is missing"))
     }
 
-    fn optional_text(&self, key: &str) -> Result<Option<&str>, FollowLineRejected> {
+    fn optional_text(&self, key: &str) -> Result<Option<&'a str>, FollowLineRejected> {
         match self.fields.get(key) {
             None => Ok(None),
             Some(value) => value
@@ -124,6 +170,23 @@ impl FollowLinePayload {
                 .as_u64()
                 .map(Some)
                 .ok_or_else(|| Self::wrong(key, "expected a whole number")),
+        }
+    }
+
+    fn required_float(&self, key: &str) -> Result<f64, FollowLineRejected> {
+        self.fields
+            .get(key)
+            .ok_or_else(|| Self::wrong(key, "required key is missing"))?
+            .as_f64()
+            .ok_or_else(|| Self::wrong(key, "expected a number"))
+    }
+
+    fn optional_flag(&self, key: &str) -> Result<bool, FollowLineRejected> {
+        match self.fields.get(key) {
+            None => Ok(false),
+            Some(value) => value
+                .as_bool()
+                .ok_or_else(|| Self::wrong(key, "expected true or false")),
         }
     }
 

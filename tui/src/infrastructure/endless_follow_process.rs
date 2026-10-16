@@ -4,13 +4,13 @@ use std::sync::mpsc::{Receiver, channel};
 use std::thread;
 
 use crate::domain::errors::FollowLineRejected;
-use crate::domain::follow_line::FollowLine;
+use crate::domain::follow_entry::FollowEntry;
 use crate::domain::follow_source::FollowSource;
 use crate::infrastructure::follow_line_payload::FollowLinePayload;
 
 pub struct EndlessFollowProcess {
     child: Child,
-    deliveries: Receiver<Result<FollowLine, FollowLineRejected>>,
+    deliveries: Receiver<Result<FollowEntry, FollowLineRejected>>,
 }
 
 impl EndlessFollowProcess {
@@ -31,9 +31,7 @@ impl EndlessFollowProcess {
         let (sender, deliveries) = channel();
         thread::spawn(move || {
             for line in BufReader::new(stdout).lines().map_while(Result::ok) {
-                if let Some(delivery) = FollowLinePayload::delivery(&line)
-                    && sender.send(delivery).is_err()
-                {
+                if sender.send(FollowLinePayload::delivery(&line)).is_err() {
                     return;
                 }
             }
@@ -51,7 +49,7 @@ impl EndlessFollowProcess {
 }
 
 impl FollowSource for EndlessFollowProcess {
-    fn pending(&mut self) -> Vec<Result<FollowLine, FollowLineRejected>> {
+    fn pending(&mut self) -> Vec<Result<FollowEntry, FollowLineRejected>> {
         self.deliveries.try_iter().collect()
     }
 }

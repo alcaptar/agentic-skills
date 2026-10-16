@@ -16,6 +16,7 @@ use crate::domain::pane_size::PaneSize;
 use crate::domain::session_launch::SessionLaunch;
 use crate::domain::slice_board::SliceBoard;
 use crate::domain::slice_key::SliceKey;
+use crate::domain::wall_clock::WallClock;
 use crate::infrastructure::board_view::BoardView;
 use crate::infrastructure::bounded_gh_process::BoundedGhProcess;
 use crate::infrastructure::claude_config_root::ClaudeConfigRoot;
@@ -26,6 +27,7 @@ use crate::infrastructure::endless_pty_session::EndlessPtySession;
 use crate::infrastructure::key_bytes::KeyBytes;
 use crate::infrastructure::key_routing::{Focus, KeyRouting, Order, Routed};
 use crate::infrastructure::random_workspace_ids::RandomWorkspaceIds;
+use crate::infrastructure::signal_process_probe::SignalProcessProbe;
 use crate::infrastructure::split_screen::SplitScreen;
 use crate::infrastructure::system_clock::SystemClock;
 use crate::infrastructure::terminal_session::TerminalSession;
@@ -108,7 +110,7 @@ impl Cli {
             }
         };
         let source = EndlessFollowProcess::spawn(&Self::FOLLOW_ARGV).map_err(|rejected| rejected.to_string())?;
-        let mut watch = WatchSlices::new(source);
+        let mut watch = WatchSlices::new(source, SignalProcessProbe);
         let mut session = TerminalSession::open().map_err(|error| error.to_string())?;
         let window = session.terminal().size().map_err(|error| error.to_string())?;
         let mut claude = EndlessPtySession::spawn(&launch, SplitScreen::pane_size(Rect::from(window)))
@@ -137,7 +139,14 @@ impl Cli {
                         Layout::vertical([Constraint::Length(WorkspaceHeader::HEIGHT), Constraint::Min(0)])
                             .areas(board_area);
                     WorkspaceHeader::render(frame, header_area, &workspace);
-                    BoardView::render(frame, slices_area, &shown, selected.as_ref(), detail.as_ref());
+                    BoardView::render(
+                        frame,
+                        slices_area,
+                        &shown,
+                        selected.as_ref(),
+                        detail.as_ref(),
+                        SystemClock.epoch_millis(),
+                    );
                 })
                 .map_err(|error| error.to_string())?;
             match Self::next_input().map_err(|error| error.to_string())? {

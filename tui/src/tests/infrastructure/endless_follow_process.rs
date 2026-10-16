@@ -72,6 +72,7 @@ mod integration {
     use std::panic::{AssertUnwindSafe, catch_unwind};
 
     use crate::domain::errors::FollowLineRejected;
+    use crate::domain::follow_entry::FollowEntry;
     use crate::domain::follow_source::FollowSource;
     use crate::infrastructure::endless_follow_process::EndlessFollowProcess;
     use crate::tests::infrastructure::endless_follow_process::{SleepingChild, Waiting};
@@ -109,7 +110,7 @@ mod integration {
         let argv = [
             "sh",
             "-c",
-            r#"printf '%s\n' '{"repo":"a/b","issue":1,"slice_id":"slice-01","step":"implement","status":"advancing"}' 'garbage'"#,
+            r#"printf '%s\n' '{"version":2,"kind":"activity","ts":1,"repo":"a/b","issue":1,"slice_id":"slice-01","actor":"judge","tool":"Read","target":"x"}' 'garbage'"#,
         ];
         let mut process = EndlessFollowProcess::spawn(&argv).unwrap();
         let mut delivered = Vec::new();
@@ -119,7 +120,11 @@ mod integration {
             (delivered.len() >= 3).then_some(())
         });
 
-        assert_eq!(delivered[0].as_ref().unwrap().slice_id(), "slice-01");
+        assert!(
+            matches!(delivered[0], Ok(FollowEntry::Activity(_))),
+            "{:?}",
+            delivered[0]
+        );
         assert_eq!(
             delivered[1],
             Err(FollowLineRejected::NotJson {

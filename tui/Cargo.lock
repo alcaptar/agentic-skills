@@ -1313,6 +1313,7 @@ name = "slice-runner-tui"
 version = "0.1.0"
 dependencies = [
  "crossterm",
+ "nix 0.29.0",
  "portable-pty",
  "ratatui",
  "serde_json",

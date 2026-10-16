@@ -1,84 +1,26 @@
-use crate::domain::closure::Closure;
-use crate::domain::parent::Parent;
-use crate::domain::step::Step;
+use crate::domain::slice_subject::SliceSubject;
+use crate::domain::transition::Transition;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct FollowLine {
-    repo: String,
-    issue: u64,
-    slice_id: String,
-    step: String,
-    status: String,
-    parent: Parent,
-    name: Option<String>,
+    subject: SliceSubject,
+    transition: Transition,
 }
 
 impl FollowLine {
-    pub fn new(
-        repo: &str,
-        issue: u64,
-        slice_id: &str,
-        step: &str,
-        status: &str,
-        parent: Parent,
-        name: Option<&str>,
-    ) -> Self {
-        Self {
-            repo: repo.to_string(),
-            issue,
-            slice_id: slice_id.to_string(),
-            step: step.to_string(),
-            status: status.to_string(),
-            parent,
-            name: name.map(str::to_string),
-        }
-    }
-
-    pub fn transition(
-        repo: &str,
-        issue: u64,
-        slice_id: &str,
-        step: Option<Step>,
-        closure: Closure,
-        parent: Parent,
-        name: Option<&str>,
-    ) -> Self {
-        Self::new(
-            repo,
-            issue,
-            slice_id,
-            step.map_or("", Step::name),
-            &closure.label(),
-            parent,
-            name,
-        )
+    pub fn new(subject: SliceSubject, transition: Transition) -> Self {
+        Self { subject, transition }
     }
 
     pub fn repo(&self) -> &str {
-        &self.repo
+        self.subject.repo()
     }
 
     pub fn issue(&self) -> u64 {
-        self.issue
+        self.subject.issue()
     }
 
-    pub fn slice_id(&self) -> &str {
-        &self.slice_id
-    }
-
-    pub fn step(&self) -> &str {
-        &self.step
-    }
-
-    pub fn status(&self) -> &str {
-        &self.status
-    }
-
-    pub fn parent(&self) -> Parent {
-        self.parent
-    }
-
-    pub fn name(&self) -> Option<&str> {
-        self.name.as_deref()
+    pub fn into_parts(self) -> (SliceSubject, Transition) {
+        (self.subject, self.transition)
     }
 }

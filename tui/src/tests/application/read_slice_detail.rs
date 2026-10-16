@@ -1,5 +1,6 @@
 mod the_events_of_a_slice {
-    use crate::domain::follow_line::FollowLine;
+    use crate::domain::step::Step;
+    use crate::domain::transition::Transition;
     use crate::tests::application::watching::Watching;
     use crate::tests::mothers::follow_line_mother::FollowLineMother;
 
@@ -9,14 +10,17 @@ mod the_events_of_a_slice {
         let watched = Watching::one_tick(Watching::lines(vec![
             first.clone(),
             FollowLineMother::orphan(170),
-            FollowLineMother::moved_to(&first, "implement"),
-            FollowLineMother::closed(&first),
+            FollowLineMother::moved_to(&first, Step::Implement),
+            FollowLineMother::merged(&first),
         ]));
 
         let row = watched.board().row(&Watching::key(150)).unwrap();
 
-        let steps: Vec<&str> = row.events().iter().map(FollowLine::step).collect();
-        assert_eq!(steps, vec!["run-controls", "implement", "await-merge"]);
+        let steps: Vec<Option<Step>> = row.transitions().into_iter().map(Transition::step).collect();
+        assert_eq!(
+            steps,
+            vec![Some(Step::RunControls), Some(Step::Implement), Some(Step::AwaitMerge)]
+        );
     }
 }
 
