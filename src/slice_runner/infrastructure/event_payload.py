@@ -31,6 +31,8 @@ class EventPayload(StampedRow, ReadableLedgerRow):
     round_without_changes: Literal[True] | None = None
     spend: SpendPayload
     budget_usd: float
+    pull_request: int | None = None
+    pid: int | None = None
     parent: int | None = None
     name: str | None = None
 
@@ -62,6 +64,8 @@ class EventPayload(StampedRow, ReadableLedgerRow):
             round_without_changes=True if event.round_without_changes else None,
             spend=SpendPayload.from_domain(event.spend),
             budget_usd=event.budget_usd,
+            pull_request=event.pull_request,
+            pid=event.pid,
             parent=None if event.feature_slice is None else event.feature_slice.parent,
             name=None if event.feature_slice is None else event.feature_slice.name,
         )
@@ -85,6 +89,8 @@ class EventPayload(StampedRow, ReadableLedgerRow):
             closure=self._closure(),
             feature_slice=self._feature_slice(),
             round_without_changes=self.round_without_changes is True,
+            pull_request=self.pull_request,
+            pid=self.pid,
         )
 
     def _closure(self) -> Closure:

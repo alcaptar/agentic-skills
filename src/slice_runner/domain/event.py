@@ -26,6 +26,8 @@ class Event:
     closure: Closure
     feature_slice: FeatureSlice | None
     round_without_changes: bool = False
+    pull_request: int | None = None
+    pid: int | None = None
 
     @property
     def slice_key(self) -> tuple[str, int, str]:

@@ -1067,6 +1067,36 @@ class TestConductSliceReportingEvents:
         expected = FeatureSlice(parent=Conductor.ISSUE, name=SubIssueMother.pending().slice_id.name)
         assert {e.feature_slice for e in conductor.emitted_events} == {expected}
 
+    def test_the_events_before_the_pull_request_is_opened_carry_none_and_every_later_one_carries_its_number(
+        self,
+    ) -> None:
+        conductor = self._conductor()
+
+        conductor.conduct()
+
+        assert [e.pull_request for e in conductor.emitted_events] == [None] * 4 + [Conductor.PULL_REQUEST] * 3
+
+    def test_a_run_resumed_awaiting_the_merge_carries_in_its_first_event_the_number_the_branch_search_returned(
+        self,
+    ) -> None:
+        conductor = Conductor(
+            chosen=SelectSliceResultMother.resumed_at(RunMother.awaiting_merge()),
+            budgets=Budgets(person_wait_seconds=30),
+        )
+        conductor.forum.any_pull_request.return_value = 77
+        conductor.forum.pull_request_state.return_value = PullRequestStatusMother.open_and_mergeable()
+
+        conductor.conduct()
+
+        assert conductor.emitted_events[0].pull_request == 77
+
+    def test_every_event_carries_the_pid_of_the_process_that_wrote_it(self) -> None:
+        conductor = self._conductor()
+
+        conductor.conduct()
+
+        assert {e.pid for e in conductor.emitted_events} == {Conductor.PID}
+
     def test_the_happy_path_reports_every_step_open_until_the_run_closes_as_merged(self) -> None:
         conductor = self._conductor()
 

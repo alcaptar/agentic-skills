@@ -31,6 +31,8 @@ _REPO = "alcaptar/agentic-skills"
 _ISSUE = 150
 _SLICE = "slice-07"
 _AT = datetime(2026, 8, 10, 15, 0, tzinfo=UTC)
+_PID = 48213
+_PULL_REQUEST = 151
 
 
 class _Recorder:
@@ -42,7 +44,7 @@ class _Recorder:
 
     @property
     def action(self) -> RecordStep:
-        return RecordStep(repository=self.repository, events=self.events, clock=self.clock, budgets=Budgets())
+        return RecordStep(repository=self.repository, events=self.events, clock=self.clock, budgets=Budgets(), pid=_PID)
 
 
 class _Given:
@@ -53,6 +55,7 @@ class _Given:
         transition: Transition,
         label: IssueLabel | None = IssueLabel.IN_PROGRESS,
         spend: HarnessSpend | None = None,
+        pull_request: int | None = None,
     ) -> RecordStepParams:
         return RecordStepParams(
             repo=_REPO,
@@ -63,6 +66,7 @@ class _Given:
             transition=transition,
             spend=spend if spend is not None else HarnessSpend.nothing(),
             feature_slice=FeatureSliceMother.of_the_feature(),
+            pull_request=pull_request,
         )
 
 
@@ -109,6 +113,17 @@ class TestWhatItLeavesOnTheEvent:
 
         emitted = recorder.events.emit.call_args.args[0]
         assert emitted.feature_slice == FeatureSliceMother.of_the_feature()
+
+    def test_the_event_carries_the_pull_request_it_was_given_and_the_pid_of_the_process(self) -> None:
+        recorder = _Recorder()
+        transition = Transition(run=RunMother.awaiting_merge())
+
+        recorder.action.execute(
+            _Given.params(current=RunMother.awaiting_ci(), transition=transition, pull_request=_PULL_REQUEST)
+        )
+
+        emitted = recorder.events.emit.call_args.args[0]
+        assert (emitted.pull_request, emitted.pid) == (_PULL_REQUEST, _PID)
 
 
 class TestHowItMovesTheLabel:

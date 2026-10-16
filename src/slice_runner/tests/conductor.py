@@ -82,6 +82,7 @@ class Conductor:
     BASE: ClassVar[str] = "master"
     LOGS: ClassVar[Path] = Path("/tmp/slice-runner/logs")
     PULL_REQUEST: ClassVar[int] = 61
+    PID: ClassVar[int] = 48213
     TITLE: ClassVar[str] = "feat(prechecks-deterministas): comprobar antes de tocar codigo"
     BODY: ClassVar[str] = "## Intencion\nhoy nada evita reimplementar una slice ya entregada\n\nCloses #45"
     NOW: ClassVar[datetime] = datetime(2024, 1, 1, tzinfo=UTC)
@@ -208,7 +209,11 @@ class Conductor:
                 deliver=self.deliver,
                 close=self.close,
                 record_step=RecordStep(
-                    repository=self.repository, events=self.events, clock=self.clock, budgets=self.budgets
+                    repository=self.repository,
+                    events=self.events,
+                    clock=self.clock,
+                    budgets=self.budgets,
+                    pid=self.PID,
                 ),
                 record_closure=RecordClosure(
                     metrics=self.metrics,
@@ -217,7 +222,7 @@ class Conductor:
                     corpus=self.corpus,
                     debt_ledger=self.debt_ledger,
                 ),
-                record_start=RecordStart(events=self.events, clock=self.clock, budgets=self.budgets),
+                record_start=RecordStart(events=self.events, clock=self.clock, budgets=self.budgets, pid=self.PID),
                 read_ci=ReadCiStatus(ci=self.ci, forum=self.forum),
                 read_pull_request=ReadPullRequestStatus(forum=self.forum),
                 catch_up=CatchUpBranch(branches=self.branches),

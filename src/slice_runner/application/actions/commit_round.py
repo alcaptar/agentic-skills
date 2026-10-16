@@ -30,14 +30,16 @@ class CommitRoundParams:
     run: Run
     spend: HarnessSpend
     feature_slice: FeatureSlice
+    pull_request: int | None
 
 
 class CommitRound:
-    def __init__(self, *, workspace: Workspace, events: EventLog, clock: Clock, budgets: Budgets) -> None:
+    def __init__(self, *, workspace: Workspace, events: EventLog, clock: Clock, budgets: Budgets, pid: int) -> None:
         self._workspace = workspace
         self._events = events
         self._clock = clock
         self._budgets = budgets
+        self._pid = pid
 
     def execute(self, params: CommitRoundParams) -> None:
         standing_on = self._workspace.current_branch(worktree=params.worktree)
@@ -57,6 +59,8 @@ class CommitRound:
                     closure=Closure.open(),
                     feature_slice=params.feature_slice,
                     round_without_changes=True,
+                    pull_request=params.pull_request,
+                    pid=self._pid,
                 )
             )
 

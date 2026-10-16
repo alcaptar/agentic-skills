@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
@@ -854,14 +855,16 @@ class Cli:
                     debt_ledger=debt_ledger,
                 ),
                 stage=StageSlice(workspace=workspace),
-                commit=CommitRound(workspace=workspace, events=LocalEventLog(), clock=clock, budgets=self._budgets),
+                commit=CommitRound(
+                    workspace=workspace, events=LocalEventLog(), clock=clock, budgets=self._budgets, pid=os.getpid()
+                ),
                 rescue=RescueStagedWork(workspace=workspace),
                 run_controls=RunControls(controls=LocalControlRunner(process=self._process)),
                 verify=self._action(clock=clock, corpus=corpus),
                 deliver=DeliverSlice(workspace=workspace, forum=forum),
                 close=CloseParent(repository=repository),
                 record_step=RecordStep(
-                    repository=repository, events=LocalEventLog(), clock=clock, budgets=self._budgets
+                    repository=repository, events=LocalEventLog(), clock=clock, budgets=self._budgets, pid=os.getpid()
                 ),
                 record_closure=RecordClosure(
                     metrics=LocalMetricsLog(clock=clock),
@@ -870,7 +873,7 @@ class Cli:
                     corpus=corpus,
                     debt_ledger=debt_ledger,
                 ),
-                record_start=RecordStart(events=LocalEventLog(), clock=clock, budgets=self._budgets),
+                record_start=RecordStart(events=LocalEventLog(), clock=clock, budgets=self._budgets, pid=os.getpid()),
                 read_ci=ReadCiStatus(ci=GhCi(call=gh_call), forum=forum),
                 read_pull_request=ReadPullRequestStatus(forum=forum),
                 catch_up=CatchUpBranch(branches=BranchesWithoutCatchUp(branches=branches)),
