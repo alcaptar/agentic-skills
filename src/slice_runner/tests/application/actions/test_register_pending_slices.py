@@ -12,6 +12,7 @@ from slice_runner.application.actions.register_pending_slices import (
 )
 from slice_runner.domain.child_issues import ChildIssues
 from slice_runner.domain.clock import Clock
+from slice_runner.domain.closure import Closure
 from slice_runner.domain.event import Event
 from slice_runner.domain.event_cursor import EventCursor
 from slice_runner.domain.event_log import EventLog
@@ -20,7 +21,6 @@ from slice_runner.domain.event_status import EventStatus
 from slice_runner.domain.exceptions import UnreadableEventLogError
 from slice_runner.domain.feature_slice import FeatureSlice
 from slice_runner.domain.harness_spend import HarnessSpend
-from slice_runner.domain.run_state import RunState
 from slice_runner.domain.step import Step
 from slice_runner.tests.mothers.child_issue_mother import ChildIssueMother
 from slice_runner.tests.mothers.event_mother import EventMother
@@ -96,7 +96,7 @@ class TestRegisteringThePendingSlices:
                 at=self._NOW,
                 spend=HarnessSpend.nothing(),
                 status=EventStatus.PENDING,
-                state=RunState.OPEN,
+                closure=Closure.open(),
                 feature_slice=FeatureSlice(parent=ChildIssueMother.PARENT, name="registrar"),
             )
         ]

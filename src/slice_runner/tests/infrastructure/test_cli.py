@@ -16,11 +16,12 @@ from slice_runner.domain.call_spend_log import HarnessCallSpend
 from slice_runner.domain.call_trace import HarnessCall
 from slice_runner.domain.canonical_slice_id import CanonicalSliceId
 from slice_runner.domain.clock import Clock
+from slice_runner.domain.closing_reason import ClosingReason
+from slice_runner.domain.closure import Closure
 from slice_runner.domain.event_cursor import EventCursor
 from slice_runner.domain.event_reader import EventBatch
 from slice_runner.domain.issue_label import IssueLabel
 from slice_runner.domain.outcome import Outcome
-from slice_runner.domain.run_state import RunState
 from slice_runner.domain.slice_coordinates import SliceCoordinates
 from slice_runner.domain.step import Step
 from slice_runner.infrastructure.call_spend_payload import CallSpendPayload
@@ -82,110 +83,175 @@ if TYPE_CHECKING:
 _SLICE = "slice-01"
 _IMPLEMENTER_PAYLOAD = "implementer-two-paths"
 
-_TABLE: list[tuple[Step, Outcome, dict[str, int], tuple[Step, RunState, int]]] = [
-    (Step.MOUNT_WORKTREE, Outcome.DONE, {}, (Step.IMPLEMENT, RunState.OPEN, 0)),
-    (Step.MOUNT_WORKTREE, Outcome.OVER_BUDGET, {}, (Step.MOUNT_WORKTREE, RunState.ABORTED_BUDGET, 0)),
-    (Step.MOUNT_WORKTREE, Outcome.CONFLICTING, {}, (Step.MOUNT_WORKTREE, RunState.BLOCKED_CI_CONFLICT, 0)),
-    (Step.MOUNT_WORKTREE, Outcome.WORKTREE_TAKEN, {}, (Step.MOUNT_WORKTREE, RunState.BLOCKED_WORKTREE, 0)),
-    (Step.UNDERSTAND, Outcome.WORKTREE_TAKEN, {}, (Step.UNDERSTAND, RunState.BLOCKED_WORKTREE, 0)),
-    (Step.IMPLEMENT, Outcome.WORKTREE_TAKEN, {}, (Step.IMPLEMENT, RunState.BLOCKED_WORKTREE, 0)),
-    (Step.RUN_CONTROLS, Outcome.WORKTREE_TAKEN, {}, (Step.RUN_CONTROLS, RunState.BLOCKED_WORKTREE, 0)),
-    (Step.VERIFY, Outcome.WORKTREE_TAKEN, {}, (Step.VERIFY, RunState.BLOCKED_WORKTREE, 0)),
-    (Step.OPEN_PULL_REQUEST, Outcome.WORKTREE_TAKEN, {}, (Step.OPEN_PULL_REQUEST, RunState.BLOCKED_WORKTREE, 0)),
-    (Step.AWAIT_CI, Outcome.WORKTREE_TAKEN, {}, (Step.AWAIT_CI, RunState.BLOCKED_WORKTREE, 0)),
-    (Step.CATCH_UP, Outcome.WORKTREE_TAKEN, {}, (Step.CATCH_UP, RunState.BLOCKED_WORKTREE, 0)),
-    (Step.AWAIT_MERGE, Outcome.WORKTREE_TAKEN, {}, (Step.AWAIT_MERGE, RunState.BLOCKED_WORKTREE, 0)),
+_TABLE: list[tuple[Step, Outcome, dict[str, int], tuple[Step, str, int]]] = [
+    (Step.MOUNT_WORKTREE, Outcome.DONE, {}, (Step.IMPLEMENT, "open", 0)),
+    (Step.MOUNT_WORKTREE, Outcome.OVER_BUDGET, {}, (Step.MOUNT_WORKTREE, "aborted-budget", 0)),
+    (
+        Step.MOUNT_WORKTREE,
+        Outcome.CONFLICTING,
+        {},
+        (Step.MOUNT_WORKTREE, "blocked-ci-conflict", 0),
+    ),
+    (
+        Step.MOUNT_WORKTREE,
+        Outcome.WORKTREE_TAKEN,
+        {},
+        (Step.MOUNT_WORKTREE, "blocked-worktree", 0),
+    ),
+    (Step.UNDERSTAND, Outcome.WORKTREE_TAKEN, {}, (Step.UNDERSTAND, "blocked-worktree", 0)),
+    (Step.IMPLEMENT, Outcome.WORKTREE_TAKEN, {}, (Step.IMPLEMENT, "blocked-worktree", 0)),
+    (Step.RUN_CONTROLS, Outcome.WORKTREE_TAKEN, {}, (Step.RUN_CONTROLS, "blocked-worktree", 0)),
+    (Step.VERIFY, Outcome.WORKTREE_TAKEN, {}, (Step.VERIFY, "blocked-worktree", 0)),
+    (
+        Step.OPEN_PULL_REQUEST,
+        Outcome.WORKTREE_TAKEN,
+        {},
+        (Step.OPEN_PULL_REQUEST, "blocked-worktree", 0),
+    ),
+    (Step.AWAIT_CI, Outcome.WORKTREE_TAKEN, {}, (Step.AWAIT_CI, "blocked-worktree", 0)),
+    (Step.CATCH_UP, Outcome.WORKTREE_TAKEN, {}, (Step.CATCH_UP, "blocked-worktree", 0)),
+    (Step.AWAIT_MERGE, Outcome.WORKTREE_TAKEN, {}, (Step.AWAIT_MERGE, "blocked-worktree", 0)),
     (
         Step.MOUNT_WORKTREE,
         Outcome.WORKTREE_LEFT_BEHIND,
         {},
-        (Step.MOUNT_WORKTREE, RunState.BLOCKED_LEFTOVER_WORKTREE, 0),
+        (Step.MOUNT_WORKTREE, "blocked-leftover-worktree", 0),
     ),
-    (Step.UNDERSTAND, Outcome.WORKTREE_LEFT_BEHIND, {}, (Step.UNDERSTAND, RunState.BLOCKED_LEFTOVER_WORKTREE, 0)),
-    (Step.IMPLEMENT, Outcome.WORKTREE_LEFT_BEHIND, {}, (Step.IMPLEMENT, RunState.BLOCKED_LEFTOVER_WORKTREE, 0)),
-    (Step.RUN_CONTROLS, Outcome.WORKTREE_LEFT_BEHIND, {}, (Step.RUN_CONTROLS, RunState.BLOCKED_LEFTOVER_WORKTREE, 0)),
-    (Step.VERIFY, Outcome.WORKTREE_LEFT_BEHIND, {}, (Step.VERIFY, RunState.BLOCKED_LEFTOVER_WORKTREE, 0)),
+    (
+        Step.UNDERSTAND,
+        Outcome.WORKTREE_LEFT_BEHIND,
+        {},
+        (Step.UNDERSTAND, "blocked-leftover-worktree", 0),
+    ),
+    (
+        Step.IMPLEMENT,
+        Outcome.WORKTREE_LEFT_BEHIND,
+        {},
+        (Step.IMPLEMENT, "blocked-leftover-worktree", 0),
+    ),
+    (
+        Step.RUN_CONTROLS,
+        Outcome.WORKTREE_LEFT_BEHIND,
+        {},
+        (Step.RUN_CONTROLS, "blocked-leftover-worktree", 0),
+    ),
+    (
+        Step.VERIFY,
+        Outcome.WORKTREE_LEFT_BEHIND,
+        {},
+        (Step.VERIFY, "blocked-leftover-worktree", 0),
+    ),
     (
         Step.OPEN_PULL_REQUEST,
         Outcome.WORKTREE_LEFT_BEHIND,
         {},
-        (Step.OPEN_PULL_REQUEST, RunState.BLOCKED_LEFTOVER_WORKTREE, 0),
+        (Step.OPEN_PULL_REQUEST, "blocked-leftover-worktree", 0),
     ),
-    (Step.AWAIT_CI, Outcome.WORKTREE_LEFT_BEHIND, {}, (Step.AWAIT_CI, RunState.BLOCKED_LEFTOVER_WORKTREE, 0)),
-    (Step.CATCH_UP, Outcome.WORKTREE_LEFT_BEHIND, {}, (Step.CATCH_UP, RunState.BLOCKED_LEFTOVER_WORKTREE, 0)),
-    (Step.AWAIT_MERGE, Outcome.WORKTREE_LEFT_BEHIND, {}, (Step.AWAIT_MERGE, RunState.BLOCKED_LEFTOVER_WORKTREE, 0)),
-    (Step.UNDERSTAND, Outcome.OVER_BUDGET, {}, (Step.UNDERSTAND, RunState.ABORTED_BUDGET, 0)),
-    (Step.UNDERSTAND, Outcome.CONFLICTING, {}, (Step.UNDERSTAND, RunState.BLOCKED_CI_CONFLICT, 0)),
-    (Step.IMPLEMENT, Outcome.DONE, {}, (Step.RUN_CONTROLS, RunState.OPEN, 0)),
-    (Step.IMPLEMENT, Outcome.DISCARDED, {}, (Step.IMPLEMENT, RunState.OPEN, 0)),
-    (Step.IMPLEMENT, Outcome.OVER_BUDGET, {}, (Step.IMPLEMENT, RunState.ABORTED_BUDGET, 0)),
+    (
+        Step.AWAIT_CI,
+        Outcome.WORKTREE_LEFT_BEHIND,
+        {},
+        (Step.AWAIT_CI, "blocked-leftover-worktree", 0),
+    ),
+    (
+        Step.CATCH_UP,
+        Outcome.WORKTREE_LEFT_BEHIND,
+        {},
+        (Step.CATCH_UP, "blocked-leftover-worktree", 0),
+    ),
+    (
+        Step.AWAIT_MERGE,
+        Outcome.WORKTREE_LEFT_BEHIND,
+        {},
+        (Step.AWAIT_MERGE, "blocked-leftover-worktree", 0),
+    ),
+    (Step.UNDERSTAND, Outcome.OVER_BUDGET, {}, (Step.UNDERSTAND, "aborted-budget", 0)),
+    (Step.UNDERSTAND, Outcome.CONFLICTING, {}, (Step.UNDERSTAND, "blocked-ci-conflict", 0)),
+    (Step.IMPLEMENT, Outcome.DONE, {}, (Step.RUN_CONTROLS, "open", 0)),
+    (Step.IMPLEMENT, Outcome.DISCARDED, {}, (Step.IMPLEMENT, "open", 0)),
+    (Step.IMPLEMENT, Outcome.OVER_BUDGET, {}, (Step.IMPLEMENT, "aborted-budget", 0)),
     (
         Step.IMPLEMENT,
         Outcome.CALL_NOT_MEASURED,
         {},
-        (Step.IMPLEMENT, RunState.ABORTED_UNMEASURED_CALL, 0),
+        (Step.IMPLEMENT, "aborted-unmeasured-call", 0),
     ),
-    (Step.IMPLEMENT, Outcome.CONFLICTING, {}, (Step.IMPLEMENT, RunState.BLOCKED_CI_CONFLICT, 0)),
-    (Step.RUN_CONTROLS, Outcome.DONE, {}, (Step.VERIFY, RunState.OPEN, 0)),
-    (Step.RUN_CONTROLS, Outcome.FAILED, {}, (Step.IMPLEMENT, RunState.OPEN, 0)),
-    (Step.RUN_CONTROLS, Outcome.FAILED, {"control_retries": 1}, (Step.IMPLEMENT, RunState.OPEN, 0)),
-    (Step.RUN_CONTROLS, Outcome.FAILED, {"control_retries": 2}, (Step.RUN_CONTROLS, RunState.BLOCKED_CONTROLS, 0)),
-    (Step.RUN_CONTROLS, Outcome.HYGIENE_REJECTED, {}, (Step.IMPLEMENT, RunState.OPEN, 0)),
-    (Step.RUN_CONTROLS, Outcome.HYGIENE_REJECTED, {"hygiene_retries": 1}, (Step.IMPLEMENT, RunState.OPEN, 0)),
+    (Step.IMPLEMENT, Outcome.CONFLICTING, {}, (Step.IMPLEMENT, "blocked-ci-conflict", 0)),
+    (Step.RUN_CONTROLS, Outcome.DONE, {}, (Step.VERIFY, "open", 0)),
+    (Step.RUN_CONTROLS, Outcome.FAILED, {}, (Step.IMPLEMENT, "open", 0)),
+    (Step.RUN_CONTROLS, Outcome.FAILED, {"control_retries": 1}, (Step.IMPLEMENT, "open", 0)),
+    (
+        Step.RUN_CONTROLS,
+        Outcome.FAILED,
+        {"control_retries": 2},
+        (Step.RUN_CONTROLS, "blocked-controls", 0),
+    ),
+    (Step.RUN_CONTROLS, Outcome.HYGIENE_REJECTED, {}, (Step.IMPLEMENT, "open", 0)),
+    (Step.RUN_CONTROLS, Outcome.HYGIENE_REJECTED, {"hygiene_retries": 1}, (Step.IMPLEMENT, "open", 0)),
     (
         Step.RUN_CONTROLS,
         Outcome.HYGIENE_REJECTED,
         {"hygiene_retries": 2},
-        (Step.RUN_CONTROLS, RunState.BLOCKED_HYGIENE, 0),
+        (Step.RUN_CONTROLS, "blocked-hygiene", 0),
     ),
-    (Step.RUN_CONTROLS, Outcome.INDETERMINATE, {}, (Step.RUN_CONTROLS, RunState.OPEN, 30)),
-    (Step.RUN_CONTROLS, Outcome.INDETERMINATE, {"control_retries": 2}, (Step.RUN_CONTROLS, RunState.OPEN, 30)),
-    (Step.RUN_CONTROLS, Outcome.OVER_BUDGET, {}, (Step.RUN_CONTROLS, RunState.ABORTED_BUDGET, 0)),
-    (Step.RUN_CONTROLS, Outcome.CONFLICTING, {}, (Step.RUN_CONTROLS, RunState.BLOCKED_CI_CONFLICT, 0)),
-    (Step.VERIFY, Outcome.DONE, {}, (Step.OPEN_PULL_REQUEST, RunState.OPEN, 0)),
-    (Step.VERIFY, Outcome.DISCARDED, {}, (Step.VERIFY, RunState.OPEN, 0)),
-    (Step.VERIFY, Outcome.FAILED, {}, (Step.IMPLEMENT, RunState.OPEN, 0)),
-    (Step.VERIFY, Outcome.FAILED, {"verify_retries": 1}, (Step.IMPLEMENT, RunState.OPEN, 0)),
-    (Step.VERIFY, Outcome.FAILED, {"verify_retries": 2}, (Step.VERIFY, RunState.BLOCKED_VERIFY, 0)),
-    (Step.VERIFY, Outcome.UNCHANGED, {}, (Step.VERIFY, RunState.BLOCKED_UNCHANGED_DIFF, 0)),
-    (Step.VERIFY, Outcome.OVER_BUDGET, {}, (Step.VERIFY, RunState.ABORTED_BUDGET, 0)),
+    (Step.RUN_CONTROLS, Outcome.INDETERMINATE, {}, (Step.RUN_CONTROLS, "open", 30)),
+    (Step.RUN_CONTROLS, Outcome.INDETERMINATE, {"control_retries": 2}, (Step.RUN_CONTROLS, "open", 30)),
+    (Step.RUN_CONTROLS, Outcome.OVER_BUDGET, {}, (Step.RUN_CONTROLS, "aborted-budget", 0)),
+    (Step.RUN_CONTROLS, Outcome.CONFLICTING, {}, (Step.RUN_CONTROLS, "blocked-ci-conflict", 0)),
+    (Step.VERIFY, Outcome.DONE, {}, (Step.OPEN_PULL_REQUEST, "open", 0)),
+    (Step.VERIFY, Outcome.DISCARDED, {}, (Step.VERIFY, "open", 0)),
+    (Step.VERIFY, Outcome.FAILED, {}, (Step.IMPLEMENT, "open", 0)),
+    (Step.VERIFY, Outcome.FAILED, {"verify_retries": 1}, (Step.IMPLEMENT, "open", 0)),
+    (Step.VERIFY, Outcome.FAILED, {"verify_retries": 2}, (Step.VERIFY, "blocked-verify", 0)),
+    (Step.VERIFY, Outcome.UNCHANGED, {}, (Step.VERIFY, "blocked-unchanged-diff", 0)),
+    (Step.VERIFY, Outcome.OVER_BUDGET, {}, (Step.VERIFY, "aborted-budget", 0)),
     (
         Step.VERIFY,
         Outcome.CALL_NOT_MEASURED,
         {},
-        (Step.VERIFY, RunState.ABORTED_UNMEASURED_CALL, 0),
+        (Step.VERIFY, "aborted-unmeasured-call", 0),
     ),
-    (Step.VERIFY, Outcome.CONFLICTING, {}, (Step.VERIFY, RunState.BLOCKED_CI_CONFLICT, 0)),
-    (Step.OPEN_PULL_REQUEST, Outcome.DONE, {}, (Step.AWAIT_CI, RunState.OPEN, 0)),
-    (Step.OPEN_PULL_REQUEST, Outcome.OVER_BUDGET, {}, (Step.OPEN_PULL_REQUEST, RunState.ABORTED_BUDGET, 0)),
-    (Step.OPEN_PULL_REQUEST, Outcome.CONFLICTING, {}, (Step.OPEN_PULL_REQUEST, RunState.BLOCKED_CI_CONFLICT, 0)),
-    (Step.AWAIT_CI, Outcome.DONE, {}, (Step.AWAIT_MERGE, RunState.OPEN, 0)),
-    (Step.AWAIT_CI, Outcome.PENDING, {}, (Step.AWAIT_CI, RunState.OPEN, 30)),
-    (Step.AWAIT_CI, Outcome.INDETERMINATE, {}, (Step.AWAIT_CI, RunState.OPEN, 30)),
-    (Step.AWAIT_CI, Outcome.INDETERMINATE, {"indeterminate_ticks": 1}, (Step.AWAIT_CI, RunState.OPEN, 30)),
+    (Step.VERIFY, Outcome.CONFLICTING, {}, (Step.VERIFY, "blocked-ci-conflict", 0)),
+    (Step.OPEN_PULL_REQUEST, Outcome.DONE, {}, (Step.AWAIT_CI, "open", 0)),
+    (
+        Step.OPEN_PULL_REQUEST,
+        Outcome.OVER_BUDGET,
+        {},
+        (Step.OPEN_PULL_REQUEST, "aborted-budget", 0),
+    ),
+    (
+        Step.OPEN_PULL_REQUEST,
+        Outcome.CONFLICTING,
+        {},
+        (Step.OPEN_PULL_REQUEST, "blocked-ci-conflict", 0),
+    ),
+    (Step.AWAIT_CI, Outcome.DONE, {}, (Step.AWAIT_MERGE, "open", 0)),
+    (Step.AWAIT_CI, Outcome.PENDING, {}, (Step.AWAIT_CI, "open", 30)),
+    (Step.AWAIT_CI, Outcome.INDETERMINATE, {}, (Step.AWAIT_CI, "open", 30)),
+    (Step.AWAIT_CI, Outcome.INDETERMINATE, {"indeterminate_ticks": 1}, (Step.AWAIT_CI, "open", 30)),
     (
         Step.AWAIT_CI,
         Outcome.INDETERMINATE,
         {"indeterminate_ticks": Budgets().indeterminate_ticks - 1},
-        (Step.AWAIT_CI, RunState.BLOCKED_CI_INDETERMINATE, 0),
+        (Step.AWAIT_CI, "blocked-ci-indeterminate", 0),
     ),
-    (Step.AWAIT_CI, Outcome.FAILED, {}, (Step.IMPLEMENT, RunState.OPEN, 0)),
-    (Step.AWAIT_CI, Outcome.FAILED, {"ci_retries": 1}, (Step.AWAIT_CI, RunState.BLOCKED_CI_RED, 0)),
-    (Step.AWAIT_CI, Outcome.OVER_BUDGET, {}, (Step.AWAIT_CI, RunState.ABORTED_BUDGET, 0)),
-    (Step.AWAIT_CI, Outcome.CONFLICTING, {}, (Step.CATCH_UP, RunState.OPEN, 30)),
+    (Step.AWAIT_CI, Outcome.FAILED, {}, (Step.IMPLEMENT, "open", 0)),
+    (Step.AWAIT_CI, Outcome.FAILED, {"ci_retries": 1}, (Step.AWAIT_CI, "blocked-ci-red", 0)),
+    (Step.AWAIT_CI, Outcome.OVER_BUDGET, {}, (Step.AWAIT_CI, "aborted-budget", 0)),
+    (Step.AWAIT_CI, Outcome.CONFLICTING, {}, (Step.CATCH_UP, "open", 30)),
     (
         Step.AWAIT_CI,
         Outcome.CONFLICTING,
         {"catch_up_retries": Budgets().catch_up_retries},
-        (Step.AWAIT_CI, RunState.BLOCKED_CI_CONFLICT, 0),
+        (Step.AWAIT_CI, "blocked-ci-conflict", 0),
     ),
-    (Step.CATCH_UP, Outcome.DONE, {}, (Step.RUN_CONTROLS, RunState.OPEN, 0)),
-    (Step.CATCH_UP, Outcome.CONFLICTING, {}, (Step.CATCH_UP, RunState.BLOCKED_CI_CONFLICT, 0)),
-    (Step.CATCH_UP, Outcome.OVER_BUDGET, {}, (Step.CATCH_UP, RunState.ABORTED_BUDGET, 0)),
-    (Step.AWAIT_MERGE, Outcome.DONE, {}, (Step.AWAIT_MERGE, RunState.MERGED, 0)),
-    (Step.AWAIT_MERGE, Outcome.PENDING, {}, (Step.AWAIT_MERGE, RunState.OPEN, 30)),
-    (Step.AWAIT_MERGE, Outcome.OVER_BUDGET, {}, (Step.AWAIT_MERGE, RunState.ABORTED_BUDGET, 0)),
-    (Step.AWAIT_MERGE, Outcome.CHANGES_REQUESTED, {}, (Step.IMPLEMENT, RunState.OPEN, 0)),
+    (Step.CATCH_UP, Outcome.DONE, {}, (Step.RUN_CONTROLS, "open", 0)),
+    (Step.CATCH_UP, Outcome.CONFLICTING, {}, (Step.CATCH_UP, "blocked-ci-conflict", 0)),
+    (Step.CATCH_UP, Outcome.OVER_BUDGET, {}, (Step.CATCH_UP, "aborted-budget", 0)),
+    (Step.AWAIT_MERGE, Outcome.DONE, {}, (Step.AWAIT_MERGE, "merged", 0)),
+    (Step.AWAIT_MERGE, Outcome.PENDING, {}, (Step.AWAIT_MERGE, "open", 30)),
+    (Step.AWAIT_MERGE, Outcome.OVER_BUDGET, {}, (Step.AWAIT_MERGE, "aborted-budget", 0)),
+    (Step.AWAIT_MERGE, Outcome.CHANGES_REQUESTED, {}, (Step.IMPLEMENT, "open", 0)),
 ]
 
 _IMPOSSIBLE: list[tuple[Step, Outcome]] = sorted(
@@ -831,8 +897,8 @@ class TestTheCommandThatEmitsClosedSliceMetrics:
     def test_the_verifier_fail_rate_counts_only_slices_the_judge_vetoed(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        self._record(ClosedSliceMother.closed_as_for_issue(RunState.BLOCKED_VERIFY, issue=101))
-        self._record(ClosedSliceMother.closed_as_for_issue(RunState.MERGED, issue=102))
+        self._record(ClosedSliceMother.closed_as_for_issue(Closure.because_of(ClosingReason.VERIFY), issue=101))
+        self._record(ClosedSliceMother.closed_as_for_issue(Closure.merged(), issue=102))
 
         summary = json.loads(self._emitted(tmp_path, capsys)[-1])
 
@@ -841,9 +907,9 @@ class TestTheCommandThatEmitsClosedSliceMetrics:
     def test_the_blocked_by_controls_rate_does_not_count_a_verifier_veto(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        self._record(ClosedSliceMother.closed_as_for_issue(RunState.BLOCKED_CONTROLS, issue=201))
-        self._record(ClosedSliceMother.closed_as_for_issue(RunState.BLOCKED_VERIFY, issue=202))
-        self._record(ClosedSliceMother.closed_as_for_issue(RunState.MERGED, issue=203))
+        self._record(ClosedSliceMother.closed_as_for_issue(Closure.because_of(ClosingReason.CONTROLS), issue=201))
+        self._record(ClosedSliceMother.closed_as_for_issue(Closure.because_of(ClosingReason.VERIFY), issue=202))
+        self._record(ClosedSliceMother.closed_as_for_issue(Closure.merged(), issue=203))
 
         summary = json.loads(self._emitted(tmp_path, capsys)[-1])
 
@@ -853,7 +919,7 @@ class TestTheCommandThatEmitsClosedSliceMetrics:
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
         self._record(ClosedSliceMother.merged_after_retrying_controls_and_ci(control_retries=1, ci_retries=0))
-        self._record(ClosedSliceMother.closed_as_for_issue(RunState.MERGED, issue=ClosedSliceMother.ISSUE + 1))
+        self._record(ClosedSliceMother.closed_as_for_issue(Closure.merged(), issue=ClosedSliceMother.ISSUE + 1))
 
         summary = json.loads(self._emitted(tmp_path, capsys)[-1])
 
@@ -863,7 +929,7 @@ class TestTheCommandThatEmitsClosedSliceMetrics:
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
         self._record(ClosedSliceMother.merged_after_retrying_controls_and_ci(control_retries=1, ci_retries=3))
-        self._record(ClosedSliceMother.closed_as_for_issue(RunState.MERGED, issue=ClosedSliceMother.ISSUE + 1))
+        self._record(ClosedSliceMother.closed_as_for_issue(Closure.merged(), issue=ClosedSliceMother.ISSUE + 1))
 
         summary = json.loads(self._emitted(tmp_path, capsys)[-1])
 
@@ -872,8 +938,8 @@ class TestTheCommandThatEmitsClosedSliceMetrics:
     def test_the_ci_red_rate_counts_only_slices_closed_with_a_red_check(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        self._record(ClosedSliceMother.closed_as_for_issue(RunState.BLOCKED_CI_RED, issue=301))
-        self._record(ClosedSliceMother.closed_as_for_issue(RunState.MERGED, issue=302))
+        self._record(ClosedSliceMother.closed_as_for_issue(Closure.because_of(ClosingReason.CI_RED), issue=301))
+        self._record(ClosedSliceMother.closed_as_for_issue(Closure.merged(), issue=302))
 
         summary = json.loads(self._emitted(tmp_path, capsys)[-1])
 
@@ -882,8 +948,8 @@ class TestTheCommandThatEmitsClosedSliceMetrics:
     def test_the_blocked_by_hygiene_rate_counts_only_slices_closed_over_an_incomplete_report(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        self._record(ClosedSliceMother.closed_as_for_issue(RunState.BLOCKED_HYGIENE, issue=310))
-        self._record(ClosedSliceMother.closed_as_for_issue(RunState.MERGED, issue=311))
+        self._record(ClosedSliceMother.closed_as_for_issue(Closure.because_of(ClosingReason.HYGIENE), issue=310))
+        self._record(ClosedSliceMother.closed_as_for_issue(Closure.merged(), issue=311))
 
         summary = json.loads(self._emitted(tmp_path, capsys)[-1])
 
@@ -893,7 +959,7 @@ class TestTheCommandThatEmitsClosedSliceMetrics:
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
         self._record(ClosedSliceMother.merged_after_going_back_for_every_reason())
-        self._record(ClosedSliceMother.closed_as_for_issue(RunState.MERGED, issue=ClosedSliceMother.ISSUE + 1))
+        self._record(ClosedSliceMother.closed_as_for_issue(Closure.merged(), issue=ClosedSliceMother.ISSUE + 1))
 
         summary = json.loads(self._emitted(tmp_path, capsys)[-1])
 
@@ -1115,7 +1181,7 @@ class TestTheTransitionOfEveryPair:
         step: Step,
         outcome: Outcome,
         spent: dict[str, int],
-        expected: tuple[Step, RunState, int],
+        expected: tuple[Step, Closure, int],
         capsys: pytest.CaptureFixture[str],
     ) -> None:
         code = Cli.explain(request=TransitionRequestMother.asking(step, outcome, **spent), budgets=Budgets())
@@ -1174,7 +1240,7 @@ class TestWhatEachBudgetPays:
         )
 
         emitted = json.loads(capsys.readouterr().out)
-        assert emitted["state"] == RunState.OPEN
+        assert emitted["state"] == "open"
         assert emitted["run"]["control_retries"] == 2
 
     def test_a_hygiene_rejection_spends_a_retry_of_its_own_and_not_one_of_the_controls(
@@ -1204,7 +1270,7 @@ class TestWhatEachBudgetPays:
         )
 
         emitted = json.loads(capsys.readouterr().out)
-        assert emitted["state"] == RunState.OPEN
+        assert emitted["state"] == "open"
         assert (emitted["run"]["verify_discards"], emitted["run"]["verify_retries"]) == (1, 2)
 
     def test_an_answer_from_the_ci_clears_the_ticks_that_had_none_because_the_window_wants_them_consecutive(
@@ -2767,7 +2833,7 @@ class TestTheCommandThatShowsFeatureStatus(TheFeatureBeingShown):
 
         lines = capsys.readouterr().out.strip().splitlines()
         slice_02 = next(line for line in lines if "slice-02" in line)
-        assert RunState.MERGED.value in slice_02
+        assert "merged" in slice_02
         assert "$" in slice_02
 
     def test_a_corrupt_line_in_the_metrics_log_exits_with_a_usage_error_instead_of_a_stack_dump(

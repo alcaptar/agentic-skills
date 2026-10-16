@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Self
 
-from slice_runner.domain.run_state import RunState
+from slice_runner.infrastructure.closed_as import ClosedAs
 from slice_runner.infrastructure.contract_model import ContractModel
 from slice_runner.infrastructure.run_payload import RunPayload
 
@@ -12,13 +12,13 @@ if TYPE_CHECKING:
 
 class TransitionPayload(ContractModel):
     run: RunPayload
-    state: RunState
+    state: ClosedAs
     wait_seconds: int
 
     @classmethod
     def from_domain(cls, transition: Transition) -> Self:
         return cls(
             run=RunPayload.from_domain(transition.run),
-            state=transition.state,
+            state=ClosedAs.of(transition.closure),
             wait_seconds=transition.wait_seconds,
         )

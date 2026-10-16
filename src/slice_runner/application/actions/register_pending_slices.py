@@ -3,13 +3,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from slice_runner.domain.closure import Closure
 from slice_runner.domain.event import Event
 from slice_runner.domain.event_cursor import EventCursor
 from slice_runner.domain.event_status import EventStatus
 from slice_runner.domain.feature_slice import FeatureSlice
 from slice_runner.domain.harness_spend import HarnessSpend
 from slice_runner.domain.issue_state import IssueState
-from slice_runner.domain.run_state import RunState
 from slice_runner.domain.step import Step
 
 if TYPE_CHECKING:
@@ -60,6 +60,6 @@ class RegisterPendingSlices:
             at=self._clock.now(),
             spend=HarnessSpend.nothing(),
             status=EventStatus.PENDING,
-            state=RunState.OPEN,
+            closure=Closure.open(),
             feature_slice=FeatureSlice(parent=params.parent, name=child.slice_id.name),
         )

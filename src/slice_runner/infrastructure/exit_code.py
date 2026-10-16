@@ -1,10 +1,15 @@
 from __future__ import annotations
 
 from enum import IntEnum
+from typing import TYPE_CHECKING
 
+from slice_runner.domain.closing_reason import ClosingReason
 from slice_runner.domain.halt import Halt
 from slice_runner.domain.ruling import Ruling
 from slice_runner.domain.run_state import RunState
+
+if TYPE_CHECKING:
+    from slice_runner.domain.closure import Closure
 
 
 class ExitCode(IntEnum):
@@ -35,10 +40,10 @@ class ExitCode(IntEnum):
                 return cls.VETOED
 
     @classmethod
-    def of_the_halt(cls, *, halt: Halt, state: RunState) -> ExitCode:
+    def of_the_halt(cls, *, halt: Halt, closure: Closure) -> ExitCode:
         match halt:
             case Halt.RUN_CLOSED:
-                return cls._of_the_closing(state)
+                return cls._of_the_closing(closure)
             case Halt.PRECHECKS_BLOCKED:
                 return cls.PRECHECKS_BLOCKED
             case Halt.WAIT_EXHAUSTED:
@@ -47,23 +52,31 @@ class ExitCode(IntEnum):
                 return cls.PULL_REQUEST_CLOSED
 
     @classmethod
-    def _of_the_closing(cls, state: RunState) -> ExitCode:
-        match state:
+    def _of_the_closing(cls, closure: Closure) -> ExitCode:
+        match closure.state:
             case RunState.MERGED:
                 return cls.OK
-            case RunState.BLOCKED_UNCHANGED_DIFF:
+            case RunState.OPEN | RunState.ABORTED:
+                return cls.RUN_UNMERGED
+            case RunState.BLOCKED:
+                return cls._of_the_blocking(closure.reason)
+
+    @classmethod
+    def _of_the_blocking(cls, reason: ClosingReason | None) -> ExitCode:
+        match reason:
+            case ClosingReason.UNCHANGED_DIFF:
                 return cls.UNCHANGED_DIFF
             case (
-                RunState.OPEN
-                | RunState.BLOCKED_CONTROLS
-                | RunState.BLOCKED_HYGIENE
-                | RunState.BLOCKED_VERIFY
-                | RunState.BLOCKED_CI_RED
-                | RunState.BLOCKED_CI_INDETERMINATE
-                | RunState.BLOCKED_CI_CONFLICT
-                | RunState.BLOCKED_WORKTREE
-                | RunState.BLOCKED_LEFTOVER_WORKTREE
-                | RunState.ABORTED_BUDGET
-                | RunState.ABORTED_UNMEASURED_CALL
+                None
+                | ClosingReason.CONTROLS
+                | ClosingReason.HYGIENE
+                | ClosingReason.VERIFY
+                | ClosingReason.CI_RED
+                | ClosingReason.CI_INDETERMINATE
+                | ClosingReason.CI_CONFLICT
+                | ClosingReason.WORKTREE
+                | ClosingReason.LEFTOVER_WORKTREE
+                | ClosingReason.BUDGET
+                | ClosingReason.UNMEASURED_CALL
             ):
                 return cls.RUN_UNMERGED

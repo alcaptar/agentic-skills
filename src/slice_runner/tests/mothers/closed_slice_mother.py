@@ -5,9 +5,10 @@ from typing import TYPE_CHECKING, ClassVar
 
 from slice_runner.domain.budgets import Budgets
 from slice_runner.domain.closed_slice import ClosedSlice
+from slice_runner.domain.closing_reason import ClosingReason
+from slice_runner.domain.closure import Closure
 from slice_runner.domain.declared_debt import DeclaredDebt
 from slice_runner.domain.role_models import RoleModels
-from slice_runner.domain.run_state import RunState
 from slice_runner.tests.mothers.harness_spend_mother import HarnessSpendMother
 from slice_runner.tests.mothers.run_mother import RunMother
 
@@ -32,31 +33,31 @@ class ClosedSliceMother:
 
     @classmethod
     def merged(cls) -> ClosedSlice:
-        return cls._closed(RunState.MERGED)
+        return cls._closed(Closure.merged())
 
     @classmethod
-    def closed_as(cls, state: RunState) -> ClosedSlice:
-        return cls._closed(state)
+    def closed_as(cls, closure: Closure) -> ClosedSlice:
+        return cls._closed(closure)
 
     @classmethod
     def merged_for_issue(cls, issue: int) -> ClosedSlice:
-        return cls._closed(RunState.MERGED, issue=issue)
+        return cls._closed(Closure.merged(), issue=issue)
 
     @classmethod
-    def closed_as_for_issue(cls, state: RunState, *, issue: int) -> ClosedSlice:
-        return cls._closed(state, issue=issue)
+    def closed_as_for_issue(cls, closure: Closure, *, issue: int) -> ClosedSlice:
+        return cls._closed(closure, issue=issue)
 
     @classmethod
     def merged_with_a_user_story_key(cls) -> ClosedSlice:
-        return cls._closed(RunState.MERGED, slice_id="PROJ-1234-07")
+        return cls._closed(Closure.merged(), slice_id="PROJ-1234-07")
 
     @classmethod
     def still_open(cls) -> ClosedSlice:
-        return cls._closed(RunState.OPEN)
+        return cls._closed(Closure.open())
 
     @classmethod
     def merged_measuring(cls, *spends: HarnessSpend) -> ClosedSlice:
-        return cls._closed(RunState.MERGED, spends=spends)
+        return cls._closed(Closure.merged(), spends=spends)
 
     @classmethod
     def merged_measuring_nothing(cls) -> ClosedSlice:
@@ -64,69 +65,71 @@ class ClosedSliceMother:
 
     @classmethod
     def vetoed_over(cls, *findings: Finding) -> ClosedSlice:
-        return cls._closed(RunState.BLOCKED_VERIFY, findings=findings)
+        return cls._closed(Closure.because_of(ClosingReason.VERIFY), findings=findings)
 
     @classmethod
     def merged_after_correcting(cls, *findings: Finding) -> ClosedSlice:
-        return cls._closed(RunState.MERGED, findings=findings, findings_of_the_last_round=())
+        return cls._closed(Closure.merged(), findings=findings, findings_of_the_last_round=())
 
     @classmethod
     def merged_after_going_back_for_every_reason(cls) -> ClosedSlice:
-        return cls._closed(RunState.MERGED, run=RunMother.that_went_back_for_every_reason())
+        return cls._closed(Closure.merged(), run=RunMother.that_went_back_for_every_reason())
 
     @classmethod
     def merged_discarding_because_of(cls, discarded: DiscardedCall | None) -> ClosedSlice:
         return cls._closed(
-            RunState.MERGED, run=replace(RunMother.that_went_back_for_every_reason(), discarded_call=discarded)
+            Closure.merged(), run=replace(RunMother.that_went_back_for_every_reason(), discarded_call=discarded)
         )
 
     @classmethod
     def blocked_indeterminate_because_of(cls, cause: CiIndeterminateCause | None) -> ClosedSlice:
-        return cls._closed(RunState.BLOCKED_CI_INDETERMINATE, ci_indeterminate_cause=cause)
+        return cls._closed(Closure.because_of(ClosingReason.CI_INDETERMINATE), ci_indeterminate_cause=cause)
 
     @classmethod
     def merged_leaving_out(cls, *left_out: str) -> ClosedSlice:
-        return cls._closed(RunState.MERGED, debt=DeclaredDebt(declared=True, left_out=left_out))
+        return cls._closed(Closure.merged(), debt=DeclaredDebt(declared=True, left_out=left_out))
 
     @classmethod
     def merged_declaring_nothing_left_out(cls) -> ClosedSlice:
-        return cls._closed(RunState.MERGED, debt=DeclaredDebt(declared=True, left_out=()))
+        return cls._closed(Closure.merged(), debt=DeclaredDebt(declared=True, left_out=()))
 
     @classmethod
     def merged_measuring_the_diff(cls, stats: DiffStats) -> ClosedSlice:
-        return cls._closed(RunState.MERGED, diff_stats=stats)
+        return cls._closed(Closure.merged(), diff_stats=stats)
 
     @classmethod
     def merged_measuring_the_diff_and_spend(cls, stats: DiffStats, *spends: HarnessSpend) -> ClosedSlice:
-        return cls._closed(RunState.MERGED, diff_stats=stats, spends=spends)
+        return cls._closed(Closure.merged(), diff_stats=stats, spends=spends)
 
     @classmethod
     def merged_discarding_and_measuring_the_diff(cls, discarded: DiscardedCall, stats: DiffStats) -> ClosedSlice:
-        return cls._closed(RunState.MERGED, run=RunMother.awaiting_merge_after_discarding(discarded), diff_stats=stats)
+        return cls._closed(Closure.merged(), run=RunMother.awaiting_merge_after_discarding(discarded), diff_stats=stats)
 
     @classmethod
     def merged_with_config(cls, *, budgets: Budgets | None = None, models: RoleModels | None = None) -> ClosedSlice:
-        return cls._closed(RunState.MERGED, budgets=budgets, models=models)
+        return cls._closed(Closure.merged(), budgets=budgets, models=models)
 
     @classmethod
     def merged_after_retrying_controls_and_ci(cls, *, control_retries: int, ci_retries: int) -> ClosedSlice:
         return cls._closed(
-            RunState.MERGED,
+            Closure.merged(),
             run=RunMother.merged_after_retrying_controls_and_ci(control_retries=control_retries, ci_retries=ci_retries),
         )
 
     @classmethod
     def merged_with_its_worktree(cls, retirement: WorktreeRetirement) -> ClosedSlice:
-        return replace(cls._closed(RunState.MERGED), worktree=cls.WORKTREE, worktree_retirement=retirement)
+        return replace(cls._closed(Closure.merged()), worktree=cls.WORKTREE, worktree_retirement=retirement)
 
     @classmethod
     def aborted_over_budget(cls, budgets: Budgets, *, spend: HarnessSpend | None = None) -> ClosedSlice:
-        return cls._closed(RunState.ABORTED_BUDGET, budgets=budgets, spends=None if spend is None else (spend,))
+        return cls._closed(
+            Closure.because_of(ClosingReason.BUDGET), budgets=budgets, spends=None if spend is None else (spend,)
+        )
 
     @classmethod
     def _closed(
         cls,
-        state: RunState,
+        closure: Closure,
         *,
         issue: int | None = None,
         slice_id: str | None = None,
@@ -145,7 +148,7 @@ class ClosedSliceMother:
             issue=cls.ISSUE if issue is None else issue,
             slice_id=cls.SLICE_ID if slice_id is None else slice_id,
             name=cls.NAME,
-            state=state,
+            closure=closure,
             run=run or RunMother.awaiting_merge(),
             budgets=budgets or cls.BUDGETS,
             models=models or cls.MODELS,

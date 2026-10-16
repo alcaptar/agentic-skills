@@ -29,7 +29,7 @@ class MetricsLedgerEntry:
             issue=payload.issue,
             slice_id=payload.slice_id,
             name=payload.name,
-            state=DurableClosure.state_of(verdict=payload.verdict, ci=payload.ci),
+            closure=DurableClosure.closure_of(verdict=payload.verdict, ci=payload.ci),
             findings=cls._severity_count(payload.findings),
             findings_of_the_last_round=cls._severity_count(payload.findings_of_the_last_round),
             implement_retries=payload.implement_retries,

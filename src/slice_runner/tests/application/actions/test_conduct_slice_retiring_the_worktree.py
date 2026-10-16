@@ -5,10 +5,11 @@ from dataclasses import replace
 import pytest
 
 from slice_runner.domain.budgets import Budgets
+from slice_runner.domain.closing_reason import ClosingReason
+from slice_runner.domain.closure import Closure
 from slice_runner.domain.exceptions import WorktreeRetirementError
 from slice_runner.domain.halt import Halt
 from slice_runner.domain.issue_label import IssueLabel
-from slice_runner.domain.run_state import RunState
 from slice_runner.domain.worktree_retirement import WorktreeRetirement
 from slice_runner.tests.conductor import Conductor
 from slice_runner.tests.mothers.control_outcome_mother import ControlOutcomeMother
@@ -40,7 +41,7 @@ class TestConductSliceRetiringTheWorktreeOfAMergedRun(_Merging):
 
         result = conductor.conduct()
 
-        assert result.state is RunState.MERGED
+        assert result.closure == Closure.merged()
         conductor.worktrees.remove.assert_called_once_with(root=Conductor.ROOT, path=Conductor.WORKTREE)
         conductor.worktrees.delete_branch.assert_called_once_with(root=Conductor.ROOT, branch=_BRANCH)
 
@@ -132,8 +133,8 @@ class TestConductSliceRetiringTheWorktreeOfAMergedRun(_Merging):
 
         result = conductor.conduct()
 
-        assert (result.halt, result.state) == (Halt.RUN_CLOSED, RunState.MERGED)
-        assert conductor.closed.state is RunState.MERGED
+        assert (result.halt, result.closure) == (Halt.RUN_CLOSED, Closure.merged())
+        assert conductor.closed.closure == Closure.merged()
         conductor.repository.clear_run.assert_called_once_with(repo=Conductor.REPO, issue=_SUBISSUE)
         assert conductor.close.execute.call_count == 1
         assert conductor.closed.worktree_retirement.kept
@@ -197,7 +198,7 @@ class TestConductSliceTheEndingsThatKeepTheWorktree(_Merging):
 
         result = conductor.conduct()
 
-        assert result.state is RunState.BLOCKED_CONTROLS
+        assert result.closure == Closure.because_of(ClosingReason.CONTROLS)
         assert not conductor.worktrees.has_uncommitted_work.called
         assert not conductor.worktrees.local_only_commits.called
         assert not conductor.worktrees.remove.called
@@ -221,7 +222,7 @@ class TestConductSliceTheEndingsThatKeepTheWorktree(_Merging):
 
         result = conductor.conduct()
 
-        assert result.state is RunState.ABORTED_UNMEASURED_CALL
+        assert result.closure == Closure.because_of(ClosingReason.UNMEASURED_CALL)
         assert not conductor.worktrees.has_uncommitted_work.called
         assert not conductor.worktrees.remove.called
         assert not conductor.worktrees.delete_branch.called
@@ -248,7 +249,7 @@ class TestConductSliceWhenATreeIsFoundThatNobodyExpected(_Merging):
 
         result = conductor.conduct()
 
-        assert (result.halt, result.state) == (Halt.RUN_CLOSED, RunState.BLOCKED_LEFTOVER_WORKTREE)
+        assert (result.halt, result.closure) == (Halt.RUN_CLOSED, Closure.because_of(ClosingReason.LEFTOVER_WORKTREE))
         assert result.conflicting_path == Conductor.WORKTREE
 
     def test_a_tree_left_by_a_stop_of_the_prechecks_is_reused_by_the_next_invocation(self) -> None:
@@ -261,7 +262,7 @@ class TestConductSliceWhenATreeIsFoundThatNobodyExpected(_Merging):
 
         result = conductor.conduct()
 
-        assert result.state is not RunState.BLOCKED_LEFTOVER_WORKTREE
+        assert result.closure != Closure.because_of(ClosingReason.LEFTOVER_WORKTREE)
         assert not conductor.worktrees.add_new_branch.called
         assert not conductor.worktrees.add_on_branch.called
         assert conductor.check_sources.execute.call_count == 1
@@ -287,7 +288,7 @@ class TestConductSliceWhenATreeIsFoundThatNobodyExpected(_Merging):
             remove=IssueLabel.IN_PROGRESS,
             add=IssueLabel.BLOCKED_LEFTOVER_WORKTREE,
         )
-        assert conductor.closed.state is RunState.BLOCKED_LEFTOVER_WORKTREE
+        assert conductor.closed.closure == Closure.because_of(ClosingReason.LEFTOVER_WORKTREE)
 
     def test_the_closing_names_the_path_and_leaves_the_tree_for_a_person_to_resolve(self) -> None:
         conductor = self._after_an_abort_that_left_its_tree()
@@ -305,7 +306,7 @@ class TestConductSliceWhenATreeIsFoundThatNobodyExpected(_Merging):
 
         result = conductor.conduct()
 
-        assert result.state is not RunState.BLOCKED_LEFTOVER_WORKTREE
+        assert result.closure != Closure.because_of(ClosingReason.LEFTOVER_WORKTREE)
         assert not conductor.worktrees.add_new_branch.called
         assert not conductor.worktrees.add_on_branch.called
         assert conductor.implement.execute.call_count == 1
@@ -326,7 +327,7 @@ class TestConductSliceWhenATreeIsFoundThatNobodyExpected(_Merging):
 
         result = conductor.conduct()
 
-        assert result.state is RunState.BLOCKED_LEFTOVER_WORKTREE
+        assert result.closure == Closure.because_of(ClosingReason.LEFTOVER_WORKTREE)
         assert conductor.implement.execute.call_count == 0
 
     def test_a_run_reopened_by_the_retry_subcommand_with_no_tree_in_the_way_mounts_one_and_expects_it_from_then_on(
@@ -350,7 +351,7 @@ class TestConductSliceWhenATreeIsFoundThatNobodyExpected(_Merging):
 
         result = conductor.conduct(worktree="/trees/by-hand")
 
-        assert result.state is not RunState.BLOCKED_LEFTOVER_WORKTREE
+        assert result.closure != Closure.because_of(ClosingReason.LEFTOVER_WORKTREE)
 
 
 class TestConductSliceRetiringTheWorktreeOfAMergeMissedBetweenInvocations:
@@ -380,6 +381,6 @@ class TestConductSliceRetiringTheWorktreeOfAMergeMissedBetweenInvocations:
 
         assert not conductor.worktrees.remove.called
         first = conductor.metrics.record.call_args_list[0].args[0]
-        assert first.state is RunState.MERGED
+        assert first.closure == Closure.merged()
         assert first.worktree_retirement is WorktreeRetirement.KEPT_UNCOMMITTED_WORK
         conductor.repository.clear_run.assert_any_call(repo=Conductor.REPO, issue=SubIssueMother.dangling().number)

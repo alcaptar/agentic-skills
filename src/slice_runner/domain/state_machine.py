@@ -3,11 +3,12 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Literal, NoReturn
 
+from slice_runner.domain.closing_reason import ClosingReason
+from slice_runner.domain.closure import Closure
 from slice_runner.domain.exceptions import ImpossibleTransitionError
 from slice_runner.domain.harness_spend import HarnessSpend
 from slice_runner.domain.issue_label import IssueLabel
 from slice_runner.domain.outcome import Outcome
-from slice_runner.domain.run_state import RunState
 from slice_runner.domain.step import Step
 from slice_runner.domain.transition import Transition
 
@@ -28,11 +29,11 @@ class StateMachine:
             if verdict_recorded:
                 closing = self._logged_a_verify_round(closing)
 
-            return self._closed(closing, RunState.ABORTED_BUDGET)
+            return self._closed(closing, ClosingReason.BUDGET)
         if outcome is Outcome.WORKTREE_TAKEN:
-            return self._closed(run, RunState.BLOCKED_WORKTREE)
+            return self._closed(run, ClosingReason.WORKTREE)
         if outcome is Outcome.WORKTREE_LEFT_BEHIND:
-            return self._closed(run, RunState.BLOCKED_LEFTOVER_WORKTREE)
+            return self._closed(run, ClosingReason.LEFTOVER_WORKTREE)
         if outcome is Outcome.CONFLICTING:
             return self._after_a_catch_up_conflict(run)
 
@@ -56,7 +57,7 @@ class StateMachine:
                 | Step.OPEN_PULL_REQUEST
                 | Step.CATCH_UP
             ):
-                return self._closed(run, RunState.BLOCKED_CI_CONFLICT)
+                return self._closed(run, ClosingReason.CI_CONFLICT)
             case Step.AWAIT_CI:
                 return self._retrying_a_catch_up(run)
             case Step.AWAIT_MERGE:
@@ -67,7 +68,7 @@ class StateMachine:
             moved = replace(run, catch_up_retries=run.catch_up_retries + 1, step=Step.CATCH_UP)
             return Transition(run=moved, wait_seconds=self.budgets.seconds_between_ticks)
 
-        return self._closed(run, RunState.BLOCKED_CI_CONFLICT)
+        return self._closed(run, ClosingReason.CI_CONFLICT)
 
     def reopened(self, run: Run, *, blocked: IssueLabel) -> Run:
         match blocked:
@@ -183,7 +184,7 @@ class StateMachine:
                     Step.IMPLEMENT,
                 )
             case Outcome.CALL_NOT_MEASURED:
-                return self._closed(self._marking_a_dead_call(run, call_died), RunState.ABORTED_UNMEASURED_CALL)
+                return self._closed(self._marking_a_dead_call(run, call_died), ClosingReason.UNMEASURED_CALL)
             case _:
                 self._impossible(run, outcome)
 
@@ -218,7 +219,7 @@ class StateMachine:
                 replace(run, control_retries=run.control_retries + 1, catching_up_the_branch=False), Step.IMPLEMENT
             )
 
-        return self._closed(run, RunState.BLOCKED_CONTROLS)
+        return self._closed(run, ClosingReason.CONTROLS)
 
     def _retrying_a_hygiene_rejection(self, run: Run) -> Transition:
         if run.hygiene_retries < self.budgets.hygiene_retries:
@@ -226,7 +227,7 @@ class StateMachine:
                 replace(run, hygiene_retries=run.hygiene_retries + 1, catching_up_the_branch=False), Step.IMPLEMENT
             )
 
-        return self._closed(run, RunState.BLOCKED_HYGIENE)
+        return self._closed(run, ClosingReason.HYGIENE)
 
     def _after_the_judge(self, run: Run, outcome: Outcome, *, call_died: bool) -> Transition:
         match outcome:
@@ -237,9 +238,9 @@ class StateMachine:
             case Outcome.FAILED:
                 return self._retrying_a_veto(self._logged_a_verify_round(run))
             case Outcome.UNCHANGED:
-                return self._closed(run, RunState.BLOCKED_UNCHANGED_DIFF)
+                return self._closed(run, ClosingReason.UNCHANGED_DIFF)
             case Outcome.CALL_NOT_MEASURED:
-                return self._closed(self._marking_a_dead_call(run, call_died), RunState.ABORTED_UNMEASURED_CALL)
+                return self._closed(self._marking_a_dead_call(run, call_died), ClosingReason.UNMEASURED_CALL)
             case _:
                 self._impossible(run, outcome)
 
@@ -251,7 +252,7 @@ class StateMachine:
         if run.verify_retries < self.budgets.verify_retries:
             return self._moving_to(replace(run, verify_retries=run.verify_retries + 1), Step.IMPLEMENT)
 
-        return self._closed(run, RunState.BLOCKED_VERIFY)
+        return self._closed(run, ClosingReason.VERIFY)
 
     def _after_the_pull_request(self, run: Run, outcome: Outcome) -> Transition:
         if outcome is Outcome.DONE:
@@ -277,18 +278,18 @@ class StateMachine:
         if counted.indeterminate_ticks < self.budgets.indeterminate_ticks:
             return self._ticking(counted)
 
-        return self._closed(counted, RunState.BLOCKED_CI_INDETERMINATE)
+        return self._closed(counted, ClosingReason.CI_INDETERMINATE)
 
     def _retrying_a_red_ci(self, run: Run) -> Transition:
         if run.ci_retries < self.budgets.ci_retries:
             return self._moving_to(replace(run, ci_retries=run.ci_retries + 1), Step.IMPLEMENT)
 
-        return self._closed(run, RunState.BLOCKED_CI_RED)
+        return self._closed(run, ClosingReason.CI_RED)
 
     def _after_asking_for_the_merge(self, run: Run, outcome: Outcome) -> Transition:
         match outcome:
             case Outcome.DONE:
-                return self._closed(run, RunState.MERGED)
+                return Transition(run=run, closure=Closure.merged())
             case Outcome.PENDING:
                 return self._ticking(run)
             case Outcome.CHANGES_REQUESTED:
@@ -308,8 +309,8 @@ class StateMachine:
         return Transition(run=run, wait_seconds=self.budgets.seconds_between_ticks)
 
     @staticmethod
-    def _closed(run: Run, state: RunState) -> Transition:
-        return Transition(run=run, state=state)
+    def _closed(run: Run, reason: ClosingReason) -> Transition:
+        return Transition(run=run, closure=Closure.because_of(reason))
 
     @staticmethod
     def _impossible(run: Run, outcome: Outcome) -> NoReturn:

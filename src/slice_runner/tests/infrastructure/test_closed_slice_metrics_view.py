@@ -5,9 +5,10 @@ from typing import TYPE_CHECKING
 
 from slice_runner.domain.closed_slice_metrics import UNKNOWN_LABEL, ClosedSliceMetrics
 from slice_runner.domain.closed_slice_scope import ClosedSliceScope
+from slice_runner.domain.closing_reason import ClosingReason
+from slice_runner.domain.closure import Closure
 from slice_runner.domain.diff_stats import DiffStats
 from slice_runner.domain.role_spend import RoleSpend
-from slice_runner.domain.run_state import RunState
 from slice_runner.domain.step import Step
 from slice_runner.infrastructure.closed_slice_metrics_view import ClosedSliceMetricsView
 from slice_runner.tests.mothers.closed_slice_record_mother import ClosedSliceRecordMother
@@ -151,7 +152,7 @@ class TestTheRatesSection(RenderingTheView):
     def test_each_rate_is_painted_with_the_number_of_samples_it_comes_from(self) -> None:
         records = (
             ClosedSliceRecordMother.merged(),
-            ClosedSliceRecordMother.closed_as(RunState.BLOCKED_VERIFY),
+            ClosedSliceRecordMother.closed_as(Closure.because_of(ClosingReason.VERIFY)),
         )
 
         rendered = self._rendered(records=records)

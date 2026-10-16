@@ -45,6 +45,7 @@ from slice_runner.application.queries.spend_of_step import SpendOfStep, SpendOfS
 from slice_runner.domain.budgets import Budgets
 from slice_runner.domain.closed_slice_metrics import ClosedSliceMetrics
 from slice_runner.domain.closed_slice_scope import ClosedSliceScope
+from slice_runner.domain.closing_reason import ClosingReason
 from slice_runner.domain.event_cursor import EventCursor
 from slice_runner.domain.exceptions import (
     BranchMismatchError,
@@ -76,7 +77,6 @@ from slice_runner.domain.exceptions import (
 from slice_runner.domain.gh_retry_policy import GhRetryPolicy
 from slice_runner.domain.halt import Halt
 from slice_runner.domain.role_models import RoleModels
-from slice_runner.domain.run_state import RunState
 from slice_runner.domain.state_machine import StateMachine
 from slice_runner.domain.step import Step
 from slice_runner.infrastructure.branches_without_catch_up import BranchesWithoutCatchUp
@@ -608,7 +608,7 @@ class Cli:
         self._warn_about_the_kept_worktree(conducted)
         print(json.dumps(ConductedSlicePayload.from_domain(conducted).to_contract(), ensure_ascii=False))
 
-        return ExitCode.of_the_halt(halt=conducted.halt, state=conducted.state)
+        return ExitCode.of_the_halt(halt=conducted.halt, closure=conducted.closure)
 
     @staticmethod
     def _warn_about_the_draft_pull_request(conducted: ConductSliceResult) -> None:
@@ -623,14 +623,14 @@ class Cli:
 
     @staticmethod
     def _warn_about_the_blocked_worktree(conducted: ConductSliceResult) -> None:
-        match conducted.state:
-            case RunState.BLOCKED_WORKTREE:
+        match conducted.closure.reason:
+            case ClosingReason.WORKTREE:
                 print(
                     f"the worktree of the slice cannot be mounted because of {conducted.conflicting_path}; "
                     "free that path or branch and reinvoke with a retry instruction",
                     file=sys.stderr,
                 )
-            case RunState.BLOCKED_LEFTOVER_WORKTREE:
+            case ClosingReason.LEFTOVER_WORKTREE:
                 command = KeptWorktreeComment.removal_command(conducted.conflicting_path)
                 print(
                     f"a worktree nobody expected is left at {conducted.conflicting_path}, so it is neither reused "
@@ -642,7 +642,7 @@ class Cli:
 
     @staticmethod
     def _warn_about_the_kept_worktree(conducted: ConductSliceResult) -> None:
-        if conducted.state is RunState.BLOCKED_LEFTOVER_WORKTREE or not conducted.worktree_retirement.kept:
+        if conducted.closure.reason is ClosingReason.LEFTOVER_WORKTREE or not conducted.worktree_retirement.kept:
             return
 
         print(

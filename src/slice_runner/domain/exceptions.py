@@ -35,6 +35,10 @@ class ImpossibleTransitionError(ValueError):
     pass
 
 
+class InvalidClosureError(ValueError):
+    pass
+
+
 class RunNotClosedError(ValueError):
     pass
 

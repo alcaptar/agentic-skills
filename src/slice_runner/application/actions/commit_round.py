@@ -4,9 +4,9 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from slice_runner.domain.branch_standing import BranchStanding
+from slice_runner.domain.closure import Closure
 from slice_runner.domain.event import Event
 from slice_runner.domain.event_status import EventStatus
-from slice_runner.domain.run_state import RunState
 from slice_runner.domain.step import Step
 
 if TYPE_CHECKING:
@@ -49,7 +49,7 @@ class CommitRound:
                     at=self._clock.now(),
                     spend=params.spend,
                     status=EventStatus.NOTHING_TO_COMMIT,
-                    state=RunState.OPEN,
+                    closure=Closure.open(),
                     feature_slice=params.feature_slice,
                 )
             )

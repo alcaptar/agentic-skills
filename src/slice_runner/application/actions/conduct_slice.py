@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, ClassVar, Literal
 
 from slice_runner.application.actions.catch_up_branch import CatchUpBranchParams
 from slice_runner.application.actions.close_parent import CloseParentParams
@@ -22,7 +22,9 @@ from slice_runner.application.queries.read_ci_status import ReadCiStatusParams
 from slice_runner.application.queries.read_pull_request_status import ReadPullRequestStatusParams
 from slice_runner.application.queries.run_prechecks import RunPrechecksParams
 from slice_runner.application.queries.select_slice import SelectSliceParams
+from slice_runner.domain.closing_reason import ClosingReason
 from slice_runner.domain.closing_worktree import ClosingWorktree
+from slice_runner.domain.closure import Closure
 from slice_runner.domain.discarded_call import DiscardedCall
 from slice_runner.domain.exceptions import (
     DirtyIndexError,
@@ -102,7 +104,7 @@ class ConductSliceParams:
 @dataclass(frozen=True, kw_only=True, slots=True)
 class ConductSliceResult:
     halt: Halt
-    state: RunState
+    closure: Closure
     step: Step
     precheck: PrecheckResult | None = None
     pull_request: int | None = None
@@ -320,7 +322,7 @@ class ConductSlice:
             self._repository.write_run(repo=progress.params.repo, issue=progress.subissue.number, run=transition.run)
         closed = self._recorded(progress, transition)
 
-        return self._closing(closed, transition.state)
+        return self._closing(closed, transition.closure)
 
     @staticmethod
     def _staged_work_waits_at(step: Step) -> bool:
@@ -352,7 +354,7 @@ class ConductSlice:
         transition = self._machine.after(progress.run, Outcome.CONFLICTING)
         closed = self._recorded(progress, transition)
 
-        return self._closing(closed, transition.state)
+        return self._closing(closed, transition.closure)
 
     def _prechecking(self, progress: ConductSliceProgress) -> ConductSliceResult:
         precheck = self._prechecks.execute(
@@ -425,8 +427,8 @@ class ConductSlice:
                 verdict_recorded=stepped.verdict_recorded,
             )
             progress = self._recorded(stepped.progress, transition)
-            if transition.state is not RunState.OPEN:
-                return self._closing(progress, transition.state)
+            if transition.closure.state is not RunState.OPEN:
+                return self._closing(progress, transition.closure)
             if transition.wait_seconds > 0:
                 progress = self._waiting(progress, transition.wait_seconds)
                 if self._budgets.wait_exhausted(progress.waited_seconds, step=progress.run.step):
@@ -752,14 +754,14 @@ class ConductSlice:
                 issue=subissue.number,
                 slice_id=subissue.slice_id.canonical,
                 name=subissue.slice_id.name,
-                state=RunState.MERGED,
+                closure=Closure.merged(),
                 run=run,
                 budgets=self._budgets,
                 models=self._models,
                 worktree=worktree,
                 worktree_retirement=self._retiring(
                     RetireWorktreeParams(root=params.root, worktree=worktree, branch=subissue.branch),
-                    state=RunState.MERGED,
+                    closure=Closure.merged(),
                     step=run.step,
                     derived=True,
                 ),
@@ -772,7 +774,7 @@ class ConductSlice:
                 slice_id=subissue.slice_id.canonical,
                 current=run,
                 label=subissue.label,
-                transition=Transition(run=run, state=RunState.MERGED),
+                transition=Transition(run=run, closure=Closure.merged()),
                 spend=run.spend,
                 feature_slice=self._feature_slice_of(params=params, subissue=subissue),
             )
@@ -795,16 +797,16 @@ class ConductSlice:
         return replace(progress, waited_seconds=progress.waited_seconds + seconds)
 
     def _retiring(
-        self, tree: RetireWorktreeParams, *, state: RunState, step: Step, derived: bool
+        self, tree: RetireWorktreeParams, *, closure: Closure, step: Step, derived: bool
     ) -> WorktreeRetirement:
-        closing = WorktreeRetirementPolicy.of_the_closing(state=state, step=step)
+        closing = WorktreeRetirementPolicy.of_the_closing(closure=closure, step=step)
         if closing is not ClosingWorktree.RETIRE or not derived:
             return WorktreeRetirement.without_retiring(closing)
 
         return self._retire.execute(tree).retirement
 
-    def _closing(self, progress: ConductSliceProgress, state: RunState) -> ConductSliceResult:
-        if state is RunState.MERGED and not progress.subissue.signal_is_exempt:
+    def _closing(self, progress: ConductSliceProgress, closure: Closure) -> ConductSliceResult:
+        if closure.state is RunState.MERGED and not progress.subissue.signal_is_exempt:
             self._deploy_watch.watch(
                 worktree=progress.worktree, repo=progress.params.repo, signal=progress.subissue.signal
             )
@@ -812,7 +814,7 @@ class ConductSlice:
             RetireWorktreeParams(
                 root=progress.params.root, worktree=progress.worktree, branch=progress.subissue.branch
             ),
-            state=state,
+            closure=closure,
             step=progress.run.step,
             derived=progress.params.worktree is None,
         )
@@ -822,7 +824,7 @@ class ConductSlice:
                 issue=progress.subissue.number,
                 slice_id=progress.subissue.slice_id.canonical,
                 name=progress.subissue.slice_id.name,
-                state=state,
+                closure=closure,
                 run=progress.run,
                 budgets=self._budgets,
                 models=self._models,
@@ -832,30 +834,32 @@ class ConductSlice:
                 worktree_retirement=retirement,
             )
         )
-        if state is RunState.MERGED:
+        if closure.state is RunState.MERGED:
             self._repository.clear_run(repo=progress.params.repo, issue=progress.subissue.number)
             self._close.execute(CloseParentParams(repo=progress.params.repo, issue=progress.params.issue))
 
-        return self._ending(progress, Halt.RUN_CLOSED, state=state, retirement=retirement)
+        return self._ending(progress, Halt.RUN_CLOSED, closure=closure, retirement=retirement)
+
+    _STILL_OPEN: ClassVar[Closure] = Closure.open()
 
     @staticmethod
     def _ending(
         progress: ConductSliceProgress,
         halt: Halt,
         *,
-        state: RunState = RunState.OPEN,
+        closure: Closure = _STILL_OPEN,
         precheck: PrecheckResult | None = None,
         retirement: WorktreeRetirement = WorktreeRetirement.NOT_MOUNTED,
     ) -> ConductSliceResult:
         return ConductSliceResult(
             halt=halt,
-            state=state,
+            closure=closure,
             step=progress.run.step,
             precheck=precheck,
             pull_request=progress.pull_request,
             worktree=progress.worktree,
             worktree_retirement=retirement,
             conflicting_path=progress.conflicting_paths[0]
-            if state in (RunState.BLOCKED_WORKTREE, RunState.BLOCKED_LEFTOVER_WORKTREE)
+            if closure.reason in (ClosingReason.WORKTREE, ClosingReason.LEFTOVER_WORKTREE)
             else "",
         )

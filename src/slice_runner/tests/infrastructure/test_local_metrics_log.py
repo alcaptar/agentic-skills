@@ -10,10 +10,11 @@ import pytest
 from slice_runner.domain.budgets import Budgets
 from slice_runner.domain.ci_indeterminate_cause import CiIndeterminateCause
 from slice_runner.domain.closed_slice_scope import ClosedSliceScope
+from slice_runner.domain.closing_reason import ClosingReason
+from slice_runner.domain.closure import Closure
 from slice_runner.domain.diff_stats import DiffStats
 from slice_runner.domain.exceptions import RunNotClosedError, UnreadableMetricsLogError
 from slice_runner.domain.role_models import RoleModels
-from slice_runner.domain.run_state import RunState
 from slice_runner.domain.severity import Severity
 from slice_runner.domain.worktree_retirement import WorktreeRetirement
 from slice_runner.infrastructure import local_metrics_log
@@ -64,22 +65,22 @@ class TestWhereTheDurableLogIsWrittenFrom(WithTheDurableStoresOutOfTheRealHome):
 
 class TestHowEachClosureIsRecorded(WithTheDurableStoresOutOfTheRealHome):
     @pytest.mark.parametrize(
-        ("state", "verdict", "ci"),
+        ("closure", "verdict", "ci"),
         [
-            (RunState.MERGED, "pass", "green"),
-            (RunState.BLOCKED_CI_RED, "pass", "red"),
-            (RunState.BLOCKED_CI_INDETERMINATE, "pass", "none"),
-            (RunState.BLOCKED_VERIFY, "fail", "none"),
-            (RunState.BLOCKED_CONTROLS, "blocked-controls", "none"),
-            (RunState.BLOCKED_HYGIENE, "blocked-hygiene", "none"),
-            (RunState.ABORTED_BUDGET, "aborted-budget", "none"),
-            (RunState.ABORTED_UNMEASURED_CALL, "aborted-unmeasured-call", "none"),
+            (Closure.merged(), "pass", "green"),
+            (Closure.because_of(ClosingReason.CI_RED), "pass", "red"),
+            (Closure.because_of(ClosingReason.CI_INDETERMINATE), "pass", "none"),
+            (Closure.because_of(ClosingReason.VERIFY), "fail", "none"),
+            (Closure.because_of(ClosingReason.CONTROLS), "blocked-controls", "none"),
+            (Closure.because_of(ClosingReason.HYGIENE), "blocked-hygiene", "none"),
+            (Closure.because_of(ClosingReason.BUDGET), "aborted-budget", "none"),
+            (Closure.because_of(ClosingReason.UNMEASURED_CALL), "aborted-unmeasured-call", "none"),
         ],
     )
     def test_every_closure_of_the_program_has_its_own_pair_in_the_durable_vocabulary(
-        self, tmp_path: Path, state: RunState, verdict: str, ci: str
+        self, tmp_path: Path, closure: Closure, verdict: str, ci: str
     ) -> None:
-        LocalMetricsLog(clock=self.frozen_at()).record(ClosedSliceMother.closed_as(state))
+        LocalMetricsLog(clock=self.frozen_at()).record(ClosedSliceMother.closed_as(closure))
 
         row = WrittenMetricsLog.row_under(tmp_path)
         assert (row["verdict"], row["ci"]) == (verdict, ci)
@@ -393,8 +394,8 @@ class TestTheLedgerOnlyGrows(WithTheDurableStoresOutOfTheRealHome):
     def test_a_second_closure_is_appended_instead_of_overwriting_the_first(self, tmp_path: Path) -> None:
         log = LocalMetricsLog(clock=self.frozen_at())
 
-        log.record(ClosedSliceMother.closed_as(RunState.MERGED))
-        log.record(ClosedSliceMother.closed_as(RunState.BLOCKED_VERIFY))
+        log.record(ClosedSliceMother.closed_as(Closure.merged()))
+        log.record(ClosedSliceMother.closed_as(Closure.because_of(ClosingReason.VERIFY)))
 
         assert [row["verdict"] for row in WrittenMetricsLog.rows_under(tmp_path)] == ["pass", "fail"]
 
@@ -409,13 +410,17 @@ class TestReadingBackTheClosedSlices(WithTheDurableStoresOutOfTheRealHome):
         self, tmp_path: Path
     ) -> None:
         log = LocalMetricsLog(clock=self.frozen_at(datetime(2026, 1, 1, tzinfo=UTC)))
-        log.record(ClosedSliceMother.closed_as(RunState.MERGED))
+        log.record(ClosedSliceMother.closed_as(Closure.merged()))
         log = LocalMetricsLog(clock=self.frozen_at(datetime(2026, 2, 1, tzinfo=UTC)))
-        log.record(ClosedSliceMother.closed_as_for_issue(RunState.BLOCKED_VERIFY, issue=ClosedSliceMother.ISSUE + 1))
+        log.record(
+            ClosedSliceMother.closed_as_for_issue(
+                Closure.because_of(ClosingReason.VERIFY), issue=ClosedSliceMother.ISSUE + 1
+            )
+        )
 
         found = log.closed_slices(_WIDE_OPEN)
 
-        assert [record.state for record in found] == [RunState.MERGED, RunState.BLOCKED_VERIFY]
+        assert [record.closure for record in found] == [Closure.merged(), Closure.because_of(ClosingReason.VERIFY)]
 
     def test_a_slice_outside_the_date_range_is_left_out(self, tmp_path: Path) -> None:
         log = LocalMetricsLog(clock=self.frozen_at(datetime(2026, 1, 1, tzinfo=UTC)))
@@ -492,21 +497,21 @@ class TestDeduplicatingRepeatedClosuresOfTheSameSlice(WithTheDurableStoresOutOfT
         self, tmp_path: Path
     ) -> None:
         log = LocalMetricsLog(clock=self.frozen_at(datetime(2026, 1, 1, tzinfo=UTC)))
-        log.record(ClosedSliceMother.closed_as(RunState.BLOCKED_VERIFY))
+        log.record(ClosedSliceMother.closed_as(Closure.because_of(ClosingReason.VERIFY)))
         log = LocalMetricsLog(clock=self.frozen_at(datetime(2026, 1, 2, tzinfo=UTC)))
-        log.record(ClosedSliceMother.closed_as(RunState.MERGED))
+        log.record(ClosedSliceMother.closed_as(Closure.merged()))
 
         found = log.closed_slices(_WIDE_OPEN)
 
-        assert [record.state for record in found] == [RunState.MERGED]
+        assert [record.closure for record in found] == [Closure.merged()]
 
     def test_a_window_that_only_covers_the_earlier_closure_still_returns_it_instead_of_reaching_past_it(
         self, tmp_path: Path
     ) -> None:
         log = LocalMetricsLog(clock=self.frozen_at(datetime(2026, 8, 8, tzinfo=UTC)))
-        log.record(ClosedSliceMother.closed_as(RunState.BLOCKED_VERIFY))
+        log.record(ClosedSliceMother.closed_as(Closure.because_of(ClosingReason.VERIFY)))
         log = LocalMetricsLog(clock=self.frozen_at(datetime(2026, 8, 18, tzinfo=UTC)))
-        log.record(ClosedSliceMother.closed_as(RunState.MERGED))
+        log.record(ClosedSliceMother.closed_as(Closure.merged()))
 
         found = log.closed_slices(
             ClosedSliceScope.of_a_repo_between(
@@ -514,7 +519,7 @@ class TestDeduplicatingRepeatedClosuresOfTheSameSlice(WithTheDurableStoresOutOfT
             )
         )
 
-        assert [record.state for record in found] == [RunState.BLOCKED_VERIFY]
+        assert [record.closure for record in found] == [Closure.because_of(ClosingReason.VERIFY)]
 
     def test_the_key_is_the_repo_and_the_issue_and_not_the_slice_id_that_can_change_mid_feature(
         self, tmp_path: Path
@@ -646,6 +651,8 @@ class TestTheRowCarriesWhatBecameOfTheWorktree(WithTheDurableStoresOutOfTheRealH
         assert len(found) == 1
 
     def test_the_new_leftover_closing_is_written_as_its_own_verdict(self, tmp_path: Path) -> None:
-        LocalMetricsLog(clock=self.frozen_at()).record(ClosedSliceMother.closed_as(RunState.BLOCKED_LEFTOVER_WORKTREE))
+        LocalMetricsLog(clock=self.frozen_at()).record(
+            ClosedSliceMother.closed_as(Closure.because_of(ClosingReason.LEFTOVER_WORKTREE))
+        )
 
         assert WrittenMetricsLog.row_under(tmp_path)["verdict"] == "blocked-leftover-worktree"

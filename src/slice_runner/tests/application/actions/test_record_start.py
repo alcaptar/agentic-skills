@@ -8,9 +8,9 @@ import pytest
 
 from slice_runner.application.actions.record_start import RecordStart, RecordStartParams
 from slice_runner.domain.clock import Clock
+from slice_runner.domain.closure import Closure
 from slice_runner.domain.event_log import EventLog
 from slice_runner.domain.event_status import EventStatus
-from slice_runner.domain.run_state import RunState
 from slice_runner.domain.step import Step
 from slice_runner.tests.mothers.feature_slice_mother import FeatureSliceMother
 from slice_runner.tests.mothers.harness_spend_mother import HarnessSpendMother
@@ -58,10 +58,10 @@ class TestRecordStart:
         action.execute(self._params(RunMother.implementing()))
 
         emitted = events.emit.call_args.args[0]
-        assert (emitted.step, emitted.status, emitted.state) == (
+        assert (emitted.step, emitted.status, emitted.closure) == (
             Step.IMPLEMENT,
             EventStatus.ADVANCING,
-            RunState.OPEN,
+            Closure.open(),
         )
 
     def test_the_start_names_the_slice_the_instant_the_spend_paid_so_far_and_the_feature(

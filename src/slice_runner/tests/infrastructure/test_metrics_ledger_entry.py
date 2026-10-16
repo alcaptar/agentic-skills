@@ -7,6 +7,8 @@ from typing import TYPE_CHECKING
 import pytest
 
 from slice_runner.domain.ci_indeterminate_cause import CiIndeterminateCause
+from slice_runner.domain.closing_reason import ClosingReason
+from slice_runner.domain.closure import Closure
 from slice_runner.domain.diff_stats import DiffStats
 from slice_runner.domain.exceptions import UnreadableMetricsLogError
 from slice_runner.domain.run_state import RunState
@@ -62,15 +64,23 @@ class TestReadingBackARowThisProgramWrote(ReadingARow):
         assert record.ts == _STAMP
 
     def test_every_closure_of_the_program_is_read_back_as_the_state_it_closed_in(self) -> None:
-        for state in RunState:
-            if state is RunState.OPEN:
-                continue
-            closed = ClosedSliceMother.closed_as(state)
+        for reason in ClosingReason:
+            closure = Closure.because_of(reason)
+            closed = ClosedSliceMother.closed_as(closure)
             row = MetricsEntryPayload.from_domain(closed, ts=_STAMP.isoformat()).to_contract()
 
             record = self._read(row)
 
-            assert record.state == state
+            assert record.closure == closure
+
+    def test_a_row_with_the_blocked_hygiene_verdict_is_still_read_as_the_hygiene_closure(self) -> None:
+        closed = ClosedSliceMother.closed_as(Closure.because_of(ClosingReason.HYGIENE))
+        row = MetricsEntryPayload.from_domain(closed, ts=_STAMP.isoformat()).to_contract()
+        row["verdict"] = "blocked-hygiene"
+
+        record = self._read(row)
+
+        assert record.closure == Closure(state=RunState.BLOCKED, reason=ClosingReason.HYGIENE)
 
     def test_the_harness_spend_measured_across_every_call_is_read_back_whole(self) -> None:
         closed = ClosedSliceMother.merged_measuring(

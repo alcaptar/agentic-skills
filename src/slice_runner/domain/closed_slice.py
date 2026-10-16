@@ -10,11 +10,11 @@ from slice_runner.domain.worktree_retirement import WorktreeRetirement
 if TYPE_CHECKING:
     from slice_runner.domain.budgets import Budgets
     from slice_runner.domain.ci_indeterminate_cause import CiIndeterminateCause
+    from slice_runner.domain.closure import Closure
     from slice_runner.domain.diff_stats import DiffStats
     from slice_runner.domain.finding import Finding
     from slice_runner.domain.role_models import RoleModels
     from slice_runner.domain.run import Run
-    from slice_runner.domain.run_state import RunState
     from slice_runner.domain.severity import Severity
 
 
@@ -24,7 +24,7 @@ class ClosedSlice:
     issue: int
     slice_id: str
     name: str
-    state: RunState
+    closure: Closure
     run: Run
     budgets: Budgets
     models: RoleModels

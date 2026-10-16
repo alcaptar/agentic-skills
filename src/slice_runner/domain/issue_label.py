@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from enum import StrEnum
 
+from slice_runner.domain.closing_reason import ClosingReason
+from slice_runner.domain.closure import Closure
 from slice_runner.domain.run_state import RunState
 from slice_runner.domain.step import Step
 
@@ -23,36 +25,23 @@ class IssueLabel(StrEnum):
     ABORTED_UNMEASURED_CALL = "abortada:llamada-no-medida"
 
     @property
-    def closed_as(self) -> RunState | None:
-        for state in RunState:
-            if state is not RunState.OPEN and IssueLabel.of(state=state, step=Step.MOUNT_WORKTREE) is self:
-                return state
+    def closed_as(self) -> Closure | None:
+        for reason in ClosingReason:
+            closure = Closure.because_of(reason)
+            if IssueLabel.of(closure=closure, step=Step.MOUNT_WORKTREE) is self:
+                return closure
 
         return None
 
     @classmethod
-    def of(cls, *, state: RunState, step: Step) -> IssueLabel | None:
-        match state:
+    def of(cls, *, closure: Closure, step: Step) -> IssueLabel | None:
+        match closure.state:
             case RunState.OPEN:
                 return cls._of_the_open_step(step)
             case RunState.MERGED:
                 return None
-            case (
-                RunState.BLOCKED_CONTROLS
-                | RunState.BLOCKED_HYGIENE
-                | RunState.BLOCKED_VERIFY
-                | RunState.BLOCKED_UNCHANGED_DIFF
-                | RunState.BLOCKED_CI_RED
-                | RunState.BLOCKED_CI_INDETERMINATE
-                | RunState.BLOCKED_CI_CONFLICT
-                | RunState.BLOCKED_WORKTREE
-                | RunState.BLOCKED_LEFTOVER_WORKTREE
-            ):
-                return cls._of_the_blocked_reason(state)
-            case RunState.ABORTED_BUDGET:
-                return cls.ABORTED_BUDGET
-            case RunState.ABORTED_UNMEASURED_CALL:
-                return cls.ABORTED_UNMEASURED_CALL
+            case RunState.BLOCKED | RunState.ABORTED:
+                return cls._of_the_closed(closure)
 
     @classmethod
     def _of_the_open_step(cls, step: Step) -> IssueLabel:
@@ -72,15 +61,17 @@ class IssueLabel(StrEnum):
                 return cls.IN_PROGRESS
 
     @classmethod
-    def _of_the_blocked_reason(cls, state: RunState) -> IssueLabel:
+    def _of_the_closed(cls, closure: Closure) -> IssueLabel:
         return {
-            RunState.BLOCKED_CONTROLS: cls.BLOCKED_CONTROLS,
-            RunState.BLOCKED_HYGIENE: cls.BLOCKED_HYGIENE,
-            RunState.BLOCKED_VERIFY: cls.BLOCKED_VERIFY,
-            RunState.BLOCKED_UNCHANGED_DIFF: cls.BLOCKED_UNCHANGED_DIFF,
-            RunState.BLOCKED_CI_RED: cls.BLOCKED_CI_RED,
-            RunState.BLOCKED_CI_INDETERMINATE: cls.BLOCKED_CI_INDETERMINATE,
-            RunState.BLOCKED_CI_CONFLICT: cls.BLOCKED_CI_CONFLICT,
-            RunState.BLOCKED_WORKTREE: cls.BLOCKED_WORKTREE,
-            RunState.BLOCKED_LEFTOVER_WORKTREE: cls.BLOCKED_LEFTOVER_WORKTREE,
-        }[state]
+            Closure.because_of(ClosingReason.CONTROLS): cls.BLOCKED_CONTROLS,
+            Closure.because_of(ClosingReason.HYGIENE): cls.BLOCKED_HYGIENE,
+            Closure.because_of(ClosingReason.VERIFY): cls.BLOCKED_VERIFY,
+            Closure.because_of(ClosingReason.UNCHANGED_DIFF): cls.BLOCKED_UNCHANGED_DIFF,
+            Closure.because_of(ClosingReason.CI_RED): cls.BLOCKED_CI_RED,
+            Closure.because_of(ClosingReason.CI_INDETERMINATE): cls.BLOCKED_CI_INDETERMINATE,
+            Closure.because_of(ClosingReason.CI_CONFLICT): cls.BLOCKED_CI_CONFLICT,
+            Closure.because_of(ClosingReason.WORKTREE): cls.BLOCKED_WORKTREE,
+            Closure.because_of(ClosingReason.LEFTOVER_WORKTREE): cls.BLOCKED_LEFTOVER_WORKTREE,
+            Closure.because_of(ClosingReason.BUDGET): cls.ABORTED_BUDGET,
+            Closure.because_of(ClosingReason.UNMEASURED_CALL): cls.ABORTED_UNMEASURED_CALL,
+        }[closure]

@@ -51,7 +51,7 @@ class RecordStep:
         return RecordStepResult(run=run, label=label)
 
     def _labelled(self, params: RecordStepParams, *, step_of: Run) -> IssueLabel | None:
-        label = IssueLabel.of(state=params.transition.state, step=step_of.step)
+        label = IssueLabel.of(closure=params.transition.closure, step=step_of.step)
         if label is params.label:
             return label
         if label is None:
@@ -75,7 +75,7 @@ class RecordStep:
                 at=self._clock.now(),
                 spend=params.spend,
                 status=status,
-                state=params.transition.state,
+                closure=params.transition.closure,
                 feature_slice=params.feature_slice,
             )
         )

@@ -4,6 +4,7 @@ from datetime import datetime
 from typing import ClassVar, Self
 
 from slice_runner.domain.canonical_slice_id import CanonicalSliceId
+from slice_runner.domain.closure import Closure
 from slice_runner.domain.event import Event
 from slice_runner.domain.event_status import EventStatus
 from slice_runner.domain.exceptions import UnreadableEventLogError
@@ -11,6 +12,7 @@ from slice_runner.domain.feature_slice import FeatureSlice
 from slice_runner.domain.run_state import RunState
 from slice_runner.domain.slice_coordinates import SliceCoordinates
 from slice_runner.domain.step import Step
+from slice_runner.infrastructure.closed_as import ClosedAs
 from slice_runner.infrastructure.durable_ledger import ReadableLedgerRow
 from slice_runner.infrastructure.json_schema import JsonSchema
 from slice_runner.infrastructure.spend_payload import SpendPayload
@@ -23,7 +25,7 @@ class EventPayload(StampedRow, ReadableLedgerRow):
     step: Step
     spend: SpendPayload
     status: EventStatus
-    closed_as: RunState | None = None
+    closed_as: ClosedAs | None = None
     parent: int | None = None
     name: str | None = None
 
@@ -43,7 +45,7 @@ class EventPayload(StampedRow, ReadableLedgerRow):
             step=event.step,
             spend=SpendPayload.from_domain(event.spend),
             status=event.status,
-            closed_as=None if event.state is RunState.OPEN else event.state,
+            closed_as=None if event.closure.state is RunState.OPEN else ClosedAs.of(event.closure),
             parent=None if event.feature_slice is None else event.feature_slice.parent,
             name=None if event.feature_slice is None else event.feature_slice.name,
         )
@@ -63,7 +65,7 @@ class EventPayload(StampedRow, ReadableLedgerRow):
             at=datetime.fromisoformat(self.ts),
             spend=self.spend.to_domain(),
             status=self.status,
-            state=RunState.OPEN if self.closed_as is None else self.closed_as,
+            closure=Closure.open() if self.closed_as is None else self.closed_as.to_closure(),
             feature_slice=self._feature_slice(),
         )
 

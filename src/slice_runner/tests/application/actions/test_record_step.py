@@ -8,12 +8,13 @@ import pytest
 
 from slice_runner.application.actions.record_step import RecordStep, RecordStepParams
 from slice_runner.domain.clock import Clock
+from slice_runner.domain.closing_reason import ClosingReason
+from slice_runner.domain.closure import Closure
 from slice_runner.domain.event_log import EventLog
 from slice_runner.domain.event_status import EventStatus
 from slice_runner.domain.harness_spend import HarnessSpend
 from slice_runner.domain.issue_label import IssueLabel
 from slice_runner.domain.run_repository import RunRepository
-from slice_runner.domain.run_state import RunState
 from slice_runner.domain.step import Step
 from slice_runner.domain.transition import Transition
 from slice_runner.tests.mothers.feature_slice_mother import FeatureSliceMother
@@ -133,7 +134,7 @@ class TestHowItMovesTheLabel:
 
     def test_a_closure_that_carries_no_label_retires_the_one_that_was_there(self) -> None:
         recorder = _Recorder()
-        transition = Transition(run=RunMother.awaiting_merge(), state=RunState.MERGED)
+        transition = Transition(run=RunMother.awaiting_merge(), closure=Closure.merged())
 
         result = recorder.action.execute(
             _Given.params(current=RunMother.awaiting_merge(), transition=transition, label=IssueLabel.AWAITING_MERGE)
@@ -144,7 +145,7 @@ class TestHowItMovesTheLabel:
 
     def test_a_closure_with_no_label_on_a_slice_that_had_none_does_not_ask_the_forum_to_retire_anything(self) -> None:
         recorder = _Recorder()
-        transition = Transition(run=RunMother.awaiting_merge(), state=RunState.MERGED)
+        transition = Transition(run=RunMother.awaiting_merge(), closure=Closure.merged())
 
         recorder.action.execute(_Given.params(current=RunMother.awaiting_merge(), transition=transition, label=None))
 
@@ -167,20 +168,20 @@ class TestTheEventItEmits:
 
     def test_a_closing_transition_is_emitted_as_closed_so_the_log_says_the_run_ended(self) -> None:
         recorder = _Recorder()
-        transition = Transition(run=RunMother.awaiting_merge(), state=RunState.MERGED)
+        transition = Transition(run=RunMother.awaiting_merge(), closure=Closure.merged())
 
         recorder.action.execute(_Given.params(current=RunMother.awaiting_merge(), transition=transition))
 
         assert recorder.events.emit.call_args.args[0].status is EventStatus.CLOSED
 
-    @pytest.mark.parametrize("state", [RunState.MERGED, RunState.BLOCKED_VERIFY])
-    def test_a_closing_transition_emits_the_state_it_closed_with(self, state: RunState) -> None:
+    @pytest.mark.parametrize("closure", [Closure.merged(), Closure.because_of(ClosingReason.VERIFY)])
+    def test_a_closing_transition_emits_the_state_it_closed_with(self, closure: Closure) -> None:
         recorder = _Recorder()
-        transition = Transition(run=RunMother.awaiting_merge(), state=state)
+        transition = Transition(run=RunMother.awaiting_merge(), closure=closure)
 
         recorder.action.execute(_Given.params(current=RunMother.awaiting_merge(), transition=transition))
 
-        assert recorder.events.emit.call_args.args[0].state is state
+        assert recorder.events.emit.call_args.args[0].closure is closure
 
     def test_a_transition_that_advances_emits_the_open_state(self) -> None:
         recorder = _Recorder()
@@ -189,7 +190,7 @@ class TestTheEventItEmits:
             _Given.params(current=RunMother.implementing(), transition=Transition(run=RunMother.judging()))
         )
 
-        assert recorder.events.emit.call_args.args[0].state is RunState.OPEN
+        assert recorder.events.emit.call_args.args[0].closure == Closure.open()
 
     def test_a_transition_that_waits_emits_the_open_state(self) -> None:
         recorder = _Recorder()
@@ -201,7 +202,7 @@ class TestTheEventItEmits:
             )
         )
 
-        assert recorder.events.emit.call_args.args[0].state is RunState.OPEN
+        assert recorder.events.emit.call_args.args[0].closure == Closure.open()
 
     def test_the_event_carries_the_accumulated_spend_so_the_log_shows_what_the_run_costs_so_far(self) -> None:
         recorder = _Recorder()
