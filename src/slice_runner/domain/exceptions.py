@@ -185,3 +185,7 @@ class MalformedSliceIdError(ValueError):
 
 class WorktreeRetirementError(OSError):
     pass
+
+
+class UnreadableFollowLineError(ValueError):
+    pass
