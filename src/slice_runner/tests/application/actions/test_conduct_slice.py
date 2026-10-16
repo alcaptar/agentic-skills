@@ -1084,7 +1084,7 @@ class TestConductSliceReportingEvents:
         emitted = conductor.emitted_events
         assert (emitted[-1].step, emitted[-1].closure) == (Step.AWAIT_MERGE, Closure.open())
 
-    def test_a_pending_ci_reports_the_await_ci_step_on_every_tick(self) -> None:
+    def test_a_pending_ci_that_ticks_three_times_reports_the_await_ci_step_once(self) -> None:
         conductor = Conductor(
             chosen=SelectSliceResultMother.resumed_at(RunMother.about_to_ask_the_ci()),
             budgets=Budgets(ci_wait_seconds=90),
@@ -1093,8 +1093,34 @@ class TestConductSliceReportingEvents:
 
         conductor.conduct()
 
+        assert conductor.clock.sleep.call_count == 3
         emitted = conductor.emitted_events
-        assert [(e.step, e.closure) for e in emitted] == [(Step.AWAIT_CI, Closure.open())] * 3
+        assert [(e.step, e.closure) for e in emitted] == [(Step.AWAIT_CI, Closure.open())]
+
+    def test_a_ci_that_waits_goes_through_catch_up_and_waits_again_reports_await_ci_twice(self) -> None:
+        conductor = Conductor(
+            chosen=SelectSliceResultMother.resumed_at(RunMother.about_to_ask_the_ci()),
+            budgets=Budgets(ci_wait_seconds=60),
+        )
+        conductor.ci.status.side_effect = [CiStatus.PENDING, CiStatus.NO_CHECKS, CiStatus.PENDING, CiStatus.PENDING]
+        conductor.forum.pull_request_state.return_value = PullRequestStatusMother.open_and_conflicting()
+
+        conductor.conduct()
+
+        assert [e.step for e in conductor.emitted_events].count(Step.AWAIT_CI) == 2
+
+    def test_a_merge_wait_that_ticks_until_exhausted_reports_await_merge_once(self) -> None:
+        conductor = Conductor(
+            chosen=SelectSliceResultMother.resumed_at(RunMother.awaiting_merge()),
+            budgets=Budgets(person_wait_seconds=90),
+        )
+        conductor.forum.pull_request_state.return_value = PullRequestStatusMother.open_and_mergeable()
+
+        result = conductor.conduct()
+
+        assert result.halt is Halt.WAIT_EXHAUSTED
+        assert conductor.clock.sleep.call_count == 3
+        assert [(e.step, e.closure) for e in conductor.emitted_events] == [(Step.AWAIT_MERGE, Closure.open())]
 
 
 class TestConductSliceChainingDeployWatchAfterAMerge:
