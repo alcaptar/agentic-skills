@@ -51,29 +51,26 @@ impl BoardView {
                 }
             })
             .collect();
-        let areas = Layout::vertical(constraints).split(area);
-        let mut footer = area;
+        let footer_height = if watched.rejection().is_some() { 2 } else { 1 };
+        let [groups_area, footer_area] =
+            Layout::vertical([Constraint::Min(0), Constraint::Length(footer_height)]).areas(area);
+        let areas = Layout::vertical(constraints).split(groups_area);
         for ((group, lines), group_area) in painted.into_iter().zip(areas.iter()) {
-            let block = Block::bordered().title(Self::title_of(group));
-            footer = block.inner(*group_area);
-            frame.render_widget(Paragraph::new(lines).block(block), *group_area);
+            frame.render_widget(
+                Paragraph::new(lines).block(Block::bordered().title(Self::title_of(group))),
+                *group_area,
+            );
         }
-        Self::render_footer(frame, footer, watched);
+        Self::render_footer(frame, footer_area, watched);
     }
 
     fn render_footer(frame: &mut Frame, area: Rect, watched: &WatchedBoard) {
-        if area.height == 0 {
-            return;
+        let mut lines = Vec::new();
+        if let Some(rejection) = watched.rejection() {
+            lines.push(Line::from(Span::styled(format!(" {rejection}"), SliceGlyph::alarm())));
         }
-        let keys_row = Rect::new(area.x, area.y + area.height - 1, area.width, 1);
-        frame.render_widget(Paragraph::new(Self::KEYS), keys_row);
-        if let (Some(rejection), true) = (watched.rejection(), area.height > 1) {
-            let rejection_row = Rect::new(area.x, keys_row.y - 1, area.width, 1);
-            frame.render_widget(
-                Paragraph::new(format!(" {rejection}")).style(SliceGlyph::alarm()),
-                rejection_row,
-            );
-        }
+        lines.push(Line::from(Self::KEYS));
+        frame.render_widget(Paragraph::new(lines), area);
     }
 
     fn lines_of(group: &FeatureGroup, selected: Option<&SliceKey>, now: u64) -> Vec<Line<'static>> {

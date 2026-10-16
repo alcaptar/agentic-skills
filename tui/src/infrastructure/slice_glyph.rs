@@ -10,12 +10,12 @@ pub struct SliceGlyph;
 impl SliceGlyph {
     const SPINNER: [&'static str; 10] = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
     const SPINNER_FRAME_MILLIS: u64 = 100;
-    pub const STILL_RUNNING: &'static str = "●";
+    pub const GONE: &'static str = "●";
 
     pub fn of(row: &SliceRow, now: u64) -> Span<'static> {
         let closure = row.latest().closure();
         let symbol = match closure {
-            Closure::InProgress if row.process_is_gone() => Self::STILL_RUNNING,
+            Closure::InProgress if row.process_is_gone() => Self::GONE,
             Closure::InProgress => Self::spinner(now),
             Closure::Pending => "○",
             Closure::AwaitingMerge => "◆",
@@ -28,7 +28,7 @@ impl SliceGlyph {
     }
 
     pub fn spinner(now: u64) -> &'static str {
-        let frame = usize::try_from(now / Self::SPINNER_FRAME_MILLIS % 10).unwrap_or(0);
+        let frame = usize::try_from(now / Self::SPINNER_FRAME_MILLIS).unwrap_or(0) % Self::SPINNER.len();
 
         Self::SPINNER[frame]
     }

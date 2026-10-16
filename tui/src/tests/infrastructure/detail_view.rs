@@ -58,3 +58,21 @@ mod the_detail_view {
         assert!(!DetailScreen::text_of(row).contains("slice-runner retry"));
     }
 }
+
+mod the_detail_view_of_a_long_story {
+    use crate::tests::application::watching::Watching;
+    use crate::tests::infrastructure::detail_view::DetailScreen;
+    use crate::tests::mothers::screen_mother::ScreenMother;
+
+    #[test]
+    fn keeps_the_command_to_reopen_and_drops_the_oldest_steps() {
+        let watched = Watching::one_tick(Watching::lines(ScreenMother::a_long_blocked_story()));
+        let row = watched.board().row(&ScreenMother::key(8)).unwrap();
+
+        let screen = DetailScreen::text_of(row);
+
+        assert!(screen.contains("slice-runner retry 533"), "{screen}");
+        assert!(screen.contains("bloqueada: controles"), "{screen}");
+        assert!(!screen.contains("hace 40m"), "{screen}");
+    }
+}

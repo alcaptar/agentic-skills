@@ -1,3 +1,5 @@
+use crate::domain::rounds::Counter;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ClosingReason {
     Controls,
@@ -35,6 +37,17 @@ impl ClosingReason {
             Self::Worktree => "worktree",
             Self::Budget => "presupuesto",
             Self::UnmeasuredCall => "llamada no medida",
+        }
+    }
+
+    pub fn spends(self) -> Option<Counter> {
+        match self {
+            Self::Controls => Some(Counter::Controls),
+            Self::Judge => Some(Counter::Judge),
+            Self::CiRed => Some(Counter::Ci),
+            Self::CiIndeterminate => Some(Counter::CiIndeterminate),
+            Self::CiConflict => Some(Counter::CatchUp),
+            Self::Worktree | Self::Budget | Self::UnmeasuredCall => None,
         }
     }
 

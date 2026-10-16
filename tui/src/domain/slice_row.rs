@@ -12,7 +12,8 @@ use crate::domain::transition::Transition;
 pub struct SliceRow {
     key: SliceKey,
     subject: SliceSubject,
-    transitions: Vec<Transition>,
+    earlier: Vec<Transition>,
+    latest: Transition,
     activity: Vec<ActivityLine>,
     liveness: Liveness,
 }
@@ -27,7 +28,8 @@ impl SliceRow {
         Self {
             key,
             subject,
-            transitions: vec![transition],
+            earlier: Vec::new(),
+            latest: transition,
             activity: Vec::new(),
             liveness: Liveness::Unchecked,
         }
@@ -35,14 +37,21 @@ impl SliceRow {
 
     pub fn with_line(&self, line: FollowLine) -> Self {
         let (subject, transition) = line.into_parts();
-        let mut transitions = self.transitions.clone();
-        if !transitions.last().is_some_and(|last| transition.repeats(last)) {
-            transitions.push(transition);
+        let subject = subject.known_over(&self.subject);
+        if transition.repeats(&self.latest) {
+            return Self {
+                subject,
+                latest: transition.since(self.latest.at()),
+                ..self.clone()
+            };
         }
+        let mut earlier = self.earlier.clone();
+        earlier.push(self.latest.clone());
 
         Self {
-            subject: subject.known_over(&self.subject),
-            transitions,
+            subject,
+            earlier,
+            latest: transition,
             ..self.clone()
         }
     }
@@ -78,8 +87,8 @@ impl SliceRow {
         &self.subject
     }
 
-    pub fn transitions(&self) -> &[Transition] {
-        &self.transitions
+    pub fn transitions(&self) -> Vec<&Transition> {
+        self.earlier.iter().chain(std::iter::once(&self.latest)).collect()
     }
 
     pub fn activity(&self) -> &[ActivityLine] {
@@ -87,9 +96,7 @@ impl SliceRow {
     }
 
     pub fn latest(&self) -> &Transition {
-        let index = self.transitions.len().saturating_sub(1);
-
-        &self.transitions[index]
+        &self.latest
     }
 
     pub fn repo(&self) -> &str {
@@ -105,11 +112,15 @@ impl SliceRow {
     }
 
     pub fn pid(&self) -> Option<u32> {
-        self.transitions.iter().rev().find_map(Transition::pid)
+        self.transitions()
+            .into_iter()
+            .rev()
+            .take_while(|transition| transition.closure() == Closure::InProgress)
+            .find_map(Transition::pid)
     }
 
     pub fn pull_request(&self) -> Option<u64> {
-        self.transitions.iter().rev().find_map(Transition::pull_request)
+        self.transitions().into_iter().rev().find_map(Transition::pull_request)
     }
 
     pub fn is_running(&self) -> bool {

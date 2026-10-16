@@ -47,6 +47,10 @@ impl Transition {
         Self { pid: Some(pid), ..self }
     }
 
+    pub fn since(self, at: u64) -> Self {
+        Self { at, ..self }
+    }
+
     pub fn at(&self) -> u64 {
         self.at
     }

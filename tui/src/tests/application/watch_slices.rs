@@ -271,3 +271,38 @@ mod a_transition_that_repeats_the_last_one {
         assert_eq!(watched.board().row(&Watching::key(150)).unwrap().transitions().len(), 2);
     }
 }
+
+mod a_reopened_slice {
+    use crate::domain::attention::Attention;
+    use crate::tests::application::watching::Watching;
+    use crate::tests::doubles::FixedProbe;
+    use crate::tests::mothers::screen_mother::ScreenMother;
+
+    #[test]
+    fn does_not_inherit_the_process_of_the_run_that_closed() {
+        let watched = Watching::entries(ScreenMother::reopened_without_a_process(), FixedProbe::alive_only(&[]));
+
+        let row = watched.board().row(&ScreenMother::key(4)).unwrap();
+
+        assert_eq!(row.pid(), None);
+        assert_eq!(row.attention(), Attention::Running);
+    }
+}
+
+mod a_repeated_line_with_a_new_spend {
+    use crate::tests::application::watching::Watching;
+    use crate::tests::mothers::screen_mother::ScreenMother;
+
+    #[test]
+    fn keeps_one_entry_with_the_new_spend_and_the_first_moment() {
+        let (first, again) = ScreenMother::the_same_step_twice_with_more_spend();
+        let first_at = first.clone().into_parts().1.at();
+
+        let watched = Watching::one_tick(Watching::lines(vec![first, again]));
+
+        let row = watched.board().row(&ScreenMother::key(3)).unwrap();
+        assert_eq!(row.transitions().len(), 1);
+        assert_eq!(row.latest().at(), first_at);
+        assert!((row.latest().spend().cost_usd() - 45.0).abs() < f64::EPSILON);
+    }
+}

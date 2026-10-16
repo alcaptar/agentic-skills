@@ -228,4 +228,72 @@ impl ScreenMother {
                 .copied(),
         )
     }
+
+    pub fn a_long_blocked_story() -> Vec<FollowLine> {
+        let mut lines: Vec<FollowLine> = (0..10)
+            .map(|round| {
+                let step = if round % 2 == 0 {
+                    Step::Implement
+                } else {
+                    Step::RunControls
+                };
+                FollowLine::new(
+                    Self::subject_of(8),
+                    Transition::new(
+                        Self::NOW - (40 - round * 3) * Self::MINUTE,
+                        Closure::InProgress,
+                        Some(step),
+                        FollowLineMother::rounds(round / 2, 0),
+                        Spend::new(1.0, 50.0),
+                    ),
+                )
+            })
+            .collect();
+        lines.push(FollowLine::new(
+            Self::subject_of(8),
+            Transition::new(
+                Self::NOW - Self::MINUTE,
+                Closure::Blocked(ClosingReason::Controls),
+                Some(Step::RunControls),
+                FollowLineMother::rounds(2, 0),
+                Spend::new(1.0, 50.0),
+            ),
+        ));
+        lines
+    }
+
+    pub fn reopened_without_a_process() -> Vec<FollowEntry> {
+        let mut entries: Vec<FollowEntry> = Self::feature()
+            .into_iter()
+            .filter(|entry| matches!(entry, FollowEntry::Transition(line) if line.issue() == Self::PARENT + 4))
+            .collect();
+        entries.push(FollowEntry::Transition(FollowLine::new(
+            Self::subject_of(4),
+            Transition::new(
+                Self::NOW,
+                Closure::InProgress,
+                Some(Step::Implement),
+                FollowLineMother::rounds(0, 0),
+                Spend::new(3.1, 50.0),
+            ),
+        )));
+        entries
+    }
+
+    pub fn the_same_step_twice_with_more_spend() -> (FollowLine, FollowLine) {
+        let implementing = |minutes_ago: u64, cost: f64| {
+            FollowLine::new(
+                Self::subject_of(3),
+                Transition::new(
+                    Self::NOW - minutes_ago * Self::MINUTE,
+                    Closure::InProgress,
+                    Some(Step::Implement),
+                    FollowLineMother::rounds(0, 0),
+                    Spend::new(cost, 50.0),
+                ),
+            )
+        };
+
+        (implementing(9, 30.0), implementing(2, 45.0))
+    }
 }

@@ -9,7 +9,6 @@ use crate::domain::elapsed::Elapsed;
 use crate::domain::rounds::Counter;
 use crate::domain::slice_row::SliceRow;
 use crate::domain::step::Step;
-use crate::domain::transition::Transition;
 use crate::infrastructure::narration::Narration;
 use crate::infrastructure::slice_glyph::SliceGlyph;
 
@@ -18,7 +17,8 @@ pub struct DetailView;
 impl DetailView {
     const KEYS: &'static str = " esc volver · ctrl+q claude";
     const SHOWN_ACTIVITY: usize = 5;
-    const SENTENCE_WIDTH: usize = 55;
+    const KEPT_HISTORY: usize = 3;
+    const SENTENCE_WIDTH: usize = 54;
     const PHASES: [(Step, &'static str); 7] = [
         (Step::MountWorktree, "mnt"),
         (Step::Implement, "imp"),
@@ -35,12 +35,15 @@ impl DetailView {
         let block = Block::bordered().title(format!(" {} {} ", row.subject().number(), row.label()));
         let inner = block.inner(area);
         let room = usize::from(inner.height.saturating_sub(1));
-        let top = Self::top_of(row, now);
         let bottom = Self::bottom_of(row);
         let history = Self::history_of(row, now);
-        let space = room.saturating_sub(top.len() + bottom.len() + 1);
+        let head = Self::head_of(row, now);
+        let space = room.saturating_sub(head.len() + bottom.len() + 1);
+        let activity = Self::activity_fitting(row, now, space, history.len());
+        let space = space.saturating_sub(activity.len());
         let skipped = history.len().saturating_sub(space);
-        let mut lines = top;
+        let mut lines = head;
+        lines.extend(activity);
         lines.push(Line::from(" HISTORIA"));
         lines.extend(history.into_iter().skip(skipped));
         lines.extend(bottom);
@@ -51,16 +54,29 @@ impl DetailView {
         }
     }
 
-    fn top_of(row: &SliceRow, now: u64) -> Vec<Line<'static>> {
-        let mut lines = vec![Self::headline_of(row, now), Self::spend_of(row), Line::default()];
-        lines.push(Line::from(Self::phases_of(row)));
-        lines.push(Line::from(Self::counters_of(row, &Self::FIRST_COUNTERS)));
-        lines.push(Line::from(Self::counters_of(row, &Self::LAST_COUNTERS)));
-        lines.push(Line::default());
-        if row.is_running() && !row.activity().is_empty() {
-            lines.extend(Self::activity_of(row, now));
-            lines.push(Line::default());
+    fn head_of(row: &SliceRow, now: u64) -> Vec<Line<'static>> {
+        vec![
+            Self::headline_of(row, now),
+            Self::spend_of(row),
+            Line::default(),
+            Line::from(Self::phases_of(row)),
+            Line::from(Self::counters_of(row, &Self::FIRST_COUNTERS)),
+            Line::from(Self::counters_of(row, &Self::LAST_COUNTERS)),
+            Line::default(),
+        ]
+    }
+
+    fn activity_fitting(row: &SliceRow, now: u64, space: usize, history: usize) -> Vec<Line<'static>> {
+        if !row.is_running() || row.activity().is_empty() {
+            return Vec::new();
         }
+        let framing = 2;
+        let shown = Self::SHOWN_ACTIVITY.min(space.saturating_sub(framing + history.min(Self::KEPT_HISTORY)));
+        if shown == 0 {
+            return Vec::new();
+        }
+        let mut lines = Self::activity_of(row, now, shown);
+        lines.push(Line::default());
 
         lines
     }
@@ -81,11 +97,11 @@ impl DetailView {
         if let Some(step) = latest.step() {
             spans.push(Span::raw(format!(" · {}", step.name())));
         }
-        let first = row.transitions().first().map_or(latest.at(), Transition::at);
-        let end = match closure {
-            Closure::Blocked(_) | Closure::Aborted(_) | Closure::Merged => latest.at(),
-            Closure::Pending | Closure::InProgress | Closure::AwaitingMerge => now,
-        };
+        let first = row
+            .transitions()
+            .first()
+            .map_or(latest.at(), |transition| transition.at());
+        let end = if closure.is_settled() { latest.at() } else { now };
         spans.push(Span::raw(format!(
             " · hace {} · {} en total",
             Elapsed::between(latest.at(), now),
@@ -179,7 +195,7 @@ impl DetailView {
         format!(" {}", shown.join(" · "))
     }
 
-    fn activity_of(row: &SliceRow, now: u64) -> Vec<Line<'static>> {
+    fn activity_of(row: &SliceRow, now: u64, shown: usize) -> Vec<Line<'static>> {
         let activity = row.activity();
         let Some(last) = activity.last() else {
             return Vec::new();
@@ -190,7 +206,7 @@ impl DetailView {
             Actor::Controls => " QUÉ HACEN LOS CONTROLES AHORA",
         };
         let mut lines = vec![Line::from(heading)];
-        let start = activity.len().saturating_sub(Self::SHOWN_ACTIVITY);
+        let start = activity.len().saturating_sub(shown);
         lines.extend(activity[start..].iter().map(|line| {
             Line::from(format!(
                 " hace {:<4} {:<5} {}",
@@ -210,7 +226,7 @@ impl DetailView {
             .iter()
             .enumerate()
             .map(|(index, transition)| {
-                let earlier = index.checked_sub(1).and_then(|before| transitions.get(before));
+                let earlier = index.checked_sub(1).and_then(|before| transitions.get(before)).copied();
                 let later = transitions.get(index + 1);
                 let mut sentence = Narration::of(transition, earlier);
                 if later.is_none() && running {
@@ -225,7 +241,7 @@ impl DetailView {
                 }
 
                 Line::from(format!(
-                    " hace {age:<4} {sentence:<width$}{duration}",
+                    " hace {age:<4} {sentence:<width$} {duration}",
                     width = Self::SENTENCE_WIDTH
                 ))
             })

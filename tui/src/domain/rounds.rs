@@ -29,7 +29,7 @@ impl Counter {
         }
     }
 
-    fn sends_the_work_back(self) -> bool {
+    pub fn sends_the_work_back(self) -> bool {
         match self {
             Self::Controls | Self::Hygiene | Self::Judge | Self::Ci => true,
             Self::CiIndeterminate | Self::CatchUp => false,

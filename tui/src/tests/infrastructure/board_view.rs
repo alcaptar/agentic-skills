@@ -178,3 +178,26 @@ mod the_tray_with_an_open_detail {
         assert_eq!(screen, include_str!("../screens/bandeja.txt"));
     }
 }
+
+mod the_tray_with_several_features {
+    use crate::domain::errors::FollowLineRejected;
+    use crate::tests::application::watching::Watching;
+    use crate::tests::infrastructure::board_view::Screen;
+    use crate::tests::mothers::follow_line_mother::FollowLineMother;
+
+    #[test]
+    fn keeps_the_keys_and_the_rejection_on_screen_when_the_groups_fill_it() {
+        let mut deliveries = Watching::lines(
+            (0..12)
+                .map(|issue| FollowLineMother::child_of(140 + issue, 150 + issue))
+                .collect(),
+        );
+        deliveries.push(Err(FollowLineRejected::UnsupportedVersion { version: 3 }));
+        let watched = Watching::one_tick(deliveries);
+
+        let screen = Screen::text_of(&watched);
+
+        assert!(screen.contains("unsupported follow line version 3"), "{screen}");
+        assert!(screen.contains("enter detalle"), "{screen}");
+    }
+}

@@ -16,7 +16,7 @@ mod the_events_of_a_slice {
 
         let row = watched.board().row(&Watching::key(150)).unwrap();
 
-        let steps: Vec<Option<Step>> = row.transitions().iter().map(Transition::step).collect();
+        let steps: Vec<Option<Step>> = row.transitions().into_iter().map(Transition::step).collect();
         assert_eq!(
             steps,
             vec![Some(Step::RunControls), Some(Step::Implement), Some(Step::AwaitMerge)]

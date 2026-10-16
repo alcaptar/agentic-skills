@@ -24,21 +24,12 @@ impl Narration {
     }
 
     fn blocked(transition: &Transition, reason: ClosingReason) -> String {
-        let spent = Self::counter_of(reason).is_some_and(|counter| transition.rounds().of(counter).is_spent());
+        let spent = reason
+            .spends()
+            .is_some_and(|counter| transition.rounds().of(counter).is_spent());
         let tail = if spent { ", sin vueltas que queden" } else { "" };
 
         format!("✕ bloqueada: {}{tail}", reason.label())
-    }
-
-    fn counter_of(reason: ClosingReason) -> Option<Counter> {
-        match reason {
-            ClosingReason::Controls => Some(Counter::Controls),
-            ClosingReason::Judge => Some(Counter::Judge),
-            ClosingReason::CiRed => Some(Counter::Ci),
-            ClosingReason::CiIndeterminate => Some(Counter::CiIndeterminate),
-            ClosingReason::CiConflict => Some(Counter::CatchUp),
-            ClosingReason::Worktree | ClosingReason::Budget | ClosingReason::UnmeasuredCall => None,
-        }
     }
 
     fn working(transition: &Transition, earlier: Option<&Transition>) -> String {
@@ -50,6 +41,7 @@ impl Narration {
             Step::Implement => {
                 let cause = earlier
                     .and_then(|earlier| transition.rounds().grown_since(earlier.rounds()))
+                    .filter(|counter| counter.sends_the_work_back())
                     .map_or("", Self::cause_of);
                 format!("{cause}implementa, vuelta {round}")
             }

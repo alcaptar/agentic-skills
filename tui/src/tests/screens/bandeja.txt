@@ -20,5 +20,5 @@
 │                                                                              │
 │                                                                              │
 │                                                                              │
-│ ↑↓ mover · enter detalle · ctrl+q claude                                     │
 └──────────────────────────────────────────────────────────────────────────────┘
+ ↑↓ mover · enter detalle · ctrl+q claude                                       
