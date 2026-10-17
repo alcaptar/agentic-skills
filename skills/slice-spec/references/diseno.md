@@ -86,6 +86,14 @@ no se salta.
   imposible no lo puede cumplir nadie, y se descubre con el presupuesto gastado.
 - **Si algun criterio lo puede cumplir el implementador y lo puede medir el juez.** El implementador no
   toca git ni compone la pull request; el juez no recibe el informe.
+- **Lo visual: si la feature construye algo que se ve, la maqueta se disena en la ronda y no despues.**
+  Busca la paleta del repo destino antes de la primera maqueta -en sus fuentes de convencion, su tema o
+  sus constantes de color- y usala; si no tiene, la paleta es una decision de la ronda y queda escrita en el
+  HTML. Itera la maqueta como artefacto, con variantes, y la persona elige. En el padre entra solo la variante elegida:
+  se copia a un `### <nombre>` de `## Diseno`, con el enlace al artefacto en el `<summary>` del
+  `<details>` y su HTML en un bloque de codigo. Una maqueta con todas las variantes sin elegir, o con
+  colores inventados, llega al implementador y al juez como si fuera el diseno. Si no aplica, se cierra
+  diciendo por que.
 
 Nombres de ficheros y clases y estrategia de tests: solo se preguntan si las fuentes de convencion del repo destino no los cubren.
 Si las cubren, se cita la fuente y no se pregunta.
