@@ -34,7 +34,7 @@ sabe por que existe; sin el segundo, la auditoria sería una opinion.
 
 | Factor | Estado | Evidencia |
 |---|---|---|
-| 1. Lenguaje natural a llamadas de herramienta | **Cumple** | `deploy_core.py` de la skill deploy-watch, ya retirada, es "el código determinista tiene la soberania"; `controles.py` e `issue_body.py`, retirados con el flujo viejo, también lo eran. El modelo propone, el exit code decide |
+| 1. Lenguaje natural a llamadas de herramienta | **Cumple** | `skills/deploy-watch/scripts/deploy_core.py` es "el código determinista tiene la soberania"; `controles.py` e `issue_body.py`, retirados con el flujo viejo, también lo eran. El modelo propone, el exit code decide |
 | 2. Duena de tus prompts | **Cumple, con hueco** | Skills versionadas aquí, con `~/.claude/` por symlink; `tests/test_skill_contracts.py` valida contratos escritos en `.md`. Falta lo que el factor pide además: *"testing y evaluaciones como código regular"* |
 | 3. Duena de tu ventana de contexto | **Parcial, conocido** | Muy trabajado (salida de build a disco, relato largo fuera del `SKILL.md`, subagentes desechables). Residual: el orquestador vive en la sesión del harness, que no es del repo. Declarado como fase 2 en `docs/design-notes.md` |
 | 4. Las herramientas son salida estructurada | **Cumple** | El veredicto del verificador era un objeto validado por `controles.py verify-verdict` (retirado con el flujo viejo). Frontera más debil: la lista de rutas del implementador volvia en prosa, con `pr-hygiene` como red |
@@ -119,7 +119,7 @@ El criterio de corte por skill es **si el valor está en la conversación o en e
 |---|---|---|
 | `skills/slice-spec/SKILL.md` | La conversación con una persona | Sigue siendo skill. Ser dueño del loop aquí no compra nada y cuesta justo lo que la hace buena |
 | `SKILL.md` del runner (retirado) | El loop | Programa (`src/slice_runner/`) |
-| `SKILL.md` de la skill deploy-watch, ya retirada | El loop de ticks, con nucleo puro ya escrito | Programa, o skill fina sobre uno |
+| `skills/deploy-watch/SKILL.md` | El loop de ticks, con nucleo puro ya escrito | Programa, o skill fina sobre uno |
 
 Y el coste de la transición es menor de lo que parece: `deploy_core.py`, `metrics.py`,
 `discover_controles.py` y `discover_conventions.py` **ya son** el nucleo determinista y los puertos,
