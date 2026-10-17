@@ -27,6 +27,7 @@ from slice_runner.application.actions.stage_slice import StageSlice
 from slice_runner.application.actions.verify_slice import VerifySlice
 from slice_runner.application.queries.check_sources import CheckSources
 from slice_runner.application.queries.read_ci_status import ReadCiStatus
+from slice_runner.application.queries.read_design_captures import ReadDesignCaptures
 from slice_runner.application.queries.read_pull_request_status import ReadPullRequestStatus
 from slice_runner.application.queries.run_prechecks import RunPrechecks
 from slice_runner.application.queries.select_slice import SelectSlice
@@ -55,6 +56,7 @@ from slice_runner.domain.worktrees import Worktrees
 from slice_runner.tests.doubles import RecordedActivityLog, RecordedCorpus, RecordedDebtLedger, RecordedSpendLog
 from slice_runner.tests.mothers.branch_catch_up_mother import BranchCatchUpMother
 from slice_runner.tests.mothers.control_outcome_mother import ControlOutcomeMother
+from slice_runner.tests.mothers.design_captures_mother import DesignCapturesMother
 from slice_runner.tests.mothers.implementation_mother import ImplementationMother
 from slice_runner.tests.mothers.listed_worktree_mother import ListedWorktreeMother
 from slice_runner.tests.mothers.pull_request_status_mother import PullRequestStatusMother
@@ -98,6 +100,7 @@ class Conductor:
         self.select = self._doubling(SelectSlice, execute=chosen)
         self.prechecks = self._doubling(RunPrechecks, execute=PrecheckResult(outcome=PrecheckOutcome.CLEAR))
         self.check_sources = self._doubling(CheckSources, execute=PrecheckResult(outcome=PrecheckOutcome.CLEAR))
+        self.read_captures = self._doubling(ReadDesignCaptures, execute=DesignCapturesMother.none())
         self.worktrees: Mock = create_autospec(Worktrees, spec_set=True, instance=True)
         self.worktrees.listed.return_value = self._listing_of(chosen)
         self.worktrees.is_mounted.return_value = True
@@ -199,6 +202,7 @@ class Conductor:
                 mount=MountWorktree(worktrees=self.worktrees),
                 retire=RetireWorktree(worktrees=self.worktrees),
                 check_sources=self.check_sources,
+                read_captures=self.read_captures,
                 implement=self.implement,
                 stage=self.stage,
                 commit=self.commit,

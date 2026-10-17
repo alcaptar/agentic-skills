@@ -106,8 +106,29 @@ una persona y no una sugerencia. Copia literalmente los textos fijos del diseno 
 paleta del repo; lo que cambia con los datos y los mensajes que el diseno no trae los decides tu.
 """
 
+_CAPTURES_TEXT = """
+## Encargo de capturas
+
+Como **ultimo paso de la vuelta**, despues de la ultima edicion, deja las capturas de lo que has dibujado en
+`{directory}` (ruta absoluta):
+
+- Captura como digan las fuentes de convencion del repo: ellas dicen como se captura aqui.
+- Escribe un fichero por captura y, en `{manifest}`, el manifiesto
+  `{{"captures": [{{"design": "<nombre del diseno>", "state": "<estado que muestra>",
+  "file": "<fichero en ese directorio>"}}]}}`.
+- Si no puedes capturar, escribe en el manifiesto `{{"missing": "<motivo>"}}`: unas capturas que faltan no
+  bloquean nada, un directorio sin manifiesto tampoco, pero sin motivo nadie sabe por que faltan.
+- Nunca declares ningun fichero de ese directorio entre los que tocas: git lo ignora, y declararlo rompe el
+  indice.
+- Una edicion despues de capturar deja una captura que ya no es del codigo.
+"""
+
 
 class SliceImplementerBrief:
     TOOLS: ClassVar[tuple[str, ...]] = ("Read", "Write", "Edit", "Bash", "Grep", "Glob", "Skill")
     TEXT: ClassVar[str] = _BRIEF
     DESIGN_TEXT: ClassVar[str] = _DESIGN_TEXT
+
+    @classmethod
+    def captures_text(cls, *, directory: str, manifest: str) -> str:
+        return _CAPTURES_TEXT.format(directory=directory, manifest=manifest)

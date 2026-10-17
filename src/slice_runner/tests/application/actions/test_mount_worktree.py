@@ -46,6 +46,13 @@ class _Mounting:
 
 
 class TestMountWorktree:
+    def test_the_directory_of_the_design_captures_is_excluded_from_git_when_the_worktree_is_mounted(self) -> None:
+        mounting = _Mounting()
+
+        mounting.mount()
+
+        mounting.worktrees.exclude.assert_any_call(root=mounting.ROOT, rule="/.design-captures/")
+
     def test_with_nothing_mounted_and_no_branch_it_creates_both_from_the_base(self) -> None:
         mounting = _Mounting()
 
@@ -213,7 +220,8 @@ class TestMountWorktree:
         mounting.mount()
 
         called = [call[0] for call in mounting.worktrees.method_calls]
-        mounting.worktrees.exclude.assert_called_once_with(root=mounting.ROOT, rule="/.worktrees/")
+        mounting.worktrees.exclude.assert_any_call(root=mounting.ROOT, rule="/.worktrees/")
+        assert mounting.worktrees.exclude.call_count == 2
         assert called.index("exclude") < called.index("listed")
 
 
