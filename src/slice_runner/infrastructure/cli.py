@@ -818,7 +818,9 @@ class Cli:
     @staticmethod
     def _history_of(followed: FollowEventsResult) -> tuple[Event, ...]:
         last_change = {event.slice_key: event for event in followed.changes}
-        latest_not_yet_told = tuple(event for event in followed.snapshot if last_change.get(event.slice_key) is not event)
+        latest_not_yet_told = tuple(
+            event for event in followed.snapshot if last_change.get(event.slice_key) is not event
+        )
 
         return followed.changes + latest_not_yet_told
 

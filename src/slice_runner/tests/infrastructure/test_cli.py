@@ -3102,7 +3102,9 @@ class TestTheCommandThatFollowsTheEventsAsJson(WithTheDurableStoresOutOfTheRealH
         assert self._printed(capsys) == [self._ADVANCING, self._MERGED]
         assert reader.cursors == [EventCursor.start(), EventCursor(offset=10)]
 
-    def test_once_prints_the_history_of_the_first_read_as_json_and_never_sleeps(self, capsys: pytest.CaptureFixture[str]) -> None:
+    def test_once_prints_the_history_of_the_first_read_as_json_and_never_sleeps(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
         reader = ScriptedEventReader(
             EventBatch(events=(EventMother.advancing(),), cursor=EventCursor(offset=10)),
             EventBatch(events=(EventMother.closed(),), cursor=EventCursor(offset=20)),
