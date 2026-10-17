@@ -1,115 +1,98 @@
-# Disenar por rondas
+# Disenar preguntando lo que importa
 
 Reference-doc de `slice-spec`. Se carga en el paso 1 del modo autoria (`reference-docs`): el modo
 `validate` no lo paga.
 
 ## Para que existe
 
-Un diseno que se aprueba pregunta poco y decide mucho: lo que nadie pregunto lo resuelve el agente en
-silencio (`silent-misalignment`), y la decision reaparece mas tarde, cuando la toma el implementador sin
-que nadie la vea o la cuestiona el juez con la vuelta ya pagada. Este proceso
-no termina cuando la persona dice que si: termina cuando **no queda ninguna decision sin tomar**.
+Un diseno que nadie interroga deja decisiones que luego toma el implementador sin que nadie lo vea
+(`silent-misalignment`). Pero preguntar todo lo que se puede preguntar falla al reves: la persona acaba
+contestando a destajo casos que no se van a dar, y una respuesta a destajo no informa mas que una
+pregunta que no se hizo (`cognitive-overload`).
 
-Mezcla dos cosas. Del interrogatorio toma el arbol de decisiones y las rondas; de la exploracion de
-enfoques toma que una decision de diseno se presenta con alternativas, no con la primera idea
-(`cast-wide`). Y anade la que ninguno de los dos hace: que alguien que no diseno intente refutar el
-resultado antes de crearlo (`feedback-flip`).
+Por eso la profundidad la pone el agente investigando, y a la persona solo le llega lo que solo ella
+puede decidir. Lo demas lo decide el agente y lo deja escrito, para que la persona lo vete en el paso 1c.
 
-## El arbol y la frontera
+## Primero se investiga
 
-El diseno es un **arbol de decisiones**: cada decision abre las que cuelgan de ella. La **frontera** son
-las decisiones cuyos prerrequisitos ya estan tomados, las que se pueden preguntar ahora sin adivinar
-respuestas que aun no se han oido.
+Antes de la primera pregunta corre la investigacion del paso 1b de `slice-spec`. **Nunca preguntes algo
+que puedes mirar.**
 
-Se trabaja por **rondas**. Una ronda pregunta **toda la frontera** de una vez, numerada, y espera las
-respuestas antes de la siguiente. Cada respuesta mueve la frontera: lo decidido desbloquea lo que
-dependia de ello. Una pregunta que depende de otra abierta en la misma ronda va a una ronda posterior,
-no a esta.
+## Que llega a la persona
 
-Formato de una ronda, sin emojis:
+Una pregunta llega a la persona solo si pasa **los dos filtros**:
 
-```
-**Q1 - <titulo>**: <la pregunta, con sus enfoques si es una decision de diseno>
+1. **Es ambigua de verdad**: el codigo, las fuentes de convencion y los precedentes no deciden entre dos
+   caminos razonables.
+2. **Cambia lo que se construye**: segun la respuesta, salen distintas las slices, sus criterios o sus
+   contratos.
 
-**Recomendacion:** <la respuesta que recomiendas, y en que se basa>
+**Un caso raro solo entra con un puntero** que diga que aplica aqui: un consumidor que existe, una fila
+que ya esta escrita, un precedente con su numero. "Podria pasar que..." sin puntero no se pregunta ni se
+decide: se descarta.
 
----
+Lo que no pasa los filtros lo decide el agente, y cada una de esas decisiones va a la lista de
+**decisiones del agente** que publica el paso 1c. Lo que solo se cierra con su motivo no va a la lista.
 
-**Q2 - <titulo>**: ...
-```
+## Como se pregunta
 
-La numeracion sigue entre rondas, no vuelve a empezar: la persona contesta por numero y una Q3 tiene que
-ser siempre la misma.
+- **Sin cupo y sin rondas fijas.** Lo mas importante primero, unas pocas cada vez, y espera la
+  respuesta: lo que una respuesta desbloquea va despues, no en el mismo mensaje.
+- **Una decision de diseno trae al menos dos caminos distintos** con lo que cuesta cada uno (`cast-wide`);
+  un camino y su variante cosmetica no son dos.
+- **Cada pregunta lleva tu recomendacion y en que se basa**: un hecho con su ruta o su numero, una
+  convencion con el fichero que la declara, o que es una preferencia. Sin la base, la recomendacion sesga
+  sin que se vea (`answer-injection`).
+- **La numeracion es continua** (`Q1`, `Q2`...) y no vuelve a empezar, para que la persona conteste por
+  numero.
+- **Llevale la contraria con evidencia** (`active-partner`): si lo que pide la persona choca con lo que
+  dice el codigo o una convencion, dilo con el puntero en vez de acatarlo.
 
-## Cada pregunta
+## Lo que el agente recorre siempre
 
-- **Una decision de diseno trae al menos dos enfoques distintos**, con lo que cuesta cada uno. Un
-  enfoque y su variante cosmetica no son dos. Una pregunta de hecho o de preferencia no necesita
-  enfoques.
-- **La recomendacion dice en que se basa**: un hecho medido, con su ruta o su numero; una convencion,
-  con la ruta del fichero que la declara; o que es una preferencia. Una recomendacion sin base sesga sin
-  que se vea (`answer-injection`); con la base escrita, la persona sabe cuanto pesa.
-- **Las decisiones son de la persona y los hechos son tuyos.** Nunca preguntes algo que puedes mirar.
+No son preguntas: es lo que el agente revisa antes de cerrar, porque es lo que un diseno deja sin mirar
+y luego paga una slice. Cada punto acaba decidido -por la persona si pasa los filtros, por el agente si
+no- o cerrado con su motivo.
 
-## Los hechos los busca un subagente
+- **Que sustituye, y que deja ilegible de lo ya escrito**: estado persistido, filas de un almacen
+  durable, ficheros que el programa relee.
+- **Quien mas consume lo que cambia**: otro repo, un comando que alguien invoca con sus valores por
+  omision.
+- **Si alguna regla que ya existe decide esto mismo**: dos sitios acaban diciendo cosas distintas.
+- **Los conceptos de dominio**: aggregates, value objects, vocabularios cerrados, y que nombra cada uno.
+- **La arquitectura**: que capa, que puerto y que modulo para cada pieza nueva, y el flujo de
+  dependencias.
+- **Los contratos con sus firmas**: lo que cruza una frontera, con la firma exacta. Es lo que deja
+  construir sus dos lados a la vez.
+- **Que numero o tope se elige**: sin medicion es una preferencia, y se dice.
+- **Si algun criterio choca con lo que la slice excluye o sustituye, o no lo puede cumplir el
+  implementador ni medir el juez**: el implementador no toca git ni compone la pull request, y el juez no
+  recibe su informe.
 
-Cuando una pregunta necesita un hecho del entorno -que hace hoy una pieza, si se intento antes, quien
-consume una interfaz-, lanza un subagente que lo busque en background y **no bloquees la ronda**: un
-hecho que se esta buscando es un prerrequisito sin resolver, asi que solo esperan las preguntas que
-dependen de el. El resto de la frontera se pregunta ya.
-
-Lo que encuentren entra en una ronda como algo que la persona confirma, con la vara del paso 1b: una
-ruta o un numero, nunca una impresion. Es de ahi de donde sale `## Lo que ya existe`.
-
-## Ramas que siempre se visitan
-
-El arbol de cada feature es suyo, pero estas ramas existen en todos, porque son las que un diseno
-aprobado deja sin visitar y las que luego paga una slice. Si una no aplica, se cierra diciendo por que,
-no se salta.
-
-- **Que sustituye, y que deja ilegible de lo ya escrito**: estado persistido en issues abiertas, filas
-  de los almacenes durables, ficheros que el programa relee. Un lector nuevo con el esquema estricto
-  revienta sobre una fila vieja que nadie considero.
-- **Quien mas consume lo que cambia**: otro equipo, otro repo, un comando que alguien invoca con sus
-  valores por omision. Cambiar un default rompe a quien no lo pasaba.
-- **Si alguna regla que ya existe decide esto mismo.** Escribirla otra vez deja dos sitios que acaban
-  diciendo cosas distintas; el diseno decide cual se queda.
-- **Los conceptos de dominio**: que aggregates y value objects hay, que vocabulario cerrado, y que
-  nombra cada uno.
-- **La arquitectura**: donde vive cada pieza nueva -que capa, que puerto, que modulo-, el flujo de
-  dependencias y las fronteras. Si el diseno no lo decide, lo decide el implementador.
-- **Los contratos con sus firmas**: lo que cruza una frontera -puerto, modelo compartido entre capas,
-  endpoint, evento- con la firma exacta de cada uno. Es lo que deja construir sus dos lados a la vez.
-
-- **Que numero o tope se elige, y con que motivo.** Un numero sin medicion es una preferencia, y se dice.
-- **Si algun criterio pide algo que la propia slice excluye o sustituye.** Un criterio que la slice hace
-  imposible no lo puede cumplir nadie, y se descubre con el presupuesto gastado.
-- **Si algun criterio lo puede cumplir el implementador y lo puede medir el juez.** El implementador no
-  toca git ni compone la pull request; el juez no recibe el informe.
-
-Nombres de ficheros y clases y estrategia de tests: solo se preguntan si las fuentes de convencion del repo destino no los cubren.
-Si las cubren, se cita la fuente y no se pregunta.
+Nombres de ficheros y clases y estrategia de tests: solo se preguntan si las fuentes de convencion del
+repo destino no los cubren. Si las cubren, se cita la fuente y no se pregunta.
 
 ## Cuando se acaba
 
-Cuando la frontera esta vacia: todas las ramas visitadas, nada supuesto en silencio. Entonces se cierra
-con el paso 1c de `slice-spec`, que publica lo entendido, los criterios de la feature y las decisiones, y
-espera confirmacion. No se corta nada antes.
+Cuando no queda abierta ninguna pregunta que pase los filtros y todo lo de la lista esta decidido o
+cerrado. Entonces se cierra con el paso 1c de `slice-spec`.
 
 ## La refutacion
 
-Con el borrador de la spec escrito -padre y subissues, antes de ensenarlo entero- lo recibe un
-**subagente que no diseno**, solo con ese texto, y su unico trabajo es **intentar refutarlo**: quien
-acaba de proponer algo tiende a defenderlo, y el que refuta no tiene nada que defender. Es la misma
-regla que separa al implementador del juez.
+Con el borrador de la spec escrito, lo recibe un **subagente que no diseno**, solo con ese texto, y su
+unico trabajo es **intentar refutarlo** (`feedback-flip`): quien acaba de proponer algo tiende a
+defenderlo, y el que refuta no tiene nada que defender.
 
 Se le pide:
 
 - que se rompe con lo que se propone, y a quien;
 - que lineas de una misma slice se contradicen, o que criterio choca con otro;
 - que criterio no puede cumplirse o no puede medirse;
-- que afirmacion del diseno es falsa o no se sostiene con lo que el propio texto dice.
+- que afirmacion del diseno no se sostiene con lo que el propio texto dice.
 
-Sus objeciones no se aplican solas: forman **una ultima ronda** a la persona, cada una con su
-recomendacion. Lo decidido se corrige en el borrador. Hay una sola pasada: la refutacion no se repite
-sobre sus propias correcciones.
+Sus objeciones pasan **los mismos dos filtros**. Las que si, y cualquiera que contradiga una decision
+de la persona, van a ella con su recomendacion. Las
+que no, las corrige el agente en el borrador y las nombra al cerrar (paso 6), una linea cada una, para
+que la persona sepa que cambio despues de confirmar el troceo. Si una correccion cambia el troceo, la
+lista corta del paso 2d se vuelve a ensenar. Hay una sola pasada: la refutacion no se repite sobre sus
+propias correcciones.

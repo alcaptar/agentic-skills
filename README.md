@@ -46,7 +46,7 @@ flowchart TD
     idea([idea o feature]) --> spec
 
     subgraph spec_phase["1 - Disenar"]
-        spec["<b>/slice-spec</b><br/>diseno por rondas + troceo vertical"]
+        spec["<b>/slice-spec</b><br/>diseno investigado + troceo vertical"]
     end
 
     spec -->|crea| issue[("<b>Issue de GitHub</b><br/>1 issue padre + 1 subissue por slice<br/><i>unica fuente de verdad</i>")]
@@ -103,7 +103,7 @@ sola al mergear.
 
 | Pieza | Que es | Para que |
 |---|---|---|
-| `skills/slice-spec/SKILL.md` | Skill de autoria | Convierte una idea en una spec bien formada y **crea el issue padre mas una subissue por slice**. Envuelve `superpowers:brainstorming` para el diseno; el troceo lo lleva su propio cerebro (`skills/slice-spec/references/slicing.md`), que saca delante el **contrato de toda frontera** porque es lo que deja construir productor y consumidor a la vez. Cierra proponiendo **que slices pueden correr en paralelo** y, confirmado, monta un worktree por slice y lanza sus runs. Modo `validate` para auditar una spec existente. No escribe codigo. |
+| `skills/slice-spec/SKILL.md` | Skill de autoria | Convierte una idea en una spec bien formada y **crea el issue padre mas una subissue por slice**. Disena investigando el repo y preguntando solo lo que la persona tiene que decidir; el troceo lo lleva su propio cerebro (`skills/slice-spec/references/slicing.md`), que saca delante el **contrato de toda frontera** porque es lo que deja construir productor y consumidor a la vez. Cierra proponiendo **que slices pueden correr en paralelo** y, confirmado, monta un worktree por slice y lanza sus runs. Modo `validate` para auditar una spec existente. No escribe codigo. |
 | `skills/slice-runner/scripts/discover_controles.py` / `discover_conventions.py` | Helpers de descubrimiento | Los usa `slice-spec` para **proponer** los controles y las fuentes de convencion del repo. Descubren y no deciden: confirma la persona. |
 | `skills/slice-spec/references/slicing.md`, `skills/slice-spec/references/observabilidad.md` | Documentos de referencia | Conocimiento cargado bajo demanda: como trocear y como decidir la observabilidad de una slice. |
 | `src/slice_runner/` | Programa orquestador | El trozo del pipeline que ya **no** es un agente: `run` conduce una slice de punta a punta; `verify`, que calcula el diff de la slice, se lo pasa **dentro del prompt** al juez -invocado como una llamada sin estado, `claude -p` con el esquema del veredicto- y emite el veredicto por salida estandar con su codigo de salida (tabla en "El paso que ya es un programa"); `explain` contesta que paso viene despues de un resultado y cuando se agota un presupuesto, sin montar un run; y `read` abre la conversacion grabada de una llamada concreta. Cada llamada al harness deja su rastro en `src/slice_runner/infrastructure/local_call_trace.py` y cada veredicto de `verify` en `src/slice_runner/infrastructure/local_corpus.py`, los dos escritos fuera del repo (ver "El paso que ya es un programa"). Capas separadas (`domain/`, `application/`, `infrastructure/`) y tests co-localizados. El *por que* de esta forma esta en `docs/design-notes.md`. |
@@ -381,7 +381,7 @@ nadie se entere.
 > y el stock se corrompe en silencio.
 ```
 
-La skill disena por rondas de preguntas hasta no dejar ninguna decision sin tomar, hace que otro agente refute el borrador, propone el troceo vertical, descubre los controles y las
+La skill investiga el repo y te pregunta solo lo ambiguo que cambia lo que se construye, te lista lo que decidio ella para que lo vetes, te propone el troceo vertical para confirmarlo, hace que otro agente refute el borrador, descubre los controles y las
 convenciones del repo (y **te los pregunta** para confirmarlos), y crea el issue padre `#42` con una
 subissue por slice. Sale algo asi:
 
