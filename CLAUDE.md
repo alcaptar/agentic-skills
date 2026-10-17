@@ -1,7 +1,7 @@
 # agentic-skills — instrucciones del repo
 
 Este repo es la **fuente de verdad** de skills personales de Claude Code (`slice-spec`,
-`slice-runner`, `deploy-watch`). Las skills viven aqui y `~/.claude/skills/` apunta por symlink,
+`slice-runner`). Las skills viven aqui y `~/.claude/skills/` apunta por symlink,
 asi que editar aqui cambia el comportamiento activo de Claude Code.
 
 ## Regla critica: convenciones primero
@@ -62,7 +62,7 @@ una sin declarar, es un fallo y hay que declararla o corregirla, no ampliarla po
 Estos ficheros preceden a las convenciones actuales. **No los imites al escribir codigo nuevo**, ni
 siquiera como "ejemplo del repo":
 
-- `skills/slice-runner/scripts/` y `skills/deploy-watch/scripts/` — en castellano y llenos de
+- `skills/slice-runner/scripts/` — en castellano y llenos de
   docstrings.
 - `tests/` — todavia function-based y en castellano.
 
