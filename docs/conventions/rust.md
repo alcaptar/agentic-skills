@@ -50,6 +50,38 @@ muere cuando el adaptador se suelta, en su `impl Drop`, también si la interfaz 
 lanzamiento con `CommandBuilder::new` exige `.kill()` en el mismo fichero igual que `Command::new`. Lo que
 no vale es un proceso sin tope lanzado desde cualquier otro sitio.
 
+## Paleta
+
+**La interfaz solo usa colores con nombre**: `Color::Red`, `Color::DarkGray` y el resto de los
+del terminal, más `Color::Reset` para el texto y el fondo por omisión. Nunca `Color::Rgb` ni
+`Color::Indexed`. Así la paleta es un vocabulario cerrado que no crece con cada pantalla, y un color
+nuevo es una decisión de diseño que se ve en el diff, no un hexadecimal suelto.
+
+Cada nombre tiene un valor fijo, que es el que usa toda maqueta de la interfaz y el que pinta una captura.
+El terminal de quien la usa puede pintar otro tono según su tema: la tabla fija con que se compara, no lo
+que se ve en cada máquina. El conversor de capturas la lee de este fichero, así que no tiene copia.
+
+| Color | Valor |
+|---|---|
+| `Reset` (texto) | `#d8dde6` |
+| `Reset` (fondo) | `#0f1216` |
+| `Black` | `#14171c` |
+| `Red` | `#ef6b6b` |
+| `Green` | `#6fcf8a` |
+| `Yellow` | `#f2b53b` |
+| `Blue` | `#6b9cf2` |
+| `Magenta` | `#c58af2` |
+| `Cyan` | `#5cc8e0` |
+| `Gray` | `#8a93a3` |
+| `DarkGray` | `#6b7280` |
+| `LightRed` | `#f59a9a` |
+| `LightGreen` | `#9fe0b0` |
+| `LightYellow` | `#f7cf7a` |
+| `LightBlue` | `#9dbdf7` |
+| `LightMagenta` | `#dab3f7` |
+| `LightCyan` | `#93dcec` |
+| `White` | `#f4f6f9` |
+
 ## Estructura
 
 ```
@@ -88,3 +120,4 @@ otro.
 - Un `Command` o `CommandBuilder` lanzado sin tope fuera de un adaptador que declara un proceso sin tope.
 - Un ejemplo de contrato copiado dentro de `tui/` en vez de leído de `contract/`.
 - Un comentario o un doc comment.
+- Un `Color::Rgb` o un `Color::Indexed`: el color que no está en la paleta.
