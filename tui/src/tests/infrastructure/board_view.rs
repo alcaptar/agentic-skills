@@ -73,12 +73,12 @@ impl Screen {
 }
 
 mod the_tray {
-    use crate::tests::infrastructure::screen_html::ScreenHtml;
     use ratatui::style::Color;
 
     use crate::tests::application::watching::Watching;
     use crate::tests::doubles::FixedProbe;
     use crate::tests::infrastructure::board_view::Screen;
+    use crate::tests::infrastructure::screen_html::ScreenHtml;
     use crate::tests::mothers::screen_mother::ScreenMother;
 
     #[test]

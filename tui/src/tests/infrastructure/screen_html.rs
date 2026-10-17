@@ -1,27 +1,84 @@
+use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 
 use ratatui::buffer::{Buffer, Cell};
 use ratatui::style::{Color, Modifier};
 
+pub struct Palette {
+    values: HashMap<String, String>,
+}
+
+impl Palette {
+    pub fn of_the_conventions() -> Self {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../docs/conventions/rust.md");
+
+        Self::of_the_table(&fs::read_to_string(path).unwrap())
+    }
+
+    pub fn of_the_table(table: &str) -> Self {
+        let values = table
+            .lines()
+            .filter(|line| line.starts_with("| `"))
+            .filter_map(|line| {
+                let cells: Vec<&str> = line.split('|').map(str::trim).collect();
+                let name = cells.get(1)?.replace('`', "");
+                let value = cells.get(2)?.trim_matches('`');
+                value.starts_with('#').then(|| (name, value.to_string()))
+            })
+            .collect();
+
+        Self { values }
+    }
+
+    pub fn background(&self) -> &str {
+        self.value("Reset (fondo)")
+    }
+
+    pub fn hexadecimal(&self, color: Color) -> String {
+        match color {
+            Color::Reset | Color::Indexed(_) => self.value("Reset (texto)").to_string(),
+            Color::Rgb(red, green, blue) => format!("#{red:02x}{green:02x}{blue:02x}"),
+            Color::Black => self.value("Black").to_string(),
+            Color::Red => self.value("Red").to_string(),
+            Color::Green => self.value("Green").to_string(),
+            Color::Yellow => self.value("Yellow").to_string(),
+            Color::Blue => self.value("Blue").to_string(),
+            Color::Magenta => self.value("Magenta").to_string(),
+            Color::Cyan => self.value("Cyan").to_string(),
+            Color::Gray => self.value("Gray").to_string(),
+            Color::DarkGray => self.value("DarkGray").to_string(),
+            Color::LightRed => self.value("LightRed").to_string(),
+            Color::LightGreen => self.value("LightGreen").to_string(),
+            Color::LightYellow => self.value("LightYellow").to_string(),
+            Color::LightBlue => self.value("LightBlue").to_string(),
+            Color::LightMagenta => self.value("LightMagenta").to_string(),
+            Color::LightCyan => self.value("LightCyan").to_string(),
+            Color::White => self.value("White").to_string(),
+        }
+    }
+
+    fn value(&self, name: &str) -> &str {
+        self.values.get(name).map_or("", String::as_str)
+    }
+}
+
 pub struct ScreenHtml;
 
 impl ScreenHtml {
-    const TEXT: &'static str = "#d8dde6";
-    const BACKGROUND: &'static str = "#0f1216";
-
     pub fn of(buffer: &Buffer) -> String {
+        let palette = Palette::of_the_conventions();
         let mut html = format!(
             "<pre style=\"color:{};background-color:{}\">",
-            Self::TEXT,
-            Self::BACKGROUND
+            palette.hexadecimal(Color::Reset),
+            palette.background()
         );
         for y in 0..buffer.area.height {
             let mut style = String::new();
             let mut text = String::new();
             for x in 0..buffer.area.width {
                 let cell = &buffer[(x, y)];
-                let cell_style = Self::style_of(cell);
+                let cell_style = Self::style_of(&palette, cell);
                 if cell_style != style {
                     Self::close(&mut html, &style, &text);
                     text.clear();
@@ -50,41 +107,18 @@ impl ScreenHtml {
         }
     }
 
-    fn style_of(cell: &Cell) -> String {
-        let mut style = format!(
-            "color:{};background-color:{}",
-            Self::hexadecimal(cell.fg, Self::TEXT),
-            Self::hexadecimal(cell.bg, Self::BACKGROUND)
-        );
+    fn style_of(palette: &Palette, cell: &Cell) -> String {
+        let background = if matches!(cell.bg, Color::Reset | Color::Indexed(_)) {
+            palette.background().to_string()
+        } else {
+            palette.hexadecimal(cell.bg)
+        };
+        let mut style = format!("color:{};background-color:{}", palette.hexadecimal(cell.fg), background);
         if cell.modifier.contains(Modifier::BOLD) {
             style.push_str(";font-weight:bold");
         }
 
         style
-    }
-
-    fn hexadecimal(color: Color, reset: &str) -> String {
-        match color {
-            Color::Reset | Color::Indexed(_) => reset,
-            Color::Black => "#14171c",
-            Color::Red => "#ef6b6b",
-            Color::Green => "#6fcf8a",
-            Color::Yellow => "#f2b53b",
-            Color::Blue => "#6b9cf2",
-            Color::Magenta => "#c58af2",
-            Color::Cyan => "#5cc8e0",
-            Color::Gray => "#8a93a3",
-            Color::DarkGray => "#6b7280",
-            Color::LightRed => "#f59a9a",
-            Color::LightGreen => "#9fe0b0",
-            Color::LightYellow => "#f7cf7a",
-            Color::LightBlue => "#9dbdf7",
-            Color::LightMagenta => "#dab3f7",
-            Color::LightCyan => "#93dcec",
-            Color::White => "#f4f6f9",
-            Color::Rgb(red, green, blue) => return format!("#{red:02x}{green:02x}{blue:02x}"),
-        }
-        .to_string()
     }
 
     fn escaped(symbol: &str) -> String {
@@ -101,7 +135,7 @@ mod the_screen_html {
     use ratatui::style::{Color, Modifier, Style};
     use uuid::Uuid;
 
-    use crate::tests::infrastructure::screen_html::ScreenHtml;
+    use crate::tests::infrastructure::screen_html::{Palette, ScreenHtml};
 
     struct Cells;
 
@@ -120,6 +154,23 @@ mod the_screen_html {
         fn fresh_directory() -> PathBuf {
             std::env::temp_dir().join(format!("screen-html-{}", Uuid::new_v4()))
         }
+    }
+
+    #[test]
+    fn a_colour_comes_out_with_the_value_the_table_gives_it() {
+        let table = "| `Red` | `#010203` |\n| `Reset` (texto) | `#0a0b0c` |\n| `Reset` (fondo) | `#0d0e0f` |\n";
+        let palette = Palette::of_the_table(table);
+
+        assert_eq!(palette.hexadecimal(Color::Red), "#010203");
+        assert_eq!(palette.hexadecimal(Color::Reset), "#0a0b0c");
+        assert_eq!(palette.background(), "#0d0e0f");
+    }
+
+    #[test]
+    fn the_palette_of_the_conventions_is_read_from_the_file_that_declares_it() {
+        let palette = Palette::of_the_conventions();
+
+        assert_eq!(palette.hexadecimal(Color::Cyan), "#5cc8e0");
     }
 
     #[test]
@@ -219,11 +270,8 @@ mod the_screen_html {
 
     #[test]
     fn without_a_directory_it_writes_nothing() {
-        let directory = Cells::fresh_directory();
-
         ScreenHtml::write(None, "bandeja", &Cells::styled("x", Style::default()));
 
-        assert!(!directory.exists());
         assert!(!PathBuf::from("bandeja.html").exists());
     }
 }
