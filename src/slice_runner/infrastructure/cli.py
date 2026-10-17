@@ -19,6 +19,7 @@ from slice_runner.application.actions.conduct_slice import (
 )
 from slice_runner.application.actions.deliver_slice import DeliverSlice
 from slice_runner.application.actions.implement_slice import ImplementSlice
+from slice_runner.application.actions.mount_comparison import MountComparison
 from slice_runner.application.actions.mount_worktree import MountWorktree
 from slice_runner.application.actions.record_closure import RecordClosure
 from slice_runner.application.actions.record_start import RecordStart
@@ -137,6 +138,7 @@ from slice_runner.infrastructure.local_tool_use_log import LocalToolUseLog
 from slice_runner.infrastructure.local_toolbox import LocalToolbox
 from slice_runner.infrastructure.os_process_replacement import OsProcessReplacement
 from slice_runner.infrastructure.process import ProcessNotRunnableError, ProcessTimedOutError
+from slice_runner.infrastructure.process_comparison_pages import ProcessComparisonPages
 from slice_runner.infrastructure.process_design_capture_store import ProcessDesignCaptureStore
 from slice_runner.infrastructure.process_replacement import ExecutableNotFoundError
 from slice_runner.infrastructure.process_source_reader import ProcessSourceReader
@@ -913,6 +915,7 @@ class Cli:
                 rescue=RescueStagedWork(workspace=workspace),
                 run_controls=RunControls(controls=LocalControlRunner(process=self._process), activity=activity),
                 verify=self._action(clock=clock, corpus=corpus),
+                mount_comparison=MountComparison(pages=ProcessComparisonPages(process=self._process)),
                 deliver=DeliverSlice(workspace=workspace, forum=forum),
                 close=CloseParent(repository=repository),
                 record_step=RecordStep(

@@ -248,6 +248,7 @@ _KNOWN_NOT_HARNESS_WRITING = {
     ("_forum", "pull_request_state"),
     ("_machine", "after"),
     ("_mount", "execute"),
+    ("_mount_comparison", "execute"),
     ("_prechecks", "execute"),
     ("_pull_request", "body"),
     ("_pull_request", "commit_message"),

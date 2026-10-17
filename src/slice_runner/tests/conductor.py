@@ -16,6 +16,7 @@ from slice_runner.application.actions.conduct_slice import (
 )
 from slice_runner.application.actions.deliver_slice import DeliverSlice
 from slice_runner.application.actions.implement_slice import ImplementSlice
+from slice_runner.application.actions.mount_comparison import MountComparison
 from slice_runner.application.actions.mount_worktree import MountWorktree
 from slice_runner.application.actions.record_closure import RecordClosure
 from slice_runner.application.actions.record_start import RecordStart
@@ -116,6 +117,7 @@ class Conductor:
         self.workspace.staged.return_value = ()
         self.rescue = RescueStagedWork(workspace=self.workspace)
         self.verify = self._doubling(VerifySlice, execute=VerificationMother.passing())
+        self.mount_comparison = self._doubling(MountComparison, execute=None)
         self.deliver = self._doubling(DeliverSlice, execute=self.PULL_REQUEST)
         self.close = self._doubling(CloseParent, execute=None)
         self.repository: Mock = create_autospec(RunRepository, spec_set=True, instance=True)
@@ -209,6 +211,7 @@ class Conductor:
                 rescue=self.rescue,
                 run_controls=RunControls(controls=self.controls, activity=self.activity),
                 verify=self.verify,
+                mount_comparison=self.mount_comparison,
                 deliver=self.deliver,
                 close=self.close,
                 record_step=RecordStep(
