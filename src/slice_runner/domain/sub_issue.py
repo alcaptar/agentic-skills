@@ -34,7 +34,3 @@ class SubIssue:
 
     def decisions_under(self, parent: ParentIssue) -> tuple[str, ...]:
         return (*parent.decisions, *self.decisions)
-
-    @property
-    def signal_is_exempt(self) -> bool:
-        return self.signal.strip().lower().startswith("exenta")

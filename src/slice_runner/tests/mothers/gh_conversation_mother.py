@@ -32,13 +32,6 @@ _SUBISSUE_PROSE_WITHOUT_DECISIONS = (
 
 _SUBISSUE_PROSE = f"DECISION: el estado persistido manda sobre la rama\n{_SUBISSUE_PROSE_WITHOUT_DECISIONS}"
 
-_SUBISSUE_PROSE_WITH_A_SIGNAL = (
-    "INTENCION: hoy nada evita reimplementar una slice ya entregada\n"
-    "DECISION: el estado persistido manda sobre la rama\n"
-    "ACEPTACION: el run retoma por el paso que dice el estado persistido\n"
-    "SENAL: prometheus rate(application_slice_conducida_total[5m]) > 0 en 10m post-deploy; critical\n"
-)
-
 
 class GhConversationMother:
     REPO: ClassVar[str] = "alcaptar/agentic-skills"
@@ -109,14 +102,6 @@ class GhConversationMother:
             summary=cls.SUMMARY,
             body=body,
             label=label,
-            state=IssueState.OPEN,
-        )
-
-    @classmethod
-    def the_slice_with_a_signal_resumed_at(cls, run: Run) -> str:
-        return cls._children(
-            body=f"{_SUBISSUE_PROSE_WITH_A_SIGNAL}\n{cls._state_block(run)}\n",
-            label=IssueLabel.IN_PROGRESS,
             state=IssueState.OPEN,
         )
 

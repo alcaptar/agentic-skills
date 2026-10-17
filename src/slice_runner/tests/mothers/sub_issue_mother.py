@@ -105,10 +105,6 @@ class SubIssueMother:
         return replace(SubIssueMother.of_a_second_slice(), repo=SubIssueMother.OTHER_REPO)
 
     @staticmethod
-    def declaring_a_signal() -> SubIssue:
-        return replace(SubIssueMother.pending(), signal="tasa de error 5xx de shop-web en produccion")
-
-    @staticmethod
     def declaring_an_exclusion() -> SubIssue:
         return replace(SubIssueMother.pending(), excludes="el panel de grafana que consume esta serie")
 
