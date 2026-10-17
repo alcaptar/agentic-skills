@@ -8,6 +8,7 @@ from slice_runner.application.actions.close_parent import CloseParentParams
 from slice_runner.application.actions.commit_round import CommitRoundParams
 from slice_runner.application.actions.deliver_slice import DeliverSliceParams
 from slice_runner.application.actions.implement_slice import ImplementSliceParams
+from slice_runner.application.actions.mount_comparison import MountComparisonParams
 from slice_runner.application.actions.mount_worktree import MountWorktreeParams, MountWorktreeResult
 from slice_runner.application.actions.record_closure import RecordClosureParams
 from slice_runner.application.actions.record_start import RecordStartParams
@@ -61,6 +62,7 @@ if TYPE_CHECKING:
     from slice_runner.application.actions.commit_round import CommitRound
     from slice_runner.application.actions.deliver_slice import DeliverSlice
     from slice_runner.application.actions.implement_slice import ImplementSlice
+    from slice_runner.application.actions.mount_comparison import MountComparison
     from slice_runner.application.actions.mount_worktree import MountWorktree
     from slice_runner.application.actions.record_closure import RecordClosure
     from slice_runner.application.actions.record_start import RecordStart
@@ -184,6 +186,7 @@ class ConductSliceUseCases:
     rescue: RescueStagedWork
     run_controls: RunControls
     verify: VerifySlice
+    mount_comparison: MountComparison
     deliver: DeliverSlice
     close: CloseParent
     record_step: RecordStep
@@ -224,6 +227,7 @@ class ConductSlice:
         self._rescue = use_cases.rescue
         self._run_controls = use_cases.run_controls
         self._verify = use_cases.verify
+        self._mount_comparison = use_cases.mount_comparison
         self._deliver = use_cases.deliver
         self._close = use_cases.close
         self._record_step = use_cases.record_step
@@ -659,6 +663,16 @@ class ConductSlice:
         )
 
     def _opening_the_pull_request(self, progress: ConductSliceProgress) -> SteppedSlice:
+        designs = progress.subissue.designs_under(progress.parent)
+        self._mount_comparison.execute(
+            MountComparisonParams(
+                worktree=progress.worktree,
+                designs=designs,
+                captures=self._read_captures.execute(
+                    ReadDesignCapturesParams(worktree=progress.worktree, designs=designs)
+                ),
+            )
+        )
         opened = self._deliver.execute(
             DeliverSliceParams(
                 worktree=progress.worktree,

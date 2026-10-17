@@ -867,6 +867,27 @@ class TestConductSliceOnTheHappyPath:
         )
         assert (delivered.title, delivered.body) == (Conductor.TITLE, Conductor.BODY)
 
+    def test_the_comparison_is_mounted_before_the_pull_request_is_opened_with_the_designs_and_captures_of_the_round(
+        self,
+    ) -> None:
+        conductor = Conductor(
+            chosen=SelectSliceResultMother.resumed_at(
+                RunMother.about_to_open_the_pull_request(),
+                subissue=SubIssueMother.naming_designs("detalle"),
+                parent=ParentIssueMother.declaring_two_designs(),
+            )
+        )
+        conductor.read_captures.execute.return_value = DesignCapturesMother.of_the_board_and_the_detail()
+
+        conductor.conduct()
+
+        mounted = conductor.mount_comparison.execute.call_args.args[0]
+        assert (mounted.worktree, mounted.designs, mounted.captures) == (
+            Conductor.WORKTREE,
+            (DesignMother.detail(),),
+            DesignCapturesMother.of_the_board_and_the_detail(),
+        )
+
     def test_the_pull_request_body_is_asked_for_with_what_the_implementer_declared_left_out(self) -> None:
         conductor = self._conductor()
         conductor.implement.execute.return_value = ImplementationMother.with_debt()
