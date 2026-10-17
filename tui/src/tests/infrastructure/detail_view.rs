@@ -1,5 +1,6 @@
 use ratatui::Terminal;
 use ratatui::backend::TestBackend;
+use ratatui::buffer::Buffer;
 
 use crate::domain::slice_row::SliceRow;
 use crate::infrastructure::detail_view::DetailView;
@@ -9,20 +10,26 @@ use crate::tests::mothers::screen_mother::ScreenMother;
 pub struct DetailScreen;
 
 impl DetailScreen {
-    pub fn text_of(row: &SliceRow) -> String {
+    pub fn painted(row: &SliceRow) -> Buffer {
         let mut terminal = Terminal::new(TestBackend::new(Screen::WIDTH, Screen::HEIGHT)).unwrap();
         terminal
             .draw(|frame| DetailView::render(frame, frame.area(), row, ScreenMother::NOW))
             .unwrap();
 
-        Screen::lines(terminal.backend().buffer())
+        terminal.backend().buffer().clone()
+    }
+
+    pub fn text_of(row: &SliceRow) -> String {
+        Screen::lines(&Self::painted(row))
     }
 }
 
 mod the_detail_view {
     use crate::tests::application::watching::Watching;
     use crate::tests::doubles::FixedProbe;
+    use crate::tests::infrastructure::board_view::Screen;
     use crate::tests::infrastructure::detail_view::DetailScreen;
+    use crate::tests::infrastructure::screen_html::ScreenHtml;
     use crate::tests::mothers::screen_mother::ScreenMother;
 
     #[test]
@@ -33,10 +40,10 @@ mod the_detail_view {
         );
         let row = watched.board().row(&ScreenMother::key(2)).unwrap();
 
-        assert_eq!(
-            DetailScreen::text_of(row),
-            include_str!("../screens/detalle-en-curso.txt")
-        );
+        let buffer = DetailScreen::painted(row);
+        ScreenHtml::write(Screen::captures_dir().as_deref(), "detalle-en-curso", &buffer);
+
+        assert_eq!(Screen::lines(&buffer), include_str!("../screens/detalle-en-curso.txt"));
     }
 
     #[test]

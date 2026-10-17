@@ -12,6 +12,7 @@ mod issue_body_payload;
 mod key_bytes;
 mod key_routing;
 mod random_workspace_ids;
+mod screen_html;
 mod split_screen;
 mod threaded_workspace_binding;
 mod workspace_header;

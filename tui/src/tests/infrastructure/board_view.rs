@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use ratatui::Terminal;
 use ratatui::backend::TestBackend;
 use ratatui::buffer::Buffer;
@@ -14,6 +16,10 @@ pub struct Screen;
 impl Screen {
     pub const WIDTH: u16 = 80;
     pub const HEIGHT: u16 = 24;
+
+    pub fn captures_dir() -> Option<PathBuf> {
+        std::env::var_os("CAPTURES_DIR").map(PathBuf::from)
+    }
 
     pub fn text_of(watched: &WatchedBoard) -> String {
         Self::lines(&Self::painted(watched, None, None))
@@ -67,6 +73,7 @@ impl Screen {
 }
 
 mod the_tray {
+    use crate::tests::infrastructure::screen_html::ScreenHtml;
     use ratatui::style::Color;
 
     use crate::tests::application::watching::Watching;
@@ -78,9 +85,10 @@ mod the_tray {
     fn paints_the_agreed_screen_character_by_character() {
         let watched = Watching::entries(ScreenMother::feature(), FixedProbe::everyone_alive());
 
-        let screen = Screen::text_of_selecting(&watched, &ScreenMother::key(1), None);
+        let buffer = Screen::painted(&watched, Some(&ScreenMother::key(1)), None);
+        ScreenHtml::write(Screen::captures_dir().as_deref(), "bandeja", &buffer);
 
-        assert_eq!(screen, include_str!("../screens/bandeja.txt"));
+        assert_eq!(Screen::lines(&buffer), include_str!("../screens/bandeja.txt"));
     }
 
     #[test]
@@ -114,6 +122,8 @@ mod the_tray {
         );
 
         let buffer = Screen::painted(&watched, Some(&ScreenMother::key(1)), None);
+
+        ScreenHtml::write(Screen::captures_dir().as_deref(), "bandeja-con-actividad", &buffer);
 
         assert_eq!(
             Screen::lines(&buffer),
@@ -165,6 +175,7 @@ mod the_tray_with_an_open_detail {
     use crate::tests::application::watching::Watching;
     use crate::tests::doubles::FixedProbe;
     use crate::tests::infrastructure::board_view::Screen;
+    use crate::tests::infrastructure::screen_html::ScreenHtml;
     use crate::tests::mothers::screen_mother::ScreenMother;
 
     #[test]
@@ -172,9 +183,10 @@ mod the_tray_with_an_open_detail {
         let watched = Watching::entries(ScreenMother::feature(), FixedProbe::everyone_alive());
         let detail = ReadSliceDetail::execute(ScreenMother::key(4));
 
-        let screen = Screen::text_of_selecting(&watched, &ScreenMother::key(4), Some(&detail));
+        let buffer = Screen::painted(&watched, Some(&ScreenMother::key(4)), Some(&detail));
+        ScreenHtml::write(Screen::captures_dir().as_deref(), "detalle-bloqueada", &buffer);
 
-        assert_eq!(screen, include_str!("../screens/detalle-bloqueada.txt"));
+        assert_eq!(Screen::lines(&buffer), include_str!("../screens/detalle-bloqueada.txt"));
     }
 
     #[test]
@@ -215,6 +227,7 @@ mod the_tray_at_the_width_of_half_a_laptop_screen {
     use crate::tests::application::watching::Watching;
     use crate::tests::doubles::FixedProbe;
     use crate::tests::infrastructure::board_view::Screen;
+    use crate::tests::infrastructure::screen_html::ScreenHtml;
     use crate::tests::mothers::screen_mother::ScreenMother;
 
     const NARROW: u16 = 58;
@@ -223,9 +236,10 @@ mod the_tray_at_the_width_of_half_a_laptop_screen {
     fn keeps_every_summary_whole_by_shortening_the_names() {
         let watched = Watching::entries(ScreenMother::feature(), FixedProbe::everyone_alive());
 
-        let screen = Screen::lines(&Screen::painted_at(NARROW, &watched, Some(&ScreenMother::key(1)), None));
+        let buffer = Screen::painted_at(NARROW, &watched, Some(&ScreenMother::key(1)), None);
+        ScreenHtml::write(Screen::captures_dir().as_deref(), "bandeja-58", &buffer);
 
-        assert_eq!(screen, include_str!("../screens/bandeja-58.txt"));
+        assert_eq!(Screen::lines(&buffer), include_str!("../screens/bandeja-58.txt"));
     }
 }
 
@@ -234,6 +248,7 @@ mod the_detail_at_the_width_of_half_a_laptop_screen {
     use crate::tests::application::watching::Watching;
     use crate::tests::doubles::FixedProbe;
     use crate::tests::infrastructure::board_view::Screen;
+    use crate::tests::infrastructure::screen_html::ScreenHtml;
     use crate::tests::mothers::screen_mother::ScreenMother;
 
     const NARROW: u16 = 58;
@@ -243,13 +258,12 @@ mod the_detail_at_the_width_of_half_a_laptop_screen {
         let watched = Watching::entries(ScreenMother::feature(), FixedProbe::everyone_alive());
         let detail = ReadSliceDetail::execute(ScreenMother::key(4));
 
-        let screen = Screen::lines(&Screen::painted_at(
-            NARROW,
-            &watched,
-            Some(&ScreenMother::key(4)),
-            Some(&detail),
-        ));
+        let buffer = Screen::painted_at(NARROW, &watched, Some(&ScreenMother::key(4)), Some(&detail));
+        ScreenHtml::write(Screen::captures_dir().as_deref(), "detalle-bloqueada-58", &buffer);
 
-        assert_eq!(screen, include_str!("../screens/detalle-bloqueada-58.txt"));
+        assert_eq!(
+            Screen::lines(&buffer),
+            include_str!("../screens/detalle-bloqueada-58.txt")
+        );
     }
 }
