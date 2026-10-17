@@ -38,9 +38,8 @@ budget".
 
 ## Procedimiento de corte
 
-Guia eficiente: aplica de forma autonoma los pasos 1-2, presenta el set de slices con su
-razonamiento, y **abre dialogo con la persona solo cuando el corte no es obvio o una slice se pasa
-de tamano** (paso 3).
+Guia eficiente: aplica de forma autonoma los pasos 1-3 y presenta el set de slices en la lista corta
+del paso 2d de `slice-spec`. El dialogo con la persona del paso 3 solo se abre si rechaza esa lista.
 
 ### 1. Walking skeleton / tracer bullet — la slice #1
 
@@ -129,7 +128,8 @@ Stories* (Richard Lawrence / Humanizing Work) y de SPIDR (Mike Cohn):
 ### 3. Hamburger method — motor de composicion (cuando ninguna heuristica dispara)
 
 Cuando la feature es grande pero no tiene indicadores linguisticos de corte y las heuristicas de
-arriba no dan un corte obvio, usa el metodo de la hamburguesa (Gojko Adzic) **con la persona**:
+arriba no dan un corte obvio, usa el metodo de la hamburguesa (Gojko Adzic): por tu cuenta, y **con la persona** solo si rechazo
+la lista corta:
 
 1. Lista las **tareas/capas** del flujo (consultar datos -> procesar -> notificar -> ...).
 2. Para **cada capa**, genera 4-5 **opciones graduadas de calidad/esfuerzo**, de la mas cutre que

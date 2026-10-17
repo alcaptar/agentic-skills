@@ -79,18 +79,28 @@ _KEBAB_TITLE = re.compile(r"^slice-\d\d \((?:[a-z]+: )?[a-z0-9]+(?:-[a-z0-9]+)*\
 _MACRO_LABEL = re.compile(r"`((?:estado|bloqueada|abortada):[a-z-]+)`")
 _LABELLED_LINE_WRITTEN = re.compile(r"^([A-Z]{4,})\s*:", re.MULTILINE)
 _LABELLED_LINE_NAMED = re.compile(r"`([A-Z]{4,})\s*:")
-_CONFIRMATION_ANCHORS = ("spec completa", "espera confirmacion")
+_CONFIRMATION_ANCHORS = ("no crees nada sin el troceo confirmado", "sin volcar la spec")
 """Short anchors for the gate criterion, which has no second surface to compare against.
 
-`slice-spec` creates issues in someone else's repository, so the gate -- print everything and wait --
-is the whole safety of the step. Nothing else in the tree states it, so this is a claim about the
-prose rather than a comparison; reword the sentence and the anchors move with it.
+`slice-spec` creates issues in someone else's repository, so the gate -- nothing is created without the
+slicing the person confirmed -- is the whole safety of the step. The bodies are not printed: they are
+written for the program to parse, and the person reads them on GitHub. Nothing else in the tree states
+it, so this is a claim about the prose rather than a comparison; reword the sentence and the anchors move
+with it.
 """
 
-_UNDERSTANDING_ANCHORS = ("el fichero existe no cumple", "declara que esa vara se aplico", "no un informe")
+_UNDERSTANDING_ANCHORS = (
+    "el fichero existe no cumple",
+    "declara que esa vara se aplico",
+    "no un informe",
+    "decisiones del agente",
+)
 """Same kind of claim as `_CONFIRMATION_ANCHORS`, for the pause that publishes what got understood.
 
-None of the three has a second surface to compare against: step `1b` confirms pointers -- a path, an
+The agent's own decisions are listed apart so the person can veto them: whatever did not pass the two
+filters of the design reference was decided without asking, and this is the only place it surfaces.
+
+None of the four has a second surface to compare against: step `1b` confirms pointers -- a path, an
 issue number -- never whether the behaviour behind them was understood, and the feature's
 acceptance criteria are confirmed here and never written to the parent issue. So this is a claim
 about the prose, and rewording any of them moves its anchor with it.
@@ -587,14 +597,14 @@ def test_the_macro_state_slice_spec_writes_is_a_label_of_the_vocabulary_and_neve
     )
 
 
-def test_the_step_that_creates_the_issues_shows_the_whole_spec_and_waits_before_creating_anything() -> None:
+def test_the_step_that_creates_the_issues_waits_for_the_confirmed_slicing_and_does_not_dump_the_bodies() -> None:
     """Creating the tree is the one irreversible thing this skill does, and it does it in someone's repo.
 
     A parent plus one subissue per slice, each with `--parent` -- that flag is what makes them children,
     and the program finds them with `parent-issue:<repo>#<n>`, so a subissue created without it is
     invisible to the run -- and with `--label`, because the state is a label from the moment it is
-    created. Before any of that, the whole spec goes to the terminal and the step waits: there is no
-    other artifact to review, since the spec no longer exists as a file anybody can read.
+    created. Before any of that the person has confirmed the slicing; the bodies themselves are not
+    printed, because they are written for the program and the person reads them on GitHub.
     """
     steps = re.split(r"^(?=\d+[a-z]?\.\s)", _spec_prose(_AUTHORING_STEPS), flags=re.MULTILINE)
     creating = [step for step in steps if "gh issue create" in step]
@@ -607,7 +617,7 @@ def test_the_step_that_creates_the_issues_shows_the_whole_spec_and_waits_before_
     missing = [anchor for anchor in _CONFIRMATION_ANCHORS if anchor not in step]
     assert not missing, (
         f"the creating step of {_rel(_SPEC)} no longer states {missing}: nothing else in the tree says "
-        f"that the spec is shown whole and confirmed before anything is created"
+        f"that nothing is created before the person confirms the slicing"
     )
 
 
@@ -1545,7 +1555,7 @@ def test_every_slice_title_slice_spec_documents_yields_a_name_git_accepts_as_a_b
     )
 
 
-class TestSliceSpecDesignDecidedInRounds:
+class TestSliceSpecDesignDecidedBeforeSlicing:
     _REFERENCES = _SPEC.parent / "references"
 
     @classmethod
@@ -1575,7 +1585,7 @@ class TestSliceSpecDesignDecidedInRounds:
     def test_the_design_reference_always_visits_domain_concepts_architecture_and_contracts_with_signatures(
         self,
     ) -> None:
-        branches = _read(self._REFERENCES / "diseno.md").split("## Ramas que siempre se visitan")[1]
+        branches = _read(self._REFERENCES / "diseno.md").split("## Lo que el agente recorre siempre")[1]
 
         for branch in ("conceptos de dominio", "arquitectura", "contratos"):
             assert branch in branches, f"the always-visited branches do not name `{branch}`"
@@ -1590,24 +1600,38 @@ class TestSliceSpecDesignDecidedInRounds:
         assert re.search(r"estrategia de tests", design)
         assert re.search(r"solo se preguntan si las fuentes de convencion del repo destino no los cubren", design)
 
-    def test_the_parent_repo_discovery_runs_before_the_first_round(self) -> None:
+    def test_the_parent_repo_discovery_runs_before_the_first_question(self) -> None:
         skill = _read(_SPEC)
 
         discovery = skill.index("discover_conventions.py <repo>")
-        first_round = skill.index("**Disena por rondas")
+        first_round = skill.index("**Disena investigando primero")
 
         assert discovery < first_round
 
-    def test_a_target_repo_is_discovered_as_soon_as_a_round_decides_there_is_work_in_it_and_before_its_contracts(
+    def test_a_target_repo_is_discovered_as_soon_as_the_design_decides_there_is_work_in_it_and_before_its_contracts(
         self,
     ) -> None:
         skill = self._flat(_read(_SPEC))
 
         assert re.search(
-            r"en cuanto una ronda decide que hay trabajo en (otro|ese) repo.{0,400}antes de decidir sus contratos",
+            r"en cuanto el diseno decide que hay trabajo en (otro|ese) repo.{0,400}antes de decidir sus contratos",
             skill,
             re.DOTALL | re.IGNORECASE,
         )
+
+    def test_the_design_reference_asks_the_person_only_what_is_ambiguous_and_changes_what_gets_built(self) -> None:
+        design = self._flat(_read(self._REFERENCES / "diseno.md"))
+
+        assert "**Es ambigua de verdad**" in design
+        assert "**Cambia lo que se construye**" in design
+        assert "Un caso raro solo entra con un puntero" in design
+        assert "toda la frontera" not in design
+
+    def test_the_slicing_step_waits_for_the_short_slicing_list_to_be_confirmed(self) -> None:
+        step = self._flat(self._step(_read(_SPEC), "2d. **"))
+
+        assert "lista corta" in step
+        assert "espera confirmacion del troceo" in step
 
     def test_the_closing_step_of_the_design_publishes_the_decisions_with_the_code_and_the_criteria(self) -> None:
         step = self._step(_read(_SPEC), "1c. **")
@@ -1631,7 +1655,7 @@ class TestSliceSpecDesignDecidedInRounds:
         self,
     ) -> None:
         reference = _read(self._REFERENCES / "diseno.md")
-        branches = reference.split("## Ramas que siempre se visitan")[1].split("## Cuando se acaba")[0]
+        branches = reference.split("## Lo que el agente recorre siempre")[1].split("## Cuando se acaba")[0]
         visual = self._flat(branches[branches.index("visual") :])
 
         assert _DESIGN_HEADING in visual, f"the visual branch of the design reference does not name {_DESIGN_HEADING}"
@@ -1642,12 +1666,12 @@ class TestSliceSpecDesignDecidedInRounds:
 
     def test_the_visual_branch_looks_for_the_palette_of_the_target_repo_before_the_first_mockup(self) -> None:
         reference = _read(self._REFERENCES / "diseno.md")
-        branches = reference.split("## Ramas que siempre se visitan")[1].split("## Cuando se acaba")[0]
+        branches = reference.split("## Lo que el agente recorre siempre")[1].split("## Cuando se acaba")[0]
         visual = self._flat(branches[branches.index("visual") :])
 
         assert re.search(r"paleta del repo destino.{0,200}antes de la primera maqueta", visual, re.IGNORECASE)
 
     def test_the_step_that_creates_the_spec_says_each_design_section_carries_only_the_chosen_variant(self) -> None:
-        step = self._flat(self._step(_read(_SPEC), "5. **Muestra"))
+        step = self._flat(self._step(_read(_SPEC), "5. **Crea"))
 
         assert re.search(r"cada `### <nombre>` lleva solo la variante elegida", step)
