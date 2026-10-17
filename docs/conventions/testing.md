@@ -164,6 +164,24 @@ markdown, se cita en backticks, así que lo que se valida es el token, y solo en
 un directorio de primer nivel. Por eso una ruta de ejemplo se escribe como **molde**, con nombres
 plantilla que no apuntan a nada del árbol (ver `docs/conventions/como-se-escribe.md`).
 
+## Capturas de una slice con diseño
+
+Una slice que cita un diseño entrega capturas de lo que pinta, y el encargo dice dónde dejarlas y cómo
+escribir su manifiesto. Lo que dice este apartado es **cómo se capturan en este repo**.
+
+**Interfaz de terminal.** La captura la escribe el propio test de pantalla: el mismo que dibuja la vista
+y la compara con su referencia, cuando recibe un directorio de capturas, deja además el HTML de lo que
+dibujó, con su color de texto, su fondo y su negrita, y con el nombre de su referencia. Se lanza desde
+`tui/` con `CAPTURES_DIR=<directorio de capturas> cargo test`, y sin la variable ningún test escribe
+nada.
+
+- **Una pantalla nueva o cambiada lleva su test de pantalla**, y por eso su captura: lo que no tiene test
+  no se captura, y lo que no se captura no se compara con el diseño.
+- **El estado de la captura es el de los datos del mother** con que se dibujó, y es lo que el manifiesto
+  dice en `state`: qué pantalla, a qué anchura y con qué slices.
+- **Capturar es lo último de la vuelta.** Una edición después de capturar deja una captura que ya no es
+  del código, y nada lo detecta.
+
 ## Antipatrones
 
 - Un test como función suelta en el árbol nuevo.
