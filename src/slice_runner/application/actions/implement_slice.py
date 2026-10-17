@@ -73,6 +73,7 @@ class ImplementSlice:
             retry_instruction=params.retry_instruction,
             requested_changes=params.requested_changes,
             dirty_worktree_files=self._dirty_worktree_files(params),
+            designs=params.subissue.designs_under(params.parent),
         )
 
     def _dirty_worktree_files(self, params: ImplementSliceParams) -> tuple[str, ...]:

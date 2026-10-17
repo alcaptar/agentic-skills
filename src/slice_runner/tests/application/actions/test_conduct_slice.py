@@ -36,6 +36,7 @@ from slice_runner.domain.step import Step
 from slice_runner.tests.conductor import Conductor
 from slice_runner.tests.mothers.branch_catch_up_mother import BranchCatchUpMother
 from slice_runner.tests.mothers.control_outcome_mother import ControlOutcomeMother
+from slice_runner.tests.mothers.design_mother import DesignMother
 from slice_runner.tests.mothers.harness_call_mother import HarnessCallMother
 from slice_runner.tests.mothers.harness_spend_mother import HarnessSpendMother
 from slice_runner.tests.mothers.implementation_mother import ImplementationMother
@@ -173,6 +174,32 @@ class TestConductSliceHandingTheDecisionsToTheImplementer:
         assert implemented.parent.decisions + implemented.subissue.decisions == (
             ParentIssueMother.with_sources_and_controls().decisions + SubIssueMother.pending().decisions
         )
+
+
+class TestConductSliceHandingTheDesignsToEveryAgent:
+    def test_the_sources_check_counts_the_designs_the_subissue_names_and_not_the_whole_parent(self) -> None:
+        conductor = Conductor(
+            chosen=SelectSliceResultMother.about_to_start(
+                subissue=SubIssueMother.naming_designs("detalle"), parent=ParentIssueMother.declaring_two_designs()
+            )
+        )
+
+        conductor.conduct()
+
+        assert conductor.check_sources.execute.call_args.args[0].designs == (DesignMother.detail(),)
+
+    def test_the_judge_gets_the_designs_the_subissue_names(self) -> None:
+        conductor = Conductor(
+            chosen=SelectSliceResultMother.resumed_at(
+                RunMother.implementing(),
+                subissue=SubIssueMother.naming_designs("detalle"),
+                parent=ParentIssueMother.declaring_two_designs(),
+            )
+        )
+
+        conductor.conduct()
+
+        assert conductor.verify.execute.call_args.args[0].designs == (DesignMother.detail(),)
 
 
 class TestConductSliceResumingARunLeftAtTheRetiredUnderstandStep:

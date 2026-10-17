@@ -16,6 +16,7 @@ from slice_runner.tests.mothers.sub_issue_mother import SubIssueMother
 from slice_runner.tests.mothers.verdict_mother import FindingMother, VerdictMother
 
 if TYPE_CHECKING:
+    from slice_runner.domain.design import Design
     from slice_runner.domain.finding import Finding
     from slice_runner.domain.source import Source
     from slice_runner.domain.verdict import Verdict
@@ -65,6 +66,7 @@ class VerifySliceParamsMother:
             debt=(),
             decisions=(),
             deviations=(),
+            designs=(),
             compares_with_the_last_verification=False,
         )
 
@@ -90,6 +92,7 @@ class SliceUnderReviewMother:
         debt: tuple[str, ...] | None = None,
         decisions: tuple[str, ...] | None = None,
         deviations: tuple[str, ...] | None = None,
+        designs: tuple[Design, ...] | None = None,
     ) -> SliceUnderReview:
         return SliceUnderReview(
             slice_id=slice_id or cls.SLICE_ID,
@@ -108,6 +111,7 @@ class SliceUnderReviewMother:
             debt=debt if debt is not None else (),
             decisions=decisions if decisions is not None else (),
             deviations=deviations if deviations is not None else (),
+            designs=designs if designs is not None else (),
         )
 
     @staticmethod

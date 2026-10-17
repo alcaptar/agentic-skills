@@ -133,3 +133,48 @@ class TestRunPrechecks:
 
         branches.commits_behind_remote.assert_called_once_with(worktree=_ROOT, base=_BASE)
         forum.open_pull_request.assert_called_once_with(repo=_REPO, branch=_BRANCH)
+
+
+class TestRunPrechecksOfTheDesignsASubissueNames:
+    @pytest.fixture
+    def query(self) -> RunPrechecks:
+        branches: Mock = create_autospec(Branches, spec_set=True, instance=True)
+        branches.commits_behind_remote.return_value = 0
+        forum: Mock = create_autospec(Forum, spec_set=True, instance=True)
+        forum.open_pull_request.return_value = None
+
+        return RunPrechecks(branches=branches, forum=forum)
+
+    @staticmethod
+    def _params(*, subissue: SubIssue, parent: ParentIssue) -> RunPrechecksParams:
+        return RunPrechecksParams(repo=_REPO, root=_ROOT, branch=_BRANCH, base=_BASE, subissue=subissue, parent=parent)
+
+    def test_a_design_the_parent_does_not_declare_is_its_own_reason(self, query: RunPrechecks) -> None:
+        params = self._params(
+            subissue=SubIssueMother.naming_designs("tablero", "inexistente"),
+            parent=ParentIssueMother.declaring_two_designs(),
+        )
+
+        assert query.execute(params).outcome is PrecheckOutcome.UNKNOWN_DESIGN
+
+    def test_a_design_named_while_the_parent_declares_none_is_unknown_too(self, query: RunPrechecks) -> None:
+        params = self._params(
+            subissue=SubIssueMother.naming_designs("tablero"), parent=ParentIssueMother.with_sources_and_controls()
+        )
+
+        assert query.execute(params).outcome is PrecheckOutcome.UNKNOWN_DESIGN
+
+    def test_designs_the_parent_does_declare_are_clear(self, query: RunPrechecks) -> None:
+        params = self._params(
+            subissue=SubIssueMother.naming_designs("tablero", "detalle"),
+            parent=ParentIssueMother.declaring_two_designs(),
+        )
+
+        assert query.execute(params).outcome is PrecheckOutcome.CLEAR
+
+    def test_a_subissue_that_names_no_design_is_clear_even_if_the_parent_declares_some(
+        self, query: RunPrechecks
+    ) -> None:
+        params = self._params(subissue=SubIssueMother.pending(), parent=ParentIssueMother.declaring_two_designs())
+
+        assert query.execute(params).outcome is PrecheckOutcome.CLEAR

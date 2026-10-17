@@ -15,6 +15,7 @@ from slice_runner.domain.exceptions import DiffNotReadableError, UnchangedDiffEr
 from slice_runner.domain.skill_library import SkillLibrary
 from slice_runner.domain.slice_coordinates import SliceCoordinates
 from slice_runner.domain.verifier import Verifier
+from slice_runner.tests.mothers.design_mother import DesignMother
 from slice_runner.tests.mothers.verdict_mother import FindingMother, VerdictMother
 from slice_runner.tests.mothers.verification_mother import (
     JudgeMother,
@@ -187,6 +188,13 @@ class TestVerifySlice:
         action.execute(params)
 
         assert self._reviewed(verifier).decisions == decisions
+
+    def test_the_designs_the_slice_cites_travel_to_the_judge_too(self, action: VerifySlice, verifier: Mock) -> None:
+        params = replace(_PARAMS, designs=(DesignMother.board(), DesignMother.detail()))
+
+        action.execute(params)
+
+        assert self._reviewed(verifier).designs == (DesignMother.board(), DesignMother.detail())
 
     def test_the_deviations_the_implementer_declared_travel_to_the_judge_too(
         self, action: VerifySlice, verifier: Mock

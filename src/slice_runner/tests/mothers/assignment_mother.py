@@ -6,6 +6,7 @@ from typing import ClassVar
 from slice_runner.domain.assignment import Assignment
 from slice_runner.domain.requested_change import RequestedChange
 from slice_runner.tests.mothers.control_outcome_mother import ControlOutcomeMother
+from slice_runner.tests.mothers.design_mother import DesignMother
 from slice_runner.tests.mothers.parent_issue_mother import ParentIssueMother
 from slice_runner.tests.mothers.pull_request_review_comment_mother import PullRequestReviewCommentMother
 from slice_runner.tests.mothers.sub_issue_mother import SubIssueMother
@@ -123,3 +124,11 @@ class AssignmentMother:
                 ),
             ),
         )
+
+    @classmethod
+    def of_a_slice_with_the_board_design(cls) -> Assignment:
+        return replace(cls.of_the_first_round(), designs=(DesignMother.board(),))
+
+    @classmethod
+    def of_a_slice_with_two_designs(cls) -> Assignment:
+        return replace(cls.of_the_first_round(), designs=(DesignMother.board(), DesignMother.detail()))

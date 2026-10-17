@@ -6,6 +6,7 @@ import pytest
 
 from slice_runner.domain.budgets import Budgets
 from slice_runner.domain.cited_source import CitedSource
+from slice_runner.domain.design import Design
 from slice_runner.domain.exceptions import SourcesBudgetExceededError, UnreadableSourceError
 from slice_runner.domain.source import Source, SourceKind
 from slice_runner.infrastructure.process_source_reader import ProcessSourceReader
@@ -76,3 +77,25 @@ class TestTheSizeCapOnDeclaredSources:
 
         with pytest.raises(SourcesBudgetExceededError, match=r"a\.md: 7 characters.*b\.md: 4 characters"):
             reader.read_all(worktree=str(tmp_path), sources=(a, b))
+
+
+@pytest.mark.integration
+class TestTheSizeCapCountsTheDesignsAlongsideTheSources:
+    def test_a_design_that_pushes_the_sum_one_character_over_the_cap_stops_the_run(self, tmp_path: Path) -> None:
+        (tmp_path / "doc.md").write_text("a" * 6, encoding="utf-8")
+        reader = ProcessSourceReader(process=Real.process(), budgets=Budgets(sources_max_chars=10))
+        source = Source(kind=SourceKind.DOC, path="doc.md")
+
+        with pytest.raises(SourcesBudgetExceededError, match=r"tablero: 5 characters"):
+            reader.read_all(worktree=str(tmp_path), sources=(source,), designs=(Design(name="tablero", html="h" * 5),))
+
+    def test_a_design_that_leaves_the_sum_exactly_at_the_cap_is_returned_without_raising(self, tmp_path: Path) -> None:
+        (tmp_path / "doc.md").write_text("a" * 6, encoding="utf-8")
+        reader = ProcessSourceReader(process=Real.process(), budgets=Budgets(sources_max_chars=10))
+        source = Source(kind=SourceKind.DOC, path="doc.md")
+
+        cited = reader.read_all(
+            worktree=str(tmp_path), sources=(source,), designs=(Design(name="tablero", html="h" * 4),)
+        )
+
+        assert cited == (CitedSource(source=source, content="a" * 6),)

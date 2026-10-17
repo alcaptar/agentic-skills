@@ -8,6 +8,8 @@ from slice_runner.domain.precheck_result import PrecheckResult
 from slice_runner.domain.prechecks import Prechecks, SourcesCheck
 
 if TYPE_CHECKING:
+    from slice_runner.domain.cited_source import CitedSource
+    from slice_runner.domain.design import Design
     from slice_runner.domain.source import Source
     from slice_runner.domain.source_reader import SourceReader
 
@@ -16,6 +18,7 @@ if TYPE_CHECKING:
 class CheckSourcesParams:
     worktree: str
     sources: tuple[Source, ...]
+    designs: tuple[Design, ...] = ()
 
 
 class CheckSources:
@@ -29,10 +32,16 @@ class CheckSources:
 
     def _check(self, params: CheckSourcesParams) -> tuple[SourcesCheck, str | None]:
         try:
-            self._sources.read_all(worktree=params.worktree, sources=params.sources)
+            self._read(params)
         except UnreadableSourceError as error:
             return SourcesCheck.UNREADABLE, str(error)
         except SourcesBudgetExceededError as error:
             return SourcesCheck.OVER_BUDGET, str(error)
 
         return SourcesCheck.READABLE, None
+
+    def _read(self, params: CheckSourcesParams) -> tuple[CitedSource, ...]:
+        if not params.designs:
+            return self._sources.read_all(worktree=params.worktree, sources=params.sources)
+
+        return self._sources.read_all(worktree=params.worktree, sources=params.sources, designs=params.designs)

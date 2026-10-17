@@ -14,3 +14,4 @@ class PrecheckOutcome(StrEnum):
     MISSING_CONTROLS = "missing-controls"
     BASE_NOT_ON_REMOTE = "base-not-on-remote"
     MISSING_DECISIONS = "missing-decisions"
+    UNKNOWN_DESIGN = "unknown-design"

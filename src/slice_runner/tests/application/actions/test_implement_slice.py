@@ -11,6 +11,7 @@ from slice_runner.domain.debt_ledger import DebtLedger
 from slice_runner.domain.diff_reader import DiffReader
 from slice_runner.domain.implementer import Implementer
 from slice_runner.tests.mothers.control_outcome_mother import ControlOutcomeMother
+from slice_runner.tests.mothers.design_mother import DesignMother
 from slice_runner.tests.mothers.implementation_mother import ImplementationMother
 from slice_runner.tests.mothers.parent_issue_mother import ParentIssueMother
 from slice_runner.tests.mothers.sub_issue_mother import SubIssueMother
@@ -176,6 +177,23 @@ class TestImplementSlice:
         action.execute(replace(self._params(subissue=subissue), parent=parent))
 
         assert self._assigned(implementer).decisions == ("padre uno", "padre dos", "subissue uno", "subissue dos")
+
+    def test_only_the_designs_the_subissue_names_travel_in_the_assignment(
+        self, action: ImplementSlice, implementer: Mock
+    ) -> None:
+        parent = ParentIssueMother.declaring_two_designs()
+        subissue = SubIssueMother.naming_designs("detalle")
+
+        action.execute(replace(self._params(subissue=subissue), parent=parent))
+
+        assert self._assigned(implementer).designs == (DesignMother.detail(),)
+
+    def test_a_subissue_that_names_no_design_assigns_none_though_the_parent_declares_some(
+        self, action: ImplementSlice, implementer: Mock
+    ) -> None:
+        action.execute(replace(self._params(), parent=ParentIssueMother.declaring_two_designs()))
+
+        assert self._assigned(implementer).designs == ()
 
     def test_a_previous_call_that_died_asks_the_reader_and_assigns_the_files_it_found_dirty(
         self, action: ImplementSlice, implementer: Mock, reader: Mock

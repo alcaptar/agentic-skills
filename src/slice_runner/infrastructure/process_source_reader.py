@@ -8,6 +8,7 @@ from slice_runner.domain.source_reader import SourceReader
 
 if TYPE_CHECKING:
     from slice_runner.domain.budgets import Budgets
+    from slice_runner.domain.design import Design
     from slice_runner.domain.source import Source
     from slice_runner.infrastructure.process import Process
 
@@ -17,15 +18,19 @@ class ProcessSourceReader(SourceReader):
         self._process = process
         self._budgets = budgets
 
-    def read_all(self, *, worktree: str, sources: tuple[Source, ...]) -> tuple[CitedSource, ...]:
+    def read_all(
+        self, *, worktree: str, sources: tuple[Source, ...], designs: tuple[Design, ...] = ()
+    ) -> tuple[CitedSource, ...]:
         cited = tuple(
             CitedSource(source=source, content=self._read(worktree=worktree, source=source)) for source in sources
         )
-        total_chars = sum(len(one.content) for one in cited)
+        weighed = [(one.source.path, len(one.content)) for one in cited]
+        weighed.extend((design.name, len(design.html)) for design in designs)
+        total_chars = sum(chars for _, chars in weighed)
         if self._budgets.sources_exceed(total_chars):
-            weights = ", ".join(f"{one.source.path}: {len(one.content)} characters" for one in cited)
+            weights = ", ".join(f"{name}: {chars} characters" for name, chars in weighed)
             raise SourcesBudgetExceededError(
-                f"the {len(cited)} declared source(s) add up to {total_chars} characters, over the "
+                f"the {len(weighed)} declared source(s) and design(s) add up to {total_chars} characters, over the "
                 f"{self._budgets.sources_max_chars} the budget allows: {weights}"
             )
 

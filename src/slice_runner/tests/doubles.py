@@ -42,6 +42,7 @@ if TYPE_CHECKING:
     from slice_runner.domain.call_trace import HarnessCall
     from slice_runner.domain.corpus_entry import CorpusEntry
     from slice_runner.domain.debt_entry import DebtEntry
+    from slice_runner.domain.design import Design
     from slice_runner.domain.diff_stats import DiffStats
     from slice_runner.domain.event_cursor import EventCursor
     from slice_runner.domain.slice_coordinates import SliceCoordinates
@@ -493,7 +494,9 @@ class RecordedSourceReader(SourceReader):
         self._unreadable = unreadable
         self.calls: list[tuple[str, Source]] = []
 
-    def read_all(self, *, worktree: str, sources: tuple[Source, ...]) -> tuple[CitedSource, ...]:
+    def read_all(
+        self, *, worktree: str, sources: tuple[Source, ...], designs: tuple[Design, ...] = ()
+    ) -> tuple[CitedSource, ...]:
         cited = []
         for source in sources:
             self.calls.append((worktree, source))

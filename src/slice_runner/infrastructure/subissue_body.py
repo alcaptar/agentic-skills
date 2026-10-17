@@ -18,6 +18,7 @@ _DECISION_LINE = re.compile(r"^DECISION\s*:\s*(.+?)\s*$", re.IGNORECASE | re.MUL
 _SIGNAL_LINE = re.compile(r"^SENAL\s*:\s*(.+?)\s*$", re.IGNORECASE | re.MULTILINE)
 _EXCLUDES_LINE = re.compile(r"^EXCLUYE\s*:\s*(.+?)\s*$", re.IGNORECASE | re.MULTILINE)
 _REPLACES_LINE = re.compile(r"^SUSTITUYE\s*:\s*(.+?)\s*$", re.IGNORECASE | re.MULTILINE)
+_DESIGN_LINE = re.compile(r"^DISENO\s*:\s*(.+?)\s*$", re.IGNORECASE | re.MULTILINE)
 _STATE_BLOCK = re.compile(r"<!-- slice-runner:estado\n(.*?)\n-->", re.DOTALL)
 
 
@@ -30,6 +31,7 @@ class ParsedSubissueBody:
     signal: str
     excludes: str
     replaces: str
+    designs: tuple[str, ...]
     run: Run | None
 
 
@@ -44,6 +46,7 @@ class SubissueBody:
             signal=cls._first(_SIGNAL_LINE, body) or "",
             excludes=cls._first(_EXCLUDES_LINE, body) or "",
             replaces=cls._first(_REPLACES_LINE, body) or "",
+            designs=tuple(_DESIGN_LINE.findall(body)),
             run=cls._run(body),
         )
 
