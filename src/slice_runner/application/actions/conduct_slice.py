@@ -77,7 +77,6 @@ if TYPE_CHECKING:
     from slice_runner.domain.budgets import Budgets
     from slice_runner.domain.ci_indeterminate_cause import CiIndeterminateCause
     from slice_runner.domain.clock import Clock
-    from slice_runner.domain.deploy_watch import DeployWatch
     from slice_runner.domain.finding import Finding
     from slice_runner.domain.forum import Forum
     from slice_runner.domain.parent_issue import ParentIssue
@@ -198,7 +197,6 @@ class ConductSlicePorts:
     forum: Forum
     clock: Clock
     pull_request: PullRequestWriter
-    deploy_watch: DeployWatch
 
 
 class ConductSlice:
@@ -234,7 +232,6 @@ class ConductSlice:
         self._forum = ports.forum
         self._clock = ports.clock
         self._pull_request = ports.pull_request
-        self._deploy_watch = ports.deploy_watch
         self._machine = machine
         self._budgets = budgets
         self._models = models
@@ -822,10 +819,6 @@ class ConductSlice:
         return self._retire.execute(tree).retirement
 
     def _closing(self, progress: ConductSliceProgress, closure: Closure) -> ConductSliceResult:
-        if closure.state is RunState.MERGED and not progress.subissue.signal_is_exempt:
-            self._deploy_watch.watch(
-                worktree=progress.worktree, repo=progress.params.repo, signal=progress.subissue.signal
-            )
         retirement = self._retiring(
             RetireWorktreeParams(
                 root=progress.params.root, worktree=progress.worktree, branch=progress.subissue.branch

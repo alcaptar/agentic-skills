@@ -239,7 +239,6 @@ _KNOWN_NOT_HARNESS_WRITING = {
     ("_close", "execute"),
     ("_commit", "execute"),
     ("_deliver", "execute"),
-    ("_deploy_watch", "watch"),
     ("_forum", "any_pull_request"),
     ("_forum", "pull_request_state"),
     ("_machine", "after"),

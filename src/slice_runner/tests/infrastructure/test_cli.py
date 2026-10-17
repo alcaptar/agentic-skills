@@ -28,7 +28,6 @@ from slice_runner.domain.step import Step
 from slice_runner.infrastructure.call_spend_payload import CallSpendPayload
 from slice_runner.infrastructure.claude_config import ClaudeConfig
 from slice_runner.infrastructure.cli import Cli
-from slice_runner.infrastructure.deploy_watch_invocation import DeployWatchInvocation
 from slice_runner.infrastructure.durable_ledger import DurableLedger
 from slice_runner.infrastructure.event_payload import EventPayload
 from slice_runner.infrastructure.exit_code import ExitCode
@@ -1523,39 +1522,6 @@ class TestConductingASliceAnEarlierInvocationLeftHalfDone:
         assert (reported["step"], reported["standing"]) == ("await-merge", "merged")
         assert "status" not in reported
         assert json.loads(output.out)["halt"] == "run-closed"
-
-
-class TestMergingASliceWhoseSignalIsDeclared:
-    @staticmethod
-    def _invocation() -> RunInvocation:
-        return RunInvocation(
-            children=GhConversationMother.the_slice_with_a_signal_resumed_at(RunMother.awaiting_merge()),
-            answers=(
-                Answer(to=("git", "rev-parse"), code=0),
-                Answer(
-                    to=("gh", "pr", "list", "--state", "all"),
-                    stdout=GhConversationMother.the_pull_request_of_the_branch(),
-                ),
-                Answer(to=("gh", "pr", "view"), stdout=GhConversationMother.a_merged_pull_request()),
-            ),
-        )
-
-    def test_no_process_is_launched_to_watch_the_deploy_because_the_wired_adapter_is_the_muted_one(
-        self, tmp_path: Path
-    ) -> None:
-        invocation = self._invocation()
-
-        invocation.conduct(logs=tmp_path / "logs")
-
-        assert not invocation.process.invoked(DeployWatchInvocation.EXECUTABLE)
-
-    def test_the_run_still_closes_merged_so_muting_the_watch_takes_nothing_away_from_the_slice(
-        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
-    ) -> None:
-        code = self._invocation().conduct(logs=tmp_path / "logs")
-
-        assert code == ExitCode.OK
-        assert json.loads(capsys.readouterr().out)["state"] == "merged"
 
 
 class TestConductingTheSliceNamedByTheCaller:
