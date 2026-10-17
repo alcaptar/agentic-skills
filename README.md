@@ -481,29 +481,7 @@ vuelve a esperarte.
   `estado:esperando-merge` sigue siendo elegible- y **ponlo en su rama** antes: `git -C <worktree> switch
   slice/NN-name`.
 
-**4. El despliegue: hoy no se vigila solo**
-
-El programa detecta el merge, cierra el run y **para ahi**. Encadenar `deploy-watch` esta **apagado a
-proposito** mientras la skill se pule (2026-08-13): el entrypoint inyecta `MutedDeployWatch` en vez del
-adaptador que lanza `claude -p`, asi que al mergear no se gasta ninguna llamada. Lo que **no** cambia es
-la linea `SENAL:`: se sigue disenando en el slicing, se sigue exigiendo, y su emision sigue siendo un
-criterio de aceptacion que el juez mide antes de mergear. Lo unico que no ocurre es la comprobacion
-**post-deploy**.
-
-Mientras dure, quien quiera el veredicto del despliegue lanza la skill a mano en el repo desplegado:
-
-```
-claude
-> /deploy-watch senal: <la linea SENAL: de la subissue>; repo destino: <org>/<repo>
-```
-
-Cuando este pulida, se vuelve a encender cambiando el adaptador cableado en `cli.py` y devolviendo esta
-seccion a lo que decia: `deploy-watch` arranca sin preguntar nada que pueda inferir -captura baseline,
-tickea las senales relevantes al radio de impacto del cambio, comenta su veredicto en la subissue `#43`,
-y si sale degradado lanza el agente `sre` para el analisis de causa raiz y **te redacta el rollback**
-para que lo lances tu-.
-
-**5. Siguiente slice**
+**4. Siguiente slice**
 
 ```
 uv run slice-runner run 42 --repo <org>/<repo> --base master
