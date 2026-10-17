@@ -133,7 +133,6 @@ from slice_runner.infrastructure.local_process import LocalProcess
 from slice_runner.infrastructure.local_skill_library import LocalSkillLibrary
 from slice_runner.infrastructure.local_tool_use_log import LocalToolUseLog
 from slice_runner.infrastructure.local_toolbox import LocalToolbox
-from slice_runner.infrastructure.muted_deploy_watch import MutedDeployWatch
 from slice_runner.infrastructure.os_process_replacement import OsProcessReplacement
 from slice_runner.infrastructure.process import ProcessNotRunnableError, ProcessTimedOutError
 from slice_runner.infrastructure.process_replacement import ExecutableNotFoundError
@@ -930,7 +929,6 @@ class Cli:
                 forum=forum,
                 clock=clock,
                 pull_request=SlicePullRequest(),
-                deploy_watch=MutedDeployWatch(),
             ),
             machine=machine,
             budgets=self._budgets,

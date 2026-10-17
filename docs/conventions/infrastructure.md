@@ -213,16 +213,6 @@ importar**: un smoke que solo importe el módulo lo da por bueno. Lo evita
   **El gasto sobrevive a la invocación**: se acumula por invocación pero se siembra con lo que trae el
   estado persistido y se escribe de vuelta en cada paso que lo cambia, así que una slice reinvocada sigue
   viendo su presupuesto entero y la fila que cierra el run suma todas las invocaciones.
-- **Una pieza del flujo se apaga por el cableado, con un adaptador que no hace nada, y quien lo decide
-  es el entrypoint.** Un adaptador mudo implementa el puerto y no lanza nada; el entrypoint lo inyecta
-  en lugar del real. **Lo que se apaga es el cableado, no el flujo**: el caso de uso sigue llamando al
-  puerto en el mismo sitio y con los mismos datos, así que reencender es cambiar la línea que lo
-  inyecta. Consecuencia aceptada: el adaptador real se queda vivo y sin cablear, sostenido solo por su
-  test de frontera.
-
-  **Lo que se mide es que el proceso no se lanza, no que el adaptador mudo no haga nada** -un test suyo
-  mediria el lenguaje, ver `docs/conventions/testing.md`-: el doble del puerto revienta con el `argv`
-  delante si alguien vuelve a cablear el real.
 - Un código de salida distinto de cero **es un dato**, no una excepción: se lanza el proceso con
   `check=False` y el adaptador interpreta, porque el motivo está en `stderr` y una excepción lo borra.
 

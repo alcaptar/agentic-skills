@@ -40,7 +40,6 @@ from slice_runner.domain.clock import Clock
 from slice_runner.domain.control_runner import ControlRunner
 from slice_runner.domain.corpus_entry import CorpusEntry
 from slice_runner.domain.debt_entry import DebtEntry
-from slice_runner.domain.deploy_watch import DeployWatch
 from slice_runner.domain.event_log import EventLog
 from slice_runner.domain.forum import Forum
 from slice_runner.domain.metrics_log import MetricsLog
@@ -138,7 +137,6 @@ class Conductor:
         self.pull_request: Mock = create_autospec(PullRequestWriter, spec_set=True, instance=True)
         self.pull_request.title.return_value = self.TITLE
         self.pull_request.body.return_value = self.BODY
-        self.deploy_watch: Mock = create_autospec(DeployWatch, spec_set=True, instance=True)
         self.events: Mock = create_autospec(EventLog, spec_set=True, instance=True)
 
     @classmethod
@@ -233,7 +231,6 @@ class Conductor:
                 forum=self.forum,
                 clock=self.clock,
                 pull_request=self.pull_request,
-                deploy_watch=self.deploy_watch,
             ),
             machine=StateMachine(budgets=self.budgets),
             budgets=self.budgets,
