@@ -5,7 +5,7 @@ is directories Claude Code reads from its configuration directory. Only this hal
 the other one (`install-program`) writes into the machine's environment and does not fit in a suite --
 so `install` is split into two targets and this file covers the one that can be.
 
-Three directories are linked and only two of them are skills: `skills/slice-runner/` lost its
+Two directories are linked and only one of them is a skill: `skills/slice-runner/` lost its
 `SKILL.md` when the old flow was retired and kept only the helpers `slice-spec` shells out to.
 
 The target is driven with `CLAUDE_HOME=<path>` on the command line rather than the environment
@@ -29,7 +29,7 @@ if TYPE_CHECKING:
 
     from slice_runner.infrastructure.process import ProcessOutput
 
-_LINKED = ("slice-spec", "deploy-watch", "slice-runner")
+_LINKED = ("slice-spec", "slice-runner")
 
 
 def _install_skills(home: Path) -> ProcessOutput:
@@ -38,8 +38,8 @@ def _install_skills(home: Path) -> ProcessOutput:
 
 
 @pytest.mark.integration
-def test_installing_points_all_three_linked_directories_at_this_checkout(tmp_path: Path) -> None:
-    """All three directories land, and they land as links to the checkout rather than as copies.
+def test_installing_points_every_linked_directory_at_this_checkout(tmp_path: Path) -> None:
+    """Every linked directory lands, and they land as links to the checkout rather than as copies.
 
     Copies would drift the moment the repo changes, which is the property the symlink exists for:
     editing the repo changes what Claude Code runs, with nothing to re-sync.
@@ -114,10 +114,10 @@ _LINKED_DECLARATION = re.compile(r"^LINKED\s*:=\s*(.+)$", re.MULTILINE)
 def test_the_doctor_checks_every_directory_the_installer_links() -> None:
     """A directory `make install-skills` links and the doctor never looks at is the same gap as an unchecked helper.
 
-    `skills/slice-runner/` carries no `SKILL.md`, so it cannot be checked the way `slice-spec` and
-    `deploy-watch` are; the doctor covers it instead through the helpers it holds under `scripts/`.
-    Deriving both sides from the Makefile and from `CheckReadiness`, rather than restating the three
-    names here, is what makes a fourth linked directory -- or a check quietly dropped -- fail here
+    `skills/slice-runner/` carries no `SKILL.md`, so it cannot be checked the way `slice-spec` is;
+    the doctor covers it instead through the helpers it holds under `scripts/`.
+    Deriving both sides from the Makefile and from `CheckReadiness`, rather than restating the
+    names here, is what makes a third linked directory -- or a check quietly dropped -- fail here
     instead of drifting unnoticed.
     """
     declared = _LINKED_DECLARATION.search((_ROOT / "Makefile").read_text())
@@ -144,7 +144,7 @@ def test_installing_the_skills_refuses_to_replace_a_link_that_points_somewhere_e
     """
     elsewhere = tmp_path / "elsewhere"
     elsewhere.mkdir()
-    occupied = tmp_path / "skills" / "deploy-watch"
+    occupied = tmp_path / "skills" / "slice-runner"
     occupied.parent.mkdir(parents=True)
     occupied.symlink_to(elsewhere)
 

@@ -46,7 +46,7 @@ class CheckReadinessPorts:
 
 
 class CheckReadiness:
-    SKILLS: ClassVar[tuple[str, ...]] = ("slice-spec", "deploy-watch")
+    SKILLS: ClassVar[tuple[str, ...]] = ("slice-spec",)
     PLUGINS: ClassVar[tuple[str, ...]] = ("superpowers",)
     HELPERS: ClassVar[tuple[str, ...]] = (
         "skills/slice-runner/scripts/discover_conventions.py",

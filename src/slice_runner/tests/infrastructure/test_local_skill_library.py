@@ -96,23 +96,23 @@ class TestWhetherASkillIsInstalled:
     def test_a_skill_present_as_a_plain_directory_is_found(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        skill = tmp_path / "skills" / "deploy-watch"
+        skill = tmp_path / "skills" / "slice-spec"
         skill.mkdir(parents=True)
         monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
 
-        assert LocalSkillLibrary().installed("deploy-watch") == skill
+        assert LocalSkillLibrary().installed("slice-spec") == skill
 
     def test_a_skill_installed_as_a_symlink_resolves_to_its_real_destination_not_the_link_path(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        checkout = tmp_path / "checkout" / "skills" / "deploy-watch"
+        checkout = tmp_path / "checkout" / "skills" / "slice-spec"
         checkout.mkdir(parents=True)
         (tmp_path / "skills").mkdir()
-        symlink = tmp_path / "skills" / "deploy-watch"
+        symlink = tmp_path / "skills" / "slice-spec"
         symlink.symlink_to(checkout)
         monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
 
-        installed = LocalSkillLibrary().installed("deploy-watch")
+        installed = LocalSkillLibrary().installed("slice-spec")
 
         assert installed == checkout
         assert installed != symlink
@@ -121,16 +121,16 @@ class TestWhetherASkillIsInstalled:
         (tmp_path / "skills").mkdir()
         monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
 
-        assert LocalSkillLibrary().installed("deploy-watch") is None
+        assert LocalSkillLibrary().installed("slice-spec") is None
 
     def test_a_file_in_place_of_the_skill_directory_is_not_installed_either(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         (tmp_path / "skills").mkdir()
-        (tmp_path / "skills" / "deploy-watch").write_text("not a directory", encoding="utf-8")
+        (tmp_path / "skills" / "slice-spec").write_text("not a directory", encoding="utf-8")
         monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
 
-        assert LocalSkillLibrary().installed("deploy-watch") is None
+        assert LocalSkillLibrary().installed("slice-spec") is None
 
 
 class TestWhetherAnAbsolutePathHelperIsReachable:
@@ -180,17 +180,17 @@ class TestTheCheckoutASkillPointsTo:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         repo = tmp_path / "repos" / "agentic-skills"
-        skill = repo / "skills" / "deploy-watch"
+        skill = repo / "skills" / "slice-spec"
         skill.mkdir(parents=True)
         (tmp_path / "skills").mkdir()
-        symlink = tmp_path / "skills" / "deploy-watch"
+        symlink = tmp_path / "skills" / "slice-spec"
         symlink.symlink_to(skill)
         monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
 
-        assert LocalSkillLibrary().checkout("deploy-watch") == repo
+        assert LocalSkillLibrary().checkout("slice-spec") == repo
 
     def test_a_skill_not_installed_has_no_checkout(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         (tmp_path / "skills").mkdir()
         monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
 
-        assert LocalSkillLibrary().checkout("deploy-watch") is None
+        assert LocalSkillLibrary().checkout("slice-spec") is None

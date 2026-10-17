@@ -2419,7 +2419,6 @@ class TestTheCommandThatChecksReadiness:
     def toolbox(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv(ClaudeConfig.VARIABLE, str(tmp_path))
         (tmp_path / "skills" / "slice-spec").mkdir(parents=True)
-        (tmp_path / "skills" / "deploy-watch").mkdir(parents=True)
         scripts = tmp_path / "skills" / "slice-runner" / "scripts"
         scripts.mkdir(parents=True)
         (scripts / "discover_conventions.py").write_text("x", encoding="utf-8")
@@ -2493,7 +2492,6 @@ class TestTheCommandThatChecksReadiness:
             "gh",
             "claude",
             "skill slice-spec",
-            "skill deploy-watch",
             "plugin superpowers",
             "helper discover_conventions.py",
             "helper discover_controles.py",

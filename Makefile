@@ -9,21 +9,20 @@
 # El entregable son dos mitades que se instalan distinto: el programa es una rueda de
 # Python y las skills son ficheros que Claude Code lee de su directorio de configuracion.
 # `install` monta las dos, porque instalar solo una deja un entorno que parece listo y no
-# lo esta: sin `slice-spec` no hay issue que conducir, y sin `deploy-watch` la llamada que
-# el programa encadena al mergear se gasta sin hacer nada.
+# lo esta: sin `slice-spec` no hay issue que conducir.
 #
 # El destino sale de `CLAUDE_CONFIG_DIR` si esta puesto, igual que lo resuelve el programa
 # (`src/slice_runner/infrastructure/claude_config.py`): si este target asumiera `~/.claude`,
 # mentiria en cuanto alguien mueva la configuracion.
 CLAUDE_HOME ?= $(if $(CLAUDE_CONFIG_DIR),$(CLAUDE_CONFIG_DIR),$(HOME)/.claude)
 
-# Tres directorios, y el tercero **no es una skill**: `skills/slice-runner/` ya no tiene `SKILL.md`
+# Dos directorios, y el segundo **no es una skill**: `skills/slice-runner/` ya no tiene `SKILL.md`
 # -la skill que vivia ahi se retiro a `agentic-skills-legacy`- y solo conserva `scripts/`. Se enlaza
 # igualmente porque `slice-spec` invoca desde ahi sus dos helpers de descubrimiento por ruta absoluta
 # (`~/.claude/skills/slice-runner/scripts/discover_conventions.py` y `discover_controles.py`), asi que
 # sin este enlace el paso 3 de `slice-spec` no encuentra con que descubrir las convenciones ni los
 # controles. Un directorio sin `SKILL.md` no carga ninguna skill, asi que enlazarlo no activa nada.
-LINKED := slice-spec deploy-watch slice-runner
+LINKED := slice-spec slice-runner
 
 # Las dos mitades son targets propios porque solo una se puede medir: `install-skills` corre
 # en un `CLAUDE_HOME` de usar y tirar (`make install-skills CLAUDE_HOME=<ruta>`) y lo cubre
