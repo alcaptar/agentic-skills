@@ -620,7 +620,8 @@ un run anterior no se reutiliza ni se pisa: la invocacion siguiente cierra en
    es un documento que se lea de un tiron, asi que lo que se revisa es lo que imprimes: el cuerpo del
    padre entero y, slice a slice, su titulo, su etiqueta y su cuerpo. Es una accion visible en el repo
    de alguien y no se deshace facil, asi que **no crees nada hasta que la persona lo confirme**; si
-   pide cambios, corriges y vuelves a mostrarlo.
+   pide cambios, corriges y vuelves a mostrarlo. Si el padre declara `## Diseno`, cada `### <nombre>`
+   lleva solo la variante elegida: las descartadas se quedan en el artefacto y no viajan al padre.
 
    Con la confirmacion dada, y en este orden:
 

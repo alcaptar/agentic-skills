@@ -1626,3 +1626,28 @@ class TestSliceSpecDesignDecidedInRounds:
 
         assert "Un criterio puede fijar donde vive una pieza" not in skill
         assert re.search(r"donde vive una pieza es una decision", skill, re.IGNORECASE)
+
+    def test_the_design_reference_has_a_visual_branch_that_names_the_section_the_chosen_variant_is_copied_to(
+        self,
+    ) -> None:
+        reference = _read(self._REFERENCES / "diseno.md")
+        branches = reference.split("## Ramas que siempre se visitan")[1].split("## Cuando se acaba")[0]
+        visual = self._flat(branches[branches.index("visual") :])
+
+        assert _DESIGN_HEADING in visual, f"the visual branch of the design reference does not name {_DESIGN_HEADING}"
+        assert re.search(r"variantes", visual)
+        assert re.search(r"solo la (variante )?elegida", visual)
+        assert "### <nombre>" in visual
+        assert "<summary>" in visual
+
+    def test_the_visual_branch_looks_for_the_palette_of_the_target_repo_before_the_first_mockup(self) -> None:
+        reference = _read(self._REFERENCES / "diseno.md")
+        branches = reference.split("## Ramas que siempre se visitan")[1].split("## Cuando se acaba")[0]
+        visual = self._flat(branches[branches.index("visual") :])
+
+        assert re.search(r"paleta del repo destino.{0,200}antes de la primera maqueta", visual, re.IGNORECASE)
+
+    def test_the_step_that_creates_the_spec_says_each_design_section_carries_only_the_chosen_variant(self) -> None:
+        step = self._flat(self._step(_read(_SPEC), "5. **Muestra"))
+
+        assert re.search(r"cada `### <nombre>` lleva solo la variante elegida", step)
