@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
 from slice_runner.infrastructure.slice_pull_request import SlicePullRequest
 from slice_runner.tests.mothers.sub_issue_mother import SubIssueMother
 from slice_runner.tests.mothers.verdict_mother import FindingMother
@@ -63,7 +65,12 @@ class TestSlicePullRequest:
     def test_a_signal_the_subissue_declared_never_reaches_the_body_because_nothing_checks_it_after_the_deploy(
         self,
     ) -> None:
-        body = SlicePullRequest().body(SubIssueMother.declaring_a_signal(), debt=(), findings=(), deviations=())
+        body = SlicePullRequest().body(
+            replace(SubIssueMother.pending(), signal="tasa de error 5xx de shop-web en produccion"),
+            debt=(),
+            findings=(),
+            deviations=(),
+        )
 
         assert "## Senal a comprobar tras el despliegue" not in body
         assert "tasa de error 5xx de shop-web en produccion" not in body
