@@ -18,7 +18,6 @@ impl DetailView {
     const KEYS: &'static str = " esc volver · ctrl+q claude";
     const SHOWN_ACTIVITY: usize = 5;
     const KEPT_HISTORY: usize = 3;
-    const SENTENCE_WIDTH: usize = 54;
     const PHASES: [(Step, &'static str); 7] = [
         (Step::MountWorktree, "mnt"),
         (Step::Implement, "imp"),
@@ -34,9 +33,10 @@ impl DetailView {
     pub fn render(frame: &mut Frame, area: Rect, row: &SliceRow, now: u64) {
         let block = Block::bordered().title(format!(" {} {} ", row.subject().number(), row.label()));
         let inner = block.inner(area);
+        let width = usize::from(inner.width);
         let room = usize::from(inner.height.saturating_sub(1));
-        let bottom = Self::bottom_of(row);
-        let history = Self::history_of(row, now);
+        let bottom = Self::bottom_of(row, width);
+        let history = Self::history_of(row, now, width);
         let head = Self::head_of(row, now);
         let space = room.saturating_sub(head.len() + bottom.len() + 1);
         let activity = Self::activity_fitting(row, now, space, history.len());
@@ -57,7 +57,7 @@ impl DetailView {
     fn head_of(row: &SliceRow, now: u64) -> Vec<Line<'static>> {
         vec![
             Self::headline_of(row, now),
-            Self::spend_of(row),
+            Self::times_of(row, now),
             Line::default(),
             Line::from(Self::phases_of(row)),
             Line::from(Self::counters_of(row, &Self::FIRST_COUNTERS)),
@@ -84,58 +84,56 @@ impl DetailView {
     fn headline_of(row: &SliceRow, now: u64) -> Line<'static> {
         let latest = row.latest();
         let closure = latest.closure();
-        let mut spans = vec![Span::raw(" "), SliceGlyph::of(row, now), Span::raw(" ")];
-        if closure == Closure::Pending {
-            spans.push(Span::raw(closure.label()));
-            return Line::from(spans);
-        }
-        spans.push(Span::raw(closure.label()));
+        let mut spans = vec![
+            Span::raw(" "),
+            SliceGlyph::of(row, now),
+            Span::raw(" "),
+            Span::raw(closure.label()),
+        ];
         if row.process_is_gone() {
             spans.push(Span::raw(" · "));
             spans.push(Span::styled("proceso muerto", SliceGlyph::alarm()));
         }
-        if let Some(step) = latest.step() {
+        if let (Some(step), false) = (latest.step(), closure == Closure::Merged) {
             spans.push(Span::raw(format!(" · {}", step.name())));
         }
-        let first = row
-            .transitions()
-            .first()
-            .map_or(latest.at(), |transition| transition.at());
-        let end = if closure.is_settled() { latest.at() } else { now };
-        spans.push(Span::raw(format!(
-            " · hace {} · {} en total",
-            Elapsed::between(latest.at(), now),
-            Elapsed::between(first, end)
-        )));
 
         Line::from(spans)
     }
 
-    fn spend_of(row: &SliceRow) -> Line<'static> {
-        let spend = row.latest().spend();
-        let pull_request = row.pull_request().map_or_else(
-            || "sin pull request".to_string(),
-            |number| format!("pull request #{number}"),
-        );
-        let amount = format!(" ${:.2} de ${:.0}", spend.cost_usd(), spend.budget_usd());
-        let amount = if spend.nears_the_budget() {
+    fn times_of(row: &SliceRow, now: u64) -> Line<'static> {
+        let latest = row.latest();
+        let transitions = row.transitions();
+        let mut parts = vec![Span::raw(format!(" hace {}", Elapsed::between(latest.at(), now)))];
+        if let (Some(first), true) = (transitions.first(), transitions.len() > 1) {
+            let end = if latest.closure().is_settled() {
+                latest.at()
+            } else {
+                now
+            };
+            parts.push(Span::raw(format!(" · {} en total", Elapsed::between(first.at(), end))));
+        }
+        let spend = latest.spend();
+        let amount = format!(" · ${:.2} de ${:.0}", spend.cost_usd(), spend.budget_usd());
+        parts.push(if spend.nears_the_budget() {
             Span::styled(amount, SliceGlyph::warning())
         } else {
             Span::raw(amount)
-        };
+        });
+        if let Some(number) = row.pull_request() {
+            parts.push(Span::raw(format!(" · pull request #{number}")));
+        }
 
-        Line::from(vec![amount, Span::raw(format!(" · {pull_request}"))])
+        Line::from(parts)
     }
 
     fn phases_of(row: &SliceRow) -> String {
         let latest = row.latest();
-        let reached_later = row
-            .transitions()
-            .iter()
-            .any(|transition| transition.step().is_some_and(|step| step != Step::MountWorktree));
+        let current = Self::PHASES.iter().position(|(step, _)| latest.step() == Some(*step));
         let phases: Vec<String> = Self::PHASES
             .iter()
-            .map(|(step, abbreviation)| {
+            .enumerate()
+            .map(|(index, (step, abbreviation))| {
                 let visits = row
                     .transitions()
                     .iter()
@@ -143,9 +141,9 @@ impl DetailView {
                         transition.step() == Some(*step) && transition.closure() == Closure::InProgress
                     })
                     .count();
-                let mark = if latest.step() == Some(*step) {
+                let mark = if current == Some(index) {
                     Self::current_mark(latest.closure())
-                } else if visits > 0 || (*step == Step::MountWorktree && reached_later) {
+                } else if visits > 0 || current.is_some_and(|current| index < current) {
                     "■"
                 } else {
                     "·"
@@ -205,60 +203,91 @@ impl DetailView {
             Actor::Judge => " QUÉ HACE EL JUEZ AHORA",
             Actor::Controls => " QUÉ HACEN LOS CONTROLES AHORA",
         };
-        let mut lines = vec![Line::from(heading)];
         let start = activity.len().saturating_sub(shown);
-        lines.extend(activity[start..].iter().map(|line| {
-            Line::from(format!(
-                " hace {:<4} {:<5} {}",
-                Elapsed::between(line.at(), now).to_string(),
-                line.tool(),
-                line.target()
-            ))
-        }));
+        let ages: Vec<String> = activity[start..]
+            .iter()
+            .map(|line| Elapsed::between(line.at(), now).to_string())
+            .collect();
+        let age_width = ages.iter().map(|age| age.chars().count()).max().unwrap_or(0);
+        let mut lines = vec![Line::from(heading)];
+        lines.extend(
+            activity[start..].iter().zip(ages).map(|(line, age)| {
+                Line::from(format!(" hace {age:<age_width$}  {:<5} {}", line.tool(), line.target()))
+            }),
+        );
 
         lines
     }
 
-    fn history_of(row: &SliceRow, now: u64) -> Vec<Line<'static>> {
+    fn history_of(row: &SliceRow, now: u64, width: usize) -> Vec<Line<'static>> {
         let transitions = row.transitions();
         let running = row.is_running() && !row.process_is_gone();
+        let ages: Vec<String> = transitions
+            .iter()
+            .map(|transition| Elapsed::between(transition.at(), now).to_string())
+            .collect();
+        let durations: Vec<String> = transitions
+            .iter()
+            .zip(transitions.iter().skip(1))
+            .map(|(transition, later)| Elapsed::between(transition.at(), later.at()).to_string())
+            .collect();
+        let age_width = ages.iter().map(|age| age.chars().count()).max().unwrap_or(0);
+        let duration_width = durations
+            .iter()
+            .map(|duration| duration.chars().count())
+            .max()
+            .unwrap_or(0);
+        let lead = " hace ".chars().count() + age_width + 2;
+        let sentence_width = width.saturating_sub(lead + duration_width + 2);
+
         transitions
             .iter()
             .enumerate()
             .map(|(index, transition)| {
                 let earlier = index.checked_sub(1).and_then(|before| transitions.get(before)).copied();
-                let later = transitions.get(index + 1);
                 let mut sentence = Narration::of(transition, earlier);
-                if later.is_none() && running {
+                let duration = durations.get(index);
+                if duration.is_none() && running {
                     sentence = format!("{} {sentence}", SliceGlyph::spinner(now));
                 }
-                let duration = later.map_or_else(String::new, |later| {
-                    Elapsed::between(transition.at(), later.at()).to_string()
-                });
-                let age = Elapsed::between(transition.at(), now).to_string();
-                if duration.is_empty() {
-                    return Line::from(format!(" hace {age:<4} {sentence}"));
+                let age = &ages[index];
+                match duration {
+                    Some(duration) => Line::from(format!(
+                        " hace {age:<age_width$}  {:<sentence_width$} {duration:>duration_width$}",
+                        Self::fitted(&sentence, sentence_width)
+                    )),
+                    None => Line::from(format!(
+                        " hace {age:<age_width$}  {}",
+                        Self::fitted(&sentence, width.saturating_sub(lead))
+                    )),
                 }
-
-                Line::from(format!(
-                    " hace {age:<4} {sentence:<width$} {duration}",
-                    width = Self::SENTENCE_WIDTH
-                ))
             })
             .collect()
     }
 
-    fn bottom_of(row: &SliceRow) -> Vec<Line<'static>> {
+    fn fitted(text: &str, width: usize) -> String {
+        if text.chars().count() <= width {
+            return text.to_string();
+        }
+        let kept: String = text.chars().take(width.saturating_sub(1)).collect();
+
+        format!("{kept}…")
+    }
+
+    fn bottom_of(row: &SliceRow, width: usize) -> Vec<Line<'static>> {
         match row.latest().closure() {
-            Closure::Blocked(_) | Closure::Aborted(_) => vec![
-                Line::default(),
-                Line::from(" Para reabrirla:"),
-                Line::from(format!(
-                    " slice-runner retry {} --repo {} \"<instrucción>\"",
-                    row.subject().issue(),
-                    row.repo()
-                )),
-            ],
+            Closure::Blocked(_) | Closure::Aborted(_) => {
+                let command = format!(" slice-runner retry {} --repo {}", row.subject().issue(), row.repo());
+                let instruction = " \"<instrucción>\"";
+                let mut lines = vec![Line::default(), Line::from(" Para reabrirla:")];
+                if command.chars().count() + instruction.chars().count() <= width {
+                    lines.push(Line::from(format!("{command}{instruction}")));
+                } else {
+                    lines.push(Line::from(command));
+                    lines.push(Line::from(format!("  {instruction}")));
+                }
+                lines
+            }
             Closure::Pending | Closure::InProgress | Closure::AwaitingMerge | Closure::Merged => Vec::new(),
         }
     }

@@ -8,8 +8,8 @@ use crate::domain::slice_row::SliceRow;
 pub struct SliceGlyph;
 
 impl SliceGlyph {
-    const SPINNER: [&'static str; 10] = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
-    const SPINNER_FRAME_MILLIS: u64 = 100;
+    const SPINNER: [&'static str; 4] = ["◐", "◓", "◑", "◒"];
+    const SPINNER_FRAME_MILLIS: u64 = 150;
     pub const GONE: &'static str = "●";
 
     pub fn of(row: &SliceRow, now: u64) -> Span<'static> {

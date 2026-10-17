@@ -769,7 +769,7 @@ class Cli:
         cursors = ActivityCursors()
         try:
             followed = query.execute(FollowEventsParams(cursor=EventCursor.start(), repo=repo))
-            self._printed(followed.snapshot, as_json=as_json)
+            self._printed(followed.changes if as_json else followed.snapshot, as_json=as_json)
             cursors = self._printed_activity(live, followed.snapshot, cursors)
             while not once:
                 clock.sleep(seconds=self._budgets.seconds_between_follow_reads)

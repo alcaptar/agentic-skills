@@ -3116,6 +3116,17 @@ class TestTheCommandThatFollowsTheEventsAsJson(WithTheDurableStoresOutOfTheRealH
         clock.sleep.assert_not_called()
         assert len(reader.cursors) == 1
 
+    def test_the_first_read_as_json_prints_every_transition_of_a_slice_so_its_history_can_be_told(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        reader = ScriptedEventReader(
+            EventBatch(events=(EventMother.advancing(), EventMother.closed()), cursor=EventCursor(offset=20))
+        )
+
+        self._cli().follow(repo=None, once=True, as_json=True, reader=reader, clock=self._clock_interrupted_after(1))
+
+        assert self._printed(capsys) == [self._ADVANCING, self._MERGED]
+
     def test_a_row_written_before_the_feature_was_recorded_prints_without_the_parent_and_the_name(
         self, capsys: pytest.CaptureFixture[str]
     ) -> None:

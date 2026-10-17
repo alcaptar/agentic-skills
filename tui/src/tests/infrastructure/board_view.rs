@@ -24,7 +24,16 @@ impl Screen {
     }
 
     pub fn painted(watched: &WatchedBoard, selected: Option<&SliceKey>, detail: Option<&SliceDetail>) -> Buffer {
-        let mut terminal = Terminal::new(TestBackend::new(Self::WIDTH, Self::HEIGHT)).unwrap();
+        Self::painted_at(Self::WIDTH, watched, selected, detail)
+    }
+
+    pub fn painted_at(
+        width: u16,
+        watched: &WatchedBoard,
+        selected: Option<&SliceKey>,
+        detail: Option<&SliceDetail>,
+    ) -> Buffer {
+        let mut terminal = Terminal::new(TestBackend::new(width, Self::HEIGHT)).unwrap();
         terminal
             .draw(|frame| BoardView::render(frame, frame.area(), watched, selected, detail, ScreenMother::NOW))
             .unwrap();
@@ -82,7 +91,7 @@ mod the_tray {
 
         assert_eq!(Screen::color_of(&buffer, "◆"), vec![Color::Yellow]);
         assert_eq!(Screen::color_of(&buffer, "✕"), vec![Color::Red]);
-        assert_eq!(Screen::color_of(&buffer, "⠋"), vec![Color::Cyan, Color::Cyan]);
+        assert_eq!(Screen::color_of(&buffer, "◐"), vec![Color::Cyan, Color::Cyan]);
         assert_eq!(Screen::color_of(&buffer, "○"), vec![Color::DarkGray]);
         assert_eq!(Screen::color_of(&buffer, "✓"), vec![Color::Green]);
         assert_eq!(Screen::color_of(&buffer, "$42/50"), vec![Color::Yellow]);
@@ -199,5 +208,39 @@ mod the_tray_with_several_features {
 
         assert!(screen.contains("unsupported follow line version 3"), "{screen}");
         assert!(screen.contains("enter detalle"), "{screen}");
+    }
+}
+
+mod the_tray_at_the_width_of_half_a_laptop_screen {
+    use crate::application::queries::read_slice_detail::ReadSliceDetail;
+    use crate::tests::application::watching::Watching;
+    use crate::tests::doubles::FixedProbe;
+    use crate::tests::infrastructure::board_view::Screen;
+    use crate::tests::mothers::screen_mother::ScreenMother;
+
+    const NARROW: u16 = 58;
+
+    #[test]
+    fn keeps_every_summary_whole_by_shortening_the_names() {
+        let watched = Watching::entries(ScreenMother::feature(), FixedProbe::everyone_alive());
+
+        let screen = Screen::lines(&Screen::painted_at(NARROW, &watched, Some(&ScreenMother::key(1)), None));
+
+        assert_eq!(screen, include_str!("../screens/bandeja-58.txt"));
+    }
+
+    #[test]
+    fn breaks_the_command_to_reopen_and_keeps_each_duration_on_its_line() {
+        let watched = Watching::entries(ScreenMother::feature(), FixedProbe::everyone_alive());
+        let detail = ReadSliceDetail::execute(ScreenMother::key(4));
+
+        let screen = Screen::lines(&Screen::painted_at(
+            NARROW,
+            &watched,
+            Some(&ScreenMother::key(4)),
+            Some(&detail),
+        ));
+
+        assert_eq!(screen, include_str!("../screens/detalle-bloqueada-58.txt"));
     }
 }
