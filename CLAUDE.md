@@ -130,7 +130,7 @@ Estos no son convenciones de codigo: son las invariantes del pipeline, y valen e
   **controles**, no "puertas" -era un calco de *gate*-. Y nadie que juzgue ve output de build: con `--out`,
   la salida de un control fallido va a disco y el orquestador solo reenvia la ruta.
 - **La observabilidad es parte de la slice**: cada slice que cambia comportamiento en prod declara su
-  linea `SENAL:` (como se comprueba viva; la consume `deploy-watch`), y las exentas lo declaran con
+  linea `SENAL:` (como se comprueba viva; la comprueba quien despliega), y las exentas lo declaran con
   motivo. La emision de una senal nueva es un criterio de aceptacion mas (test de emision, pre-merge);
   el valor vivo se comprueba post-deploy. Alertas y paneles son **slices propias**, en su repo (`REPO:`)
   y **detras** de la slice que emite la serie. El cerebro esta en

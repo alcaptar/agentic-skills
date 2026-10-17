@@ -20,11 +20,11 @@ la usas para confirmar el cambio vivo.
 | | assert | quien lo verifica | cuando |
 |---|---|---|---|
 | **Emision** | el codigo emite la metrica/log/span con sus labels | test + `slice-verifier` | pre-merge |
-| **Valor vivo** | el contador sube / el error no aparece tras el deploy | `deploy-watch` | post-deploy |
+| **Valor vivo** | el contador sube / el error no aparece tras el deploy | quien despliega | post-deploy |
 
 La emision es un **criterio de aceptacion normal** y falsable (borra la instrumentacion y el test
-cae). El valor vivo **no es testeable**: por eso vive en su propia linea `SENAL:`, que consume
-`deploy-watch`.
+cae). El valor vivo **no es testeable**: por eso vive en su propia linea `SENAL:`, que declara
+como se comprueba y que comprueba quien despliega.
 
 ## Cuando procede (y cuando no)
 
@@ -166,9 +166,9 @@ Criterios de aceptacion tipicos de una slice de alerta: el test `promtool` que d
 esperada, el que **no** dispara por debajo del umbral, labels obligatorias presentes y `for:`
 no-cero.
 
-`SENAL` tipica: `prometheus ALERTS{alertname="X"} presente y == 0 en 24h; advisory` — es decir, la
+`SENAL` tipica: `prometheus ALERTS{alertname="X"} presente y == 0 en 24h` — es decir, la
 regla **cargo** y **no genera falsos positivos**. Es advisory a proposito: una alerta recien puesta que
-dispara no tumba el deploy, te dice que el umbral esta mal calibrado.
+dispara no es una regresion, te dice que el umbral esta mal calibrado.
 
 ### Paneles: `mercadona/mo.sre.grafana-configs`
 
@@ -191,7 +191,7 @@ No se puede alertar ni pintar una serie que nadie emite. No es preferencia, es d
 
 ```
 slice-N    emite la senal (repo de app)        SENAL: la serie aparece con sus labels
-    | deploy + deploy-watch confirma la serie viva
+    | deploy + quien despliega confirma la serie viva
 slice-N+1  alerta (gke, carpeta del equipo)    SENAL: ALERTS{alertname="X"} presente y == 0
 slice-N+2  panel (grafana-configs)             SENAL: exenta - render manual
 ```
@@ -202,15 +202,15 @@ posponer sin perder el core.
 
 ## Como se escribe la linea `SENAL:`
 
-Texto libre **estructurado**, no un DSL. `deploy-watch` habla en terminos de negocio y su colector
-construye la query concreta, asi que basta con ser inequivoco:
+Texto libre **estructurado**, no un DSL. Quien despliega construye la query concreta, asi que basta
+con ser inequivoco:
 
-    SENAL: <fuente> <expresion o serie> ; <assert vivo con su ventana> ; critical|advisory
+    SENAL: <fuente> <expresion o serie> ; <assert vivo con su ventana>
 
 ```
-SENAL: prometheus rate(application_stock_ajustado_total{motivo="rotura"}[5m]) > 0 en 10m post-deploy; critical
-SENAL: elasticsearch logs con ajuste_rechazado y campo motivo presentes tras el primer rechazo; advisory
-SENAL: prometheus ALERTS{alertname="ShopAjusteStockFallido"} presente y == 0 en 24h; advisory
+SENAL: prometheus rate(application_stock_ajustado_total{motivo="rotura"}[5m]) > 0 en 10m post-deploy
+SENAL: elasticsearch logs con ajuste_rechazado y campo motivo presentes tras el primer rechazo
+SENAL: prometheus ALERTS{alertname="ShopAjusteStockFallido"} presente y == 0 en 24h
 SENAL: exenta - refactor puro, ningun comportamiento cambia
 ```
 
@@ -221,10 +221,6 @@ SENAL: se monitoriza con Grafana                 <- no nombra serie, ventana ni 
 SENAL: la latencia no empeora                    <- ¿que percentil, medido donde, contra que baseline?
 SENAL: revisar que funcione                       <- prosa
 ```
-
-`critical` frena el `go` de `deploy-watch` si el breach persiste; `advisory` informa. Por defecto,
-**advisory**: marca `critical` solo lo que el usuario siente (errores, indisponibilidad), igual que en
-`monitoring.md`.
 
 ## Anti-patterns
 
@@ -237,8 +233,8 @@ SENAL: revisar que funcione                       <- prosa
   emision, no la senal viva).
 - **Dejar la telemetria para "la slice de observabilidad" del final**: es la aplazable que nunca llega,
   y es justo lo que este doc corrige de la heuristica 9.
-- **`SENAL` ausente sin declarar exencion**: pasa desapercibida y degrada el veredicto del deploy al
-  generico, sin que nadie lo haya decidido.
+- **`SENAL` ausente sin declarar exencion**: pasa desapercibida y quien despliega no sabe que
+  mirar, sin que nadie lo haya decidido.
 - **Metrica de alta cardinalidad** (ids de pedido, emails, uuid como label): revienta Prometheus. Eso
   va al log estructurado o al span, no a un label.
 

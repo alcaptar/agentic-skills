@@ -253,7 +253,7 @@ Como llega una slice vertical a prod siendo reversible y desplegable sola sin ro
   blast radius, no una ley fisica; un repo puede afinarlo. Si una slice lo supera, trocearla.
 - **Verificacion post-deploy:** cada slice que llega a prod define **como se comprueba su
   comportamiento vivo** — evidencia observable, ejecutable, con su assert y su via de rollback. Eso
-  es exactamente la linea `SENAL:` del contrato de la spec, y quien la consume es `deploy-watch`. La
+  es exactamente la linea `SENAL:` del contrato de la spec, y quien despliega es quien la comprueba. La
   **forma** depende del repo: un servicio HTTP mirara errores/latencia en el edge; una lib o CLI, una
   invocacion + salida esperada; un job, un efecto observable. No hardcodees el mecanismo HTTP como si
   fuera universal.
@@ -277,8 +277,8 @@ Como llega una slice vertical a prod siendo reversible y desplegable sola sin ro
 - PRs que dependen de un orden concreto de merge para no romper produccion.
 - Nombrar slices por capa tecnica cuando el corte vertical SI cabia en el budget (el horizontal es
   para cuando el vertical no entra, no por defecto).
-- Slices que cambian comportamiento en prod **sin senal declarada** (ni exencion escrita): el deploy se
-  valida entonces con el veredicto generico y nadie lo decidio.
+- Slices que cambian comportamiento en prod **sin senal declarada** (ni exencion escrita): quien
+  despliega no sabe que mirar y nadie lo decidio.
 - Meter la alerta o el panel **en la misma PR** que la metrica que consumen.
 - Dejar el caso mas arriesgado para el final.
 - Slices con "y"/"o" en el titulo que esconden varias features.

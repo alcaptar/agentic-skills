@@ -8,7 +8,6 @@ _CRITERIA = (
     "stagea exactamente las rutas declaradas por el implementador",
     "nunca commitea en master ni en main",
 )
-_SIGNAL = "exenta - este repo no despliega"
 
 
 class TestPullRequestBody:
@@ -20,17 +19,16 @@ class TestPullRequestBody:
             debt=("el cableado del subcomando queda para la slice-09",),
             findings=(),
             deviations=(),
-            signal=_SIGNAL,
             subissue=46,
         )
 
     @staticmethod
     def _without_debt() -> PullRequestBody:
         return PullRequestBody(
-            intention=_INTENTION, criteria=_CRITERIA, debt=(), findings=(), deviations=(), signal=_SIGNAL, subissue=46
+            intention=_INTENTION, criteria=_CRITERIA, debt=(), findings=(), deviations=(), subissue=46
         )
 
-    def test_the_body_a_person_reads_carries_the_why_the_criteria_the_debt_and_the_signal(self) -> None:
+    def test_the_body_a_person_reads_carries_the_why_the_criteria_and_the_debt(self) -> None:
         assert self._with_debt().rendered() == (
             "## Intencion\n"
             "sin esto el programa verifica y no entrega, asi que ningun run puede terminar\n"
@@ -41,9 +39,6 @@ class TestPullRequestBody:
             "\n"
             "## Deuda aceptada\n"
             "- el cableado del subcomando queda para la slice-09\n"
-            "\n"
-            "## Senal a comprobar tras el despliegue\n"
-            "exenta - este repo no despliega\n"
             "\n"
             "Closes #46"
         )
@@ -56,9 +51,6 @@ class TestPullRequestBody:
             "## Criterios de aceptacion cumplidos\n"
             "- stagea exactamente las rutas declaradas por el implementador\n"
             "- nunca commitea en master ni en main\n"
-            "\n"
-            "## Senal a comprobar tras el despliegue\n"
-            "exenta - este repo no despliega\n"
             "\n"
             "Closes #46"
         )
@@ -77,7 +69,6 @@ class TestPullRequestBody:
             debt=(),
             findings=(accepted,),
             deviations=(),
-            signal=_SIGNAL,
             subissue=46,
         ).rendered()
 
@@ -93,7 +84,6 @@ class TestPullRequestBody:
             debt=("el cableado del subcomando queda para la slice-09",),
             findings=(accepted,),
             deviations=(),
-            signal=_SIGNAL,
             subissue=46,
         ).rendered()
 
@@ -104,7 +94,7 @@ class TestPullRequestBody:
             "Hallazgos que el juez dejo pasar sin corregir:\n"
             f"- {accepted.severity}: {accepted.rule} - {accepted.detail} ({accepted.path})\n"
             "\n"
-            "## Senal a comprobar tras el despliegue"
+            "Closes #46"
         ) in body
 
     def test_a_finding_the_judge_approved_without_correcting_opens_the_debt_section_even_with_nothing_left_out(
@@ -117,7 +107,6 @@ class TestPullRequestBody:
             debt=(),
             findings=(accepted,),
             deviations=(),
-            signal=_SIGNAL,
             subissue=46,
         ).rendered()
 
@@ -131,11 +120,10 @@ class TestPullRequestBody:
             debt=debt,
             findings=(),
             deviations=deviations,
-            signal=_SIGNAL,
             subissue=46,
         )
 
-    def test_two_declared_deviations_fill_their_own_section_one_bullet_each_before_the_signal(self) -> None:
+    def test_two_declared_deviations_fill_their_own_section_one_bullet_each(self) -> None:
         body = self._with_deviations(
             (
                 "el puerto no admite la firma decidida porque ya la consume otro adaptador",
@@ -148,7 +136,7 @@ class TestPullRequestBody:
             "- el puerto no admite la firma decidida porque ya la consume otro adaptador\n"
             "- la excepcion hereda de OSError y no de ValueError porque el subproceso la lanza\n"
             "\n"
-            "## Senal a comprobar tras el despliegue"
+            "Closes #46"
         ) in body
 
     def test_the_deviations_section_comes_after_the_accepted_debt_section(self) -> None:
