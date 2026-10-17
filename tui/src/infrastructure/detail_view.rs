@@ -36,16 +36,16 @@ impl DetailView {
         let width = usize::from(inner.width);
         let room = usize::from(inner.height.saturating_sub(1));
         let bottom = Self::bottom_of(row, width);
-        let history = Self::history_of(row, now, width);
+        let told = row.transitions().len();
         let head = Self::head_of(row, now);
         let space = room.saturating_sub(head.len() + bottom.len() + 1);
-        let activity = Self::activity_fitting(row, now, space, history.len());
+        let activity = Self::activity_fitting(row, now, space, told);
         let space = space.saturating_sub(activity.len());
-        let skipped = history.len().saturating_sub(space);
+        let skipped = told.saturating_sub(space);
         let mut lines = head;
         lines.extend(activity);
         lines.push(Line::from(" HISTORIA"));
-        lines.extend(history.into_iter().skip(skipped));
+        lines.extend(Self::history_of(row, now, width, skipped));
         lines.extend(bottom);
         frame.render_widget(Paragraph::new(lines).block(block), area);
         if inner.height > 0 {
@@ -129,7 +129,18 @@ impl DetailView {
 
     fn phases_of(row: &SliceRow) -> String {
         let latest = row.latest();
-        let current = Self::PHASES.iter().position(|(step, _)| latest.step() == Some(*step));
+        let shown_step = latest.step().map(|step| match step {
+            Step::CatchUp => Step::AwaitCi,
+            Step::MountWorktree
+            | Step::Understand
+            | Step::Implement
+            | Step::RunControls
+            | Step::Verify
+            | Step::OpenPullRequest
+            | Step::AwaitCi
+            | Step::AwaitMerge => step,
+        });
+        let current = Self::PHASES.iter().position(|(step, _)| shown_step == Some(*step));
         let phases: Vec<String> = Self::PHASES
             .iter()
             .enumerate()
@@ -219,38 +230,42 @@ impl DetailView {
         lines
     }
 
-    fn history_of(row: &SliceRow, now: u64, width: usize) -> Vec<Line<'static>> {
+    fn history_of(row: &SliceRow, now: u64, width: usize, skipped: usize) -> Vec<Line<'static>> {
         let transitions = row.transitions();
         let running = row.is_running() && !row.process_is_gone();
-        let ages: Vec<String> = transitions
+        let shown: Vec<usize> = (skipped..transitions.len()).collect();
+        let ages: Vec<String> = shown
             .iter()
-            .map(|transition| Elapsed::between(transition.at(), now).to_string())
+            .map(|index| Elapsed::between(transitions[*index].at(), now).to_string())
             .collect();
-        let durations: Vec<String> = transitions
+        let durations: Vec<Option<String>> = shown
             .iter()
-            .zip(transitions.iter().skip(1))
-            .map(|(transition, later)| Elapsed::between(transition.at(), later.at()).to_string())
+            .map(|index| {
+                transitions
+                    .get(index + 1)
+                    .map(|later| Elapsed::between(transitions[*index].at(), later.at()).to_string())
+            })
             .collect();
         let age_width = ages.iter().map(|age| age.chars().count()).max().unwrap_or(0);
         let duration_width = durations
             .iter()
+            .flatten()
             .map(|duration| duration.chars().count())
             .max()
             .unwrap_or(0);
         let lead = " hace ".chars().count() + age_width + 2;
         let sentence_width = width.saturating_sub(lead + duration_width + 2);
 
-        transitions
+        shown
             .iter()
-            .enumerate()
-            .map(|(index, transition)| {
+            .zip(ages.iter().zip(durations.iter()))
+            .map(|(index, (age, duration))| {
+                let transition = transitions[*index];
                 let earlier = index.checked_sub(1).and_then(|before| transitions.get(before)).copied();
                 let mut sentence = Narration::of(transition, earlier);
-                let duration = durations.get(index);
                 if duration.is_none() && running {
                     sentence = format!("{} {sentence}", SliceGlyph::spinner(now));
                 }
-                let age = &ages[index];
                 match duration {
                     Some(duration) => Line::from(format!(
                         " hace {age:<age_width$}  {:<sentence_width$} {duration:>duration_width$}",
@@ -268,6 +283,9 @@ impl DetailView {
     fn fitted(text: &str, width: usize) -> String {
         if text.chars().count() <= width {
             return text.to_string();
+        }
+        if width == 0 {
+            return String::new();
         }
         let kept: String = text.chars().take(width.saturating_sub(1)).collect();
 

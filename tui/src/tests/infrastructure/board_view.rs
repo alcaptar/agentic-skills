@@ -212,7 +212,6 @@ mod the_tray_with_several_features {
 }
 
 mod the_tray_at_the_width_of_half_a_laptop_screen {
-    use crate::application::queries::read_slice_detail::ReadSliceDetail;
     use crate::tests::application::watching::Watching;
     use crate::tests::doubles::FixedProbe;
     use crate::tests::infrastructure::board_view::Screen;
@@ -228,6 +227,16 @@ mod the_tray_at_the_width_of_half_a_laptop_screen {
 
         assert_eq!(screen, include_str!("../screens/bandeja-58.txt"));
     }
+}
+
+mod the_detail_at_the_width_of_half_a_laptop_screen {
+    use crate::application::queries::read_slice_detail::ReadSliceDetail;
+    use crate::tests::application::watching::Watching;
+    use crate::tests::doubles::FixedProbe;
+    use crate::tests::infrastructure::board_view::Screen;
+    use crate::tests::mothers::screen_mother::ScreenMother;
+
+    const NARROW: u16 = 58;
 
     #[test]
     fn breaks_the_command_to_reopen_and_keeps_each_duration_on_its_line() {

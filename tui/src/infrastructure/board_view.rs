@@ -19,7 +19,7 @@ use crate::infrastructure::slice_glyph::SliceGlyph;
 pub struct BoardView;
 
 impl BoardView {
-    const NARROWEST_NAME: usize = 12;
+    const NARROWEST_NAME: usize = 6;
     const KEYS: &'static str = " ↑↓ mover · enter detalle · ctrl+q claude";
     const SEPARATOR: &'static str = " · ";
 
