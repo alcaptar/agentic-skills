@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 
 from slice_runner.domain.control_command import ControlCommand
 from slice_runner.domain.controls import Controls
+from slice_runner.domain.design import Design
 from slice_runner.domain.exceptions import MalformedConventionLineError
 from slice_runner.domain.source import Source, SourceKind
 
@@ -18,6 +19,8 @@ _PRIOR_ART_HEADING = re.compile(r"^\s*##\s+lo\s+que\s+ya\s+existe\s*$", re.IGNOR
 _SOURCES_HEADING = re.compile(r"^\s*##\s+fuentes\s+de\s+convenci[oó]n\s*$", re.IGNORECASE)
 _DECISIONS_HEADING = re.compile(r"^\s*##\s+decisiones\s*$", re.IGNORECASE)
 _DECISION_ITEM = re.compile(r"^\s*-\s*(.+?)\s*$")
+_DESIGN_HEADING = re.compile(r"^\s*##\s+dise[nñ]o\s*$", re.IGNORECASE)
+_FENCE = re.compile(r"^\s*```")
 _CONTROLS_HEADING = re.compile(r"^\s*##\s+controles\s*$", re.IGNORECASE)
 _H2 = re.compile(r"^\s*##\s+")
 _SUBHEADING = re.compile(r"^\s*###\s+(.+?)\s*$")
@@ -32,6 +35,7 @@ class ParsedParentBody:
     decisions: tuple[str, ...]
     sources: tuple[Source, ...]
     controls: Controls
+    designs: tuple[Design, ...]
 
 
 class ParentBody:
@@ -43,6 +47,7 @@ class ParentBody:
             decisions=cls._decisions(body),
             sources=cls._sources(body, repo),
             controls=cls._controls(body, repo),
+            designs=cls._designs(body),
         )
 
     @staticmethod
@@ -65,6 +70,36 @@ class ParentBody:
         items = (_DECISION_ITEM.match(line) for line in cls._section_text(body, _DECISIONS_HEADING).splitlines())
 
         return tuple(item.group(1) for item in items if item)
+
+    @classmethod
+    def _designs(cls, body: str) -> tuple[Design, ...]:
+        designs: list[Design] = []
+        name: str | None = None
+        html: list[str] | None = None
+        fenced = False
+        in_section = False
+        for line in body.splitlines():
+            if not in_section:
+                in_section = bool(_DESIGN_HEADING.match(line))
+                continue
+            if fenced:
+                if _FENCE.match(line):
+                    fenced = False
+                    if name is not None and html is not None:
+                        designs.append(Design(name=name, html="\n".join(html)))
+                        name, html = None, None
+                elif html is not None:
+                    html.append(line)
+                continue
+            if _H2.match(line):
+                break
+            if sub := _SUBHEADING.match(line):
+                name, html = sub.group(1), None
+            elif _FENCE.match(line):
+                fenced = True
+                html = [] if name is not None and html is None else None
+
+        return tuple(designs)
 
     @classmethod
     def _sources(cls, body: str, repo: str | None) -> tuple[Source, ...]:

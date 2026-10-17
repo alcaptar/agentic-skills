@@ -1001,6 +1001,7 @@ class Cli:
             debt=(),
             decisions=(),
             deviations=(),
+            designs=(),
             compares_with_the_last_verification=False,
         )
 

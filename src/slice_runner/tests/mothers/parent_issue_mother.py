@@ -7,6 +7,7 @@ from slice_runner.domain.issue_state import IssueState
 from slice_runner.domain.parent_issue import ParentIssue
 from slice_runner.domain.source import Source, SourceKind
 from slice_runner.tests.mothers.control_command_mother import ControlCommandMother
+from slice_runner.tests.mothers.design_mother import DesignMother
 
 
 class ParentIssueMother:
@@ -72,4 +73,10 @@ class ParentIssueMother:
         return replace(
             ParentIssueMother.with_sources_and_controls(),
             controls=Controls(commands=(), exemption_reason="la integracion continua solo publica en master"),
+        )
+
+    @staticmethod
+    def declaring_two_designs() -> ParentIssue:
+        return replace(
+            ParentIssueMother.with_sources_and_controls(), designs=(DesignMother.board(), DesignMother.detail())
         )

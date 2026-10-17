@@ -7,8 +7,10 @@ from typing import TYPE_CHECKING, ClassVar
 from slice_runner.infrastructure.cited_finding import CitedFinding
 from slice_runner.infrastructure.cited_sources import CitedSources
 from slice_runner.infrastructure.counted_lines import CountedLines
+from slice_runner.infrastructure.design_block import DesignBlock
 from slice_runner.infrastructure.harness_invocation_runner import HarnessInvocation
 from slice_runner.infrastructure.prior_art_block import PriorArtBlock
+from slice_runner.infrastructure.slice_verifier_judge import SliceVerifierJudge
 from slice_runner.infrastructure.verdict_payload import VerdictPayload
 
 if TYPE_CHECKING:
@@ -52,7 +54,14 @@ class JudgeInvocation(HarnessInvocation):
 
     @property
     def text(self) -> str:
-        return "\n".join([self.judge.rubric, "", self._run_data, "", self._diff])
+        return "\n".join([*self._rubric, "", self._run_data, "", self._diff])
+
+    @property
+    def _rubric(self) -> list[str]:
+        if not self.review.designs:
+            return [self.judge.rubric]
+
+        return [self.judge.rubric, SliceVerifierJudge.DESIGN_RUBRIC]
 
     @property
     def _grants_to_read(self) -> list[str]:
@@ -95,6 +104,7 @@ class JudgeInvocation(HarnessInvocation):
                 *CountedLines.of("lo que el implementador declaro dejar fuera", review.debt),
                 *CountedLines.of("decisiones de diseno", review.decisions),
                 *CountedLines.of("decisiones de diseno que el implementador declaro no seguir", review.deviations),
+                *DesignBlock.of(review.designs),
             ]
         )
 

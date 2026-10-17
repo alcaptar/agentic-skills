@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from unittest.mock import Mock, create_autospec
 
 import pytest
@@ -8,6 +9,7 @@ from slice_runner.application.queries.check_sources import CheckSources, CheckSo
 from slice_runner.domain.exceptions import SourcesBudgetExceededError, UnreadableSourceError
 from slice_runner.domain.precheck_outcome import PrecheckOutcome
 from slice_runner.domain.source_reader import SourceReader
+from slice_runner.tests.mothers.design_mother import DesignMother
 from slice_runner.tests.mothers.parent_issue_mother import ParentIssueMother
 
 _WORKTREE = "/repos/agentic-skills/.worktrees/05-prechecks-deterministas"
@@ -59,3 +61,14 @@ class TestCheckSources:
         query.execute(params)
 
         sources.read_all.assert_called_once_with(worktree=_WORKTREE, sources=params.sources)
+
+    def test_the_designs_the_params_carried_travel_to_the_reader_so_they_count_against_the_same_budget(
+        self, query: CheckSources, sources: Mock
+    ) -> None:
+        params = replace(self._params(), designs=(DesignMother.board(),))
+
+        query.execute(params)
+
+        sources.read_all.assert_called_once_with(
+            worktree=_WORKTREE, sources=params.sources, designs=(DesignMother.board(),)
+        )

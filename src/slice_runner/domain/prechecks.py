@@ -55,6 +55,8 @@ class Prechecks:
             return PrecheckOutcome.MISSING_CONTROLS
         if not subissue.decisions or not parent.decisions:
             return PrecheckOutcome.MISSING_DECISIONS
+        if subissue.names_a_design_missing_from(parent):
+            return PrecheckOutcome.UNKNOWN_DESIGN
 
         return PrecheckOutcome.CLEAR
 

@@ -382,7 +382,11 @@ class ConductSlice:
 
     def _reading_the_sources(self, progress: ConductSliceProgress) -> ConductSliceResult:
         checked = self._check_sources.execute(
-            CheckSourcesParams(worktree=progress.worktree, sources=progress.parent.sources)
+            CheckSourcesParams(
+                worktree=progress.worktree,
+                sources=progress.parent.sources,
+                designs=progress.subissue.designs_under(progress.parent),
+            )
         )
         if checked.outcome is not PrecheckOutcome.CLEAR:
             return self._halted_by(progress, checked)
@@ -606,6 +610,7 @@ class ConductSlice:
                     debt=progress.debt,
                     decisions=progress.subissue.decisions_under(progress.parent),
                     deviations=progress.deviations,
+                    designs=progress.subissue.designs_under(progress.parent),
                     compares_with_the_last_verification=progress.judged_in_this_invocation,
                 )
             )

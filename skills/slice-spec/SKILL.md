@@ -118,7 +118,7 @@ Una feature = **un issue padre** + **una subissue por slice**. Un solo formato, 
 |---|---|
 | Issue padre | `## Intencion`, `## Lo que ya existe`, `## Decisiones`, `## Fuentes de convencion` y `## Controles`, los dos ultimos por repo, mas `## Historia de usuario` si la feature tiene una -y entonces tambien la clave delante de su titulo y la etiqueta `origen:<clave>`-. Las slices son sus subissues, y la barra de progreso la calcula GitHub |
 | Titulo de la subissue | `slice-NN (name): titulo`, con la clave de la historia de usuario delante si el padre la declara; de ahi sale el orden de ejecucion, y de `name` sale la rama (con la clave delante del numero cuando la hay: `slice/AS-255-NN-name`) y el scope del commit |
-| Cuerpo de la subissue | Las lineas de la slice: `REPO:`, `INTENCION:`, `DECISION:`, `ACEPTACION:`, `SENAL:`, `EXCLUYE:`, `SUSTITUYE:` |
+| Cuerpo de la subissue | Las lineas de la slice: `REPO:`, `INTENCION:`, `DECISION:`, `ACEPTACION:`, `SENAL:`, `EXCLUYE:`, `SUSTITUYE:`, y `DISENO:` solo si la slice construye algo visual |
 | Etiqueta de la subissue | El estado macro, que arranca en `estado:pendiente`, mas `origen:<clave>` si el padre declara historia de usuario |
 
 ### El issue padre
@@ -196,6 +196,18 @@ SUSTITUYE: no
   razonables y por que-. Es la decision, no un criterio de aceptacion disfrazado ni un detalle del
   codigo. Si de verdad no hay ninguna, la seccion lleva una sola linea `- ninguna: <motivo>`; **vacia
   no vale**, y un padre sin ninguna linea para el run en la comprobacion previa con `missing-decisions`.
+- El padre puede llevar `## Diseno`, **solo cuando la feature tiene una maqueta**: un `### <nombre>` por
+  diseno -dentro de esta seccion `###` es el nombre del diseno y nunca un repo-, y debajo un `<details>`
+  cuyo `<summary>` lleva el enlace al artefacto y, dentro, el HTML de la variante elegida en **un bloque
+  de codigo**. `slice-runner` mete en el prompt del implementador y en el del juez el contenido del
+  **primer bloque de codigo** de cada diseno que una slice cita, tal cual y sin destilar; el `<details>`,
+  el `<summary>` y el enlace son para la persona y no viajan. Cuenta dentro del mismo tope de caracteres
+  que las fuentes de convencion. Un diseno que ninguna slice cita no viaja a nadie.
+- Una slice que construye algo visual lleva una linea `DISENO: <nombre>` por cada diseno que cita, con el
+  nombre **exacto** de un `### <nombre>` de `## Diseno` del padre. Es opcional, y el ejemplo de
+  arriba no la escribe a proposito: una slice sin ninguna no recibe HTML aunque el padre declare
+  disenos. **Un `DISENO:` que nombra un diseno que el padre no declara para el run en la comprobacion
+  previa con `unknown-design`**, sin marcar la subissue en curso.
 - El padre lleva `## Lo que ya existe` con lineas `- pieza: <ruta> - <que hace hoy>`,
   `- precedente: #<numero> - <que le paso>` o `- acopla: <sitio> - <como>`. **Cada linea cita una ruta
   o un numero**: un hallazgo que no se puede ir a comprobar es una impresion y no entra. **Y una linea
@@ -740,6 +752,11 @@ trabajo. Ofrece corregirlas. Checklist:
   escrito.** Si falta (p. ej. un issue anterior a este mecanismo), **es la desviacion a corregir**:
   pregunta a la persona que decidio de diseno al cortar esta slice y anade las lineas, reportandola
   como `slice-NN (#numero)`, en el cuerpo; sin ellas `slice-runner` para con `missing-decisions`.
+- **Cada `DISENO:` nombra un diseno que existe.** Si una subissue lleva `DISENO: <nombre>` y el padre no
+  tiene `### <nombre>` dentro de `## Diseno` -o no tiene la seccion-, **es la desviacion a corregir**:
+  `slice-runner` para con `unknown-design`. Reportala como `slice-NN (#numero)`, en el cuerpo, citando
+  el nombre. Y un `### <nombre>` de `## Diseno` sin bloque de codigo no tiene HTML que viaje: reportalo
+  como `issue padre`. La ausencia de `DISENO:` en una slice no es desviacion: es opcional.
 - **El padre tiene seccion `## Decisiones` con al menos una linea.** Si falta (p. ej. un issue anterior
   a este mecanismo), **es la desviacion a corregir**: pregunta a la persona que decidio de diseno al
   disenar la feature y anadela al cuerpo del padre; una feature sin decisiones se declara con

@@ -119,3 +119,7 @@ class SubIssueMother:
             slice_id=SliceIdentity(ordinal=5, name="prechecks-deterministas", user_story="PROJ-1234"),
             title="PROJ-1234 slice-05 (prechecks-deterministas): comprobar antes de tocar codigo",
         )
+
+    @staticmethod
+    def naming_designs(*names: str) -> SubIssue:
+        return replace(SubIssueMother.pending(), design_names=names)

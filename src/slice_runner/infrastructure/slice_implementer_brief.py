@@ -98,7 +98,16 @@ decisiones de diseno que no seguiste -un elemento por decision, con su motivo, o
 seguiste todas-: llega al juez y a una seccion propia de la pull request.
 """
 
+_DESIGN_TEXT = """
+## Encargo de diseno
+
+Esta slice cita un diseno: el prompt lleva la seccion **"## Diseno"** con su HTML, que es lo que pidio
+una persona y no una sugerencia. Copia literalmente los textos fijos del diseno y usa solo colores de la
+paleta del repo; lo que cambia con los datos y los mensajes que el diseno no trae los decides tu.
+"""
+
 
 class SliceImplementerBrief:
     TOOLS: ClassVar[tuple[str, ...]] = ("Read", "Write", "Edit", "Bash", "Grep", "Glob", "Skill")
     TEXT: ClassVar[str] = _BRIEF
+    DESIGN_TEXT: ClassVar[str] = _DESIGN_TEXT

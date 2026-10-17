@@ -13,6 +13,7 @@ from slice_runner.domain.slice_under_review import SliceUnderReview
 if TYPE_CHECKING:
     from slice_runner.domain.checklist_entry import ChecklistEntry
     from slice_runner.domain.corpus import Corpus
+    from slice_runner.domain.design import Design
     from slice_runner.domain.diff_reader import DiffReader
     from slice_runner.domain.finding import Finding
     from slice_runner.domain.judge import Judge
@@ -41,6 +42,7 @@ class VerifySliceParams:
     debt: tuple[str, ...]
     decisions: tuple[str, ...]
     deviations: tuple[str, ...]
+    designs: tuple[Design, ...]
     compares_with_the_last_verification: bool
 
 
@@ -81,6 +83,7 @@ class VerifySlice:
                 debt=params.debt,
                 decisions=params.decisions,
                 deviations=params.deviations,
+                designs=params.designs,
             ),
         )
         self._corpus.record(

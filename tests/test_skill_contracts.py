@@ -144,6 +144,19 @@ deriving it from the very example under test approves whatever the example happe
 about the prose, with its reason next to it, like `_CONFIRMATION_ANCHORS`.
 """
 
+_OPTIONAL_SUBISSUE_LINES = frozenset({"DISENO"})
+"""The labelled lines a subissue body may carry, which the example does not write.
+
+`DISENO:` names a design the parent declares under `## Diseno`, and only a slice that builds something
+visual carries it, so the example -- which is what a model copies into every spec -- leaves it out on
+purpose: written there, every slice would cite a design. The rules and the `validate` checklist still
+have to name it, because a label nobody is told about is one nobody writes and `validate` approves the
+absence of. `SubissueBody` reads it, but `_SUBISSUE_LINES` and this set are held against the prose, not
+against the parser, for the same reason the first one is not derived from the example.
+"""
+
+_DESIGN_HEADING = "`## Diseno`"
+
 
 def _without_fences(markdown: str) -> str:
     return re.sub(r"^```.*?^```\n", "", markdown, flags=re.DOTALL | re.MULTILINE)
@@ -345,13 +358,41 @@ def test_the_labelled_lines_of_a_subissue_are_the_same_in_the_example_the_rules_
     demanded = set(_LABELLED_LINE_NAMED.findall(_spec_prose(_HARD_RULES)))
     checked = set(_LABELLED_LINE_NAMED.findall(_spec_prose(_VALIDATE)))
 
-    assert demanded == written, (
+    allowed = written | _OPTIONAL_SUBISSUE_LINES
+
+    assert demanded == allowed, (
         f"the example and the hard rules of {_rel(_SPEC)} disagree on the lines of a subissue: "
-        f"only in the rules {sorted(demanded - written)}, only in the example {sorted(written - demanded)}"
+        f"only in the rules {sorted(demanded - allowed)}, only in the example {sorted(allowed - demanded)}"
     )
-    assert checked == written, (
+    assert checked == allowed, (
         f"the example and the validate checklist of {_rel(_SPEC)} disagree on the lines of a subissue: "
-        f"only in validate {sorted(checked - written)}, only in the example {sorted(written - checked)}"
+        f"only in validate {sorted(checked - allowed)}, only in the example {sorted(allowed - checked)}"
+    )
+
+
+def test_the_optional_lines_a_subissue_may_carry_are_never_written_by_the_example() -> None:
+    """The example writes the mandatory lines and none of the optional ones.
+
+    Held apart from the comparison above so that the failure names which half moved: an example that
+    starts writing `DISENO:` makes every copied spec cite a design the parent does not declare.
+    """
+    written = set(_LABELLED_LINE_WRITTEN.findall(_spec_example(_SUBISSUE_EXAMPLE)))
+
+    assert written.isdisjoint(_OPTIONAL_SUBISSUE_LINES), (
+        f"the example under `{_SUBISSUE_EXAMPLE}` writes {sorted(written & _OPTIONAL_SUBISSUE_LINES)}, which are "
+        f"optional: a model copies the example into every subissue"
+    )
+
+
+def test_the_parent_section_that_declares_the_designs_is_named_by_the_rules_and_the_validate_checklist() -> None:
+    """`ParentBody` reads `## Diseno`, so the two places that tell a person about it have to name it.
+
+    A heading renamed in one of them leaves a parent that declares designs under a name the program does
+    not read: the designs never travel and nothing says why.
+    """
+    assert _DESIGN_HEADING in _spec_prose(_HARD_RULES), f"the hard rules of {_rel(_SPEC)} do not name {_DESIGN_HEADING}"
+    assert _DESIGN_HEADING in _spec_prose(_VALIDATE), (
+        f"the validate checklist of {_rel(_SPEC)} does not name {_DESIGN_HEADING}"
     )
 
 

@@ -69,6 +69,7 @@ class GhRunRepository(RunRepository):
             decisions=parsed.decisions,
             sources=parsed.sources,
             controls=parsed.controls,
+            designs=parsed.designs,
             subissue_count=payload.subissues_summary.total,
             state=payload.state,
         )
@@ -328,6 +329,7 @@ class GhRunRepository(RunRepository):
             replaces=parsed.replaces,
             run=parsed.run,
             label=cls._label_of(payload.labels),
+            design_names=parsed.designs,
         )
 
     @classmethod

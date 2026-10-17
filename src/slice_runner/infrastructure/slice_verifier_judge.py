@@ -350,9 +350,20 @@ bloque de codigo que lo envuelva. El orquestador lo consume como dato.
 vacia. `prior_rulings` es una lista vacia cuando "hallazgos de la ronda anterior" tambien lo es.
 """
 
+_DESIGN_RUBRIC = """
+## Rubrica de diseno
+
+Esta slice cita un diseno: el prompt lleva la seccion **"## Diseno"** con su HTML, y lo mides contra el
+diff ademas de los items de arriba. Hay dos hallazgos propios del diseno, y solo dos: senalar como
+hallazgo un color que el diff usa fuera de la paleta del repo, y senalar como hallazgo un texto fijo del
+diseno que el diff cambia, cada uno con su ruta y su linea. No senales datos dinamicos ni mensajes
+nuevos que el diseno no trae: no son hallazgo. El `rule` de estos hallazgos es `diseno`.
+"""
+
 
 class SliceVerifierJudge:
     TOOLS: ClassVar[tuple[str, ...]] = ("Read", "Grep", "Glob", "Skill")
+    DESIGN_RUBRIC: ClassVar[str] = _DESIGN_RUBRIC
 
     @classmethod
     def adversarial(cls) -> Judge:

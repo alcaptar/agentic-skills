@@ -18,9 +18,13 @@ if TYPE_CHECKING:
 class SelectSliceResultMother:
     @classmethod
     def about_to_start(
-        cls, *, subissue: SubIssue | None = None, dangling: tuple[SubIssue, ...] = ()
+        cls,
+        *,
+        subissue: SubIssue | None = None,
+        parent: ParentIssue | None = None,
+        dangling: tuple[SubIssue, ...] = (),
     ) -> SelectSliceResult:
-        return cls._of(subissue or SubIssueMother.pending(), dangling=dangling)
+        return cls._of(subissue or SubIssueMother.pending(), parent=parent, dangling=dangling)
 
     @classmethod
     def resumed_at(
