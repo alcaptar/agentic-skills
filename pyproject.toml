@@ -64,7 +64,6 @@ runtime-evaluated-base-classes = [
 
 [tool.ruff.lint.isort]
 known-first-party = [
-    "deploy_core",
     "discover_controles",
     "discover_conventions",
     "slice_runner",
@@ -83,4 +82,4 @@ testpaths = ["tests", "src/slice_runner/tests"]
 markers = [
     "integration: lanza un subproceso real (se deselecciona con -m 'not integration')",
 ]
-pythonpath = ["src", "skills/slice-runner/scripts", "skills/deploy-watch/scripts"]
+pythonpath = ["src", "skills/slice-runner/scripts"]

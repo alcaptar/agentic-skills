@@ -795,17 +795,6 @@ en vez de leerla sin esas cifras-. Y lo que **no** se retira: el cierre sigue re
 ronda de cada slice; lo que deja de pagar es el coste por byte de diff, no el crecimiento por numero de
 verificaciones.
 
-## deploy-watch
-
-### Decisiones clave
-
-- **Fase post-approve, invocación manual, read-only sobre prod.** Disparador manual elegido para cero polling en vacío.
-- **Compone, no reinventa**: el agente orquesta por tick las skills de observabilidad (catalogo abierto) + agente `sre`; la decisión la hace un core puro (`deploy_core.py`: umbrales relativos, confirmación sostenida, scorecard, veredicto). Antes delegaba en una skill `deploy-monitor` suelta (script HTTP bloqueante), **absorbida en 2026-07-23**.
-- **Veredicto por 4 señales**: rollout k8s, recursos (OOM/restarts/CPU), errores/latencia HTTP vs baseline, Sentry (issues nuevas del release). Sano solo si las 4 están ok toda la ventana de estabilización.
-- **Ante anomalia**: agente `sre` para RCA read-only + rollback redactado (git revert del merge + redeploy según slicing.md), sin ejecutar.
-- **Seguridad**: nunca ejecuta rollback ni toca backends; max_runtime + circuit breaker; merge y rollback los decide el usuario.
-- **El encadenado esta apagado desde 2026-08-13, y se apago por el cableado.** El programa lleva `MutedDeployWatch` inyectado en vez de `ClaudeDeployWatch`, así que mergear una slice ya no lanza `claude -p '/deploy-watch ...'`. El motivo es de calendario, no de diseño: la skill todavía no esta pulida -es la única pieza del pipeline que nunca se ha medido contra un despliegue real de otra persona- y el equipo empieza a probar el flujo esta semana; una llamada que cuesta dinero, tarda y puede confundir a quien nunca ha visto la herramienta es exactamente lo que no debe encontrarse en su primera slice. **Lo que no se apago**: la línea `SENAL:` se sigue disenando en el slicing, se sigue exigiendo, y su emisión sigue siendo criterio de aceptación que el juez mide antes de mergear -o sea que lo que se pierde es la comprobación post-deploy, no la observabilidad de la slice-. Se eligió el adaptador mudo sobre las otras dos formas por lo que cuesta **volver**: una bandera de línea de comandos anadia superficie que habría que retirar después, y borrar la llamada de `ConductSlice` dejaba el puerto sin consumidor y obligaba a reescribir código y test para reencender. El detalle de la decisión de capa vive en `docs/conventions/infrastructure.md`; cuando se pula, se reencienden la línea de `cli.py`, el paso 4 del `README.md` y su diagrama.
-
 ### La regla que se aplico tres veces y nunca se escribió (2026-08-21)
 
 Vaciar el conductor de trabajo que era de un caso de uso se hizo en #295 (los dos pasos que esperan),
@@ -1151,8 +1140,6 @@ Estado actual: **Nivel 1** — una slice por invocación, todo bajo control manu
   - Checkpoint humano opcional entre slices.
   - Requisito previo: confianza en el verificador; es lo que sostiene el loop sin supervisión.
 - **Nivel 3 — Workflow fan-out (paralelo).** Solo para slices independientes. Requiere: chequeo de independencia (solape de ficheros/migraciones), aislamiento de entorno de test por worktree (`COMPOSE_PROJECT_NAME`/puertos), y orden de merge (serializar quien toque el head de alembic).
-- **Encadenar slice-runner -> deploy-watch.** Tras el merge, disparar deploy-watch automaticamente. Hoy deploy-watch es manual por decisión (cero polling en vacío); la versión encadenada poll-earia el estado del PR/merge para arrancar sola.
-- **deploy-watch autonomo.** Opción descartada de momento: un `/loop` que vigila el merge y arranca la monitorización solo. Reconsiderar si el volumen de slices crece.
 - **Aislamiento mecánico del orquestador (fase 2 del coste de contexto).** La fase 1 (2026-07-31) bajo lo que cuesta el orquestador por slice, pero **no** lo saco de la sesión de la persona: el contexto limpio por slice sigue dependiendo de que ella abra sesión nueva. Lo único que lo haría mecánico es que cada slice corra en un contexto propio -un proceso `claude -p` por slice lanzado desde un script, o un orquestador subagente-, y las dos formas chocan con el **go/no-go del paso 3**. Que es justo lo que hay que decidir explicitamente, porque bajo `/loop` **ese control humano ya es ficción**: nadie responde una alineación en un run desatendido, así que Nivel 2 ya renuncio a el de facto sin escribirlo en ninguna parte. Cualquier diseño de fase 2 tiene que elegir entre recuperarlo (checkpoint humano real entre slices) o declarar que a partir de Nivel 2 no existe; heredarlo por descuido es la peor de las tres.
 
 ## Preferencias transversales

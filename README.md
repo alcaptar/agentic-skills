@@ -72,27 +72,14 @@ flowchart TD
     ci -->|verde| gate1
 
     gate1{{"<b>MERGE: decide la persona</b>"}}
-    gate1 -.->|"mergeada, cierra la subissue<br/><b>hoy el programa para aqui</b>"| watch
-
-    subgraph watch_phase["3 - Vigilar el despliegue (HOY APAGADO, se lanza a mano)"]
-        watch["<b>deploy-watch</b><br/>read-only"]
-        core{{"veredicto go / no-go"}}
-        watch --> core
-    end
-
-    core -->|go| ok([despliegue sano])
-    core -->|no-go| rca["agente <b>sre</b><br/>analisis de causa raiz<br/>+ rollback REDACTADO"]
-    rca --> gate2{{"<b>ROLLBACK: lo lanzas tu</b>"}}
+    gate1 -.->|"mergeada, cierra la subissue<br/><b>el programa para aqui</b>"| closed([run cerrado])
 
     runner -.->|"etiqueta la subissue<br/>en cada transicion"| issue
-    core -.->|"comenta el veredicto"| issue
 
     style issue fill:#fff3cd,stroke:#856404,stroke-width:3px
     style gate1 fill:#f8d7da,stroke:#721c24,stroke-width:3px
-    style gate2 fill:#f8d7da,stroke:#721c24,stroke-width:3px
     style verif fill:#d1ecf1,stroke:#0c5460
     style impl fill:#d1ecf1,stroke:#0c5460
-    style rca fill:#d1ecf1,stroke:#0c5460
 ```
 
 Lo que hay que leer del diagrama: **el issue padre y su subissue son el bus** entre el programa y quien
@@ -117,21 +104,18 @@ sola al mergear.
 | Pieza | Que es | Para que |
 |---|---|---|
 | `skills/slice-spec/SKILL.md` | Skill de autoria | Convierte una idea en una spec bien formada y **crea el issue padre mas una subissue por slice**. Envuelve `superpowers:brainstorming` para el diseno; el troceo lo lleva su propio cerebro (`skills/slice-spec/references/slicing.md`), que saca delante el **contrato de toda frontera** porque es lo que deja construir productor y consumidor a la vez. Cierra proponiendo **que slices pueden correr en paralelo** y, confirmado, monta un worktree por slice y lanza sus runs. Modo `validate` para auditar una spec existente. No escribe codigo. |
-| `skills/deploy-watch/SKILL.md` | Skill de post-merge | Vigila el despliegue en produccion, read-only. Orquesta por tick las skills de observabilidad que haya (Prometheus, Elasticsearch, logs de Google Cloud, Sentry...) segun el radio de impacto del cambio. Nunca ejecuta rollback: lo redacta. |
 | `skills/slice-runner/scripts/discover_controles.py` / `discover_conventions.py` | Helpers de descubrimiento | Los usa `slice-spec` para **proponer** los controles y las fuentes de convencion del repo. Descubren y no deciden: confirma la persona. |
-| `skills/deploy-watch/scripts/deploy_core.py` | Nucleo puro | La decision go/no-go: umbrales relativos a baseline, confirmacion sostenida, scorecard, veredicto. La toma el codigo, no la impresion del agente. |
-| `skills/deploy-watch/references/monitoring.md`, `skills/slice-spec/references/slicing.md`, `skills/slice-spec/references/observabilidad.md` | Documentos de referencia | Conocimiento cargado bajo demanda: que senales mirar y como leerlas, como trocear, y como decidir la observabilidad de una slice. |
+| `skills/slice-spec/references/slicing.md`, `skills/slice-spec/references/observabilidad.md` | Documentos de referencia | Conocimiento cargado bajo demanda: como trocear y como decidir la observabilidad de una slice. |
 | `src/slice_runner/` | Programa orquestador | El trozo del pipeline que ya **no** es un agente: `run` conduce una slice de punta a punta; `verify`, que calcula el diff de la slice, se lo pasa **dentro del prompt** al juez -invocado como una llamada sin estado, `claude -p` con el esquema del veredicto- y emite el veredicto por salida estandar con su codigo de salida (tabla en "El paso que ya es un programa"); `explain` contesta que paso viene despues de un resultado y cuando se agota un presupuesto, sin montar un run; y `read` abre la conversacion grabada de una llamada concreta. Cada llamada al harness deja su rastro en `src/slice_runner/infrastructure/local_call_trace.py` y cada veredicto de `verify` en `src/slice_runner/infrastructure/local_corpus.py`, los dos escritos fuera del repo (ver "El paso que ya es un programa"). Capas separadas (`domain/`, `application/`, `infrastructure/`) y tests co-localizados. El *por que* de esta forma esta en `docs/design-notes.md`. |
 | `docs/` | Memoria del proyecto | `conventions/` (la vara de cada capa, cargada a demanda: la tabla de enrutado esta en `CLAUDE.md`), `design-notes.md` (cada decision y su porque, para no re-derivarlo), `research-agent-loops.md` (research citado), `maturity-map.md` (donde encaja el pipeline) y `12-factor.md` (auditoria contra los 12 factores + el spike que mide si `claude -p` sirve de agente sin estado). |
-| `tests/` | Unit tests offline | La logica pura se cubre en **dos arboles**: aqui la de los scripts -cuerpo del issue, controles, nucleo del deploy- y los **contratos duplicados a proposito** entre skills; en `src/slice_runner/tests/`, co-localizada dentro del paquete, la de `src/slice_runner/`. |
+| `tests/` | Unit tests offline | La logica pura se cubre en **dos arboles**: aqui la de los scripts -cuerpo del issue, controles- y los **contratos duplicados a proposito** entre skills; en `src/slice_runner/tests/`, co-localizada dentro del paquete, la de `src/slice_runner/`. |
 
 ### Como interactuan (el contrato entre piezas)
 
 - **El issue es la unica interfaz entre skills y programa.** `slice-spec` lo escribe. En el flujo
   anterior, la skill `/slice-runner` lo lee, elige una slice y reescribe **solo su linea** en cada
   transicion; en el flujo que conduce hoy una slice, el programa etiqueta la subissue en cada
-  transicion (ver el diagrama de "El flujo de un cambio"). `deploy-watch` comenta el veredicto en los
-  dos flujos. No hay estado local ni ledger: nada que se desincronice o que haya que
+  transicion (ver el diagrama de "El flujo de un cambio"). No hay estado local ni ledger: nada que se desincronice o que haya que
   descartar. La interfaz de `tui/` tampoco guarda estado: solo lee la salida de `slice-runner follow --json`
   y se rehace de cero en cada arranque.
 - **El issue tambien declara la vara.** Sus secciones `## Fuentes de convencion` y `## Controles`
@@ -199,7 +183,7 @@ Vale igual para el `--slice` de `verify`, `read` y `spend`.
 | `explain` | Contesta que paso viene despues de un resultado, y cuando se agota un presupuesto, sin montar un run: es una funcion pura sobre el estado que le llega por entrada estandar. | `echo '{"run": {"step": "run-controls", "control_retries": 2}, "outcome": "failed"}' \| uv run slice-runner explain` |
 | `read` | Abre la conversacion grabada de una llamada concreta del rastro y la emite legible por salida estandar, para que la lea una persona. `--repo` e `--issue` identifican el run -son los mismos que fija `run`-, y `--worktree` es la ruta donde corrio la llamada: `<raiz-del-clon>/.worktrees/<NN-nombre>`, no el directorio del clon. | `uv run slice-runner read --repo alcaptar/agentic-skills --issue 38 --worktree .worktrees/04-nombre-de-la-slice --slice slice-04 --step implement` |
 | `spend` | Suma lo que gasto el harness en las llamadas que sirvieron un paso de una slice (coste, turnos, duracion, numero de llamadas) y lo emite como JSON. `--repo` e `--issue` identifican el run, igual que en `read`. | `uv run slice-runner spend --repo alcaptar/agentic-skills --issue 38 --slice slice-04 --step implement` |
-| `doctor` | Comprueba si el entorno esta listo para conducir una slice -`git`, `gh` autenticado, `claude` y las skills `slice-spec`/`deploy-watch` instaladas- y lo emite legible por salida estandar, un chequeo por linea con el comando que lo arregla cuando falta. No arregla nada el mismo. `--repo` comprueba ademas que ese repo se puede leer, y `--worktree` junto con `--base` compara la base local contra su remoto y avisa si esta por detras -un aviso no cambia el codigo de salida-. Los tres son opcionales. | `uv run slice-runner doctor --repo alcaptar/agentic-skills --worktree . --base master` |
+| `doctor` | Comprueba si el entorno esta listo para conducir una slice -`git`, `gh` autenticado, `claude` y la skill `slice-spec` instalada- y lo emite legible por salida estandar, un chequeo por linea con el comando que lo arregla cuando falta. No arregla nada el mismo. `--repo` comprueba ademas que ese repo se puede leer, y `--worktree` junto con `--base` compara la base local contra su remoto y avisa si esta por detras -un aviso no cambia el codigo de salida-. Los tres son opcionales. | `uv run slice-runner doctor --repo alcaptar/agentic-skills --worktree . --base master` |
 | `metrics` | Relee `metrics.jsonl`, `calls.jsonl` y `spend.jsonl` -sin escribir ningun estado nuevo-, emite una linea de JSON por slice cerrada dentro de la ventana pedida -ya con su identidad, su configuracion, su tamano, su gasto y su resultado unidos- y cierra con una linea de resumen: las cinco tasas (veto del verificador, bloqueo por controles, slices al primer intento, media de reintentos de implementar, integracion continua roja) cada una con su numero de muestras, las medias de gasto del harness, el reparto de descartes del juez por causa, y los mismos agregados por modelo y por variante. `--repo` acota a un repo (por defecto todos) y `--since`/`--until` acotan por fecha (`YYYY-MM-DD`, por defecto desde el principio hasta ahora). `--out` -obligatorio- es la ruta donde se escribe una vista HTML autocontenida (coste frente a tamano, gasto por papel, vueltas en el tiempo, las mismas tasas), generada de esos mismos datos y que declara lo que no puede decir. | `uv run slice-runner metrics --repo alcaptar/agentic-skills --since 2026-01-01 --out /tmp/metrics.html` |
 | `reset` | Borra el estado de ejecucion persistido de una subissue y deja su etiqueta en `estado:pendiente`, sin tocar la intencion, los criterios ni la senal de la spec. Deja un comentario diciendo cuando se reseteo y que la rama y el arbol de trabajo no se han tocado -esa limpieza la decide una persona-. Si la subissue no trae spec reconocible, o su cuerpo no se puede leer, no escribe nada. | `uv run slice-runner reset 38 --repo alcaptar/agentic-skills` |
 | `register` | Escribe en el registro local de eventos una fila `pending` por cada subissue abierta del issue padre que todavia no tiene ningun evento, con la misma clave con la que `run` escribira los suyos, para que el panel de la interfaz muestre la feature antes del primer run. Lee las subissues con la interfaz de subissues de GitHub y no con el buscador, que tarda en indexar las recien creadas. Si el registro local es ilegible sale con el mismo codigo que `follow` y no escribe nada. No lanza ningun run ni invoca al modelo. | `uv run slice-runner register 523 --repo alcaptar/agentic-skills` |
@@ -335,7 +319,7 @@ El codigo de salida es el contrato con quien lo invoca:
 | `10` | `run`: el run se interrumpio antes de llegar a una parada -`gh` o `git` fallaron, el foro contesto algo ilegible, el registro durable no se pudo escribir-. El estado persistido sigue siendo bueno. Cualquier subcomando sale con este mismo codigo ante una excepcion que el programa no sabe nombrar, con su tipo y su mensaje por `stderr` en vez de un volcado de la pila |
 | `11` | `run`: la pull request de la slice se cerro **sin** mergear, asi que el merge que la invocacion esperaba ya no puede llegar. El run se queda abierto en su paso; lo decide una persona (reabrir la pull request, o cerrar la slice) |
 | `12` | Una llamada a un proceso externo agoto su tope por llamada y se mato, asi que no hay respuesta que interpretar. Reinvocar a ciegas vuelve a pagar el tope entero: primero hay que mirar **que** se colgo |
-| `13` | `doctor`: el entorno no esta listo para conducir una slice -falta `git`, `gh` no esta autenticado, falta `claude`, falta alguna de las skills `slice-spec`/`deploy-watch`, o el binario instalado y las skills enlazadas vienen de arboles distintos-. Distinto de `4`: la invocacion estaba bien escrita, lo que falta es el entorno |
+| `13` | `doctor`: el entorno no esta listo para conducir una slice -falta `git`, `gh` no esta autenticado, falta `claude`, falta la skill `slice-spec`, o el binario instalado y las skills enlazadas vienen de arboles distintos-. Distinto de `4`: la invocacion estaba bien escrita, lo que falta es el entorno |
 | `14` | Las fuentes de convencion declaradas, ya leidas, se pasan del tope de tamano del presupuesto: no se mando ningun prompt. Distinto de `8`: eso para antes de leer nada, esto se descubre sumando contenido ya leido, y reinvocar sin reducir lo declarado repite el mismo cierre |
 | `15` | Retirado, no se emite: el cierre por un diff que el implementador no movio entre dos vueltas es ahora `bloqueada:juez`, igual que un veto agotado, y sale con `5` |
 | `18` | `retry`: la slice no esta en el estado que esa orden necesita -sin bloqueo ni aborto-. El motivo sale por `stderr` y no se escribe nada en el issue. Distinto de `4`: la invocacion estaba bien escrita y la subissue se leyo, lo que no cuadra es el estado de la slice |
@@ -556,9 +540,7 @@ Antes hacen falta tres cosas que este repo **no** instala, y una cuarta que conv
 | El plugin `superpowers` | **hoy no lo comprueba nadie**: `slice-spec` lo invoca en su paso 1 |
 
 Instalar solo una mitad deja un entorno que parece listo y no lo esta: sin `slice-spec` no hay issue
-que conducir. `deploy-watch` se sigue enlazando y el doctor lo sigue exigiendo aunque el encadenado
-este apagado (ver el paso 4 de "El flujo de un cambio"): es lo que hace que lanzarlo a mano funcione
-mientras tanto, y que reencenderlo no pida reinstalar nada.
+que conducir.
 
 Lo que hace, y por que asi:
 
@@ -572,9 +554,9 @@ Lo que hace, y por que asi:
   el codigo nuevo va a releer, y al reanudarse muere leyendo lo que el mismo escribio. Archivar antes
   no evita nada, porque esas filas se escriben **despues** de archivar. Si sabes lo que haces,
   `make install-program FORCE=1` lo salta.
-- **`make install-skills`** — enlaza **tres** directorios bajo la configuracion de Claude Code
-  (`CLAUDE_CONFIG_DIR` si esta puesto, `~/.claude` si no), y solo dos de ellos son skills:
-  - `slice-spec` y `deploy-watch`, las skills.
+- **`make install-skills`** — enlaza **dos** directorios bajo la configuracion de Claude Code
+  (`CLAUDE_CONFIG_DIR` si esta puesto, `~/.claude` si no), y solo uno de ellos es una skill:
+  - `slice-spec`, la skill.
   - `slice-runner`, que **ya no es una skill** -perdio su `SKILL.md` cuando se retiro el flujo viejo y
     conserva solo `scripts/`-. Se enlaza porque `slice-spec` invoca desde ahi sus dos helpers de
     descubrimiento por ruta absoluta; sin el, su paso 3 se queda sin con que descubrir las
@@ -612,10 +594,8 @@ skill anterior, que ya no vive aqui. Su metodologia y su rubrica viven hoy en el
   controles ni ve output de build**: su presupuesto entero es para lo semantico.
 - **Si el entorno veta un subagente, decide un solo criterio**: ¿se puede declarar la degradacion en el
   artefacto que se produce? Si si, degrada y declaralo ahi; si el artefacto entero significa la
-  garantia perdida, para. `deploy-watch` **degrada declarandolo** en su veredicto, que lo calcula
-  `deploy_core.py` y no la impresion del agente. El flujo anterior con la skill `/slice-runner` **paraba**
-  en vez de degradar -su pull request con PASA seria falsa de forma invisible-, mismo criterio y
-  artefacto distinto; hoy vive congelado en `alcaptar/agentic-skills-legacy`.
+  garantia perdida, para. El flujo anterior con la skill `/slice-runner` **paraba**
+  en vez de degradar -su pull request con PASA seria falsa de forma invisible-; hoy vive congelado en `alcaptar/agentic-skills-legacy`.
 - Controles de parada objetivos y deterministas.
 - Convenciones del repo como vara de medir principal.
 - Estado del run en el **issue de GitHub**; el registro duradero son el issue y las pull requests

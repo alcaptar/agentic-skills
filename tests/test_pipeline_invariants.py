@@ -59,6 +59,9 @@ from slice_runner.infrastructure.slice_implementer_brief import SliceImplementer
 _UNSCANNED = {
     "skills/slice-spec/references/observabilidad.md": "documenta rutas de otros repos",
     "playground/tasks": "entrada congelada de un experimento, no se actualiza",
+    "docs/12-factor.md": "fechado: lo que se leyo un dia, no se actualiza",
+    "docs/maturity-map.md": "fechado: lo que se leyo un dia, no se actualiza",
+    "docs/research-agent-loops.md": "fechado: lo que se leyo un dia, no se actualiza",
 }
 """What is not scanned at all, each for a reason about what the file IS.
 
@@ -68,6 +71,8 @@ the monitoring library or of the infra repos it documents, not to this one.
 variant hands to the model are what that run was measured against, so updating them when the tree
 moves would destroy the only thing that makes the numbers comparable -- a rerun would no longer be
 the same experiment. A path going stale there is the point, not a defect.
+The three dated docs are what was read on a given day: `CLAUDE.md` declares that they are not
+updated and that what they cite may already be retired, so a stale path there is the same point.
 """
 
 _EXEMPT: dict[str, str] = {}
