@@ -3086,7 +3086,7 @@ class TestTheCommandThatFollowsTheEventsAsJson(WithTheDurableStoresOutOfTheRealH
     def _printed(capsys: pytest.CaptureFixture[str]) -> list[dict[str, object]]:
         return [json.loads(line) for line in capsys.readouterr().out.splitlines()]
 
-    def test_it_prints_the_snapshot_and_then_one_json_object_per_change_without_ending(
+    def test_it_prints_the_history_and_then_one_json_object_per_change_without_ending(
         self, capsys: pytest.CaptureFixture[str]
     ) -> None:
         reader = ScriptedEventReader(
@@ -3102,7 +3102,9 @@ class TestTheCommandThatFollowsTheEventsAsJson(WithTheDurableStoresOutOfTheRealH
         assert self._printed(capsys) == [self._ADVANCING, self._MERGED]
         assert reader.cursors == [EventCursor.start(), EventCursor(offset=10)]
 
-    def test_once_prints_only_the_snapshot_as_json_and_never_sleeps(self, capsys: pytest.CaptureFixture[str]) -> None:
+    def test_once_prints_the_history_of_the_first_read_as_json_and_never_sleeps(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
         reader = ScriptedEventReader(
             EventBatch(events=(EventMother.advancing(),), cursor=EventCursor(offset=10)),
             EventBatch(events=(EventMother.closed(),), cursor=EventCursor(offset=20)),
@@ -3115,6 +3117,31 @@ class TestTheCommandThatFollowsTheEventsAsJson(WithTheDurableStoresOutOfTheRealH
         assert self._printed(capsys) == [self._ADVANCING]
         clock.sleep.assert_not_called()
         assert len(reader.cursors) == 1
+
+    def test_the_first_read_as_json_prints_every_transition_of_a_slice_so_its_history_can_be_told(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        reader = ScriptedEventReader(
+            EventBatch(events=(EventMother.advancing(), EventMother.closed()), cursor=EventCursor(offset=20))
+        )
+
+        self._cli().follow(repo=None, once=True, as_json=True, reader=reader, clock=self._clock_interrupted_after(1))
+
+        assert self._printed(capsys) == [self._ADVANCING, self._MERGED]
+
+    def test_the_first_read_as_json_ends_each_slice_with_its_latest_event_even_when_it_repeats_the_state(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        resumed = replace(EventMother.advancing(), pid=4242)
+        reader = ScriptedEventReader(
+            EventBatch(events=(EventMother.advancing(), resumed), cursor=EventCursor(offset=20))
+        )
+
+        self._cli().follow(repo=None, once=True, as_json=True, reader=reader, clock=self._clock_interrupted_after(1))
+
+        printed = self._printed(capsys)
+        assert len(printed) == 2
+        assert printed[-1]["pid"] == 4242
 
     def test_a_row_written_before_the_feature_was_recorded_prints_without_the_parent_and_the_name(
         self, capsys: pytest.CaptureFixture[str]

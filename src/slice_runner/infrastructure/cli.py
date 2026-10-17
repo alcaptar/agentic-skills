@@ -152,6 +152,7 @@ from slice_runner.infrastructure.verdict_payload import VerdictPayload
 
 if TYPE_CHECKING:
     from slice_runner.application.actions.conduct_slice import ConductSliceResult
+    from slice_runner.application.queries.follow_events import FollowEventsResult
     from slice_runner.domain.activity_reader import ActivityReader
     from slice_runner.domain.clock import Clock
     from slice_runner.domain.corpus import Corpus
@@ -769,7 +770,7 @@ class Cli:
         cursors = ActivityCursors()
         try:
             followed = query.execute(FollowEventsParams(cursor=EventCursor.start(), repo=repo))
-            self._printed(followed.snapshot, as_json=as_json)
+            self._printed(self._history_of(followed) if as_json else followed.snapshot, as_json=as_json)
             cursors = self._printed_activity(live, followed.snapshot, cursors)
             while not once:
                 clock.sleep(seconds=self._budgets.seconds_between_follow_reads)
@@ -813,6 +814,15 @@ class Cli:
             print(line, flush=True)
 
         return followed.cursors
+
+    @staticmethod
+    def _history_of(followed: FollowEventsResult) -> tuple[Event, ...]:
+        last_change = {event.slice_key: event for event in followed.changes}
+        latest_not_yet_told = tuple(
+            event for event in followed.snapshot if last_change.get(event.slice_key) is not event
+        )
+
+        return followed.changes + latest_not_yet_told
 
     @staticmethod
     def _printed(events: tuple[Event, ...], *, as_json: bool) -> None:

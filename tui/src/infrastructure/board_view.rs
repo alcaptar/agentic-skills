@@ -19,7 +19,7 @@ use crate::infrastructure::slice_glyph::SliceGlyph;
 pub struct BoardView;
 
 impl BoardView {
-    const NAME_WIDTH: usize = 40;
+    const NARROWEST_NAME: usize = 6;
     const KEYS: &'static str = " ↑↓ mover · enter detalle · ctrl+q claude";
     const SEPARATOR: &'static str = " · ";
 
@@ -38,7 +38,12 @@ impl BoardView {
         let groups = watched.board().groups();
         let painted: Vec<(&FeatureGroup, Vec<Line>)> = groups
             .iter()
-            .map(|group| (group, Self::lines_of(group, selected, now)))
+            .map(|group| {
+                (
+                    group,
+                    Self::lines_of(group, selected, now, usize::from(area.width.saturating_sub(2))),
+                )
+            })
             .collect();
         let constraints: Vec<Constraint> = painted
             .iter()
@@ -73,7 +78,7 @@ impl BoardView {
         frame.render_widget(Paragraph::new(lines), area);
     }
 
-    fn lines_of(group: &FeatureGroup, selected: Option<&SliceKey>, now: u64) -> Vec<Line<'static>> {
+    fn lines_of(group: &FeatureGroup, selected: Option<&SliceKey>, now: u64, width: usize) -> Vec<Line<'static>> {
         let mut lines = vec![Line::default()];
         for attention in Attention::ALL {
             let rows = group.rows_in(attention);
@@ -85,7 +90,7 @@ impl BoardView {
                 SliceGlyph::heading_style(attention).add_modifier(Modifier::BOLD),
             )));
             for row in rows {
-                lines.push(Self::row_line(row, selected == Some(row.key()), now));
+                lines.push(Self::row_line(row, selected == Some(row.key()), now, width));
                 if let (Attention::Running, Some(last)) = (attention, row.activity().last()) {
                     lines.push(Line::from(Span::styled(
                         format!("     {} {}", last.tool(), last.target()),
@@ -100,14 +105,19 @@ impl BoardView {
         lines
     }
 
-    fn row_line(row: &SliceRow, selected: bool, now: u64) -> Line<'static> {
+    fn row_line(row: &SliceRow, selected: bool, now: u64, width: usize) -> Line<'static> {
         let marker = if selected { ">" } else { " " };
+        let parts = Self::summary_of(row, now);
+        let number = row.subject().number();
+        let summary = parts.iter().map(Span::width).sum::<usize>()
+            + Self::SEPARATOR.chars().count() * parts.len().saturating_sub(1);
+        let lead = 4 + number.chars().count();
+        let name_width = width.saturating_sub(lead + summary + 1).max(Self::NARROWEST_NAME);
         let mut spans = vec![
             Span::raw(marker),
             SliceGlyph::of(row, now),
-            Span::raw(format!(" {} {} ", row.subject().number(), Self::name_of(row))),
+            Span::raw(format!(" {number} {} ", Self::name_of(row, name_width))),
         ];
-        let parts = Self::summary_of(row, now);
         for (index, part) in parts.into_iter().enumerate() {
             if index > 0 {
                 spans.push(Span::raw(Self::SEPARATOR));
@@ -158,14 +168,14 @@ impl BoardView {
         }
     }
 
-    fn name_of(row: &SliceRow) -> String {
+    fn name_of(row: &SliceRow, width: usize) -> String {
         let label = row.label();
-        if label.chars().count() > Self::NAME_WIDTH {
-            let kept: String = label.chars().take(Self::NAME_WIDTH - 1).collect();
+        if label.chars().count() > width {
+            let kept: String = label.chars().take(width - 1).collect();
             return format!("{kept}…");
         }
 
-        format!("{label:<width$}", width = Self::NAME_WIDTH)
+        format!("{label:<width$}")
     }
 
     fn title_of(group: &FeatureGroup) -> String {

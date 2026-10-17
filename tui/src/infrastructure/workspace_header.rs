@@ -15,8 +15,8 @@ impl WorkspaceHeader {
 
     pub fn render(frame: &mut Frame, area: Rect, state: &WorkspaceState) {
         let repo = match state.repo() {
-            WorkspaceRepo::Known(repo) => repo.as_str(),
-            WorkspaceRepo::Unknown => "unknown",
+            WorkspaceRepo::Known(repo) => repo.as_str().to_string(),
+            WorkspaceRepo::Unknown => "repo unknown".to_string(),
         };
         let feature = match state.binding() {
             WorkspaceBinding::Unbound => "this workspace has no feature yet".to_string(),
@@ -29,8 +29,11 @@ impl WorkspaceHeader {
 
         frame.render_widget(
             Paragraph::new(vec![
-                Line::from(format!("workspace {}  repo {repo}", state.id().as_str())),
-                Line::from(feature),
+                Line::from(format!("{repo} · {feature}")),
+                Line::styled(
+                    format!("workspace {}", state.id().as_str()),
+                    Style::new().fg(Color::DarkGray),
+                ),
                 warning,
             ]),
             area,
