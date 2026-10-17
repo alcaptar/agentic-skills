@@ -49,7 +49,6 @@ class SlicePullRequest(PullRequestWriter):
             debt=debt,
             findings=findings,
             deviations=deviations,
-            signal=subissue.signal,
             subissue=subissue.number,
         ).rendered()
 

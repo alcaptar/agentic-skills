@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
 from slice_runner.infrastructure.slice_pull_request import SlicePullRequest
 from slice_runner.tests.mothers.sub_issue_mother import SubIssueMother
 from slice_runner.tests.mothers.verdict_mother import FindingMother
@@ -45,7 +47,7 @@ class TestSlicePullRequest:
         assert message.endswith("Co-Authored-By: Claude <noreply@anthropic.com>")
         assert message.splitlines()[1] == ""
 
-    def test_the_body_carries_the_intention_a_confirmation_of_the_criteria_and_the_signal_the_subissue_declared(
+    def test_the_body_carries_the_intention_a_confirmation_of_the_criteria(
         self,
     ) -> None:
         body = SlicePullRequest().body(SubIssueMother.pending(), debt=(), findings=(), deviations=())
@@ -57,11 +59,21 @@ class TestSlicePullRequest:
             "## Criterios de aceptacion cumplidos\n"
             "- los 2 criterios de aceptacion de la subissue #45 quedan cumplidos, su detalle vive en el issue\n"
             "\n"
-            "## Senal a comprobar tras el despliegue\n"
-            "exenta - este repo no despliega\n"
-            "\n"
             "Closes #45"
         )
+
+    def test_a_signal_the_subissue_declared_never_reaches_the_body_because_nothing_checks_it_after_the_deploy(
+        self,
+    ) -> None:
+        body = SlicePullRequest().body(
+            replace(SubIssueMother.pending(), signal="tasa de error 5xx de shop-web en produccion"),
+            debt=(),
+            findings=(),
+            deviations=(),
+        )
+
+        assert "## Senal a comprobar tras el despliegue" not in body
+        assert "tasa de error 5xx de shop-web en produccion" not in body
 
     def test_the_criteria_the_subissue_declared_are_not_reproduced_word_for_word_in_the_body(self) -> None:
         subissue = SubIssueMother.pending()
@@ -96,12 +108,7 @@ class TestSlicePullRequest:
             deviations=(),
         )
 
-        assert (
-            "## Deuda aceptada\n"
-            "- el cableado del subcomando queda para otra slice\n"
-            "\n"
-            "## Senal a comprobar tras el despliegue"
-        ) in body
+        assert ("## Deuda aceptada\n- el cableado del subcomando queda para otra slice\n\nCloses #45") in body
 
     def test_a_slice_with_nothing_left_out_writes_no_debt_section(self) -> None:
         body = SlicePullRequest().body(SubIssueMother.pending(), debt=(), findings=(), deviations=())
@@ -131,5 +138,5 @@ class TestSlicePullRequest:
             "## Decisiones de diseno no seguidas\n"
             "- el puerto no admite la firma decidida porque ya la consume otro adaptador\n"
             "\n"
-            "## Senal a comprobar tras el despliegue"
+            "Closes #45"
         ) in body

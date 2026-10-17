@@ -229,9 +229,9 @@ Recorrela **entera** y reporta item a item. No la amplies con criterios propios 
    recuento de `high` y hace que el veredicto parezca peor de lo que es.
 
 9. **Observabilidad: la senal declarada tiene que poder cumplirse.** La `SENAL` de la slice **no es
-   un criterio de aceptacion** -no la verifica ningun test, la comprueba `deploy-watch` tras el
+   un criterio de aceptacion** -no la verifica ningun test, la comprueba quien despliega tras el
    deploy-, asi que si nadie la contrasta contra el diff, una senal imposible llega intacta a
-   produccion y el veredicto del deploy se queda sin nada que mirar. Lo que juzgas, **solo por
+   produccion y quien despliega se queda sin nada que mirar. Lo que juzgas, **solo por
    lectura**:
 
    - **¿Existe lo que la senal promete?** Si la senal nombra una serie/campo/span que la slice tenia que

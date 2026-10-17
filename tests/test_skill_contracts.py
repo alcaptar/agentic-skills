@@ -138,7 +138,7 @@ _SUBISSUE_LINES = frozenset({"REPO", "INTENCION", "DECISION", "ACEPTACION", "SEN
 
 `REPO:`, `SENAL:`, `EXCLUYE:` and `SUSTITUYE:` all have a consumer in the program now, read by
 `SubissueBody` and measured by the tests above and below. `INTENCION:` and `ACEPTACION:` travel as prose
-to the implementer and to `deploy-watch`, with no second surface to compare the set against, and
+to the implementer and to the judge, with no second surface to compare the set against, and
 deriving it from the very example under test approves whatever the example happens to say: drop
 `SENAL:` from the three regions at once and all three sets still match. So the set is an external claim
 about the prose, with its reason next to it, like `_CONFIRMATION_ANCHORS`.

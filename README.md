@@ -137,7 +137,7 @@ sola al mergear.
   `INTENCION:`; de ahi sale el cuerpo de la pull request, que cuenta **el por que** en vez de narrar el
   diff -eso ya lo cuenta GitHub mejor-. Vara: si borras la slice, ¿que queda roto o imposible?
 - **La observabilidad es parte de la slice.** Cada slice que cambia comportamiento en produccion
-  declara su linea `SENAL:` (como se comprueba viva), que es lo que `deploy-watch` consume despues; las
+  declara su linea `SENAL:` (como se comprueba viva), que comprueba quien despliega; las
   exentas lo declaran con motivo. El encadenado automatico esta **apagado hoy** (ver el paso 4 de "El
   flujo de un cambio"); la senal se sigue disenando y exigiendo igual.
 

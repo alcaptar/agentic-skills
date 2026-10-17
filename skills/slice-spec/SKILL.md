@@ -68,7 +68,7 @@ Dos modos:
 - **La observabilidad es parte del corte, no un extra.** Toda slice que cambia comportamiento
   observable en produccion declara su linea `SENAL:`: **como se comprueba viva**. Es la contraparte
   post-deploy de los criterios de aceptacion — estos los verifica un test antes de mergear, la senal
-  la verifica `deploy-watch` despues— y la misma vara de falsabilidad aplicada al otro extremo:
+  la comprueba quien despliega, despues— y la misma vara de falsabilidad aplicada al otro extremo:
   *nombra la senal que cambiaria si esto se rompe vivo*. Si no puedes nombrarla, la slice no es
   observable, y eso se arregla **en el slicing**, no en el incidente. Las exentas (refactor puro, VO
   interno, migracion sin efecto visible) lo declaran con motivo: `SENAL: exenta - <motivo>`;
@@ -181,7 +181,7 @@ INTENCION: hoy el stock se queda en negativo y nadie se entera hasta que una tie
 DECISION: la alerta mira el minimo en ventana de 10m y no el valor instantaneo, para no avisar por un negativo aislado
 ACEPTACION: la alerta dispara con stock negativo sostenido 10m y no con un negativo aislado
 ACEPTACION: la alerta sale con severidad critical y apunta al runbook de stock
-SENAL: prometheus min_over_time(application_stock_actual[10m]) < 0 dispara la alerta en 15m post-deploy; critical
+SENAL: prometheus min_over_time(application_stock_actual[10m]) < 0 dispara la alerta en 15m post-deploy
 EXCLUYE: el panel de Grafana que visualiza esta misma serie va en su propia slice, detras de esta
 SUSTITUYE: no
 ```
@@ -349,11 +349,11 @@ SUSTITUYE: no
   `DECISION: ninguna - <motivo>`, igual que `EXCLUYE: nada - <motivo>`; **un cuerpo sin ninguna linea
   para el run en la comprobacion previa con `missing-decisions`**.
 - El cuerpo lleva una linea `SENAL:` con **como se comprueba viva en produccion** (formato:
-  `<fuente> <serie/expresion>; <assert vivo con ventana>; critical|advisory`), o
+  `<fuente> <serie/expresion>; <assert vivo con ventana>`), o
   `SENAL: exenta - <motivo>`. Es obligatoria cuando la slice cambia comportamiento observable en prod.
   **La senal tambien es falsable**: `SENAL: se monitoriza con Grafana` no vale (no nombra serie,
   ventana ni assert); `SENAL: prometheus rate(application_stock_ajustado_total[5m]) > 0 en 10m
-  post-deploy; critical` si. Si la senal hay que **construirla**, su emision entra ademas como criterio
+  post-deploy` si. Si la senal hay que **construirla**, su emision entra ademas como criterio
   de aceptacion normal (el test de emision): la emision se verifica pre-merge, el valor vivo post-deploy.
 - El cuerpo lleva una linea `EXCLUYE:` con **lo que esta slice deja fuera de su alcance a proposito**:
   andamiaje de una slice futura ya prevista, no algo que falte. Es obligatoria siempre, sin ausencia
