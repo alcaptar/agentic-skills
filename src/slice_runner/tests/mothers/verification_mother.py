@@ -10,6 +10,7 @@ from slice_runner.domain.judge import Judge
 from slice_runner.domain.slice_diff import SliceDiff
 from slice_runner.domain.slice_under_review import SliceUnderReview
 from slice_runner.domain.verification import Verification
+from slice_runner.tests.mothers.design_captures_mother import DesignCapturesMother
 from slice_runner.tests.mothers.harness_spend_mother import HarnessSpendMother
 from slice_runner.tests.mothers.parent_issue_mother import ParentIssueMother
 from slice_runner.tests.mothers.sub_issue_mother import SubIssueMother
@@ -17,7 +18,9 @@ from slice_runner.tests.mothers.verdict_mother import FindingMother, VerdictMoth
 
 if TYPE_CHECKING:
     from slice_runner.domain.design import Design
+    from slice_runner.domain.design_captures import DesignCaptures
     from slice_runner.domain.finding import Finding
+    from slice_runner.domain.missing_design_captures import MissingDesignCaptures
     from slice_runner.domain.source import Source
     from slice_runner.domain.verdict import Verdict
 
@@ -67,6 +70,7 @@ class VerifySliceParamsMother:
             decisions=(),
             deviations=(),
             designs=(),
+            captures=DesignCapturesMother.none(),
             compares_with_the_last_verification=False,
         )
 
@@ -93,6 +97,7 @@ class SliceUnderReviewMother:
         decisions: tuple[str, ...] | None = None,
         deviations: tuple[str, ...] | None = None,
         designs: tuple[Design, ...] | None = None,
+        captures: DesignCaptures | MissingDesignCaptures | None = None,
     ) -> SliceUnderReview:
         return SliceUnderReview(
             slice_id=slice_id or cls.SLICE_ID,
@@ -112,6 +117,7 @@ class SliceUnderReviewMother:
             decisions=decisions if decisions is not None else (),
             deviations=deviations if deviations is not None else (),
             designs=designs if designs is not None else (),
+            captures=captures if captures is not None else DesignCapturesMother.none(),
         )
 
     @staticmethod

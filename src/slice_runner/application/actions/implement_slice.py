@@ -11,6 +11,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from slice_runner.domain.debt_ledger import DebtLedger
+    from slice_runner.domain.design_capture_store import DesignCaptureStore
     from slice_runner.domain.diff_reader import DiffReader
     from slice_runner.domain.finding import Finding
     from slice_runner.domain.implementation import Implementation
@@ -35,13 +36,19 @@ class ImplementSliceParams:
 
 
 class ImplementSlice:
-    def __init__(self, *, implementer: Implementer, reader: DiffReader, debt_ledger: DebtLedger) -> None:
+    def __init__(
+        self, *, implementer: Implementer, reader: DiffReader, debt_ledger: DebtLedger, captures: DesignCaptureStore
+    ) -> None:
         self._implementer = implementer
         self._reader = reader
         self._debt_ledger = debt_ledger
+        self._captures = captures
 
     def execute(self, params: ImplementSliceParams) -> Implementation:
-        implementation = self._implementer.implement(self._assignment(params))
+        assignment = self._assignment(params)
+        if assignment.designs:
+            self._captures.clear(worktree=params.worktree)
+        implementation = self._implementer.implement(assignment)
         self._debt_ledger.record(DebtEntry(coordinates=self._coordinates(params), left_out=implementation.left_out))
 
         return implementation

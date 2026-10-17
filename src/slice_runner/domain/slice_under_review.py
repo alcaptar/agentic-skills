@@ -6,7 +6,9 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from slice_runner.domain.checklist_entry import ChecklistEntry
     from slice_runner.domain.design import Design
+    from slice_runner.domain.design_captures import DesignCaptures
     from slice_runner.domain.finding import Finding
+    from slice_runner.domain.missing_design_captures import MissingDesignCaptures
     from slice_runner.domain.slice_diff import SliceDiff
     from slice_runner.domain.source import Source
 
@@ -30,3 +32,4 @@ class SliceUnderReview:
     decisions: tuple[str, ...]
     deviations: tuple[str, ...]
     designs: tuple[Design, ...]
+    captures: DesignCaptures | MissingDesignCaptures

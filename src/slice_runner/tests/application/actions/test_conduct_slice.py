@@ -36,6 +36,7 @@ from slice_runner.domain.step import Step
 from slice_runner.tests.conductor import Conductor
 from slice_runner.tests.mothers.branch_catch_up_mother import BranchCatchUpMother
 from slice_runner.tests.mothers.control_outcome_mother import ControlOutcomeMother
+from slice_runner.tests.mothers.design_captures_mother import DesignCapturesMother
 from slice_runner.tests.mothers.design_mother import DesignMother
 from slice_runner.tests.mothers.harness_call_mother import HarnessCallMother
 from slice_runner.tests.mothers.harness_spend_mother import HarnessSpendMother
@@ -200,6 +201,34 @@ class TestConductSliceHandingTheDesignsToEveryAgent:
         conductor.conduct()
 
         assert conductor.verify.execute.call_args.args[0].designs == (DesignMother.detail(),)
+
+    def test_the_captures_are_read_from_the_worktree_for_the_designs_the_subissue_names(self) -> None:
+        conductor = Conductor(
+            chosen=SelectSliceResultMother.resumed_at(
+                RunMother.implementing(),
+                subissue=SubIssueMother.naming_designs("detalle"),
+                parent=ParentIssueMother.declaring_two_designs(),
+            )
+        )
+
+        conductor.conduct()
+
+        asked = conductor.read_captures.execute.call_args.args[0]
+        assert (asked.worktree, asked.designs) == (Conductor.WORKTREE, (DesignMother.detail(),))
+
+    def test_what_is_read_of_the_captures_reaches_the_judge(self) -> None:
+        conductor = Conductor(
+            chosen=SelectSliceResultMother.resumed_at(
+                RunMother.implementing(),
+                subissue=SubIssueMother.naming_designs("detalle"),
+                parent=ParentIssueMother.declaring_two_designs(),
+            )
+        )
+        conductor.read_captures.execute.return_value = DesignCapturesMother.missing()
+
+        conductor.conduct()
+
+        assert conductor.verify.execute.call_args.args[0].captures == DesignCapturesMother.missing()
 
 
 class TestConductSliceResumingARunLeftAtTheRetiredUnderstandStep:
@@ -2450,7 +2479,8 @@ class TestConductSliceMountingTheWorktreeBeforeUnderstanding:
 
         conductor.conduct()
 
-        conductor.worktrees.exclude.assert_called_once_with(root=Conductor.ROOT, rule="/.worktrees/")
+        conductor.worktrees.exclude.assert_any_call(root=Conductor.ROOT, rule="/.worktrees/")
+        assert conductor.worktrees.exclude.call_count == 2
 
     def test_the_sources_are_read_from_the_freshly_mounted_worktree_and_not_from_the_root(self) -> None:
         conductor = self._conductor()
@@ -2597,7 +2627,7 @@ class TestConductSliceResumingMountsTheWorktreeFirst:
 
         conductor.conduct()
 
-        conductor.worktrees.exclude.assert_called_once()
+        assert conductor.worktrees.exclude.call_count == 2
         assert not conductor.worktrees.add_new_branch.called
         assert not conductor.worktrees.add_on_branch.called
         assert conductor.implement.execute.call_count == 1

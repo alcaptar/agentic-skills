@@ -68,6 +68,14 @@ no- o cerrado con su motivo.
 - **Si algun criterio choca con lo que la slice excluye o sustituye, o no lo puede cumplir el
   implementador ni medir el juez**: el implementador no toca git ni compone la pull request, y el juez no
   recibe su informe.
+- **Lo visual: si la feature construye algo que se ve, la maqueta se disena durante el diseno y no
+  despues.** Busca la paleta del repo destino antes de la primera maqueta -en sus fuentes de convencion,
+  su tema o sus constantes de color- y usala; si no tiene, la paleta es una decision mas y queda escrita
+  en el HTML. Itera la maqueta como artefacto, con variantes, y la persona elige: aqui elegir es siempre
+  suyo. En el padre entra solo la variante elegida: se copia a un `### <nombre>` de `## Diseno`, con el
+  enlace al artefacto en el `<summary>` del `<details>` y su HTML en un bloque de codigo. Una maqueta con
+  todas las variantes sin elegir, o con colores inventados, llega al implementador y al juez como si
+  fuera el diseno.
 
 Nombres de ficheros y clases y estrategia de tests: solo se preguntan si las fuentes de convencion del
 repo destino no los cubren. Si las cubren, se cita la fuente y no se pregunta.

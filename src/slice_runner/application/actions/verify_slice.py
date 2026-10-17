@@ -14,9 +14,11 @@ if TYPE_CHECKING:
     from slice_runner.domain.checklist_entry import ChecklistEntry
     from slice_runner.domain.corpus import Corpus
     from slice_runner.domain.design import Design
+    from slice_runner.domain.design_captures import DesignCaptures
     from slice_runner.domain.diff_reader import DiffReader
     from slice_runner.domain.finding import Finding
     from slice_runner.domain.judge import Judge
+    from slice_runner.domain.missing_design_captures import MissingDesignCaptures
     from slice_runner.domain.skill_library import SkillLibrary
     from slice_runner.domain.source import Source
     from slice_runner.domain.verification import Verification
@@ -43,6 +45,7 @@ class VerifySliceParams:
     decisions: tuple[str, ...]
     deviations: tuple[str, ...]
     designs: tuple[Design, ...]
+    captures: DesignCaptures | MissingDesignCaptures
     compares_with_the_last_verification: bool
 
 
@@ -84,6 +87,7 @@ class VerifySlice:
                 decisions=params.decisions,
                 deviations=params.deviations,
                 designs=params.designs,
+                captures=params.captures,
             ),
         )
         self._corpus.record(

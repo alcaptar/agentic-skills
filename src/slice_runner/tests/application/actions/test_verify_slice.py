@@ -15,6 +15,7 @@ from slice_runner.domain.exceptions import DiffNotReadableError, UnchangedDiffEr
 from slice_runner.domain.skill_library import SkillLibrary
 from slice_runner.domain.slice_coordinates import SliceCoordinates
 from slice_runner.domain.verifier import Verifier
+from slice_runner.tests.mothers.design_captures_mother import DesignCapturesMother
 from slice_runner.tests.mothers.design_mother import DesignMother
 from slice_runner.tests.mothers.verdict_mother import FindingMother, VerdictMother
 from slice_runner.tests.mothers.verification_mother import (
@@ -195,6 +196,25 @@ class TestVerifySlice:
         action.execute(params)
 
         assert self._reviewed(verifier).designs == (DesignMother.board(), DesignMother.detail())
+
+    def test_the_captures_read_for_the_designs_travel_to_the_judge_too(
+        self, action: VerifySlice, verifier: Mock
+    ) -> None:
+        captures = DesignCapturesMother.of_the_board_and_the_detail()
+        params = replace(_PARAMS, designs=(DesignMother.board(), DesignMother.detail()), captures=captures)
+
+        action.execute(params)
+
+        assert self._reviewed(verifier).captures == captures
+
+    def test_captures_declared_missing_travel_to_the_judge_with_their_reason(
+        self, action: VerifySlice, verifier: Mock
+    ) -> None:
+        params = replace(_PARAMS, designs=(DesignMother.board(),), captures=DesignCapturesMother.missing())
+
+        action.execute(params)
+
+        assert self._reviewed(verifier).captures == DesignCapturesMother.missing()
 
     def test_the_deviations_the_implementer_declared_travel_to_the_judge_too(
         self, action: VerifySlice, verifier: Mock

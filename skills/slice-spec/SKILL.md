@@ -633,6 +633,8 @@ un run anterior no se reutiliza ni se pisa: la invocacion siguiente cierra en
    no se deshace facil, asi que **no crees nada sin el troceo confirmado en el paso 2d** ni con una
    objecion de la refutacion pendiente de la persona. Lo que no se hace es imprimir el cuerpo del padre
    y de cada subissue: la persona ya confirmo lo que tenia que confirmar, y el detalle lo lee en GitHub.
+   Si el padre declara `## Diseno`, cada `### <nombre>` lleva solo la variante elegida: las descartadas
+   se quedan en el artefacto y no viajan al padre.
 
    En este orden:
 

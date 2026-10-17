@@ -8,6 +8,7 @@ import pytest
 
 from slice_runner.application.actions.implement_slice import ImplementSlice, ImplementSliceParams
 from slice_runner.domain.debt_ledger import DebtLedger
+from slice_runner.domain.design_capture_store import DesignCaptureStore
 from slice_runner.domain.diff_reader import DiffReader
 from slice_runner.domain.implementer import Implementer
 from slice_runner.tests.mothers.control_outcome_mother import ControlOutcomeMother
@@ -45,8 +46,13 @@ class TestImplementSlice:
         return debt_ledger
 
     @pytest.fixture
-    def action(self, implementer: Mock, reader: Mock, debt_ledger: Mock) -> ImplementSlice:
-        return ImplementSlice(implementer=implementer, reader=reader, debt_ledger=debt_ledger)
+    def captures(self) -> Mock:
+        captures: Mock = create_autospec(DesignCaptureStore, spec_set=True, instance=True)
+        return captures
+
+    @pytest.fixture
+    def action(self, implementer: Mock, reader: Mock, debt_ledger: Mock, captures: Mock) -> ImplementSlice:
+        return ImplementSlice(implementer=implementer, reader=reader, debt_ledger=debt_ledger, captures=captures)
 
     @staticmethod
     def _params(
@@ -194,6 +200,30 @@ class TestImplementSlice:
         action.execute(replace(self._params(), parent=ParentIssueMother.declaring_two_designs()))
 
         assert self._assigned(implementer).designs == ()
+
+    def test_a_slice_with_a_design_has_its_captures_cleared_before_the_implementer_starts(
+        self, action: ImplementSlice, implementer: Mock, captures: Mock
+    ) -> None:
+        cleared_when_the_implementer_started: list[bool] = []
+
+        def implementing(assignment: Assignment) -> object:
+            cleared_when_the_implementer_started.append(captures.clear.called)
+            return ImplementationMother.of_two_paths()
+
+        implementer.implement.side_effect = implementing
+        subissue = SubIssueMother.naming_designs("detalle")
+
+        action.execute(replace(self._params(subissue=subissue), parent=ParentIssueMother.declaring_two_designs()))
+
+        captures.clear.assert_called_once_with(worktree=_WORKTREE)
+        assert cleared_when_the_implementer_started == [True]
+
+    def test_a_slice_that_cites_no_design_leaves_the_captures_directory_alone(
+        self, action: ImplementSlice, captures: Mock
+    ) -> None:
+        action.execute(replace(self._params(), parent=ParentIssueMother.declaring_two_designs()))
+
+        captures.clear.assert_not_called()
 
     def test_a_previous_call_that_died_asks_the_reader_and_assigns_the_files_it_found_dirty(
         self, action: ImplementSlice, implementer: Mock, reader: Mock

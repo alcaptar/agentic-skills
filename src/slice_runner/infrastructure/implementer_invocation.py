@@ -4,6 +4,7 @@ import json
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar
 
+from slice_runner.domain.design_captures_directory import DesignCapturesDirectory
 from slice_runner.infrastructure.cited_finding import CitedFinding
 from slice_runner.infrastructure.cited_sources import CitedSources
 from slice_runner.infrastructure.counted_lines import CountedLines
@@ -62,7 +63,15 @@ class ImplementerInvocation(HarnessInvocation):
         if not self.assignment.designs:
             return [SliceImplementerBrief.TEXT]
 
-        return [SliceImplementerBrief.TEXT, SliceImplementerBrief.DESIGN_TEXT]
+        worktree = self.assignment.worktree
+
+        return [
+            SliceImplementerBrief.TEXT,
+            SliceImplementerBrief.DESIGN_TEXT,
+            SliceImplementerBrief.captures_text(
+                directory=DesignCapturesDirectory.of(worktree), manifest=DesignCapturesDirectory.manifest_of(worktree)
+            ),
+        ]
 
     @property
     def _slice_data(self) -> str:
