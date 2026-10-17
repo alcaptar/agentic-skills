@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from slice_runner.domain.design_captures_directory import DesignCapturesDirectory
 from slice_runner.domain.outcome import Outcome
 from slice_runner.domain.slice_identity import SliceIdentity
 from slice_runner.domain.worktree_classifier import WorktreeClassifier
@@ -37,6 +38,7 @@ class MountWorktree:
             return MountWorktreeResult(outcome=Outcome.WORKTREE_TAKEN, conflicting_path=params.worktree)
 
         self._worktrees.exclude(root=params.root, rule=SliceIdentity.worktrees_exclusion())
+        self._worktrees.exclude(root=params.root, rule=DesignCapturesDirectory.exclusion())
         branch_exists = self._worktrees.branch_exists(root=params.root, name=params.branch)
         classification = WorktreeClassifier.of(
             listed=self._worktrees.listed(root=params.root),

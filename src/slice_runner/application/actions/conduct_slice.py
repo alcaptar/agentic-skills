@@ -19,6 +19,7 @@ from slice_runner.application.actions.stage_slice import StageSliceParams
 from slice_runner.application.actions.verify_slice import VerifySliceParams
 from slice_runner.application.queries.check_sources import CheckSourcesParams
 from slice_runner.application.queries.read_ci_status import ReadCiStatusParams
+from slice_runner.application.queries.read_design_captures import ReadDesignCapturesParams
 from slice_runner.application.queries.read_pull_request_status import ReadPullRequestStatusParams
 from slice_runner.application.queries.run_prechecks import RunPrechecksParams
 from slice_runner.application.queries.select_slice import SelectSliceParams
@@ -71,6 +72,7 @@ if TYPE_CHECKING:
     from slice_runner.application.actions.verify_slice import VerifySlice
     from slice_runner.application.queries.check_sources import CheckSources
     from slice_runner.application.queries.read_ci_status import ReadCiStatus
+    from slice_runner.application.queries.read_design_captures import ReadDesignCaptures
     from slice_runner.application.queries.read_pull_request_status import ReadPullRequestStatus
     from slice_runner.application.queries.run_prechecks import RunPrechecks
     from slice_runner.application.queries.select_slice import SelectSlice, SelectSliceResult
@@ -175,6 +177,7 @@ class ConductSliceUseCases:
     mount: MountWorktree
     retire: RetireWorktree
     check_sources: CheckSources
+    read_captures: ReadDesignCaptures
     implement: ImplementSlice
     stage: StageSlice
     commit: CommitRound
@@ -214,6 +217,7 @@ class ConductSlice:
         self._mount = use_cases.mount
         self._retire = use_cases.retire
         self._check_sources = use_cases.check_sources
+        self._read_captures = use_cases.read_captures
         self._implement = use_cases.implement
         self._stage = use_cases.stage
         self._commit = use_cases.commit
@@ -590,6 +594,8 @@ class ConductSlice:
         if self._budgets.exhausted(progress.spend):
             return SteppedSlice(progress=progress, outcome=Outcome.OVER_BUDGET)
 
+        designs = progress.subissue.designs_under(progress.parent)
+        captures = self._read_captures.execute(ReadDesignCapturesParams(worktree=progress.worktree, designs=designs))
         try:
             verification = self._verify.execute(
                 VerifySliceParams(
@@ -610,7 +616,8 @@ class ConductSlice:
                     debt=progress.debt,
                     decisions=progress.subissue.decisions_under(progress.parent),
                     deviations=progress.deviations,
-                    designs=progress.subissue.designs_under(progress.parent),
+                    designs=designs,
+                    captures=captures,
                     compares_with_the_last_verification=progress.judged_in_this_invocation,
                 )
             )

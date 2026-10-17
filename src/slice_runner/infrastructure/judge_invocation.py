@@ -4,6 +4,7 @@ import json
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar
 
+from slice_runner.infrastructure.captures_block import CapturesBlock
 from slice_runner.infrastructure.cited_finding import CitedFinding
 from slice_runner.infrastructure.cited_sources import CitedSources
 from slice_runner.infrastructure.counted_lines import CountedLines
@@ -105,6 +106,7 @@ class JudgeInvocation(HarnessInvocation):
                 *CountedLines.of("decisiones de diseno", review.decisions),
                 *CountedLines.of("decisiones de diseno que el implementador declaro no seguir", review.deviations),
                 *DesignBlock.of(review.designs),
+                *CapturesBlock.of(review.captures),
             ]
         )
 

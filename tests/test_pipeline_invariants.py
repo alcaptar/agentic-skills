@@ -252,6 +252,7 @@ _KNOWN_NOT_HARNESS_WRITING = {
     ("_pull_request", "body"),
     ("_pull_request", "commit_message"),
     ("_pull_request", "title"),
+    ("_read_captures", "execute"),
     ("_read_ci", "execute"),
     ("_read_pull_request", "execute"),
     ("_record_closure", "execute"),

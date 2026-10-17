@@ -38,6 +38,7 @@ from slice_runner.application.queries.follow_events import FollowEvents, FollowE
 from slice_runner.application.queries.list_closed_slices import ListClosedSlices, ListClosedSlicesParams
 from slice_runner.application.queries.read_ci_status import ReadCiStatus
 from slice_runner.application.queries.read_conversation import ReadConversation, ReadConversationParams
+from slice_runner.application.queries.read_design_captures import ReadDesignCaptures
 from slice_runner.application.queries.read_pull_request_status import ReadPullRequestStatus
 from slice_runner.application.queries.run_prechecks import RunPrechecks
 from slice_runner.application.queries.select_slice import SelectSlice
@@ -49,6 +50,7 @@ from slice_runner.domain.budgets import Budgets
 from slice_runner.domain.closed_slice_metrics import ClosedSliceMetrics
 from slice_runner.domain.closed_slice_scope import ClosedSliceScope
 from slice_runner.domain.closing_reason import ClosingReason
+from slice_runner.domain.design_captures import DesignCaptures
 from slice_runner.domain.event_cursor import EventCursor
 from slice_runner.domain.exceptions import (
     BranchMismatchError,
@@ -135,6 +137,7 @@ from slice_runner.infrastructure.local_tool_use_log import LocalToolUseLog
 from slice_runner.infrastructure.local_toolbox import LocalToolbox
 from slice_runner.infrastructure.os_process_replacement import OsProcessReplacement
 from slice_runner.infrastructure.process import ProcessNotRunnableError, ProcessTimedOutError
+from slice_runner.infrastructure.process_design_capture_store import ProcessDesignCaptureStore
 from slice_runner.infrastructure.process_replacement import ExecutableNotFoundError
 from slice_runner.infrastructure.process_source_reader import ProcessSourceReader
 from slice_runner.infrastructure.readiness_report import ReadinessReport
@@ -874,6 +877,7 @@ class Cli:
         workspace = GitWorkspace(process=self._process)
         machine = StateMachine(budgets=self._budgets)
         reader = ProcessSourceReader(process=self._process, budgets=self._budgets)
+        captures = ProcessDesignCaptureStore(process=self._process)
         corpus = LocalCorpus(clock=clock)
         debt_ledger = LocalDebtLedger(clock=clock)
         activity = LocalActivityLog(clock=clock)
@@ -895,10 +899,12 @@ class Cli:
                 mount=MountWorktree(worktrees=worktrees),
                 retire=RetireWorktree(worktrees=worktrees),
                 check_sources=CheckSources(sources=reader),
+                read_captures=ReadDesignCaptures(captures=captures),
                 implement=ImplementSlice(
                     implementer=ClaudeImplementer(calls=calls, reader=reader),
                     reader=GitDiffReader(process=self._process),
                     debt_ledger=debt_ledger,
+                    captures=captures,
                 ),
                 stage=StageSlice(workspace=workspace),
                 commit=CommitRound(
@@ -1002,6 +1008,7 @@ class Cli:
             decisions=(),
             deviations=(),
             designs=(),
+            captures=DesignCaptures(captures=()),
             compares_with_the_last_verification=False,
         )
 
